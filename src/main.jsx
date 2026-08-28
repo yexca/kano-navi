@@ -21,6 +21,15 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Tooltip,
@@ -70,7 +79,7 @@ const dateKeyFormatter = new Intl.DateTimeFormat("en-CA", {
 })
 
 const dateTimeFormatters = new Map()
-const monthFormatters = new Map()
+const weekRangeFormatters = new Map()
 const calendarDateFormatters = new Map()
 
 function getFormatter(cache, locale, options) {
@@ -101,11 +110,30 @@ function localDateKey(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
-function formatMonthLabel(date, locale) {
-  return getFormatter(monthFormatters, locale, {
+function japanToday() {
+  const [year, month, day] = dateKey(new Date()).split("-").map(Number)
+  return new Date(year, month - 1, day)
+}
+
+function addDays(date, amount) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount)
+}
+
+function startOfWeek(date) {
+  const daysSinceMonday = (date.getDay() + 6) % 7
+  return addDays(date, -daysSinceMonday)
+}
+
+function formatWeekLabel(weekStart, locale) {
+  const weekEnd = addDays(weekStart, 6)
+  const formatter = getFormatter(weekRangeFormatters, locale, {
     year: "numeric",
-    month: "long",
-  }).format(date)
+    month: "short",
+    day: "numeric",
+  })
+  return typeof formatter.formatRange === "function"
+    ? formatter.formatRange(weekStart, weekEnd)
+    : `${formatter.format(weekStart)} – ${formatter.format(weekEnd)}`
 }
 
 function formatCalendarDate(date, locale) {
@@ -177,10 +205,6 @@ function formatSyncTime(meta, locale, t) {
   return t("sync.waiting")
 }
 
-function sameMonth(a, b) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
-}
-
 function eventIsUpcoming(event) {
   const timestamp = Date.parse(event.startsAt || "")
   if (!Number.isNaN(timestamp)) return timestamp >= Date.now()
@@ -195,48 +219,20 @@ function eventStatusClass(event) {
   return "done"
 }
 
-function Calendar({
-  month,
-  selectedDate,
-  events,
-  locale,
-  t,
-  onSelect,
-  onMonthChange,
-}) {
-  const days = useMemo(() => {
-    const year = month.getFullYear()
-    const monthIndex = month.getMonth()
-    const firstDay = new Date(year, monthIndex, 1)
-    const startOffset = firstDay.getDay()
-    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
-    const daysInPrevious = new Date(year, monthIndex, 0).getDate()
-    const cells = []
-
-    for (let index = 0; index < 42; index += 1) {
-      const dayNumber = index - startOffset + 1
-      let cellDate
-      let isMuted = false
-      if (dayNumber < 1) {
-        cellDate = new Date(year, monthIndex - 1, daysInPrevious + dayNumber)
-        isMuted = true
-      } else if (dayNumber > daysInMonth) {
-        cellDate = new Date(year, monthIndex + 1, dayNumber - daysInMonth)
-        isMuted = true
-      } else {
-        cellDate = new Date(year, monthIndex, dayNumber)
-      }
-      cells.push({ date: cellDate, isMuted })
-    }
-    return cells
-  }, [month])
+function Calendar({ selectedDate, events, locale, t, onSelect, onWeekChange }) {
+  const weekStart = useMemo(() => startOfWeek(selectedDate), [selectedDate])
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
+    [weekStart],
+  )
 
   const eventDates = useMemo(
     () => new Set(events.map((event) => dateKey(event.startsAt))),
     [events],
   )
   const todayKey = dateKey(new Date())
-  const selectedKey = selectedDate ? localDateKey(selectedDate) : ""
+  const selectedKey = localDateKey(selectedDate)
+  const weekLabel = formatWeekLabel(weekStart, locale)
 
   return (
     <>
@@ -246,29 +242,29 @@ function Calendar({
             <Button
               variant="ghost"
               size="icon"
-              className="month-button"
-              onClick={() => onMonthChange(-1)}
-              aria-label={t("calendar.previousMonth")}
+              className="week-button"
+              onClick={() => onWeekChange(-1)}
+              aria-label={t("calendar.previousWeek")}
             >
               <ChevronLeft className="inline-icon" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t("calendar.previousMonth")}</TooltipContent>
+          <TooltipContent>{t("calendar.previousWeek")}</TooltipContent>
         </Tooltip>
-        <strong>{formatMonthLabel(month, locale)}</strong>
+        <strong>{weekLabel}</strong>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="month-button"
-              onClick={() => onMonthChange(1)}
-              aria-label={t("calendar.nextMonth")}
+              className="week-button"
+              onClick={() => onWeekChange(1)}
+              aria-label={t("calendar.nextWeek")}
             >
               <ChevronRight className="inline-icon" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t("calendar.nextMonth")}</TooltipContent>
+          <TooltipContent>{t("calendar.nextWeek")}</TooltipContent>
         </Tooltip>
       </div>
       <div className="calendar-weekdays" aria-hidden="true">
@@ -279,11 +275,11 @@ function Calendar({
       <div
         className="calendar-grid"
         role="grid"
-        aria-label={t("calendar.gridLabel", {
-          month: formatMonthLabel(month, locale),
+        aria-label={t("calendar.weekLabel", {
+          range: weekLabel,
         })}
       >
-        {days.map(({ date, isMuted }) => {
+        {days.map((date) => {
           const key = localDateKey(date)
           const hasEvent = eventDates.has(key)
           const isToday = key === todayKey
@@ -294,7 +290,9 @@ function Calendar({
               key={key}
               type="button"
               role="gridcell"
-              className={`calendar-day${isMuted ? " is-muted" : ""}${isToday ? " is-today" : ""}${isSelected ? " is-selected" : ""}${hasEvent ? " has-event" : ""}`}
+              className={`calendar-day${isToday ? " is-today" : ""}${isSelected ? " is-selected" : ""}${hasEvent ? " has-event" : ""}`}
+              aria-current={isToday ? "date" : undefined}
+              aria-selected={isSelected}
               aria-label={
                 hasEvent
                   ? t("calendar.dayWithEvent", { date: spokenDate })
@@ -445,10 +443,7 @@ function App() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState(false)
   const [activeFilter, setActiveFilter] = useState("all")
-  const [month, setMonth] = useState(
-    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-  )
-  const [selectedDate, setSelectedDate] = useState(null)
+  const [selectedDate, setSelectedDate] = useState(japanToday)
   const [isDark, setIsDark] = useState(() => {
     const saved = window.localStorage.getItem("kano-theme")
     return saved
@@ -553,51 +548,33 @@ function App() {
       ? posts
       : posts.filter((post) => post.type === activeFilter)
 
-  const monthEvents = useMemo(
-    () =>
-      events.filter((event) => {
-        const timestamp = Date.parse(event.startsAt || "")
-        return !Number.isNaN(timestamp) && sameMonth(new Date(timestamp), month)
-      }),
-    [events, month],
-  )
   const selectedEvents = useMemo(
     () =>
-      selectedDate
-        ? monthEvents.filter(
-            (event) => dateKey(event.startsAt) === localDateKey(selectedDate),
-          )
-        : [],
-    [monthEvents, selectedDate],
+      events.filter(
+        (event) => dateKey(event.startsAt) === localDateKey(selectedDate),
+      ),
+    [events, selectedDate],
   )
-  const displayEvents = useMemo(() => {
-    const upcomingMonthEvents = monthEvents.filter(eventIsUpcoming)
-    const source = selectedDate
-      ? selectedEvents
-      : upcomingMonthEvents.length
-        ? upcomingMonthEvents
-        : monthEvents
-    return [...source]
-      .sort((a, b) => {
-        const upcomingDelta =
-          Number(eventIsUpcoming(b)) - Number(eventIsUpcoming(a))
-        if (upcomingDelta) return upcomingDelta
-        return Date.parse(a.startsAt || "") - Date.parse(b.startsAt || "")
-      })
-      .slice(0, 6)
-  }, [monthEvents, selectedDate, selectedEvents])
+  const displayEvents = useMemo(
+    () =>
+      [...selectedEvents]
+        .sort((a, b) => {
+          const upcomingDelta =
+            Number(eventIsUpcoming(b)) - Number(eventIsUpcoming(a))
+          if (upcomingDelta) return upcomingDelta
+          return Date.parse(a.startsAt || "") - Date.parse(b.startsAt || "")
+        })
+        .slice(0, 6),
+    [selectedEvents],
+  )
   const upcomingCount = events.filter(eventIsUpcoming).length
 
-  const handleMonthChange = (offset) => {
-    const next = new Date(month.getFullYear(), month.getMonth() + offset, 1)
-    setMonth(next)
-    setSelectedDate(null)
+  const handleWeekChange = (offset) => {
+    setSelectedDate((current) => addDays(current, offset * 7))
   }
 
   const handleSelectDate = (date) => {
     setSelectedDate(date)
-    if (!sameMonth(date, month))
-      setMonth(new Date(date.getFullYear(), date.getMonth(), 1))
   }
 
   return (
@@ -639,26 +616,44 @@ function App() {
           </div>
 
           <div className="topbar-actions">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <label className="icon-button language-control">
-                  <Languages className="icon" aria-hidden="true" />
-                  <span className="sr-only">{t("header.language")}</span>
-                  <select
-                    value={locale}
-                    onChange={(event) => setLocale(event.target.value)}
-                    aria-label={t("header.language")}
-                  >
-                    {localeOptions.map((option) => (
-                      <option value={option.value} key={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </TooltipTrigger>
-              <TooltipContent>{t("header.language")}</TooltipContent>
-            </Tooltip>
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="icon-button language-button"
+                      aria-label={t("header.language")}
+                    >
+                      <Languages className="icon" aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>{t("header.language")}</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent
+                align="end"
+                className="language-menu-content"
+              >
+                <DropdownMenuLabel>{t("header.language")}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={locale}
+                  onValueChange={setLocale}
+                >
+                  {localeOptions.map((option) => (
+                    <DropdownMenuRadioItem
+                      value={option.value}
+                      key={option.value}
+                      className="language-menu-item"
+                    >
+                      <span lang={option.value}>{option.label}</span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -823,13 +818,12 @@ function App() {
                 </span>
               </div>
               <Calendar
-                month={month}
                 selectedDate={selectedDate}
                 events={events}
                 locale={locale}
                 t={t}
                 onSelect={handleSelectDate}
-                onMonthChange={handleMonthChange}
+                onWeekChange={handleWeekChange}
               />
               <div className="event-list">
                 {isLoading ? (

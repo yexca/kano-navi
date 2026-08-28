@@ -212,8 +212,7 @@
     transform: translateY(-1px);
   }
 
-  .icon-button:focus-visible,
-  .language-control:focus-within {
+  .icon-button:focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
@@ -228,18 +227,15 @@
     stroke-width: 1.7;
   }
 
-  .language-control {
-    position: relative;
+  .language-menu-content {
+    min-width: 152px;
   }
 
-  .language-control select {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    border: 0;
+  .language-menu-item {
     cursor: pointer;
-    opacity: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
   }
 
   .hero-panel {
@@ -526,6 +522,15 @@
     justify-content: space-between;
     gap: 20px;
     padding: 52px 2px 21px;
+  }
+
+  .section-intro .overline {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1.4;
+    text-decoration: none;
+    text-transform: none;
   }
 
   .section-intro h2 {
@@ -858,15 +863,18 @@
   }
 
   .calendar-toolbar strong {
-    min-width: 130px;
+    max-width: 220px;
+    min-width: 0;
+    flex: 1;
     color: hsl(var(--foreground));
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 900;
     text-align: center;
-    letter-spacing: 0.06em;
+    letter-spacing: 0;
+    white-space: nowrap;
   }
 
-  .month-button {
+  .week-button {
     display: inline-flex;
     width: 26px;
     height: 26px;
@@ -882,7 +890,7 @@
       color 160ms ease;
   }
 
-  .month-button:hover {
+  .week-button:hover {
     border-color: hsl(var(--foreground));
     color: hsl(var(--foreground));
   }
@@ -927,11 +935,6 @@
   .calendar-day:hover {
     border-color: rgba(242, 100, 104, 0.35);
     background: rgba(242, 100, 104, 0.07);
-  }
-
-  .calendar-day.is-muted {
-    color: hsl(var(--muted-foreground));
-    opacity: 0.4;
   }
 
   .calendar-day.is-today {
