@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kano-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Test the privacy scanner
+        run: npm run test:sensitive
+
+      - name: Test the database and media cache
+        run: npm run test:server
+
+      - name: Scan the workspace for sensitive information
+        run: npm run check-sensitive
+
+      - name: Check documentation links
+        run: npm run docs:check-links
+
+      - name: Build the frontend
+        run: npm run build
+
+      - name: Seed the SQLite snapshot
+        run: npm run seed
+
+      - name: Smoke test the local API
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=8787 node server/index.js > api-smoke.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8787/api/health > /dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              cat api-smoke.log
+              exit 1
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8787/api/health | node -e 'let data=""; process.stdin.on("data", chunk => { data += chunk }); process.stdin.on("end", () => { const payload = JSON.parse(data); if (payload.ok !== true) process.exit(1) })'
+          curl --fail --silent 'http://127.0.0.1:8787/api/dashboard?days=3' | node -e 'let data=""; process.stdin.on("data", chunk => { data += chunk }); process.stdin.on("end", () => { const payload = JSON.parse(data); if (!payload.profile || !Array.isArray(payload.posts) || !Array.isArray(payload.events) || typeof payload.meta?.mediaCache?.total !== "number") process.exit(1) })'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8787/media/not-an-id)" = "404"

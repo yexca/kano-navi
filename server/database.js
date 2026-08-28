@@ -1,0 +1,935 @@
+import fs from "node:fs"
+import path from "node:path"
+import Database from "better-sqlite3"
+import { fileURLToPath } from "node:url"
+import { seedData } from "./seed-data.js"
+import {
+  MEDIA_STATUS,
+  cacheRelativePathForHash,
+  ensureMediaCacheDirectories,
+  extensionForMimeType,
+  isSafeContentHash,
+  isSafeMediaId,
+  mediaIdForSourceUrl,
+  normalizeMediaMimeType,
+  normalizeSourceUrl,
+  publicAssetExists,
+  publicMediaUrl,
+  resolveMediaCachePath,
+} from "./media-cache.js"
+
+const moduleDir = path.dirname(fileURLToPath(import.meta.url))
+const projectDir = path.resolve(moduleDir, "..")
+
+export const dataDirectory = path.join(projectDir, "data")
+export const databasePath = path.join(dataDirectory, "kano.sqlite")
+
+const schema = `
+  PRAGMA foreign_keys = ON;
+
+  CREATE TABLE IF NOT EXISTS profiles (
+    id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    romanized_name TEXT,
+    bio TEXT,
+    avatar_url TEXT,
+    banner_url TEXT,
+    x_url TEXT,
+    youtube_url TEXT,
+    updated_at TEXT,
+    raw_json TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS posts (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'daily',
+    label TEXT,
+    text TEXT NOT NULL,
+    published_at TEXT NOT NULL,
+    url TEXT NOT NULL,
+    likes INTEGER DEFAULT 0,
+    reposts INTEGER DEFAULT 0,
+    replies INTEGER DEFAULT 0,
+    media_url TEXT,
+    media_alt TEXT,
+    raw_json TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS posts_published_at_idx ON posts (published_at DESC);
+
+  CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    title TEXT NOT NULL,
+    detail TEXT,
+    starts_at TEXT NOT NULL,
+    ends_at TEXT,
+    status TEXT,
+    event_type TEXT DEFAULT 'event',
+    url TEXT,
+    is_upcoming INTEGER DEFAULT 0,
+    raw_json TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS events_starts_at_idx ON events (starts_at);
+
+  CREATE TABLE IF NOT EXISTS videos (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    title TEXT NOT NULL,
+    published_at TEXT,
+    scheduled_at TEXT,
+    url TEXT NOT NULL,
+    thumbnail_url TEXT,
+    kind TEXT,
+    is_upcoming INTEGER DEFAULT 0,
+    raw_json TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS videos_date_idx ON videos (COALESCE(scheduled_at, published_at) DESC);
+
+  CREATE TABLE IF NOT EXISTS focus (
+    id INTEGER PRIMARY KEY,
+    date_label TEXT,
+    title TEXT NOT NULL,
+    description TEXT,
+    image_url TEXT,
+    url TEXT,
+    source_url TEXT,
+    updated_at TEXT,
+    raw_json TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS timeline (
+    id INTEGER PRIMARY KEY,
+    year TEXT NOT NULL,
+    title TEXT NOT NULL,
+    detail TEXT,
+    sort_order INTEGER DEFAULT 0,
+    raw_json TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS resources (
+    id INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    detail TEXT,
+    icon TEXT,
+    tone TEXT,
+    url TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    raw_json TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS assets (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    url TEXT NOT NULL,
+    source_url TEXT,
+    alt TEXT,
+    updated_at TEXT,
+    raw_json TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS media_assets (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    cache_path TEXT,
+    mime_type TEXT,
+    extension TEXT,
+    byte_size INTEGER,
+    sha256 TEXT,
+    width INTEGER,
+    height INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending',
+    fetched_at TEXT,
+    last_checked_at TEXT,
+    last_seen_at TEXT,
+    etag TEXT,
+    last_modified TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    raw_json TEXT
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS media_assets_source_url_idx ON media_assets (source_url);
+  CREATE INDEX IF NOT EXISTS media_assets_status_idx ON media_assets (status, updated_at DESC);
+
+  CREATE TABLE IF NOT EXISTS media_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    media_id TEXT NOT NULL REFERENCES media_assets (id) ON DELETE CASCADE,
+    owner_type TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    alt TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS media_links_owner_position_idx ON media_links (owner_type, owner_id, role, position);
+  CREATE INDEX IF NOT EXISTS media_links_media_idx ON media_links (media_id);
+
+  CREATE TABLE IF NOT EXISTS sync_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    message TEXT,
+    counts_json TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS sync_runs_finished_at_idx ON sync_runs (finished_at DESC);
+`
+
+function json(value) {
+  return value == null ? null : JSON.stringify(value)
+}
+
+function numberOrZero(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
+function nullable(value) {
+  return value == null || value === "" ? null : value
+}
+
+function nowIso() {
+  return new Date().toISOString()
+}
+
+function asIntegerOrNull(value) {
+  if (value == null || value === "") return null
+  const number = Number(value)
+  return Number.isInteger(number) && number >= 0 ? number : null
+}
+
+function mediaStatus(value, fallback = MEDIA_STATUS.PENDING) {
+  if (value == null || value === "") return fallback
+  const status = String(value)
+  if (!Object.values(MEDIA_STATUS).includes(status)) throw new Error("invalid media status")
+  return status
+}
+
+function mediaSource(value) {
+  return value?.source_url ?? value?.sourceUrl ?? value?.url ?? null
+}
+
+function mediaOwner(value) {
+  const ownerType = value?.owner_type ?? value?.ownerType
+  const ownerId = value?.owner_id ?? value?.ownerId
+  if (ownerType == null || ownerId == null || String(ownerType).trim() === "" || String(ownerId).trim() === "") {
+    return null
+  }
+  return { ownerType: String(ownerType), ownerId: String(ownerId) }
+}
+
+function mediaRole(value) {
+  return String(value?.role || "image").trim() || "image"
+}
+
+function normalizedMediaCandidate(candidate) {
+  const sourceUrl = normalizeSourceUrl(mediaSource(candidate))
+  if (!sourceUrl) return null
+  const id = mediaIdForSourceUrl(sourceUrl)
+  if (!id) return null
+  const owner = mediaOwner(candidate)
+  return {
+    id,
+    source: String(candidate?.source || "unknown"),
+    sourceUrl,
+    owner,
+    role: mediaRole(candidate),
+    position: Math.max(0, Math.trunc(Number(candidate?.position ?? 0) || 0)),
+    alt: nullable(candidate?.alt ?? candidate?.media_alt ?? candidate?.mediaAlt),
+    raw: candidate?.raw ?? candidate,
+  }
+}
+
+function insertRegisteredMediaAsset(database, candidate, timestamp = nowIso()) {
+  const row = normalizedMediaCandidate(candidate)
+  if (!row) return null
+  database.prepare(`
+    INSERT INTO media_assets (
+      id, source, source_url, status, last_seen_at, created_at, updated_at, raw_json
+    ) VALUES (@id, @source, @source_url, @status, @last_seen_at, @created_at, @updated_at, @raw_json)
+    ON CONFLICT(id) DO UPDATE SET
+      source=excluded.source,
+      source_url=excluded.source_url,
+      last_seen_at=excluded.last_seen_at,
+      updated_at=excluded.updated_at,
+      raw_json=COALESCE(excluded.raw_json, media_assets.raw_json),
+      status=CASE WHEN media_assets.status = @ready_status THEN @ready_status ELSE @pending_status END
+  `).run({
+    id: row.id,
+    source: row.source,
+    source_url: row.sourceUrl,
+    status: MEDIA_STATUS.PENDING,
+    last_seen_at: timestamp,
+    created_at: timestamp,
+    updated_at: timestamp,
+    raw_json: json(row.raw),
+    ready_status: MEDIA_STATUS.READY,
+    pending_status: MEDIA_STATUS.PENDING,
+  })
+  return row
+}
+
+function insertMediaLink(database, row, timestamp = nowIso()) {
+  if (!row?.mediaId || !row?.owner) return false
+  database.prepare(`
+    INSERT INTO media_links (
+      media_id, owner_type, owner_id, role, position, alt, created_at, updated_at
+    ) VALUES (@media_id, @owner_type, @owner_id, @role, @position, @alt, @created_at, @updated_at)
+    ON CONFLICT(owner_type, owner_id, role, position) DO UPDATE SET
+      media_id=excluded.media_id,
+      alt=COALESCE(excluded.alt, media_links.alt),
+      updated_at=excluded.updated_at
+  `).run({
+    media_id: row.mediaId,
+    owner_type: row.owner.ownerType,
+    owner_id: row.owner.ownerId,
+    role: row.role,
+    position: row.position,
+    alt: row.alt,
+    created_at: timestamp,
+    updated_at: timestamp,
+  })
+  return true
+}
+
+export function openDatabase({ filename = databasePath } = {}) {
+  if (filename !== ":memory:") fs.mkdirSync(path.dirname(path.resolve(filename)), { recursive: true })
+  ensureMediaCacheDirectories()
+  const database = new Database(filename)
+  database.pragma("journal_mode = WAL")
+  database.pragma("foreign_keys = ON")
+  database.exec(schema)
+  return database
+}
+
+function insertProfile(database, profile, overwrite) {
+  const sql = overwrite
+    ? `INSERT INTO profiles (id, display_name, romanized_name, bio, avatar_url, banner_url, x_url, youtube_url, updated_at, raw_json)
+       VALUES (@id, @display_name, @romanized_name, @bio, @avatar_url, @banner_url, @x_url, @youtube_url, @updated_at, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name, romanized_name=excluded.romanized_name,
+       bio=excluded.bio, avatar_url=excluded.avatar_url, banner_url=excluded.banner_url, x_url=excluded.x_url,
+       youtube_url=excluded.youtube_url, updated_at=excluded.updated_at, raw_json=excluded.raw_json`
+    : `INSERT OR IGNORE INTO profiles (id, display_name, romanized_name, bio, avatar_url, banner_url, x_url, youtube_url, updated_at, raw_json)
+       VALUES (@id, @display_name, @romanized_name, @bio, @avatar_url, @banner_url, @x_url, @youtube_url, @updated_at, @raw_json)`
+  database.prepare(sql).run({
+    id: profile.id,
+    display_name: profile.display_name,
+    romanized_name: nullable(profile.romanized_name),
+    bio: nullable(profile.bio),
+    avatar_url: nullable(profile.avatar_url),
+    banner_url: nullable(profile.banner_url),
+    x_url: nullable(profile.x_url),
+    youtube_url: nullable(profile.youtube_url),
+    updated_at: nullable(profile.updated_at),
+    raw_json: json(profile),
+  })
+}
+
+function insertPost(database, post, overwrite) {
+  const sql = overwrite
+    ? `INSERT INTO posts (id, source, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, raw_json)
+       VALUES (@id, @source, @type, @label, @text, @published_at, @url, @likes, @reposts, @replies, @media_url, @media_alt, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET source=excluded.source, type=excluded.type, label=excluded.label, text=excluded.text,
+       published_at=excluded.published_at, url=excluded.url, likes=excluded.likes, reposts=excluded.reposts,
+       replies=excluded.replies, media_url=excluded.media_url, media_alt=excluded.media_alt, raw_json=excluded.raw_json`
+    : `INSERT OR IGNORE INTO posts (id, source, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, raw_json)
+       VALUES (@id, @source, @type, @label, @text, @published_at, @url, @likes, @reposts, @replies, @media_url, @media_alt, @raw_json)`
+  database.prepare(sql).run({
+    id: String(post.id),
+    source: post.source || "x",
+    type: post.type || "daily",
+    label: nullable(post.label),
+    text: post.text || "",
+    published_at: post.published_at || new Date().toISOString(),
+    url: post.url || "",
+    likes: numberOrZero(post.likes),
+    reposts: numberOrZero(post.reposts),
+    replies: numberOrZero(post.replies),
+    media_url: nullable(post.media_url),
+    media_alt: nullable(post.media_alt),
+    raw_json: json(post),
+  })
+}
+
+function insertEvent(database, event, overwrite) {
+  const sql = overwrite
+    ? `INSERT INTO events (id, source, title, detail, starts_at, ends_at, status, event_type, url, is_upcoming, raw_json)
+       VALUES (@id, @source, @title, @detail, @starts_at, @ends_at, @status, @event_type, @url, @is_upcoming, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET source=excluded.source, title=excluded.title, detail=excluded.detail,
+       starts_at=excluded.starts_at, ends_at=excluded.ends_at, status=excluded.status, event_type=excluded.event_type,
+       url=excluded.url, is_upcoming=excluded.is_upcoming, raw_json=excluded.raw_json`
+    : `INSERT OR IGNORE INTO events (id, source, title, detail, starts_at, ends_at, status, event_type, url, is_upcoming, raw_json)
+       VALUES (@id, @source, @title, @detail, @starts_at, @ends_at, @status, @event_type, @url, @is_upcoming, @raw_json)`
+  database.prepare(sql).run({
+    id: String(event.id),
+    source: event.source || "manual",
+    title: event.title || "未命名活动",
+    detail: nullable(event.detail),
+    starts_at: event.starts_at || new Date().toISOString(),
+    ends_at: nullable(event.ends_at),
+    status: nullable(event.status),
+    event_type: event.event_type || "event",
+    url: nullable(event.url),
+    is_upcoming: event.is_upcoming ? 1 : 0,
+    raw_json: json(event),
+  })
+}
+
+function insertVideo(database, video, overwrite) {
+  const sql = overwrite
+    ? `INSERT INTO videos (id, source, title, published_at, scheduled_at, url, thumbnail_url, kind, is_upcoming, raw_json)
+       VALUES (@id, @source, @title, @published_at, @scheduled_at, @url, @thumbnail_url, @kind, @is_upcoming, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET source=excluded.source, title=excluded.title, published_at=excluded.published_at,
+       scheduled_at=excluded.scheduled_at, url=excluded.url, thumbnail_url=excluded.thumbnail_url, kind=excluded.kind,
+       is_upcoming=excluded.is_upcoming, raw_json=excluded.raw_json`
+    : `INSERT OR IGNORE INTO videos (id, source, title, published_at, scheduled_at, url, thumbnail_url, kind, is_upcoming, raw_json)
+       VALUES (@id, @source, @title, @published_at, @scheduled_at, @url, @thumbnail_url, @kind, @is_upcoming, @raw_json)`
+  database.prepare(sql).run({
+    id: String(video.id),
+    source: video.source || "youtube",
+    title: video.title || "未命名视频",
+    published_at: nullable(video.published_at),
+    scheduled_at: nullable(video.scheduled_at),
+    url: video.url || `https://www.youtube.com/watch?v=${video.id}`,
+    thumbnail_url: nullable(video.thumbnail_url),
+    kind: nullable(video.kind),
+    is_upcoming: video.is_upcoming ? 1 : 0,
+    raw_json: json(video),
+  })
+}
+
+function insertFocus(database, focus, overwrite) {
+  const sql = overwrite
+    ? `INSERT INTO focus (id, date_label, title, description, image_url, url, source_url, updated_at, raw_json)
+       VALUES (@id, @date_label, @title, @description, @image_url, @url, @source_url, @updated_at, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET date_label=excluded.date_label, title=excluded.title, description=excluded.description,
+       image_url=excluded.image_url, url=excluded.url, source_url=excluded.source_url, updated_at=excluded.updated_at,
+       raw_json=excluded.raw_json`
+    : `INSERT OR IGNORE INTO focus (id, date_label, title, description, image_url, url, source_url, updated_at, raw_json)
+       VALUES (@id, @date_label, @title, @description, @image_url, @url, @source_url, @updated_at, @raw_json)`
+  database.prepare(sql).run({
+    id: Number(focus.id || 1),
+    date_label: nullable(focus.date_label),
+    title: focus.title || "最近焦点",
+    description: nullable(focus.description),
+    image_url: nullable(focus.image_url),
+    url: nullable(focus.url),
+    source_url: nullable(focus.source_url),
+    updated_at: nullable(focus.updated_at),
+    raw_json: json(focus),
+  })
+}
+
+function insertTimeline(database, item, overwrite) {
+  const sql = overwrite
+    ? `INSERT INTO timeline (id, year, title, detail, sort_order, raw_json)
+       VALUES (@id, @year, @title, @detail, @sort_order, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET year=excluded.year, title=excluded.title, detail=excluded.detail,
+       sort_order=excluded.sort_order, raw_json=excluded.raw_json`
+    : `INSERT OR IGNORE INTO timeline (id, year, title, detail, sort_order, raw_json)
+       VALUES (@id, @year, @title, @detail, @sort_order, @raw_json)`
+  database.prepare(sql).run({
+    id: Number(item.id),
+    year: String(item.year),
+    title: item.title || "",
+    detail: nullable(item.detail),
+    sort_order: numberOrZero(item.sort_order),
+    raw_json: json(item),
+  })
+}
+
+function insertResource(database, resource, overwrite) {
+  const sql = overwrite
+    ? `INSERT INTO resources (id, title, detail, icon, tone, url, sort_order, raw_json)
+       VALUES (@id, @title, @detail, @icon, @tone, @url, @sort_order, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET title=excluded.title, detail=excluded.detail, icon=excluded.icon,
+       tone=excluded.tone, url=excluded.url, sort_order=excluded.sort_order, raw_json=excluded.raw_json`
+    : `INSERT OR IGNORE INTO resources (id, title, detail, icon, tone, url, sort_order, raw_json)
+       VALUES (@id, @title, @detail, @icon, @tone, @url, @sort_order, @raw_json)`
+  database.prepare(sql).run({
+    id: Number(resource.id),
+    title: resource.title || "资料",
+    detail: nullable(resource.detail),
+    icon: nullable(resource.icon),
+    tone: nullable(resource.tone),
+    url: resource.url || "",
+    sort_order: numberOrZero(resource.sort_order),
+    raw_json: json(resource),
+  })
+}
+
+function insertAsset(database, asset, overwrite) {
+  const sql = overwrite
+    ? `INSERT INTO assets (id, kind, url, source_url, alt, updated_at, raw_json)
+       VALUES (@id, @kind, @url, @source_url, @alt, @updated_at, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, url=excluded.url, source_url=excluded.source_url,
+       alt=excluded.alt, updated_at=excluded.updated_at, raw_json=excluded.raw_json`
+    : `INSERT OR IGNORE INTO assets (id, kind, url, source_url, alt, updated_at, raw_json)
+       VALUES (@id, @kind, @url, @source_url, @alt, @updated_at, @raw_json)`
+  database.prepare(sql).run({
+    id: String(asset.id),
+    kind: asset.kind || "image",
+    url: asset.url || "",
+    source_url: nullable(asset.source_url),
+    alt: nullable(asset.alt),
+    updated_at: nullable(asset.updated_at),
+    raw_json: json(asset),
+  })
+}
+
+function mediaCandidatesFromProfile(profile) {
+  return [
+    { source: "profile", source_url: profile?.avatar_url, owner_type: "profile", owner_id: profile?.id, role: "avatar", position: 0 },
+    { source: "profile", source_url: profile?.banner_url, owner_type: "profile", owner_id: profile?.id, role: "banner", position: 0 },
+  ]
+}
+
+function mediaCandidatesFromPost(post) {
+  const urls = Array.isArray(post?.media_urls) ? post.media_urls : [post?.media_url]
+  return urls.map((source_url, position) => ({
+    source: post?.source || "x",
+    source_url,
+    owner_type: "post",
+    owner_id: post?.id,
+    role: "post-image",
+    position,
+    alt: post?.media_alt,
+  }))
+}
+
+function mediaCandidatesFromVideo(video) {
+  const urls = Array.isArray(video?.thumbnail_urls) ? video.thumbnail_urls : [video?.thumbnail_url]
+  return urls.map((source_url, position) => ({
+    source: video?.source || "youtube",
+    source_url,
+    owner_type: "video",
+    owner_id: video?.id,
+    role: "thumbnail",
+    position,
+  }))
+}
+
+function mediaCandidatesFromFocus(focus) {
+  return [{
+    source: "focus",
+    source_url: focus?.image_url,
+    owner_type: "focus",
+    owner_id: focus?.id || 1,
+    role: "focus-image",
+    position: 0,
+    alt: focus?.title,
+  }]
+}
+
+function mediaCandidatesFromAsset(asset) {
+  return [{
+    source: asset?.source || asset?.kind || "asset",
+    source_url: asset?.url,
+    owner_type: "asset",
+    owner_id: asset?.id,
+    role: asset?.kind || "image",
+    position: 0,
+    alt: asset?.alt,
+  }]
+}
+
+function collectSeedMediaCandidates(data) {
+  return [
+    ...mediaCandidatesFromProfile(data?.profile),
+    ...(data?.posts || []).flatMap(mediaCandidatesFromPost),
+    ...(data?.videos || []).flatMap(mediaCandidatesFromVideo),
+    ...(data?.focus ? mediaCandidatesFromFocus(data.focus) : []),
+    ...(data?.assets || []).flatMap(mediaCandidatesFromAsset),
+  ]
+}
+
+/**
+ * Register remote media discovered by a source adapter. Registration is
+ * intentionally separate from downloading: a later worker can claim pending
+ * rows and update their cache metadata without changing the source snapshot.
+ */
+export function registerMediaCandidates(database, candidates = []) {
+  const timestamp = nowIso()
+  const register = database.transaction((rows) => {
+    let registered = 0
+    let linked = 0
+    let skipped = 0
+    for (const candidate of rows) {
+      const row = insertRegisteredMediaAsset(database, candidate, timestamp)
+      if (!row) {
+        skipped += 1
+        continue
+      }
+      registered += 1
+      if (insertMediaLink(database, { ...row, mediaId: row.id }, timestamp)) linked += 1
+    }
+    return { registered, linked, skipped }
+  })
+  return register(candidates)
+}
+
+/** Upsert metadata written by a future downloader after a successful fetch. */
+export function upsertMediaAsset(database, asset) {
+  const sourceUrl = normalizeSourceUrl(mediaSource(asset))
+  if (!sourceUrl) throw new Error("media asset requires an HTTP(S) source URL")
+  const id = mediaIdForSourceUrl(sourceUrl)
+  if (!id) throw new Error("media asset requires a valid source URL")
+  if (asset?.id && String(asset.id) !== id) throw new Error("media asset ID does not match its source URL")
+  const timestamp = nowIso()
+  const status = mediaStatus(asset?.status, MEDIA_STATUS.READY)
+  const requestedCachePath = asset?.cache_path ?? asset?.cachePath
+  if (status === MEDIA_STATUS.READY && !requestedCachePath) {
+    throw new Error("ready media asset requires a cache path")
+  }
+  if (requestedCachePath && !resolveMediaCachePath(String(requestedCachePath))) {
+    throw new Error("invalid media cache path")
+  }
+  const requestedHash = asset?.sha256 == null ? null : String(asset.sha256).toLowerCase()
+  if (requestedHash != null && !/^[a-f0-9]{64}$/iu.test(String(requestedHash))) {
+    throw new Error("invalid media content hash")
+  }
+  const normalizedMimeType = normalizeMediaMimeType(asset?.mime_type ?? asset?.mimeType)
+  let readyStat = null
+  if (status === MEDIA_STATUS.READY) {
+    if (!normalizedMimeType) throw new Error("ready media asset requires an allowed image MIME type")
+    if (!requestedHash) throw new Error("ready media asset requires a content hash")
+    const expectedPath = cacheRelativePathForHash(requestedHash, extensionForMimeType(normalizedMimeType))
+    if (String(requestedCachePath) !== expectedPath) throw new Error("ready media cache path does not match its content hash")
+    const fullPath = resolveMediaCachePath(expectedPath)
+    try { readyStat = fs.statSync(fullPath) } catch { readyStat = null }
+    if (!readyStat?.isFile()) throw new Error("ready media cache file does not exist")
+  }
+  const values = {
+    id,
+    source: String(asset?.source || "unknown"),
+    source_url: sourceUrl,
+    cache_path: nullable(asset?.cache_path ?? asset?.cachePath),
+    mime_type: normalizedMimeType,
+    extension: nullable(asset?.extension ?? (normalizedMimeType ? extensionForMimeType(normalizedMimeType) : null)),
+    byte_size: asIntegerOrNull(asset?.byte_size ?? asset?.byteSize) ?? readyStat?.size ?? null,
+    sha256: requestedHash,
+    width: asIntegerOrNull(asset?.width),
+    height: asIntegerOrNull(asset?.height),
+    status,
+    fetched_at: nullable(asset?.fetched_at ?? asset?.fetchedAt ?? (status === MEDIA_STATUS.READY ? timestamp : null)),
+    last_checked_at: nullable(asset?.last_checked_at ?? asset?.lastCheckedAt ?? timestamp),
+    last_seen_at: nullable(asset?.last_seen_at ?? asset?.lastSeenAt ?? timestamp),
+    etag: nullable(asset?.etag),
+    last_modified: nullable(asset?.last_modified ?? asset?.lastModified),
+    last_error: nullable(asset?.last_error ?? asset?.lastError),
+    created_at: timestamp,
+    updated_at: timestamp,
+    raw_json: json(asset),
+  }
+  database.prepare(`
+    INSERT INTO media_assets (
+      id, source, source_url, cache_path, mime_type, extension, byte_size, sha256,
+      width, height, status, fetched_at, last_checked_at, last_seen_at, etag,
+      last_modified, last_error, created_at, updated_at, raw_json
+    ) VALUES (
+      @id, @source, @source_url, @cache_path, @mime_type, @extension, @byte_size, @sha256,
+      @width, @height, @status, @fetched_at, @last_checked_at, @last_seen_at, @etag,
+      @last_modified, @last_error, @created_at, @updated_at, @raw_json
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      source=excluded.source,
+      source_url=excluded.source_url,
+      cache_path=COALESCE(excluded.cache_path, media_assets.cache_path),
+      mime_type=COALESCE(excluded.mime_type, media_assets.mime_type),
+      extension=COALESCE(excluded.extension, media_assets.extension),
+      byte_size=COALESCE(excluded.byte_size, media_assets.byte_size),
+      sha256=COALESCE(excluded.sha256, media_assets.sha256),
+      width=COALESCE(excluded.width, media_assets.width),
+      height=COALESCE(excluded.height, media_assets.height),
+      status=CASE
+        WHEN media_assets.status = 'ready' AND excluded.status != 'ready' THEN media_assets.status
+        ELSE excluded.status
+      END,
+      fetched_at=COALESCE(excluded.fetched_at, media_assets.fetched_at),
+      last_checked_at=COALESCE(excluded.last_checked_at, media_assets.last_checked_at),
+      last_seen_at=COALESCE(excluded.last_seen_at, media_assets.last_seen_at),
+      etag=COALESCE(excluded.etag, media_assets.etag),
+      last_modified=COALESCE(excluded.last_modified, media_assets.last_modified),
+      last_error=excluded.last_error,
+      updated_at=excluded.updated_at,
+      raw_json=COALESCE(excluded.raw_json, media_assets.raw_json)
+  `).run(values)
+  return getMediaAsset(database, id)
+}
+
+const mediaAssetColumns = `
+  id, source, source_url AS sourceUrl, cache_path AS cachePath,
+  mime_type AS mimeType, extension, byte_size AS byteSize, sha256,
+  width, height, status, fetched_at AS fetchedAt, last_checked_at AS lastCheckedAt,
+  last_seen_at AS lastSeenAt, etag, last_modified AS lastModified,
+  last_error AS lastError, created_at AS createdAt, updated_at AS updatedAt
+`
+
+export function getMediaAsset(database, id) {
+  if (!isSafeMediaId(id)) return null
+  return database.prepare(`SELECT ${mediaAssetColumns} FROM media_assets WHERE id = ?`).get(id) || null
+}
+
+export function listMediaAssets(database, { status } = {}) {
+  if (status) {
+    return database.prepare(`SELECT ${mediaAssetColumns} FROM media_assets WHERE status = ? ORDER BY updated_at DESC, id ASC`).all(status)
+  }
+  return database.prepare(`SELECT ${mediaAssetColumns} FROM media_assets ORDER BY updated_at DESC, id ASC`).all()
+}
+
+export function listMediaLinks(database, { mediaId, ownerType, ownerId } = {}) {
+  const clauses = []
+  const values = []
+  if (mediaId) { clauses.push("media_id = ?"); values.push(mediaId) }
+  if (ownerType) { clauses.push("owner_type = ?"); values.push(ownerType) }
+  if (ownerId) { clauses.push("owner_id = ?"); values.push(String(ownerId)) }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
+  return database.prepare(`SELECT id, media_id AS mediaId, owner_type AS ownerType, owner_id AS ownerId, role, position, alt, created_at AS createdAt, updated_at AS updatedAt FROM media_links ${where} ORDER BY owner_type, owner_id, role, position`).all(...values)
+}
+
+function mediaReferenceForAsset(asset) {
+  if (!asset) return null
+  const cachePath = asset.cachePath ? resolveMediaCachePath(asset.cachePath) : null
+  const ready = asset.status === MEDIA_STATUS.READY && cachePath && isSafeContentHash(asset.sha256) && fs.existsSync(cachePath)
+  return {
+    id: asset.id,
+    status: ready ? MEDIA_STATUS.READY : (asset.status === MEDIA_STATUS.READY ? MEDIA_STATUS.MISSING : (asset.status || MEDIA_STATUS.MISSING)),
+    sourceUrl: asset.sourceUrl,
+    publicUrl: ready ? publicMediaUrl(asset.id, asset.sha256) : null,
+    mimeType: asset.mimeType || null,
+    byteSize: asset.byteSize ?? null,
+    width: asset.width ?? null,
+    height: asset.height ?? null,
+  }
+}
+
+/** Map a stored URL to a safe browser URL while retaining source/status data. */
+export function resolveMediaReference(database, sourceUrl, bySourceUrl = null) {
+  if (!sourceUrl) return { id: null, status: MEDIA_STATUS.MISSING, sourceUrl: null, publicUrl: null }
+  if (String(sourceUrl).startsWith("/assets/")) {
+    const exists = publicAssetExists(String(sourceUrl))
+    return {
+      id: null,
+      status: exists ? MEDIA_STATUS.READY : MEDIA_STATUS.MISSING,
+      sourceUrl: null,
+      publicUrl: exists ? String(sourceUrl) : null,
+    }
+  }
+  const normalized = normalizeSourceUrl(sourceUrl)
+  if (!normalized) return { id: null, status: MEDIA_STATUS.MISSING, sourceUrl: null, publicUrl: null }
+  const asset = bySourceUrl?.get(normalized) || database.prepare(`SELECT ${mediaAssetColumns} FROM media_assets WHERE source_url = ?`).get(normalized)
+  return mediaReferenceForAsset(asset) || {
+    id: mediaIdForSourceUrl(normalized),
+    status: MEDIA_STATUS.PENDING,
+    sourceUrl: normalized,
+    publicUrl: null,
+  }
+}
+
+export function seedDatabase(database, data = seedData, { overwrite = false } = {}) {
+  const seed = database.transaction(() => {
+    insertProfile(database, data.profile, overwrite)
+    for (const post of data.posts || []) insertPost(database, post, overwrite)
+    for (const event of data.events || []) insertEvent(database, event, overwrite)
+    for (const video of data.videos || []) insertVideo(database, video, overwrite)
+    if (data.focus) insertFocus(database, data.focus, overwrite)
+    for (const item of data.timeline || []) insertTimeline(database, item, overwrite)
+    for (const item of data.resources || []) insertResource(database, item, overwrite)
+    for (const asset of data.assets || []) insertAsset(database, asset, overwrite)
+  })
+  seed()
+  registerMediaCandidates(database, collectSeedMediaCandidates(data))
+}
+
+export function initializeDatabase({ seed = true, filename = databasePath } = {}) {
+  const database = openDatabase({ filename })
+  if (seed) seedDatabase(database)
+  return database
+}
+
+export function upsertProfile(database, profile) {
+  insertProfile(database, profile, true)
+  registerMediaCandidates(database, mediaCandidatesFromProfile(profile))
+}
+
+export function upsertPosts(database, posts = []) {
+  const run = database.transaction((rows) => rows.forEach((post) => insertPost(database, post, true)))
+  run(posts)
+  registerMediaCandidates(database, posts.flatMap(mediaCandidatesFromPost))
+}
+
+export function upsertEvents(database, events = []) {
+  const run = database.transaction((rows) => rows.forEach((event) => insertEvent(database, event, true)))
+  run(events)
+}
+
+export function upsertVideos(database, videos = []) {
+  const run = database.transaction((rows) => rows.forEach((video) => insertVideo(database, video, true)))
+  run(videos)
+  registerMediaCandidates(database, videos.flatMap(mediaCandidatesFromVideo))
+}
+
+export function upsertAssets(database, assets = []) {
+  const run = database.transaction((rows) => rows.forEach((asset) => insertAsset(database, asset, true)))
+  run(assets)
+  registerMediaCandidates(database, assets.flatMap(mediaCandidatesFromAsset))
+}
+
+export function startSyncRun(database, source, startedAt = new Date().toISOString()) {
+  const result = database.prepare(`INSERT INTO sync_runs (source, started_at, status) VALUES (?, ?, 'running')`).run(source, startedAt)
+  return Number(result.lastInsertRowid)
+}
+
+export function finishSyncRun(database, id, { status, message = "", counts = {} } = {}) {
+  database.prepare(`UPDATE sync_runs SET finished_at = ?, status = ?, message = ?, counts_json = ? WHERE id = ?`)
+    .run(new Date().toISOString(), status, message, JSON.stringify(counts), id)
+}
+
+function parseJson(value) {
+  if (!value) return undefined
+  try { return JSON.parse(value) } catch { return undefined }
+}
+
+function mapProfile(row) {
+  if (!row) return null
+  const { raw_json: _raw, ...profile } = row
+  return profile
+}
+
+function mapRows(rows) {
+  return rows.map(({ raw_json: _raw, ...row }) => row)
+}
+
+export function getLatestSync(database) {
+  const row = database.prepare(`SELECT id, source, started_at AS startedAt, finished_at AS finishedAt, status, message, counts_json AS countsJson
+    FROM sync_runs WHERE status != 'running' ORDER BY COALESCE(finished_at, started_at) DESC LIMIT 1`).get()
+  if (!row) return null
+  const { countsJson: _countsJson, ...summary } = row
+  return { ...summary, counts: parseJson(row.countsJson) || {} }
+}
+
+export function getDashboard(database, { days = 3, now = new Date() } = {}) {
+  const windowStart = now.getTime() - days * 24 * 60 * 60 * 1000
+  const mediaRows = listMediaAssets(database)
+  const mediaBySourceUrl = new Map(mediaRows.map((asset) => [asset.sourceUrl, asset]))
+  const posts = database.prepare(`SELECT id, source, type, label, text, published_at AS publishedAt, url, likes, reposts, replies, media_url AS mediaUrl, media_alt AS mediaAlt
+    FROM posts ORDER BY published_at DESC`).all()
+    .filter((post) => {
+      const timestamp = Date.parse(post.publishedAt)
+      return Number.isNaN(timestamp) || timestamp >= windowStart
+    })
+    .map((post) => {
+      const media = resolveMediaReference(database, post.mediaUrl, mediaBySourceUrl)
+      return {
+        ...post,
+        mediaUrl: media.publicUrl,
+        mediaId: media.id,
+        mediaStatus: media.status,
+        mediaSourceUrl: media.sourceUrl,
+      }
+    })
+
+  const events = database.prepare(`SELECT id, source, title, detail, starts_at AS startsAt, ends_at AS endsAt, status, event_type AS eventType, url
+    FROM events ORDER BY starts_at ASC`).all().map((event) => ({
+    ...event,
+    isUpcoming: !Number.isNaN(Date.parse(event.startsAt)) && Date.parse(event.startsAt) >= now.getTime(),
+  }))
+
+  const videos = database.prepare(`SELECT id, source, title, published_at AS publishedAt, scheduled_at AS scheduledAt, url,
+    thumbnail_url AS thumbnailUrl, kind, is_upcoming AS isUpcoming FROM videos
+    ORDER BY COALESCE(scheduled_at, published_at) DESC LIMIT 30`).all().map((video) => ({
+    ...video,
+    isUpcoming: Boolean(video.isUpcoming) || Boolean(video.scheduledAt && Date.parse(video.scheduledAt) >= now.getTime()),
+  })).map((video) => {
+    const media = resolveMediaReference(database, video.thumbnailUrl, mediaBySourceUrl)
+    return {
+      ...video,
+      thumbnailUrl: media.publicUrl,
+      thumbnailId: media.id,
+      thumbnailStatus: media.status,
+      thumbnailSourceUrl: media.sourceUrl,
+    }
+  })
+
+  const focusRow = database.prepare(`SELECT id, date_label AS dateLabel, title, description, image_url AS imageUrl, url, source_url AS sourceUrl, updated_at AS updatedAt FROM focus ORDER BY id LIMIT 1`).get()
+  const focus = focusRow ? (() => {
+    const media = resolveMediaReference(database, focusRow.imageUrl, mediaBySourceUrl)
+    return {
+      ...focusRow,
+      imageUrl: media.publicUrl,
+      imageId: media.id,
+      imageStatus: media.status,
+      imageSourceUrl: media.sourceUrl,
+    }
+  })() : null
+  const timeline = database.prepare(`SELECT id, year, title, detail, sort_order AS sortOrder FROM timeline ORDER BY sort_order ASC, id ASC`).all()
+  const resources = database.prepare(`SELECT id, title, detail, icon, tone, url, sort_order AS sortOrder FROM resources ORDER BY sort_order ASC, id ASC`).all()
+  const assets = database.prepare(`SELECT id, kind, url, source_url AS sourceUrl, alt, updated_at AS updatedAt FROM assets ORDER BY id ASC`).all().map((asset) => {
+    const media = resolveMediaReference(database, asset.url, mediaBySourceUrl)
+    return {
+      ...asset,
+      url: media.publicUrl,
+      sourceUrl: asset.sourceUrl || media.sourceUrl,
+      mediaId: media.id,
+      mediaStatus: media.status,
+      mediaSourceUrl: media.sourceUrl,
+    }
+  })
+  const profileRow = mapProfile(database.prepare(`SELECT id, display_name AS displayName, romanized_name AS romanizedName, bio, avatar_url AS avatarUrl, banner_url AS bannerUrl, x_url AS xUrl, youtube_url AS youtubeUrl, updated_at AS updatedAt FROM profiles ORDER BY id LIMIT 1`).get())
+  const profile = profileRow ? (() => {
+    const avatar = resolveMediaReference(database, profileRow.avatarUrl, mediaBySourceUrl)
+    const banner = resolveMediaReference(database, profileRow.bannerUrl, mediaBySourceUrl)
+    return {
+      ...profileRow,
+      avatarUrl: avatar.publicUrl,
+      avatarId: avatar.id,
+      avatarStatus: avatar.status,
+      avatarSourceUrl: avatar.sourceUrl,
+      bannerUrl: banner.publicUrl,
+      bannerId: banner.id,
+      bannerStatus: banner.status,
+      bannerSourceUrl: banner.sourceUrl,
+    }
+  })() : null
+  const latestSync = getLatestSync(database)
+  const mediaCache = mediaRows.reduce((summary, asset) => {
+    const media = mediaReferenceForAsset(asset)
+    const status = media?.status || asset.status
+    summary.total += 1
+    summary[status] = (summary[status] || 0) + 1
+    return summary
+  }, { total: 0 })
+
+  const dateCandidates = [profile?.updatedAt, focusRow?.updatedAt, ...posts.map((post) => post.publishedAt), ...videos.map((video) => video.publishedAt)]
+    .map((value) => Date.parse(value || ""))
+    .filter((value) => !Number.isNaN(value))
+  const fetchedAt = latestSync?.finishedAt || (dateCandidates.length ? new Date(Math.max(...dateCandidates)).toISOString() : null)
+
+  return {
+    profile,
+    posts,
+    events,
+    videos,
+    focus,
+    timeline,
+    resources,
+    assets,
+    meta: {
+      fetchedAt,
+      lastSync: latestSync,
+      postWindowDays: days,
+      generatedAt: now.toISOString(),
+      mediaCache,
+    },
+  }
+}

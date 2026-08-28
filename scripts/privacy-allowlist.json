@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "hosts": [
+    { "host": "github.com", "reason": "Public repository and documentation links." },
+    { "host": "ui.shadcn.com", "reason": "Public shadcn/ui schema referenced by components.json." },
+    { "host": "x.com", "reason": "Public X profile, posts, hashtags, and schedule links used by the board." },
+    { "host": "api.vxtwitter.com", "reason": "Public status endpoint used by the server-side X synchronizer." },
+    { "host": "pbs.twimg.com", "reason": "Public image CDN URLs returned by X status data." },
+    { "host": "youtube.com", "reason": "Public YouTube channel, video, RSS, and stream links." },
+    { "host": "i.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
+    { "host": "wikipedia.org", "reason": "Public Wikipedia biography link." },
+    { "host": "nicovideo.jp", "reason": "Public early-song archive link." },
+    { "host": "bilibili.com", "reason": "Public Bilibili profile link." },
+    { "host": "twitcasting.tv", "reason": "Public livestream archive link." },
+    { "host": "milpr.com", "reason": "Public agency/news reference link." },
+    { "host": "amebaownd.com", "reason": "Public archived official-site link." },
+    { "host": "opencollective.com", "reason": "Public dependency funding metadata in package-lock.json." },
+    { "host": "feross.org", "reason": "Public dependency funding metadata in package-lock.json." },
+    { "host": "paulmillr.com", "reason": "Public dependency funding metadata in package-lock.json." },
+    { "host": "polar.sh", "reason": "Public dependency funding metadata in package-lock.json." },
+    { "host": "tidelift.com", "reason": "Public dependency funding metadata in package-lock.json." },
+    { "host": "patreon.com", "reason": "Public dependency funding metadata in package-lock.json." }
+  ]
+}

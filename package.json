@@ -1,0 +1,43 @@
+{
+  "name": "kano-status-board",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"node server/index.js\" \"vite\"",
+    "dev:client": "vite",
+    "dev:server": "node server/index.js",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "NODE_ENV=production node server/index.js",
+    "seed": "node scripts/seed.mjs",
+    "sync": "node scripts/sync.mjs",
+    "check-sensitive": "node scripts/check-sensitive.mjs",
+    "test:sensitive": "node --test scripts/check-sensitive.test.mjs",
+    "test:server": "node --test server/*.test.mjs",
+    "docs:check-links": "node scripts/check-doc-links.mjs",
+    "check": "npm run test:sensitive && npm run test:server && npm run check-sensitive && npm run docs:check-links && npm run build"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "better-sqlite3": "^13.0.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "concurrently": "^10.0.5",
+    "express": "^5.2.1",
+    "fast-xml-parser": "^5.11.1",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "vite": "^8.2.2"
+  }
+}
