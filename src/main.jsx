@@ -9,6 +9,7 @@ import {
   Clock3,
   Heart,
   Image as ImageIcon,
+  Languages,
   LoaderCircle,
   MessageCircle,
   Moon,
@@ -27,6 +28,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { createTranslator, detectLocale, localeOptions } from "@/i18n"
 import "./index.css"
 
 const JAPAN_TIME_ZONE = "Asia/Tokyo"
@@ -54,21 +56,32 @@ const emptyDashboard = {
   meta: { fetchedAt: null, lastSync: null, postWindowDays },
 }
 
-const dateFormatter = new Intl.DateTimeFormat("zh-CN", {
+const intlLocales = {
+  "zh-CN": "zh-CN",
+  ja: "ja-JP",
+  en: "en-US",
+}
+
+const dateKeyFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: JAPAN_TIME_ZONE,
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
 })
 
-const dateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: JAPAN_TIME_ZONE,
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-})
+const dateTimeFormatters = new Map()
+const monthFormatters = new Map()
+const calendarDateFormatters = new Map()
+
+function getFormatter(cache, locale, options) {
+  if (!cache.has(locale)) {
+    cache.set(
+      locale,
+      new Intl.DateTimeFormat(intlLocales[locale] || intlLocales.en, options),
+    )
+  }
+  return cache.get(locale)
+}
 
 function pad(value) {
   return String(value).padStart(2, "0")
@@ -77,7 +90,7 @@ function pad(value) {
 function dateKey(value) {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return ""
-  const parts = dateFormatter.formatToParts(date).reduce((result, part) => {
+  const parts = dateKeyFormatter.formatToParts(date).reduce((result, part) => {
     result[part.type] = part.value
     return result
   }, {})
@@ -88,53 +101,80 @@ function localDateKey(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
-function formatMonthLabel(date) {
-  return `${date.getFullYear()} 年 ${pad(date.getMonth() + 1)} 月`
+function formatMonthLabel(date, locale) {
+  return getFormatter(monthFormatters, locale, {
+    year: "numeric",
+    month: "long",
+  }).format(date)
 }
 
-function formatDateTime(value) {
+function formatCalendarDate(date, locale) {
+  return getFormatter(calendarDateFormatters, locale, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date)
+}
+
+function formatDateTime(value, locale) {
   if (!value) return "—"
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "—"
-  const parts = dateTimeFormatter.formatToParts(date).reduce((result, part) => {
-    result[part.type] = part.value
-    return result
-  }, {})
+  const parts = getFormatter(dateTimeFormatters, locale, {
+    timeZone: JAPAN_TIME_ZONE,
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .formatToParts(date)
+    .reduce((result, part) => {
+      result[part.type] = part.value
+      return result
+    }, {})
   return `${parts.month}.${parts.day} · ${parts.hour}:${parts.minute}`
 }
 
-function formatEventDate(value) {
-  if (!value) return { date: "—", time: "待确认" }
+function formatEventDate(value, locale, t) {
+  if (!value) return { date: "—", time: t("common.pendingConfirmation") }
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return { date: "—", time: "待确认" }
-  const parts = dateTimeFormatter.formatToParts(date).reduce((result, part) => {
-    result[part.type] = part.value
-    return result
-  }, {})
+  if (Number.isNaN(date.getTime())) {
+    return { date: "—", time: t("common.pendingConfirmation") }
+  }
+  const parts = getFormatter(dateTimeFormatters, locale, {
+    timeZone: JAPAN_TIME_ZONE,
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .formatToParts(date)
+    .reduce((result, part) => {
+      result[part.type] = part.value
+      return result
+    }, {})
   return {
     date: `${parts.month}.${parts.day}`,
     time: `${parts.hour}:${parts.minute} JST`,
   }
 }
 
-function formatNumber(value) {
+function formatNumber(value, locale) {
   const number = Number(value)
   if (!Number.isFinite(number)) return "0"
-  return new Intl.NumberFormat("en", {
+  return new Intl.NumberFormat(intlLocales[locale] || intlLocales.en, {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(number)
 }
 
-function formatSyncLabel(meta) {
-  return `SQLite 快照 · ${formatSyncTime(meta)}`
-}
-
-function formatSyncTime(meta) {
+function formatSyncTime(meta, locale, t) {
   const sync = meta?.lastSync
-  if (sync?.finishedAt) return formatDateTime(sync.finishedAt)
-  if (meta?.fetchedAt) return formatDateTime(meta.fetchedAt)
-  return "等待同步"
+  if (sync?.finishedAt) return formatDateTime(sync.finishedAt, locale)
+  if (meta?.fetchedAt) return formatDateTime(meta.fetchedAt, locale)
+  return t("sync.waiting")
 }
 
 function sameMonth(a, b) {
@@ -149,11 +189,21 @@ function eventIsUpcoming(event) {
 
 function eventStatusClass(event) {
   if (eventIsUpcoming(event)) return "upcoming"
-  if (/待|确认/i.test(event.status || "")) return "pending"
+  if (/待|確認|确认|pending|tentative/i.test(event.status || "")) {
+    return "pending"
+  }
   return "done"
 }
 
-function Calendar({ month, selectedDate, events, onSelect, onMonthChange }) {
+function Calendar({
+  month,
+  selectedDate,
+  events,
+  locale,
+  t,
+  onSelect,
+  onMonthChange,
+}) {
   const days = useMemo(() => {
     const year = month.getFullYear()
     const monthIndex = month.getMonth()
@@ -198,14 +248,14 @@ function Calendar({ month, selectedDate, events, onSelect, onMonthChange }) {
               size="icon"
               className="month-button"
               onClick={() => onMonthChange(-1)}
-              aria-label="上一个月"
+              aria-label={t("calendar.previousMonth")}
             >
               <ChevronLeft className="inline-icon" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>上一个月</TooltipContent>
+          <TooltipContent>{t("calendar.previousMonth")}</TooltipContent>
         </Tooltip>
-        <strong>{formatMonthLabel(month)}</strong>
+        <strong>{formatMonthLabel(month, locale)}</strong>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -213,36 +263,43 @@ function Calendar({ month, selectedDate, events, onSelect, onMonthChange }) {
               size="icon"
               className="month-button"
               onClick={() => onMonthChange(1)}
-              aria-label="下一个月"
+              aria-label={t("calendar.nextMonth")}
             >
               <ChevronRight className="inline-icon" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>下一个月</TooltipContent>
+          <TooltipContent>{t("calendar.nextMonth")}</TooltipContent>
         </Tooltip>
       </div>
       <div className="calendar-weekdays" aria-hidden="true">
-        {["日", "一", "二", "三", "四", "五", "六"].map((weekday) => (
+        {t("calendar.weekdays").map((weekday) => (
           <span key={weekday}>{weekday}</span>
         ))}
       </div>
       <div
         className="calendar-grid"
         role="grid"
-        aria-label={`${formatMonthLabel(month)}月历`}
+        aria-label={t("calendar.gridLabel", {
+          month: formatMonthLabel(month, locale),
+        })}
       >
         {days.map(({ date, isMuted }) => {
           const key = localDateKey(date)
           const hasEvent = eventDates.has(key)
           const isToday = key === todayKey
           const isSelected = key === selectedKey
+          const spokenDate = formatCalendarDate(date, locale)
           return (
             <button
               key={key}
               type="button"
               role="gridcell"
               className={`calendar-day${isMuted ? " is-muted" : ""}${isToday ? " is-today" : ""}${isSelected ? " is-selected" : ""}${hasEvent ? " has-event" : ""}`}
-              aria-label={`${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日${hasEvent ? "，有记录" : ""}`}
+              aria-label={
+                hasEvent
+                  ? t("calendar.dayWithEvent", { date: spokenDate })
+                  : spokenDate
+              }
               onClick={() => onSelect(date)}
             >
               {date.getDate()}
@@ -254,7 +311,7 @@ function Calendar({ month, selectedDate, events, onSelect, onMonthChange }) {
   )
 }
 
-function PostItem({ post, profile }) {
+function PostItem({ post, profile, locale, t }) {
   return (
     <article className="post-item">
       <div className="post-avatar">
@@ -263,10 +320,10 @@ function PostItem({ post, profile }) {
       <div>
         <div className="post-meta">
           <span className={`post-type post-type-${post.type || "daily"}`}>
-            {post.label || "DAILY / 近况"}
+            {post.label || t("feed.defaultLabel")}
           </span>
           <time className="post-time" dateTime={post.publishedAt}>
-            {formatDateTime(post.publishedAt)}
+            {formatDateTime(post.publishedAt, locale)}
           </time>
         </div>
         <p className="post-text">{post.text}</p>
@@ -278,19 +335,20 @@ function PostItem({ post, profile }) {
             rel="noreferrer"
           >
             <ImageIcon className="inline-icon" />
-            含媒体附件
+            {t("feed.mediaAttachment")}
           </a>
         ) : null}
         <div className="post-foot">
           <span>
-            <Heart className="inline-icon" /> {formatNumber(post.likes)}
+            <Heart className="inline-icon" /> {formatNumber(post.likes, locale)}
           </span>
           <span>
-            <Repeat2 className="inline-icon" /> {formatNumber(post.reposts)}
+            <Repeat2 className="inline-icon" />{" "}
+            {formatNumber(post.reposts, locale)}
           </span>
           <span>
             <MessageCircle className="inline-icon" />{" "}
-            {formatNumber(post.replies)}
+            {formatNumber(post.replies, locale)}
           </span>
           <a
             className="post-link"
@@ -298,7 +356,7 @@ function PostItem({ post, profile }) {
             target="_blank"
             rel="noreferrer"
           >
-            原帖 <ArrowUpRight className="inline-icon" />
+            {t("feed.originalPost")} <ArrowUpRight className="inline-icon" />
           </a>
         </div>
       </div>
@@ -306,7 +364,7 @@ function PostItem({ post, profile }) {
   )
 }
 
-function VideoItem({ video }) {
+function VideoItem({ video, locale }) {
   const isUpcoming = Boolean(video.isUpcoming)
   return (
     <a
@@ -333,7 +391,9 @@ function VideoItem({ video }) {
       </div>
       <div className="media-meta">
         <span>{video.kind || (isUpcoming ? "UPCOMING LIVE" : "VIDEO")}</span>
-        <time>{formatDateTime(video.scheduledAt || video.publishedAt)}</time>
+        <time>
+          {formatDateTime(video.scheduledAt || video.publishedAt, locale)}
+        </time>
       </div>
       <h3>{video.title}</h3>
     </a>
@@ -358,20 +418,32 @@ function ResourceLink({ resource }) {
   )
 }
 
-function LoadingPanel() {
+function LoadingPanel({ t }) {
   return (
     <div className="loading-panel" role="status" aria-live="polite">
       <LoaderCircle className="loading-icon" />
-      <span>正在读取本地快照…</span>
+      <span>{t("common.loading")}</span>
     </div>
   )
+}
+
+function getInitialLocale() {
+  const savedLocale = window.localStorage.getItem("kano-locale")
+  if (localeOptions.some((option) => option.value === savedLocale)) {
+    return savedLocale
+  }
+
+  const browserLanguages = window.navigator.languages?.length
+    ? window.navigator.languages
+    : [window.navigator.language]
+  return detectLocale(browserLanguages)
 }
 
 function App() {
   const [dashboard, setDashboard] = useState(emptyDashboard)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [fetchError, setFetchError] = useState("")
+  const [fetchError, setFetchError] = useState(false)
   const [activeFilter, setActiveFilter] = useState("all")
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -383,8 +455,10 @@ function App() {
       ? saved === "dark"
       : window.matchMedia("(prefers-color-scheme: dark)").matches
   })
-  const [toast, setToast] = useState("")
+  const [locale, setLocale] = useState(getInitialLocale)
+  const [toast, setToast] = useState(null)
   const hasLoadedRef = useRef(false)
+  const t = useMemo(() => createTranslator(locale), [locale])
 
   const loadDashboard = useCallback(async ({ announce = false } = {}) => {
     setIsRefreshing(true)
@@ -402,11 +476,13 @@ function App() {
         meta: { ...emptyDashboard.meta, ...payload.meta },
       })
       hasLoadedRef.current = true
-      setFetchError("")
-      if (announce) setToast("已重新读取 SQLite 快照")
+      setFetchError(false)
+      if (announce) setToast({ key: "toast.reloaded" })
     } catch (error) {
-      setFetchError("暂时无法连接本地 API，页面保留当前快照。")
-      if (announce) setToast(`读取失败 · ${error.message}`)
+      setFetchError(true)
+      if (announce) {
+        setToast({ key: "toast.failed", values: { message: error.message } })
+      }
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
@@ -423,8 +499,17 @@ function App() {
   }, [isDark])
 
   useEffect(() => {
+    document.documentElement.lang = locale
+    document.title = t("meta.title")
+    document
+      .querySelector('meta[name="description"]')
+      ?.setAttribute("content", t("meta.description"))
+    window.localStorage.setItem("kano-locale", locale)
+  }, [locale, t])
+
+  useEffect(() => {
     if (!toast) return undefined
-    const timer = window.setTimeout(() => setToast(""), 2600)
+    const timer = window.setTimeout(() => setToast(null), 2600)
     return () => window.clearTimeout(timer)
   }, [toast])
 
@@ -446,6 +531,14 @@ function App() {
   )
   const syncStatus = dashboard.meta?.lastSync?.status
   const syncWarning = Boolean(syncStatus && syncStatus !== "success")
+  const syncLabel = fetchError
+    ? t("sync.apiUnavailable")
+    : syncWarning
+      ? syncStatus === "partial"
+        ? t("sync.partial")
+        : t("sync.needsReview")
+      : t("sync.snapshot")
+  const syncTime = formatSyncTime(dashboard.meta, locale, t)
 
   const filterCounts = useMemo(
     () => ({
@@ -511,69 +604,91 @@ function App() {
     <TooltipProvider delayDuration={250}>
       <div className="site-shell" id="top">
         <header className="topbar">
-          <a className="wordmark" href="#top" aria-label="回到顶部">
+          <a
+            className="wordmark"
+            href="#top"
+            aria-label={t("header.backToTop")}
+          >
+            <img className="topbar-avatar" src={profile.avatarUrl} alt="" />
             <span className="wordmark-jp">鹿乃</span>
-            <span className="wordmark-en">MAHORO / STATUS BOARD</span>
           </a>
 
-          <div className="topbar-center" aria-label="数据状态">
-            <span
-              className={`sync-dot${fetchError || syncWarning ? " is-offline" : ""}`}
-              aria-hidden="true"
-            />
-            <span>
-              {fetchError
-                ? "本地 API 待连接"
-                : syncWarning
-                  ? syncStatus === "partial"
-                    ? "同步部分完成"
-                    : "同步需检查"
-                  : "SQLite 快照"}
+          <div
+            className="topbar-center"
+            aria-label={`${t("header.unofficial")}. ${t("header.lastUpdated")}: ${syncTime}. ${syncLabel}`}
+          >
+            <span className="topbar-kicker">{t("header.unofficial")}</span>
+            <span className="topbar-sync" title={syncLabel}>
+              <span
+                className={`sync-dot${fetchError || syncWarning ? " is-offline" : ""}`}
+                aria-hidden="true"
+              />
+              <span className="topbar-sync-label">
+                {t("header.lastUpdated")}
+              </span>
+              <time
+                dateTime={
+                  dashboard.meta?.lastSync?.finishedAt ||
+                  dashboard.meta?.fetchedAt ||
+                  undefined
+                }
+              >
+                {syncTime}
+              </time>
             </span>
-            <span className="topbar-divider" aria-hidden="true" />
-            <time
-              dateTime={
-                dashboard.meta?.lastSync?.finishedAt ||
-                dashboard.meta?.fetchedAt ||
-                undefined
-              }
-            >
-              {formatSyncTime(dashboard.meta)}
-            </time>
           </div>
 
-          <nav className="topnav" aria-label="主导航">
-            <a href="#feed">近况</a>
-            <a href="#calendar">日程</a>
-            <a href="#media">频道</a>
-            <a href="#links">资料</a>
-          </nav>
+          <div className="topbar-actions">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <label className="icon-button language-control">
+                  <Languages className="icon" aria-hidden="true" />
+                  <span className="sr-only">{t("header.language")}</span>
+                  <select
+                    value={locale}
+                    onChange={(event) => setLocale(event.target.value)}
+                    aria-label={t("header.language")}
+                  >
+                    {localeOptions.map((option) => (
+                      <option value={option.value} key={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </TooltipTrigger>
+              <TooltipContent>{t("header.language")}</TooltipContent>
+            </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="icon-button theme-button"
-                onClick={() => setIsDark((value) => !value)}
-                aria-label="切换深色模式"
-              >
-                {isDark ? <Moon className="icon" /> : <Sun className="icon" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {isDark ? "切换浅色模式" : "切换深色模式"}
-            </TooltipContent>
-          </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="icon-button theme-button"
+                  onClick={() => setIsDark((value) => !value)}
+                  aria-label={t(
+                    isDark ? "header.switchToLight" : "header.switchToDark",
+                  )}
+                >
+                  {isDark ? (
+                    <Sun className="icon" />
+                  ) : (
+                    <Moon className="icon" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {t(isDark ? "header.switchToLight" : "header.switchToDark")}
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </header>
 
         <main>
-          <section className="hero-panel" aria-labelledby="hero-title">
+          <section className="hero-panel" aria-label={t("header.banner")}>
             <div className="hero-visual">
-              <img
-                src={profile.bannerUrl}
-                alt="鹿乃まほろ的草莓与音乐主题视觉"
-              />
+              <img src={profile.bannerUrl} alt={t("header.bannerAlt")} />
               <div className="hero-visual-caption">
                 <span>VIRTUAL ARTIST</span>
                 <span className="caption-line" aria-hidden="true" />
@@ -583,57 +698,18 @@ function App() {
                 01
               </div>
             </div>
-
-            <div className="hero-info hero-info-compact">
-              <div className="identity-block">
-                <div className="avatar-wrap">
-                  <img
-                    src={profile.avatarUrl}
-                    alt={`${profile.displayName}头像`}
-                  />
-                  <span
-                    className="avatar-status"
-                    title="近期有更新"
-                    aria-label="近期有更新"
-                  />
-                </div>
-                <div className="identity-copy">
-                  <p className="overline">
-                    {profile.displayName} · {profile.romanizedName}
-                  </p>
-                  <h1 id="hero-title">{profile.displayName}</h1>
-                  <p className="hero-description">{profile.bio}</p>
-                  <div className="hero-links">
-                    <a href={profile.xUrl} target="_blank" rel="noreferrer">
-                      X / @kano_2525 <ArrowUpRight className="inline-icon" />
-                    </a>
-                    <a
-                      href={profile.youtubeUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      YouTube <ArrowUpRight className="inline-icon" />
-                    </a>
-                  </div>
-                </div>
-              </div>
-              <div className="hero-cache-note">
-                <span className="tiny-dot" />
-                {formatSyncLabel(dashboard.meta)}
-              </div>
-            </div>
           </section>
 
           <section className="section-intro" aria-labelledby="overview-title">
             <div>
-              <p className="overline">TODAY / 一眼看懂</p>
-              <h2 id="overview-title">近况面板</h2>
+              <p className="overline">{t("overview.eyebrow")}</p>
+              <h2 id="overview-title">{t("overview.title")}</h2>
             </div>
             <div className="section-intro-right">
               <p>
                 {upcomingCount
-                  ? `${upcomingCount} 个未来安排已收录`
-                  : "把最值得点开的更新放在前面。"}
+                  ? t("overview.upcoming", { count: upcomingCount })
+                  : t("overview.lead")}
               </p>
               <Button
                 variant="outline"
@@ -642,7 +718,9 @@ function App() {
                 disabled={isRefreshing}
               >
                 <RefreshCw className="inline-icon" />
-                <span>{isRefreshing ? "读取中" : "重新读取"}</span>
+                <span>
+                  {t(isRefreshing ? "overview.refreshing" : "overview.refresh")}
+                </span>
               </Button>
             </div>
           </section>
@@ -650,12 +728,12 @@ function App() {
           {fetchError ? (
             <div className="api-alert" role="status">
               <WifiOff className="inline-icon" />
-              <span>{fetchError}</span>
+              <span>{t("error.api")}</span>
               <button
                 type="button"
                 onClick={() => loadDashboard({ announce: true })}
               >
-                重试
+                {t("common.retry")}
               </button>
             </div>
           ) : null}
@@ -665,7 +743,7 @@ function App() {
               <div className="panel-header">
                 <div>
                   <p className="panel-index">01 / X FEED</p>
-                  <h2>最近的声音</h2>
+                  <h2>{t("feed.title")}</h2>
                 </div>
                 <a
                   className="header-link"
@@ -677,30 +755,40 @@ function App() {
                 </a>
               </div>
               <Tabs value={activeFilter} onValueChange={setActiveFilter}>
-                <TabsList className="filter-tabs" aria-label="X 动态筛选">
+                <TabsList
+                  className="filter-tabs"
+                  aria-label={t("feed.filterLabel")}
+                >
                   <TabsTrigger className="filter-tab" value="all">
-                    全部 <span>{pad(filterCounts.all)}</span>
+                    {t("feed.all")} <span>{pad(filterCounts.all)}</span>
                   </TabsTrigger>
                   <TabsTrigger className="filter-tab" value="notice">
-                    公告 <span>{pad(filterCounts.notice)}</span>
+                    {t("feed.notices")} <span>{pad(filterCounts.notice)}</span>
                   </TabsTrigger>
                   <TabsTrigger className="filter-tab" value="daily">
-                    日常 <span>{pad(filterCounts.daily)}</span>
+                    {t("feed.daily")} <span>{pad(filterCounts.daily)}</span>
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
               {isLoading ? (
-                <LoadingPanel />
+                <LoadingPanel t={t} />
               ) : (
                 <div className="feed-list">
                   {visiblePosts.length ? (
                     visiblePosts.map((post) => (
-                      <PostItem key={post.id} post={post} profile={profile} />
+                      <PostItem
+                        key={post.id}
+                        post={post}
+                        profile={profile}
+                        locale={locale}
+                        t={t}
+                      />
                     ))
                   ) : (
                     <div className="empty-state">
-                      最近 {dashboard.meta?.postWindowDays || postWindowDays}{" "}
-                      天没有可显示的 X 动态。
+                      {t("feed.empty", {
+                        days: dashboard.meta?.postWindowDays || postWindowDays,
+                      })}
                     </div>
                   )}
                 </div>
@@ -708,8 +796,9 @@ function App() {
               <div className="panel-footer">
                 <span className="data-note">
                   <span className="tiny-dot" />
-                  最近 {dashboard.meta?.postWindowDays || postWindowDays} 天 ·
-                  API 快照
+                  {t("feed.window", {
+                    days: dashboard.meta?.postWindowDays || postWindowDays,
+                  })}
                 </span>
                 <a
                   href={profile.xUrl}
@@ -717,7 +806,7 @@ function App() {
                   rel="noreferrer"
                   className="footer-action"
                 >
-                  去 X 看完整串文 <ArrowRight className="inline-icon" />
+                  {t("feed.viewThread")} <ArrowRight className="inline-icon" />
                 </a>
               </div>
             </Card>
@@ -726,29 +815,32 @@ function App() {
               <div className="panel-header calendar-header">
                 <div>
                   <p className="panel-index">02 / CALENDAR</p>
-                  <h2>未来日程</h2>
+                  <h2>{t("calendar.title")}</h2>
                 </div>
                 <span className="calendar-status">
                   <CalendarDays className="inline-icon" />
-                  {upcomingCount} 个预约
+                  {t("calendar.reservations", { count: upcomingCount })}
                 </span>
               </div>
               <Calendar
                 month={month}
                 selectedDate={selectedDate}
                 events={events}
+                locale={locale}
+                t={t}
                 onSelect={handleSelectDate}
                 onMonthChange={handleMonthChange}
               />
               <div className="event-list">
                 {isLoading ? (
-                  <LoadingPanel />
+                  <LoadingPanel t={t} />
                 ) : displayEvents.length ? (
                   displayEvents.map((event) => {
-                    const formatted = formatEventDate(event.startsAt)
+                    const formatted = formatEventDate(event.startsAt, locale, t)
+                    const statusClass = eventStatusClass(event)
                     return (
                       <a
-                        className={`event-item event-item-${eventStatusClass(event)}`}
+                        className={`event-item event-item-${statusClass}`}
                         href={event.url || "#"}
                         target={event.url ? "_blank" : undefined}
                         rel={event.url ? "noreferrer" : undefined}
@@ -760,14 +852,18 @@ function App() {
                         </span>
                         <span className="event-copy">
                           <strong>{event.title}</strong>
-                          <span>{event.detail || "公开活动"}</span>
+                          <span>
+                            {event.detail || t("calendar.publicEvent")}
+                          </span>
                         </span>
-                        <span
-                          className={`event-status ${eventStatusClass(event)}`}
-                        >
+                        <span className={`event-status ${statusClass}`}>
                           {eventIsUpcoming(event)
-                            ? "即将"
-                            : event.status || "已记录"}
+                            ? t("calendar.upcoming")
+                            : t(
+                                statusClass === "pending"
+                                  ? "calendar.pending"
+                                  : "calendar.recorded",
+                              )}
                         </span>
                       </a>
                     )
@@ -775,13 +871,15 @@ function App() {
                 ) : (
                   <div className="event-item">
                     <span className="event-date">
-                      —<small>暂无</small>
+                      —<small>{t("calendar.none")}</small>
                     </span>
                     <span className="event-copy">
-                      <strong>这个月还没有公开日程</strong>
-                      <span>请留意官方 X / YouTube</span>
+                      <strong>{t("calendar.emptyTitle")}</strong>
+                      <span>{t("calendar.emptyHint")}</span>
                     </span>
-                    <span className="event-status pending">待补充</span>
+                    <span className="event-status pending">
+                      {t("calendar.pending")}
+                    </span>
                   </div>
                 )}
               </div>
@@ -794,26 +892,26 @@ function App() {
                 >
                   <img
                     src={scheduleAsset.url}
-                    alt={scheduleAsset.alt || "鹿乃まほろ活动 schedule"}
+                    alt={scheduleAsset.alt || t("calendar.scheduleAlt")}
                     loading="lazy"
                   />
                   <span>
                     <ImageIcon className="inline-icon" />
-                    查看 X 发布的 schedule 原图{" "}
+                    {t("calendar.viewSchedule")}{" "}
                     <ArrowUpRight className="inline-icon" />
                   </span>
                 </a>
               ) : null}
               <p className="calendar-note">
-                未来安排优先显示，公开日程以{" "}
+                {t("calendar.notePrefix")}
                 <a href={profile.xUrl} target="_blank" rel="noreferrer">
                   X
-                </a>{" "}
-                与{" "}
+                </a>
+                {t("calendar.noteBetween")}
                 <a href={profile.youtubeUrl} target="_blank" rel="noreferrer">
                   YouTube
-                </a>{" "}
-                公告为准。
+                </a>
+                {t("calendar.noteSuffix")}
               </p>
             </Card>
 
@@ -821,7 +919,7 @@ function App() {
               <div className="panel-header">
                 <div>
                   <p className="panel-index">03 / FOCUS</p>
-                  <h2>最近焦点</h2>
+                  <h2>{t("focus.title")}</h2>
                 </div>
                 <span className="focus-stamp">LATEST SIGNAL</span>
               </div>
@@ -830,7 +928,7 @@ function App() {
                   <div className="focus-layout">
                     <div className="focus-copy">
                       <span className="date-pill">
-                        {focus.dateLabel || "最近更新"}
+                        {focus.dateLabel || t("focus.latestUpdate")}
                       </span>
                       <h3>{focus.title}</h3>
                       <p>{focus.description}</p>
@@ -842,7 +940,7 @@ function App() {
                               target="_blank"
                               rel="noreferrer"
                             >
-                              打开焦点{" "}
+                              {t("focus.open")}{" "}
                               <Play
                                 className="inline-icon"
                                 fill="currentColor"
@@ -857,7 +955,7 @@ function App() {
                             target="_blank"
                             rel="noreferrer"
                           >
-                            查看官方资料{" "}
+                            {t("focus.officialSource")}{" "}
                             <ArrowUpRight className="inline-icon" />
                           </a>
                         ) : null}
@@ -880,21 +978,21 @@ function App() {
                   </div>
                   <div className="focus-footer">
                     <div>
-                      <span className="micro-label">STATE</span>
-                      <strong>ACTIVE</strong>
+                      <span className="micro-label">{t("focus.state")}</span>
+                      <strong>{t("focus.active")}</strong>
                     </div>
                     <div>
-                      <span className="micro-label">UPDATED</span>
-                      <strong>{formatDateTime(focus.updatedAt)}</strong>
+                      <span className="micro-label">{t("focus.updated")}</span>
+                      <strong>{formatDateTime(focus.updatedAt, locale)}</strong>
                     </div>
                     <div>
-                      <span className="micro-label">FAN TAG</span>
+                      <span className="micro-label">{t("focus.fanTag")}</span>
                       <strong>#鹿友</strong>
                     </div>
                   </div>
                 </>
               ) : (
-                <div className="empty-state">暂无焦点记录。</div>
+                <div className="empty-state">{t("focus.empty")}</div>
               )}
             </Card>
 
@@ -902,7 +1000,7 @@ function App() {
               <div className="panel-header">
                 <div>
                   <p className="panel-index">04 / WATCH &amp; LISTEN</p>
-                  <h2>最近上传</h2>
+                  <h2>{t("media.title")}</h2>
                 </div>
                 <a
                   className="header-link"
@@ -910,28 +1008,33 @@ function App() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  打开频道 <ArrowUpRight className="inline-icon" />
+                  {t("media.openChannel")}{" "}
+                  <ArrowUpRight className="inline-icon" />
                 </a>
               </div>
               {isLoading ? (
-                <LoadingPanel />
+                <LoadingPanel t={t} />
               ) : (
                 <div className="media-grid">
                   {videos.length ? (
                     videos
                       .slice(0, 6)
                       .map((video) => (
-                        <VideoItem key={video.id} video={video} />
+                        <VideoItem
+                          key={video.id}
+                          video={video}
+                          locale={locale}
+                        />
                       ))
                   ) : (
-                    <div className="empty-state">暂无 YouTube 快照。</div>
+                    <div className="empty-state">{t("media.empty")}</div>
                   )}
                 </div>
               )}
               <div className="panel-footer media-footer">
                 <span className="data-note">
                   <span className="tiny-dot" />
-                  YouTube RSS + 预约直播
+                  {t("media.dataNote")}
                 </span>
                 <a
                   href={profile.youtubeUrl}
@@ -939,7 +1042,7 @@ function App() {
                   rel="noreferrer"
                   className="footer-action"
                 >
-                  订阅频道 <ArrowRight className="inline-icon" />
+                  {t("media.subscribe")} <ArrowRight className="inline-icon" />
                 </a>
               </div>
             </Card>
@@ -948,7 +1051,7 @@ function App() {
               <div className="panel-header">
                 <div>
                   <p className="panel-index">05 / ARCHIVE</p>
-                  <h2>时间轴</h2>
+                  <h2>{t("archive.title")}</h2>
                 </div>
                 <a
                   className="header-link"
@@ -983,7 +1086,7 @@ function App() {
                   <ArrowUpRight size={14} />
                 </span>
                 <span>
-                  <strong>从最早的歌开始听</strong>
+                  <strong>{t("archive.listenFromStart")}</strong>
                   <small>NicoNico / mylist</small>
                 </span>
               </a>
@@ -993,9 +1096,9 @@ function App() {
               <div className="panel-header links-header">
                 <div>
                   <p className="panel-index">06 / THE DIRECTORY</p>
-                  <h2>资料入口</h2>
+                  <h2>{t("directory.title")}</h2>
                 </div>
-                <span className="links-note">官方与公开档案</span>
+                <span className="links-note">{t("directory.note")}</span>
               </div>
               <div className="links-grid">
                 {resources.map((resource) => (
@@ -1003,7 +1106,7 @@ function App() {
                 ))}
               </div>
               <div className="tag-cloud">
-                <span className="tag-cloud-label">常用标签</span>
+                <span className="tag-cloud-label">{t("directory.tags")}</span>
                 <a
                   href="https://x.com/hashtag/%E9%B9%BF%E4%B9%83%E3%81%BE%E3%81%BB%E3%82%8D"
                   target="_blank"
@@ -1040,13 +1143,11 @@ function App() {
         <footer className="site-footer">
           <div>
             <span className="footer-mark">鹿乃</span>
-            <span>fan-made status board</span>
+            <span>{t("footer.fanMade")}</span>
           </div>
-          <p>
-            非官方整理页 · 数据由本地 SQLite 快照提供 · 信息以各平台原页面为准
-          </p>
+          <p>{t("footer.disclaimer")}</p>
           <a href="#top">
-            回到顶部 <ChevronRight className="inline-icon" />
+            {t("footer.backToTop")} <ChevronRight className="inline-icon" />
           </a>
         </footer>
       </div>
@@ -1055,7 +1156,7 @@ function App() {
         role="status"
         aria-live="polite"
       >
-        {toast}
+        {toast ? t(toast.key, toast.values) : ""}
       </div>
     </TooltipProvider>
   )

@@ -86,18 +86,35 @@
     position: relative;
     z-index: 5;
     display: grid;
-    grid-template-columns: minmax(210px, 1fr) auto minmax(320px, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    min-height: 72px;
-    gap: 24px;
+    min-height: 76px;
+    gap: 20px;
     border-bottom: 1px solid hsl(var(--border));
   }
 
   .wordmark {
     display: inline-flex;
-    align-items: baseline;
-    gap: 11px;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
     width: fit-content;
+  }
+
+  .topbar-avatar {
+    display: block;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    border: 1px solid #20242b;
+    border-radius: 50%;
+    background: #fff;
+    object-fit: cover;
+  }
+
+  .dark .topbar-avatar {
+    border-color: #d4d7dc;
+    background: #22262d;
   }
 
   .wordmark-jp {
@@ -105,37 +122,56 @@
     font-family: "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif;
     font-size: 21px;
     font-weight: 800;
-    letter-spacing: 0.12em;
+    letter-spacing: 0;
+    white-space: nowrap;
   }
 
   .dark .wordmark-jp {
     color: #f9fafb;
   }
 
-  .wordmark-en {
-    color: hsl(var(--muted-foreground));
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.18em;
+  .topbar-center {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    gap: 5px;
+    justify-self: center;
+    min-width: 0;
+    text-align: center;
     white-space: nowrap;
   }
 
-  .topbar-center {
+  .topbar-kicker {
+    color: hsl(var(--foreground));
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  .topbar-sync {
     display: inline-flex;
     align-items: center;
-    gap: 9px;
+    gap: 6px;
     color: hsl(var(--muted-foreground));
-    font-size: 10px;
+    font-size: 8px;
     font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    letter-spacing: 0;
+    line-height: 1;
     white-space: nowrap;
   }
 
-  .topbar-divider {
-    width: 1px;
-    height: 13px;
-    background: hsl(var(--border));
+  .topbar-sync .sync-dot {
+    width: 5px;
+    height: 5px;
+    box-shadow: none;
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    justify-self: end;
+    gap: 8px;
   }
 
   .sync-dot,
@@ -152,43 +188,6 @@
   .sync-dot.is-offline {
     background: #d7af3e;
     box-shadow: 0 0 0 3px rgba(215, 175, 62, 0.16);
-  }
-
-  .topnav {
-    display: flex;
-    justify-content: flex-end;
-    gap: 22px;
-    color: hsl(var(--muted-foreground));
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .topnav a {
-    position: relative;
-    padding: 8px 0;
-    transition: color 160ms ease;
-  }
-
-  .topnav a::after {
-    position: absolute;
-    right: 0;
-    bottom: 2px;
-    left: 0;
-    height: 2px;
-    background: #f26468;
-    content: "";
-    transform: scaleX(0);
-    transform-origin: right;
-    transition: transform 180ms ease;
-  }
-
-  .topnav a:hover {
-    color: hsl(var(--foreground));
-  }
-
-  .topnav a:hover::after {
-    transform: scaleX(1);
-    transform-origin: left;
   }
 
   .icon-button {
@@ -213,6 +212,12 @@
     transform: translateY(-1px);
   }
 
+  .icon-button:focus-visible,
+  .language-control:focus-within {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
   .icon-button .icon {
     width: 16px;
     height: 16px;
@@ -223,16 +228,18 @@
     stroke-width: 1.7;
   }
 
-  .icon-moon {
-    display: none;
+  .language-control {
+    position: relative;
   }
 
-  .dark .icon-sun {
-    display: none;
-  }
-
-  .dark .icon-moon {
-    display: block;
+  .language-control select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    cursor: pointer;
+    opacity: 0;
   }
 
   .hero-panel {
@@ -304,70 +311,6 @@
     line-height: 1;
   }
 
-  .hero-info {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 30px;
-    padding: 28px 30px 25px;
-  }
-
-  .hero-info-compact {
-    min-height: 145px;
-  }
-
-  .identity-block {
-    display: flex;
-    align-items: center;
-    gap: 22px;
-    min-width: 0;
-  }
-
-  .avatar-wrap {
-    position: relative;
-    width: 112px;
-    height: 112px;
-    flex: 0 0 auto;
-    padding: 5px;
-    border: 1px solid #20242b;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 3px 3px 0 #20242b;
-  }
-
-  .dark .avatar-wrap {
-    border-color: #d4d7dc;
-    background: #22262d;
-    box-shadow: 3px 3px 0 #0a0c0e;
-  }
-
-  .avatar-wrap img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    object-fit: cover;
-  }
-
-  .avatar-status {
-    position: absolute;
-    right: 3px;
-    bottom: 9px;
-    width: 15px;
-    height: 15px;
-    border: 3px solid #fff;
-    border-radius: 50%;
-    background: #50b88d;
-  }
-
-  .dark .avatar-status {
-    border-color: #22262d;
-  }
-
-  .identity-copy {
-    min-width: 0;
-  }
-
   .overline,
   .panel-index {
     margin: 0 0 8px;
@@ -379,62 +322,9 @@
     text-transform: uppercase;
   }
 
-  .identity-copy h1 {
-    margin: 0;
-    color: hsl(var(--foreground));
-    font-family: "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif;
-    font-size: 44px;
-    font-weight: 800;
-    letter-spacing: 0.03em;
-    line-height: 1.12;
-  }
-
-  .identity-copy h1 em,
   .focus-copy h3 em {
     color: #e95763;
     font-style: normal;
-  }
-
-  .hero-description {
-    margin: 10px 0 13px;
-    color: hsl(var(--muted-foreground));
-    font-size: 12px;
-    line-height: 1.7;
-  }
-
-  .hero-links {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 14px;
-  }
-
-  .hero-links a {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: hsl(var(--muted-foreground));
-    font-size: 10px;
-    font-weight: 800;
-    transition:
-      color 160ms ease,
-      gap 160ms ease;
-  }
-
-  .hero-links a:hover {
-    gap: 7px;
-    color: #e95763;
-  }
-
-  .hero-cache-note {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-    color: hsl(var(--muted-foreground));
-    font-size: 9px;
-    font-weight: 700;
-    white-space: nowrap;
   }
 
   .tag-row {
@@ -1948,12 +1838,6 @@
     padding-right: 22px;
     padding-left: 22px;
   }
-  .topbar {
-    grid-template-columns: 1fr auto auto;
-  }
-  .topbar-center {
-    display: none;
-  }
   .links-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -1974,12 +1858,6 @@
   .links-panel {
     grid-column: span 6;
   }
-  .hero-info {
-    gap: 21px;
-  }
-  .hero-cache-note {
-    align-self: flex-end;
-  }
   .hero-signal {
     min-height: 0;
     border-top: 1px solid hsl(var(--border));
@@ -1996,25 +1874,31 @@
     padding: 0 14px 24px;
   }
   .topbar {
-    min-height: 62px;
-    gap: 11px;
+    min-height: 64px;
+    gap: 8px;
   }
   .wordmark {
-    gap: 7px;
+    gap: 6px;
+  }
+  .topbar-avatar {
+    width: 32px;
+    height: 32px;
   }
   .wordmark-jp {
-    font-size: 18px;
+    font-size: 17px;
   }
-  .wordmark-en {
-    display: none;
+  .topbar-center {
+    gap: 4px;
   }
-  .topnav {
-    gap: 12px;
-    font-size: 10px;
+  .topbar-kicker {
+    font-size: 8px;
   }
-  .topnav a:nth-child(3),
-  .topnav a:nth-child(4) {
-    display: none;
+  .topbar-sync {
+    gap: 4px;
+    font-size: 7px;
+  }
+  .topbar-actions {
+    gap: 5px;
   }
   .icon-button {
     width: 32px;
@@ -2043,41 +1927,6 @@
     right: 12px;
     bottom: 6px;
     font-size: 28px;
-  }
-  .hero-info {
-    padding: 21px 16px 19px;
-  }
-  .hero-info-compact {
-    display: block;
-    min-height: 0;
-  }
-  .identity-block {
-    align-items: flex-start;
-    gap: 13px;
-  }
-  .avatar-wrap {
-    width: 76px;
-    height: 76px;
-    padding: 4px;
-    box-shadow: 2px 2px 0 #20242b;
-  }
-  .avatar-status {
-    right: 1px;
-    bottom: 5px;
-    width: 12px;
-    height: 12px;
-    border-width: 2px;
-  }
-  .identity-copy h1 {
-    font-size: 28px;
-  }
-  .hero-description {
-    margin-top: 7px;
-    font-size: 10px;
-  }
-  .hero-cache-note {
-    margin-top: 14px;
-    font-size: 8px;
   }
   .tag {
     min-height: 21px;
