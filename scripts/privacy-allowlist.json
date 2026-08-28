@@ -30,6 +30,10 @@
       "reason": "Public YouTube channel, video, RSS, and stream links."
     },
     { "host": "i.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
+    { "host": "i1.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
+    { "host": "i2.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
+    { "host": "i3.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
+    { "host": "i4.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
     { "host": "wikipedia.org", "reason": "Public Wikipedia biography link." },
     { "host": "nicovideo.jp", "reason": "Public early-song archive link." },
     { "host": "bilibili.com", "reason": "Public Bilibili profile link." },

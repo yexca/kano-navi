@@ -5,7 +5,14 @@ import {
   writeMediaFileAtomic,
 } from "./media-cache.js"
 
-const defaultAllowedHosts = new Set(["pbs.twimg.com", "i.ytimg.com"])
+const defaultAllowedHosts = new Set([
+  "pbs.twimg.com",
+  "i.ytimg.com",
+  "i1.ytimg.com",
+  "i2.ytimg.com",
+  "i3.ytimg.com",
+  "i4.ytimg.com",
+])
 
 function assertAllowedUrl(value, allowedHosts) {
   const url = new URL(value)

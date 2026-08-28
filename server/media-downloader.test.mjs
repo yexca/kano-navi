@@ -8,7 +8,7 @@ import {
   registerMediaCandidates,
 } from "./database.js"
 import { resolveMediaCachePath } from "./media-cache.js"
-import { downloadMediaAsset } from "./media-downloader.js"
+import { defaultAllowedHosts, downloadMediaAsset } from "./media-downloader.js"
 
 function register(database, sourceUrl) {
   registerMediaCandidates(database, [
@@ -24,6 +24,19 @@ function register(database, sourceUrl) {
     (asset) => asset.sourceUrl === sourceUrl,
   )
 }
+
+test("downloader allows only the known YouTube thumbnail CDN hosts", () => {
+  for (const hostname of [
+    "i.ytimg.com",
+    "i1.ytimg.com",
+    "i2.ytimg.com",
+    "i3.ytimg.com",
+    "i4.ytimg.com",
+  ]) {
+    assert.equal(defaultAllowedHosts.has(hostname), true)
+  }
+  assert.equal(defaultAllowedHosts.has("i5.ytimg.com"), false)
+})
 
 test("downloader validates and stores an allowed image atomically", async () => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })

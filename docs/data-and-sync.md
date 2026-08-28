@@ -72,7 +72,8 @@ recent reservations for `scheduledStartTime`, writing them to both `videos` and
 `events`. When no schedule time is available, the script does not invent one.
 
 Video thumbnails are registered and linked to their rows, then the bounded media
-stage downloads pending files from `i.ytimg.com`.
+stage downloads pending files from `i.ytimg.com` or its official numbered CDN
+hosts (`i1.ytimg.com` through `i4.ytimg.com`).
 
 ### OpenAI Schedule Extraction
 

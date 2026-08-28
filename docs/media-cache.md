@@ -64,11 +64,12 @@ served as active same-origin content.
 5. Retention and garbage collection can later use `last_seen_at` and
    `media_links` to remove unreferenced files deliberately.
 
-The downloader accepts only HTTPS URLs on `pbs.twimg.com` and `i.ytimg.com` and
-revalidates every redirect against the same allowlist. The host policy is kept
-in code because this is also an SSRF boundary; the broader privacy allowlist is
-not a download permission list. Retry scheduling, image dimension probing, and
-garbage collection remain follow-up work.
+The downloader accepts only HTTPS URLs on `pbs.twimg.com`, `i.ytimg.com`, and
+YouTube's numbered thumbnail hosts from `i1.ytimg.com` through
+`i4.ytimg.com`. It revalidates every redirect against the same exact allowlist.
+The host policy is kept in code because this is also an SSRF boundary; the
+broader privacy allowlist is not a download permission list. Retry scheduling,
+image dimension probing, and garbage collection remain follow-up work.
 
 Content-addressed paths are deliberately preferred over layouts such as
 `pics/x/<timestamp>` or `pics/youtube/<video-id>`. Ownership already lives in
