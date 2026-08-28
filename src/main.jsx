@@ -398,6 +398,73 @@ function VideoItem({ video, locale }) {
   )
 }
 
+function FeaturedVideo({ video, focus, locale, t }) {
+  const isUpcoming = Boolean(video.isUpcoming)
+  const thumbnailUrl = focus.imageUrl || video.thumbnailUrl
+  const title = focus.title || video.title
+
+  return (
+    <article className="featured-video">
+      <a
+        className="featured-video-media"
+        href={video.url}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`${t("media.watchFeatured")}: ${title}`}
+      >
+        {thumbnailUrl ? (
+          <img src={thumbnailUrl} alt="" loading="lazy" />
+        ) : (
+          <span className="media-placeholder" aria-hidden="true">
+            <ImageIcon />
+          </span>
+        )}
+        <span className="play-badge featured-play-badge">
+          {isUpcoming ? (
+            <Clock3 size={14} />
+          ) : (
+            <Play size={13} fill="currentColor" />
+          )}
+        </span>
+      </a>
+      <div className="featured-video-copy">
+        <div className="featured-video-kicker">
+          <span>{t("media.featured")}</span>
+          <span>{video.kind || (isUpcoming ? "UPCOMING LIVE" : "VIDEO")}</span>
+        </div>
+        <h3>{title}</h3>
+        {focus.description ? <p>{focus.description}</p> : null}
+        <div className="featured-video-actions">
+          <Button asChild className="primary-button">
+            <a href={video.url} target="_blank" rel="noreferrer">
+              {t("media.watchFeatured")}{" "}
+              <Play className="inline-icon" fill="currentColor" />
+            </a>
+          </Button>
+          <time>
+            {focus.dateLabel ||
+              formatDateTime(
+                video.scheduledAt || video.publishedAt || focus.updatedAt,
+                locale,
+              )}
+          </time>
+          {focus.sourceUrl ? (
+            <a
+              className="quiet-link"
+              href={focus.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("media.officialSource")}{" "}
+              <ArrowUpRight className="inline-icon" />
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  )
+}
+
 function ResourceLink({ resource }) {
   return (
     <a
@@ -521,6 +588,12 @@ function App() {
   const resources = dashboard.resources || []
   const timeline = dashboard.timeline || []
   const focus = dashboard.focus
+  const featuredVideo = focus?.url
+    ? videos.find((video) => video.url === focus.url) || null
+    : null
+  const recentVideos = featuredVideo
+    ? videos.filter((video) => video.id !== featuredVideo.id)
+    : videos
   const scheduleAsset = dashboard.assets?.find(
     (asset) => asset.kind === "schedule" && asset.url,
   )
@@ -909,91 +982,10 @@ function App() {
               </p>
             </Card>
 
-            <Card className="panel focus-panel">
-              <div className="panel-header">
-                <div>
-                  <p className="panel-index">03 / FOCUS</p>
-                  <h2>{t("focus.title")}</h2>
-                </div>
-                <span className="focus-stamp">LATEST SIGNAL</span>
-              </div>
-              {focus ? (
-                <>
-                  <div className="focus-layout">
-                    <div className="focus-copy">
-                      <span className="date-pill">
-                        {focus.dateLabel || t("focus.latestUpdate")}
-                      </span>
-                      <h3>{focus.title}</h3>
-                      <p>{focus.description}</p>
-                      <div className="focus-actions">
-                        {focus.url ? (
-                          <Button asChild className="primary-button">
-                            <a
-                              href={focus.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {t("focus.open")}{" "}
-                              <Play
-                                className="inline-icon"
-                                fill="currentColor"
-                              />
-                            </a>
-                          </Button>
-                        ) : null}
-                        {focus.sourceUrl ? (
-                          <a
-                            className="quiet-link"
-                            href={focus.sourceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            {t("focus.officialSource")}{" "}
-                            <ArrowUpRight className="inline-icon" />
-                          </a>
-                        ) : null}
-                      </div>
-                    </div>
-                    {focus.imageUrl ? (
-                      <a
-                        className="focus-media"
-                        href={focus.url || focus.sourceUrl || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <img src={focus.imageUrl} alt={focus.title} />
-                        <div className="media-caption">
-                          <span>SONA / 2026</span>
-                          <span>FOCUS</span>
-                        </div>
-                      </a>
-                    ) : null}
-                  </div>
-                  <div className="focus-footer">
-                    <div>
-                      <span className="micro-label">{t("focus.state")}</span>
-                      <strong>{t("focus.active")}</strong>
-                    </div>
-                    <div>
-                      <span className="micro-label">{t("focus.updated")}</span>
-                      <strong>{formatDateTime(focus.updatedAt, locale)}</strong>
-                    </div>
-                    <div>
-                      <span className="micro-label">{t("focus.fanTag")}</span>
-                      <strong>#鹿友</strong>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="empty-state">{t("focus.empty")}</div>
-              )}
-            </Card>
-
             <Card className="panel media-panel" id="media">
               <div className="panel-header">
                 <div>
-                  <p className="panel-index">04 / WATCH &amp; LISTEN</p>
+                  <p className="panel-index">03 / RECENT VIDEOS</p>
                   <h2>{t("media.title")}</h2>
                 </div>
                 <a
@@ -1009,18 +1001,30 @@ function App() {
               {isLoading ? (
                 <LoadingPanel t={t} />
               ) : (
-                <div className="media-grid">
-                  {videos.length ? (
-                    videos
-                      .slice(0, 6)
-                      .map((video) => (
-                        <VideoItem
-                          key={video.id}
-                          video={video}
-                          locale={locale}
-                        />
-                      ))
-                  ) : (
+                <div
+                  className={`media-showcase${featuredVideo && recentVideos.length ? " has-featured" : ""}`}
+                >
+                  {featuredVideo ? (
+                    <FeaturedVideo
+                      video={featuredVideo}
+                      focus={focus}
+                      locale={locale}
+                      t={t}
+                    />
+                  ) : null}
+                  {recentVideos.length ? (
+                    <div className="media-grid">
+                      {recentVideos
+                        .slice(0, featuredVideo ? 4 : 6)
+                        .map((video) => (
+                          <VideoItem
+                            key={video.id}
+                            video={video}
+                            locale={locale}
+                          />
+                        ))}
+                    </div>
+                  ) : featuredVideo ? null : (
                     <div className="empty-state">{t("media.empty")}</div>
                   )}
                 </div>
@@ -1044,7 +1048,7 @@ function App() {
             <Card className="panel archive-panel">
               <div className="panel-header">
                 <div>
-                  <p className="panel-index">05 / ARCHIVE</p>
+                  <p className="panel-index">04 / ARCHIVE</p>
                   <h2>{t("archive.title")}</h2>
                 </div>
                 <a
@@ -1089,7 +1093,7 @@ function App() {
             <Card className="panel links-panel" id="links">
               <div className="panel-header links-header">
                 <div>
-                  <p className="panel-index">06 / THE DIRECTORY</p>
+                  <p className="panel-index">05 / THE DIRECTORY</p>
                   <h2>{t("directory.title")}</h2>
                 </div>
                 <span className="links-note">{t("directory.note")}</span>
