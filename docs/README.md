@@ -17,12 +17,12 @@ code, maintaining data, and reviewing security.
 
 ## Reading by Task
 
-| Task | Recommended reading |
-| --- | --- |
-| Taking over the project | `overview.md`, `architecture.md` |
-| Changing the page or components | `architecture.md`, `development.md` |
+| Task                              | Recommended reading                                 |
+| --------------------------------- | --------------------------------------------------- |
+| Taking over the project           | `overview.md`, `architecture.md`                    |
+| Changing the page or components   | `architecture.md`, `development.md`                 |
 | Adjusting synchronization or data | `data-and-sync.md`, `media-cache.md`, `security.md` |
-| Preparing a merge or release | `development.md`, `security.md`, `AGENTS.md` |
+| Preparing a merge or release      | `development.md`, `security.md`, `AGENTS.md`        |
 
 ## Current Implementation at a Glance
 

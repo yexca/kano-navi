@@ -9,7 +9,8 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-ink text-white hover:bg-ink/90",
-        outline: "border border-ink/20 bg-transparent hover:border-ink hover:bg-ink/[0.04]",
+        outline:
+          "border border-ink/20 bg-transparent hover:border-ink hover:bg-ink/[0.04]",
         ghost: "hover:bg-ink/[0.06]",
         coral: "bg-coral text-white hover:bg-coral/90",
         link: "text-ink underline-offset-4 hover:underline",
@@ -25,10 +26,18 @@ const buttonVariants = cva(
   },
 )
 
-const Button = React.forwardRef(({ className, variant, size, asChild = false, ...props }, ref) => {
-  const Comp = asChild ? Slot : "button"
-  return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
-})
+const Button = React.forwardRef(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  },
+)
 Button.displayName = "Button"
 
 export { Button, buttonVariants }

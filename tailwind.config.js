@@ -59,7 +59,13 @@ export default {
         "card-sm": "3px 3px 0 #20242b",
       },
       fontFamily: {
-        sans: ["'Noto Sans JP'", "'Hiragino Kaku Gothic ProN'", "'Yu Gothic'", "system-ui", "sans-serif"],
+        sans: [
+          "'Noto Sans JP'",
+          "'Hiragino Kaku Gothic ProN'",
+          "'Yu Gothic'",
+          "system-ui",
+          "sans-serif",
+        ],
         display: ["'Hiragino Mincho ProN'", "'Yu Mincho'", "Georgia", "serif"],
       },
     },

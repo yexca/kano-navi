@@ -12,9 +12,16 @@ const projectDirectory = path.resolve(moduleDirectory, "..")
  */
 export const cacheDirectory = path.join(projectDirectory, "data", "cache")
 export const mediaCacheDirectory = path.join(cacheDirectory, "media")
-export const mediaCacheContentDirectory = path.join(mediaCacheDirectory, "sha256")
+export const mediaCacheContentDirectory = path.join(
+  mediaCacheDirectory,
+  "sha256",
+)
 export const mediaCacheTempDirectory = path.join(mediaCacheDirectory, "tmp")
-export const publicAssetsDirectory = path.join(projectDirectory, "public", "assets")
+export const publicAssetsDirectory = path.join(
+  projectDirectory,
+  "public",
+  "assets",
+)
 
 export const MEDIA_STATUS = Object.freeze({
   PENDING: "pending",
@@ -37,7 +44,12 @@ const mimeExtensions = new Map([
 
 /** Create the runtime directories used by a future downloader. */
 export function ensureMediaCacheDirectories() {
-  for (const directory of [cacheDirectory, mediaCacheDirectory, mediaCacheContentDirectory, mediaCacheTempDirectory]) {
+  for (const directory of [
+    cacheDirectory,
+    mediaCacheDirectory,
+    mediaCacheContentDirectory,
+    mediaCacheTempDirectory,
+  ]) {
     fs.mkdirSync(directory, { recursive: true })
   }
 }
@@ -78,12 +90,18 @@ export function sha256ForContent(content) {
 }
 
 export function sanitizeExtension(value, fallback = "bin") {
-  const normalized = String(value || "").trim().toLowerCase().replace(/^\./u, "")
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^\./u, "")
   return extensionPattern.test(normalized) ? normalized : fallback
 }
 
 export function normalizeMediaMimeType(mimeType) {
-  const normalized = String(mimeType || "").split(";", 1)[0].trim().toLowerCase()
+  const normalized = String(mimeType || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase()
   return mimeExtensions.has(normalized) ? normalized : null
 }
 
@@ -120,26 +138,32 @@ export function cacheRelativePathForHash(contentHash, extension = "bin") {
  * traversal-containing paths return null so callers can answer with 404.
  */
 export function resolveMediaCachePath(relativePath) {
-  if (typeof relativePath !== "string" || relativePath.trim() === "") return null
+  if (typeof relativePath !== "string" || relativePath.trim() === "")
+    return null
   const normalized = relativePath.replaceAll("\\", "/")
-  if (normalized.includes("\0") || path.posix.isAbsolute(normalized)) return null
+  if (normalized.includes("\0") || path.posix.isAbsolute(normalized))
+    return null
   if (normalized.split("/").some((part) => part === "..")) return null
 
   const root = path.resolve(mediaCacheDirectory)
   const candidate = path.resolve(root, normalized)
-  if (candidate !== root && !candidate.startsWith(`${root}${path.sep}`)) return null
+  if (candidate !== root && !candidate.startsWith(`${root}${path.sep}`))
+    return null
   return candidate
 }
 
 export function publicMediaUrl(mediaId, contentHash = null) {
   if (!isSafeMediaId(mediaId)) return null
   if (contentHash == null) return `/media/${mediaId}`
-  return isSafeContentHash(contentHash) ? `/media/${mediaId}?v=${contentHash}` : null
+  return isSafeContentHash(contentHash)
+    ? `/media/${mediaId}?v=${contentHash}`
+    : null
 }
 
 /** Resolve a tracked `/assets/...` URL without permitting traversal. */
 export function resolvePublicAssetPath(assetUrl) {
-  if (typeof assetUrl !== "string" || !assetUrl.startsWith("/assets/")) return null
+  if (typeof assetUrl !== "string" || !assetUrl.startsWith("/assets/"))
+    return null
   let relativePath
   try {
     relativePath = decodeURIComponent(assetUrl.slice("/assets/".length))
@@ -149,7 +173,8 @@ export function resolvePublicAssetPath(assetUrl) {
   if (!relativePath || relativePath.includes("\0")) return null
   const root = path.resolve(publicAssetsDirectory)
   const candidate = path.resolve(root, relativePath)
-  if (candidate !== root && !candidate.startsWith(`${root}${path.sep}`)) return null
+  if (candidate !== root && !candidate.startsWith(`${root}${path.sep}`))
+    return null
   return candidate
 }
 
@@ -167,10 +192,16 @@ export function publicAssetExists(assetUrl) {
  * Atomically write a downloaded media body. The caller may pass a known hash;
  * it is rechecked before the file is moved into the content-addressed store.
  */
-export async function writeMediaFileAtomic({ content, contentHash, extension = "bin" }) {
+export async function writeMediaFileAtomic({
+  content,
+  contentHash,
+  extension = "bin",
+}) {
   const body = Buffer.isBuffer(content) ? content : Buffer.from(content)
   const actualHash = sha256ForContent(body)
-  const expectedHash = contentHash ? String(contentHash).toLowerCase() : actualHash
+  const expectedHash = contentHash
+    ? String(contentHash).toLowerCase()
+    : actualHash
   if (!sha256Pattern.test(expectedHash) || expectedHash !== actualHash) {
     throw new Error("media content hash mismatch")
   }
@@ -179,15 +210,22 @@ export async function writeMediaFileAtomic({ content, contentHash, extension = "
   const relativePath = cacheRelativePathForHash(actualHash, extension)
   const destination = resolveMediaCachePath(relativePath)
   const temporaryName = `${actualHash}.${process.pid}.${crypto.randomUUID()}.part`
-  const temporaryPath = resolveMediaCachePath(path.posix.join("tmp", temporaryName))
-  if (!destination || !temporaryPath) throw new Error("unable to resolve media cache path")
+  const temporaryPath = resolveMediaCachePath(
+    path.posix.join("tmp", temporaryName),
+  )
+  if (!destination || !temporaryPath)
+    throw new Error("unable to resolve media cache path")
 
   try {
     await fs.promises.writeFile(temporaryPath, body, { flag: "wx" })
     await fs.promises.mkdir(path.dirname(destination), { recursive: true })
     await fs.promises.rename(temporaryPath, destination)
   } catch (error) {
-    try { await fs.promises.rm(temporaryPath, { force: true }) } catch { /* best effort cleanup */ }
+    try {
+      await fs.promises.rm(temporaryPath, { force: true })
+    } catch {
+      /* best effort cleanup */
+    }
     throw error
   }
 

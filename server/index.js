@@ -11,11 +11,17 @@ const port = Number(process.env.PORT || 8787)
 export const database = initializeDatabase()
 export const app = createApp({
   database,
-  databaseLabel: path.relative(path.resolve(projectDirectory, ".."), databasePath),
+  databaseLabel: path.relative(
+    path.resolve(projectDirectory, ".."),
+    databasePath,
+  ),
   staticDirectory: distDirectory,
 })
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   app.listen(port, () => {
     console.log(`Kano status board API listening on http://localhost:${port}`)
   })

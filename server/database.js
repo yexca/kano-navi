@@ -211,7 +211,8 @@ function asIntegerOrNull(value) {
 function mediaStatus(value, fallback = MEDIA_STATUS.PENDING) {
   if (value == null || value === "") return fallback
   const status = String(value)
-  if (!Object.values(MEDIA_STATUS).includes(status)) throw new Error("invalid media status")
+  if (!Object.values(MEDIA_STATUS).includes(status))
+    throw new Error("invalid media status")
   return status
 }
 
@@ -222,7 +223,12 @@ function mediaSource(value) {
 function mediaOwner(value) {
   const ownerType = value?.owner_type ?? value?.ownerType
   const ownerId = value?.owner_id ?? value?.ownerId
-  if (ownerType == null || ownerId == null || String(ownerType).trim() === "" || String(ownerId).trim() === "") {
+  if (
+    ownerType == null ||
+    ownerId == null ||
+    String(ownerType).trim() === "" ||
+    String(ownerId).trim() === ""
+  ) {
     return null
   }
   return { ownerType: String(ownerType), ownerId: String(ownerId) }
@@ -245,7 +251,9 @@ function normalizedMediaCandidate(candidate) {
     owner,
     role: mediaRole(candidate),
     position: Math.max(0, Math.trunc(Number(candidate?.position ?? 0) || 0)),
-    alt: nullable(candidate?.alt ?? candidate?.media_alt ?? candidate?.mediaAlt),
+    alt: nullable(
+      candidate?.alt ?? candidate?.media_alt ?? candidate?.mediaAlt,
+    ),
     raw: candidate?.raw ?? candidate,
   }
 }
@@ -253,7 +261,9 @@ function normalizedMediaCandidate(candidate) {
 function insertRegisteredMediaAsset(database, candidate, timestamp = nowIso()) {
   const row = normalizedMediaCandidate(candidate)
   if (!row) return null
-  database.prepare(`
+  database
+    .prepare(
+      `
     INSERT INTO media_assets (
       id, source, source_url, status, last_seen_at, created_at, updated_at, raw_json
     ) VALUES (@id, @source, @source_url, @status, @last_seen_at, @created_at, @updated_at, @raw_json)
@@ -264,24 +274,28 @@ function insertRegisteredMediaAsset(database, candidate, timestamp = nowIso()) {
       updated_at=excluded.updated_at,
       raw_json=COALESCE(excluded.raw_json, media_assets.raw_json),
       status=CASE WHEN media_assets.status = @ready_status THEN @ready_status ELSE @pending_status END
-  `).run({
-    id: row.id,
-    source: row.source,
-    source_url: row.sourceUrl,
-    status: MEDIA_STATUS.PENDING,
-    last_seen_at: timestamp,
-    created_at: timestamp,
-    updated_at: timestamp,
-    raw_json: json(row.raw),
-    ready_status: MEDIA_STATUS.READY,
-    pending_status: MEDIA_STATUS.PENDING,
-  })
+  `,
+    )
+    .run({
+      id: row.id,
+      source: row.source,
+      source_url: row.sourceUrl,
+      status: MEDIA_STATUS.PENDING,
+      last_seen_at: timestamp,
+      created_at: timestamp,
+      updated_at: timestamp,
+      raw_json: json(row.raw),
+      ready_status: MEDIA_STATUS.READY,
+      pending_status: MEDIA_STATUS.PENDING,
+    })
   return row
 }
 
 function insertMediaLink(database, row, timestamp = nowIso()) {
   if (!row?.mediaId || !row?.owner) return false
-  database.prepare(`
+  database
+    .prepare(
+      `
     INSERT INTO media_links (
       media_id, owner_type, owner_id, role, position, alt, created_at, updated_at
     ) VALUES (@media_id, @owner_type, @owner_id, @role, @position, @alt, @created_at, @updated_at)
@@ -289,21 +303,24 @@ function insertMediaLink(database, row, timestamp = nowIso()) {
       media_id=excluded.media_id,
       alt=COALESCE(excluded.alt, media_links.alt),
       updated_at=excluded.updated_at
-  `).run({
-    media_id: row.mediaId,
-    owner_type: row.owner.ownerType,
-    owner_id: row.owner.ownerId,
-    role: row.role,
-    position: row.position,
-    alt: row.alt,
-    created_at: timestamp,
-    updated_at: timestamp,
-  })
+  `,
+    )
+    .run({
+      media_id: row.mediaId,
+      owner_type: row.owner.ownerType,
+      owner_id: row.owner.ownerId,
+      role: row.role,
+      position: row.position,
+      alt: row.alt,
+      created_at: timestamp,
+      updated_at: timestamp,
+    })
   return true
 }
 
 export function openDatabase({ filename = databasePath } = {}) {
-  if (filename !== ":memory:") fs.mkdirSync(path.dirname(path.resolve(filename)), { recursive: true })
+  if (filename !== ":memory:")
+    fs.mkdirSync(path.dirname(path.resolve(filename)), { recursive: true })
   ensureMediaCacheDirectories()
   const database = new Database(filename)
   database.pragma("journal_mode = WAL")
@@ -489,13 +506,29 @@ function insertAsset(database, asset, overwrite) {
 
 function mediaCandidatesFromProfile(profile) {
   return [
-    { source: "profile", source_url: profile?.avatar_url, owner_type: "profile", owner_id: profile?.id, role: "avatar", position: 0 },
-    { source: "profile", source_url: profile?.banner_url, owner_type: "profile", owner_id: profile?.id, role: "banner", position: 0 },
+    {
+      source: "profile",
+      source_url: profile?.avatar_url,
+      owner_type: "profile",
+      owner_id: profile?.id,
+      role: "avatar",
+      position: 0,
+    },
+    {
+      source: "profile",
+      source_url: profile?.banner_url,
+      owner_type: "profile",
+      owner_id: profile?.id,
+      role: "banner",
+      position: 0,
+    },
   ]
 }
 
 function mediaCandidatesFromPost(post) {
-  const urls = Array.isArray(post?.media_urls) ? post.media_urls : [post?.media_url]
+  const urls = Array.isArray(post?.media_urls)
+    ? post.media_urls
+    : [post?.media_url]
   return urls.map((source_url, position) => ({
     source: post?.source || "x",
     source_url,
@@ -508,7 +541,9 @@ function mediaCandidatesFromPost(post) {
 }
 
 function mediaCandidatesFromVideo(video) {
-  const urls = Array.isArray(video?.thumbnail_urls) ? video.thumbnail_urls : [video?.thumbnail_url]
+  const urls = Array.isArray(video?.thumbnail_urls)
+    ? video.thumbnail_urls
+    : [video?.thumbnail_url]
   return urls.map((source_url, position) => ({
     source: video?.source || "youtube",
     source_url,
@@ -520,27 +555,31 @@ function mediaCandidatesFromVideo(video) {
 }
 
 function mediaCandidatesFromFocus(focus) {
-  return [{
-    source: "focus",
-    source_url: focus?.image_url,
-    owner_type: "focus",
-    owner_id: focus?.id || 1,
-    role: "focus-image",
-    position: 0,
-    alt: focus?.title,
-  }]
+  return [
+    {
+      source: "focus",
+      source_url: focus?.image_url,
+      owner_type: "focus",
+      owner_id: focus?.id || 1,
+      role: "focus-image",
+      position: 0,
+      alt: focus?.title,
+    },
+  ]
 }
 
 function mediaCandidatesFromAsset(asset) {
-  return [{
-    source: asset?.source || asset?.kind || "asset",
-    source_url: asset?.url,
-    owner_type: "asset",
-    owner_id: asset?.id,
-    role: asset?.kind || "image",
-    position: 0,
-    alt: asset?.alt,
-  }]
+  return [
+    {
+      source: asset?.source || asset?.kind || "asset",
+      source_url: asset?.url,
+      owner_type: "asset",
+      owner_id: asset?.id,
+      role: asset?.kind || "image",
+      position: 0,
+      alt: asset?.alt,
+    },
+  ]
 }
 
 function collectSeedMediaCandidates(data) {
@@ -571,7 +610,8 @@ export function registerMediaCandidates(database, candidates = []) {
         continue
       }
       registered += 1
-      if (insertMediaLink(database, { ...row, mediaId: row.id }, timestamp)) linked += 1
+      if (insertMediaLink(database, { ...row, mediaId: row.id }, timestamp))
+        linked += 1
     }
     return { registered, linked, skipped }
   })
@@ -584,30 +624,51 @@ export function upsertMediaAsset(database, asset) {
   if (!sourceUrl) throw new Error("media asset requires an HTTP(S) source URL")
   const id = mediaIdForSourceUrl(sourceUrl)
   if (!id) throw new Error("media asset requires a valid source URL")
-  if (asset?.id && String(asset.id) !== id) throw new Error("media asset ID does not match its source URL")
+  if (asset?.id && String(asset.id) !== id)
+    throw new Error("media asset ID does not match its source URL")
   const timestamp = nowIso()
   const status = mediaStatus(asset?.status, MEDIA_STATUS.READY)
   const requestedCachePath = asset?.cache_path ?? asset?.cachePath
   if (status === MEDIA_STATUS.READY && !requestedCachePath) {
     throw new Error("ready media asset requires a cache path")
   }
-  if (requestedCachePath && !resolveMediaCachePath(String(requestedCachePath))) {
+  if (
+    requestedCachePath &&
+    !resolveMediaCachePath(String(requestedCachePath))
+  ) {
     throw new Error("invalid media cache path")
   }
-  const requestedHash = asset?.sha256 == null ? null : String(asset.sha256).toLowerCase()
-  if (requestedHash != null && !/^[a-f0-9]{64}$/iu.test(String(requestedHash))) {
+  const requestedHash =
+    asset?.sha256 == null ? null : String(asset.sha256).toLowerCase()
+  if (
+    requestedHash != null &&
+    !/^[a-f0-9]{64}$/iu.test(String(requestedHash))
+  ) {
     throw new Error("invalid media content hash")
   }
-  const normalizedMimeType = normalizeMediaMimeType(asset?.mime_type ?? asset?.mimeType)
+  const normalizedMimeType = normalizeMediaMimeType(
+    asset?.mime_type ?? asset?.mimeType,
+  )
   let readyStat = null
   if (status === MEDIA_STATUS.READY) {
-    if (!normalizedMimeType) throw new Error("ready media asset requires an allowed image MIME type")
-    if (!requestedHash) throw new Error("ready media asset requires a content hash")
-    const expectedPath = cacheRelativePathForHash(requestedHash, extensionForMimeType(normalizedMimeType))
-    if (String(requestedCachePath) !== expectedPath) throw new Error("ready media cache path does not match its content hash")
+    if (!normalizedMimeType)
+      throw new Error("ready media asset requires an allowed image MIME type")
+    if (!requestedHash)
+      throw new Error("ready media asset requires a content hash")
+    const expectedPath = cacheRelativePathForHash(
+      requestedHash,
+      extensionForMimeType(normalizedMimeType),
+    )
+    if (String(requestedCachePath) !== expectedPath)
+      throw new Error("ready media cache path does not match its content hash")
     const fullPath = resolveMediaCachePath(expectedPath)
-    try { readyStat = fs.statSync(fullPath) } catch { readyStat = null }
-    if (!readyStat?.isFile()) throw new Error("ready media cache file does not exist")
+    try {
+      readyStat = fs.statSync(fullPath)
+    } catch {
+      readyStat = null
+    }
+    if (!readyStat?.isFile())
+      throw new Error("ready media cache file does not exist")
   }
   const values = {
     id,
@@ -615,15 +676,29 @@ export function upsertMediaAsset(database, asset) {
     source_url: sourceUrl,
     cache_path: nullable(asset?.cache_path ?? asset?.cachePath),
     mime_type: normalizedMimeType,
-    extension: nullable(asset?.extension ?? (normalizedMimeType ? extensionForMimeType(normalizedMimeType) : null)),
-    byte_size: asIntegerOrNull(asset?.byte_size ?? asset?.byteSize) ?? readyStat?.size ?? null,
+    extension: nullable(
+      asset?.extension ??
+        (normalizedMimeType ? extensionForMimeType(normalizedMimeType) : null),
+    ),
+    byte_size:
+      asIntegerOrNull(asset?.byte_size ?? asset?.byteSize) ??
+      readyStat?.size ??
+      null,
     sha256: requestedHash,
     width: asIntegerOrNull(asset?.width),
     height: asIntegerOrNull(asset?.height),
     status,
-    fetched_at: nullable(asset?.fetched_at ?? asset?.fetchedAt ?? (status === MEDIA_STATUS.READY ? timestamp : null)),
-    last_checked_at: nullable(asset?.last_checked_at ?? asset?.lastCheckedAt ?? timestamp),
-    last_seen_at: nullable(asset?.last_seen_at ?? asset?.lastSeenAt ?? timestamp),
+    fetched_at: nullable(
+      asset?.fetched_at ??
+        asset?.fetchedAt ??
+        (status === MEDIA_STATUS.READY ? timestamp : null),
+    ),
+    last_checked_at: nullable(
+      asset?.last_checked_at ?? asset?.lastCheckedAt ?? timestamp,
+    ),
+    last_seen_at: nullable(
+      asset?.last_seen_at ?? asset?.lastSeenAt ?? timestamp,
+    ),
     etag: nullable(asset?.etag),
     last_modified: nullable(asset?.last_modified ?? asset?.lastModified),
     last_error: nullable(asset?.last_error ?? asset?.lastError),
@@ -631,7 +706,9 @@ export function upsertMediaAsset(database, asset) {
     updated_at: timestamp,
     raw_json: json(asset),
   }
-  database.prepare(`
+  database
+    .prepare(
+      `
     INSERT INTO media_assets (
       id, source, source_url, cache_path, mime_type, extension, byte_size, sha256,
       width, height, status, fetched_at, last_checked_at, last_seen_at, etag,
@@ -663,7 +740,9 @@ export function upsertMediaAsset(database, asset) {
       last_error=excluded.last_error,
       updated_at=excluded.updated_at,
       raw_json=COALESCE(excluded.raw_json, media_assets.raw_json)
-  `).run(values)
+  `,
+    )
+    .run(values)
   return getMediaAsset(database, id)
 }
 
@@ -677,33 +756,68 @@ const mediaAssetColumns = `
 
 export function getMediaAsset(database, id) {
   if (!isSafeMediaId(id)) return null
-  return database.prepare(`SELECT ${mediaAssetColumns} FROM media_assets WHERE id = ?`).get(id) || null
+  return (
+    database
+      .prepare(`SELECT ${mediaAssetColumns} FROM media_assets WHERE id = ?`)
+      .get(id) || null
+  )
 }
 
 export function listMediaAssets(database, { status } = {}) {
   if (status) {
-    return database.prepare(`SELECT ${mediaAssetColumns} FROM media_assets WHERE status = ? ORDER BY updated_at DESC, id ASC`).all(status)
+    return database
+      .prepare(
+        `SELECT ${mediaAssetColumns} FROM media_assets WHERE status = ? ORDER BY updated_at DESC, id ASC`,
+      )
+      .all(status)
   }
-  return database.prepare(`SELECT ${mediaAssetColumns} FROM media_assets ORDER BY updated_at DESC, id ASC`).all()
+  return database
+    .prepare(
+      `SELECT ${mediaAssetColumns} FROM media_assets ORDER BY updated_at DESC, id ASC`,
+    )
+    .all()
 }
 
 export function listMediaLinks(database, { mediaId, ownerType, ownerId } = {}) {
   const clauses = []
   const values = []
-  if (mediaId) { clauses.push("media_id = ?"); values.push(mediaId) }
-  if (ownerType) { clauses.push("owner_type = ?"); values.push(ownerType) }
-  if (ownerId) { clauses.push("owner_id = ?"); values.push(String(ownerId)) }
+  if (mediaId) {
+    clauses.push("media_id = ?")
+    values.push(mediaId)
+  }
+  if (ownerType) {
+    clauses.push("owner_type = ?")
+    values.push(ownerType)
+  }
+  if (ownerId) {
+    clauses.push("owner_id = ?")
+    values.push(String(ownerId))
+  }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
-  return database.prepare(`SELECT id, media_id AS mediaId, owner_type AS ownerType, owner_id AS ownerId, role, position, alt, created_at AS createdAt, updated_at AS updatedAt FROM media_links ${where} ORDER BY owner_type, owner_id, role, position`).all(...values)
+  return database
+    .prepare(
+      `SELECT id, media_id AS mediaId, owner_type AS ownerType, owner_id AS ownerId, role, position, alt, created_at AS createdAt, updated_at AS updatedAt FROM media_links ${where} ORDER BY owner_type, owner_id, role, position`,
+    )
+    .all(...values)
 }
 
 function mediaReferenceForAsset(asset) {
   if (!asset) return null
-  const cachePath = asset.cachePath ? resolveMediaCachePath(asset.cachePath) : null
-  const ready = asset.status === MEDIA_STATUS.READY && cachePath && isSafeContentHash(asset.sha256) && fs.existsSync(cachePath)
+  const cachePath = asset.cachePath
+    ? resolveMediaCachePath(asset.cachePath)
+    : null
+  const ready =
+    asset.status === MEDIA_STATUS.READY &&
+    cachePath &&
+    isSafeContentHash(asset.sha256) &&
+    fs.existsSync(cachePath)
   return {
     id: asset.id,
-    status: ready ? MEDIA_STATUS.READY : (asset.status === MEDIA_STATUS.READY ? MEDIA_STATUS.MISSING : (asset.status || MEDIA_STATUS.MISSING)),
+    status: ready
+      ? MEDIA_STATUS.READY
+      : asset.status === MEDIA_STATUS.READY
+        ? MEDIA_STATUS.MISSING
+        : asset.status || MEDIA_STATUS.MISSING,
     sourceUrl: asset.sourceUrl,
     publicUrl: ready ? publicMediaUrl(asset.id, asset.sha256) : null,
     mimeType: asset.mimeType || null,
@@ -715,7 +829,13 @@ function mediaReferenceForAsset(asset) {
 
 /** Map a stored URL to a safe browser URL while retaining source/status data. */
 export function resolveMediaReference(database, sourceUrl, bySourceUrl = null) {
-  if (!sourceUrl) return { id: null, status: MEDIA_STATUS.MISSING, sourceUrl: null, publicUrl: null }
+  if (!sourceUrl)
+    return {
+      id: null,
+      status: MEDIA_STATUS.MISSING,
+      sourceUrl: null,
+      publicUrl: null,
+    }
   if (String(sourceUrl).startsWith("/assets/")) {
     const exists = publicAssetExists(String(sourceUrl))
     return {
@@ -726,32 +846,58 @@ export function resolveMediaReference(database, sourceUrl, bySourceUrl = null) {
     }
   }
   const normalized = normalizeSourceUrl(sourceUrl)
-  if (!normalized) return { id: null, status: MEDIA_STATUS.MISSING, sourceUrl: null, publicUrl: null }
-  const asset = bySourceUrl?.get(normalized) || database.prepare(`SELECT ${mediaAssetColumns} FROM media_assets WHERE source_url = ?`).get(normalized)
-  return mediaReferenceForAsset(asset) || {
-    id: mediaIdForSourceUrl(normalized),
-    status: MEDIA_STATUS.PENDING,
-    sourceUrl: normalized,
-    publicUrl: null,
-  }
+  if (!normalized)
+    return {
+      id: null,
+      status: MEDIA_STATUS.MISSING,
+      sourceUrl: null,
+      publicUrl: null,
+    }
+  const asset =
+    bySourceUrl?.get(normalized) ||
+    database
+      .prepare(
+        `SELECT ${mediaAssetColumns} FROM media_assets WHERE source_url = ?`,
+      )
+      .get(normalized)
+  return (
+    mediaReferenceForAsset(asset) || {
+      id: mediaIdForSourceUrl(normalized),
+      status: MEDIA_STATUS.PENDING,
+      sourceUrl: normalized,
+      publicUrl: null,
+    }
+  )
 }
 
-export function seedDatabase(database, data = seedData, { overwrite = false } = {}) {
+export function seedDatabase(
+  database,
+  data = seedData,
+  { overwrite = false } = {},
+) {
   const seed = database.transaction(() => {
     insertProfile(database, data.profile, overwrite)
     for (const post of data.posts || []) insertPost(database, post, overwrite)
-    for (const event of data.events || []) insertEvent(database, event, overwrite)
-    for (const video of data.videos || []) insertVideo(database, video, overwrite)
+    for (const event of data.events || [])
+      insertEvent(database, event, overwrite)
+    for (const video of data.videos || [])
+      insertVideo(database, video, overwrite)
     if (data.focus) insertFocus(database, data.focus, overwrite)
-    for (const item of data.timeline || []) insertTimeline(database, item, overwrite)
-    for (const item of data.resources || []) insertResource(database, item, overwrite)
-    for (const asset of data.assets || []) insertAsset(database, asset, overwrite)
+    for (const item of data.timeline || [])
+      insertTimeline(database, item, overwrite)
+    for (const item of data.resources || [])
+      insertResource(database, item, overwrite)
+    for (const asset of data.assets || [])
+      insertAsset(database, asset, overwrite)
   })
   seed()
   registerMediaCandidates(database, collectSeedMediaCandidates(data))
 }
 
-export function initializeDatabase({ seed = true, filename = databasePath } = {}) {
+export function initializeDatabase({
+  seed = true,
+  filename = databasePath,
+} = {}) {
   const database = openDatabase({ filename })
   if (seed) seedDatabase(database)
   return database
@@ -763,41 +909,68 @@ export function upsertProfile(database, profile) {
 }
 
 export function upsertPosts(database, posts = []) {
-  const run = database.transaction((rows) => rows.forEach((post) => insertPost(database, post, true)))
+  const run = database.transaction((rows) =>
+    rows.forEach((post) => insertPost(database, post, true)),
+  )
   run(posts)
   registerMediaCandidates(database, posts.flatMap(mediaCandidatesFromPost))
 }
 
 export function upsertEvents(database, events = []) {
-  const run = database.transaction((rows) => rows.forEach((event) => insertEvent(database, event, true)))
+  const run = database.transaction((rows) =>
+    rows.forEach((event) => insertEvent(database, event, true)),
+  )
   run(events)
 }
 
 export function upsertVideos(database, videos = []) {
-  const run = database.transaction((rows) => rows.forEach((video) => insertVideo(database, video, true)))
+  const run = database.transaction((rows) =>
+    rows.forEach((video) => insertVideo(database, video, true)),
+  )
   run(videos)
   registerMediaCandidates(database, videos.flatMap(mediaCandidatesFromVideo))
 }
 
 export function upsertAssets(database, assets = []) {
-  const run = database.transaction((rows) => rows.forEach((asset) => insertAsset(database, asset, true)))
+  const run = database.transaction((rows) =>
+    rows.forEach((asset) => insertAsset(database, asset, true)),
+  )
   run(assets)
   registerMediaCandidates(database, assets.flatMap(mediaCandidatesFromAsset))
 }
 
-export function startSyncRun(database, source, startedAt = new Date().toISOString()) {
-  const result = database.prepare(`INSERT INTO sync_runs (source, started_at, status) VALUES (?, ?, 'running')`).run(source, startedAt)
+export function startSyncRun(
+  database,
+  source,
+  startedAt = new Date().toISOString(),
+) {
+  const result = database
+    .prepare(
+      `INSERT INTO sync_runs (source, started_at, status) VALUES (?, ?, 'running')`,
+    )
+    .run(source, startedAt)
   return Number(result.lastInsertRowid)
 }
 
-export function finishSyncRun(database, id, { status, message = "", counts = {} } = {}) {
-  database.prepare(`UPDATE sync_runs SET finished_at = ?, status = ?, message = ?, counts_json = ? WHERE id = ?`)
+export function finishSyncRun(
+  database,
+  id,
+  { status, message = "", counts = {} } = {},
+) {
+  database
+    .prepare(
+      `UPDATE sync_runs SET finished_at = ?, status = ?, message = ?, counts_json = ? WHERE id = ?`,
+    )
     .run(new Date().toISOString(), status, message, JSON.stringify(counts), id)
 }
 
 function parseJson(value) {
   if (!value) return undefined
-  try { return JSON.parse(value) } catch { return undefined }
+  try {
+    return JSON.parse(value)
+  } catch {
+    return undefined
+  }
 }
 
 function mapProfile(row) {
@@ -811,8 +984,12 @@ function mapRows(rows) {
 }
 
 export function getLatestSync(database) {
-  const row = database.prepare(`SELECT id, source, started_at AS startedAt, finished_at AS finishedAt, status, message, counts_json AS countsJson
-    FROM sync_runs WHERE status != 'running' ORDER BY COALESCE(finished_at, started_at) DESC LIMIT 1`).get()
+  const row = database
+    .prepare(
+      `SELECT id, source, started_at AS startedAt, finished_at AS finishedAt, status, message, counts_json AS countsJson
+    FROM sync_runs WHERE status != 'running' ORDER BY COALESCE(finished_at, started_at) DESC LIMIT 1`,
+    )
+    .get()
   if (!row) return null
   const { countsJson: _countsJson, ...summary } = row
   return { ...summary, counts: parseJson(row.countsJson) || {} }
@@ -821,15 +998,25 @@ export function getLatestSync(database) {
 export function getDashboard(database, { days = 3, now = new Date() } = {}) {
   const windowStart = now.getTime() - days * 24 * 60 * 60 * 1000
   const mediaRows = listMediaAssets(database)
-  const mediaBySourceUrl = new Map(mediaRows.map((asset) => [asset.sourceUrl, asset]))
-  const posts = database.prepare(`SELECT id, source, type, label, text, published_at AS publishedAt, url, likes, reposts, replies, media_url AS mediaUrl, media_alt AS mediaAlt
-    FROM posts ORDER BY published_at DESC`).all()
+  const mediaBySourceUrl = new Map(
+    mediaRows.map((asset) => [asset.sourceUrl, asset]),
+  )
+  const posts = database
+    .prepare(
+      `SELECT id, source, type, label, text, published_at AS publishedAt, url, likes, reposts, replies, media_url AS mediaUrl, media_alt AS mediaAlt
+    FROM posts ORDER BY published_at DESC`,
+    )
+    .all()
     .filter((post) => {
       const timestamp = Date.parse(post.publishedAt)
       return Number.isNaN(timestamp) || timestamp >= windowStart
     })
     .map((post) => {
-      const media = resolveMediaReference(database, post.mediaUrl, mediaBySourceUrl)
+      const media = resolveMediaReference(
+        database,
+        post.mediaUrl,
+        mediaBySourceUrl,
+      )
       return {
         ...post,
         mediaUrl: media.publicUrl,
@@ -839,81 +1026,153 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
       }
     })
 
-  const events = database.prepare(`SELECT id, source, title, detail, starts_at AS startsAt, ends_at AS endsAt, status, event_type AS eventType, url
-    FROM events ORDER BY starts_at ASC`).all().map((event) => ({
-    ...event,
-    isUpcoming: !Number.isNaN(Date.parse(event.startsAt)) && Date.parse(event.startsAt) >= now.getTime(),
-  }))
+  const events = database
+    .prepare(
+      `SELECT id, source, title, detail, starts_at AS startsAt, ends_at AS endsAt, status, event_type AS eventType, url
+    FROM events ORDER BY starts_at ASC`,
+    )
+    .all()
+    .map((event) => ({
+      ...event,
+      isUpcoming:
+        !Number.isNaN(Date.parse(event.startsAt)) &&
+        Date.parse(event.startsAt) >= now.getTime(),
+    }))
 
-  const videos = database.prepare(`SELECT id, source, title, published_at AS publishedAt, scheduled_at AS scheduledAt, url,
+  const videos = database
+    .prepare(
+      `SELECT id, source, title, published_at AS publishedAt, scheduled_at AS scheduledAt, url,
     thumbnail_url AS thumbnailUrl, kind, is_upcoming AS isUpcoming FROM videos
-    ORDER BY COALESCE(scheduled_at, published_at) DESC LIMIT 30`).all().map((video) => ({
-    ...video,
-    isUpcoming: Boolean(video.isUpcoming) || Boolean(video.scheduledAt && Date.parse(video.scheduledAt) >= now.getTime()),
-  })).map((video) => {
-    const media = resolveMediaReference(database, video.thumbnailUrl, mediaBySourceUrl)
-    return {
+    ORDER BY COALESCE(scheduled_at, published_at) DESC LIMIT 30`,
+    )
+    .all()
+    .map((video) => ({
       ...video,
-      thumbnailUrl: media.publicUrl,
-      thumbnailId: media.id,
-      thumbnailStatus: media.status,
-      thumbnailSourceUrl: media.sourceUrl,
-    }
-  })
+      isUpcoming:
+        Boolean(video.isUpcoming) ||
+        Boolean(
+          video.scheduledAt && Date.parse(video.scheduledAt) >= now.getTime(),
+        ),
+    }))
+    .map((video) => {
+      const media = resolveMediaReference(
+        database,
+        video.thumbnailUrl,
+        mediaBySourceUrl,
+      )
+      return {
+        ...video,
+        thumbnailUrl: media.publicUrl,
+        thumbnailId: media.id,
+        thumbnailStatus: media.status,
+        thumbnailSourceUrl: media.sourceUrl,
+      }
+    })
 
-  const focusRow = database.prepare(`SELECT id, date_label AS dateLabel, title, description, image_url AS imageUrl, url, source_url AS sourceUrl, updated_at AS updatedAt FROM focus ORDER BY id LIMIT 1`).get()
-  const focus = focusRow ? (() => {
-    const media = resolveMediaReference(database, focusRow.imageUrl, mediaBySourceUrl)
-    return {
-      ...focusRow,
-      imageUrl: media.publicUrl,
-      imageId: media.id,
-      imageStatus: media.status,
-      imageSourceUrl: media.sourceUrl,
-    }
-  })() : null
-  const timeline = database.prepare(`SELECT id, year, title, detail, sort_order AS sortOrder FROM timeline ORDER BY sort_order ASC, id ASC`).all()
-  const resources = database.prepare(`SELECT id, title, detail, icon, tone, url, sort_order AS sortOrder FROM resources ORDER BY sort_order ASC, id ASC`).all()
-  const assets = database.prepare(`SELECT id, kind, url, source_url AS sourceUrl, alt, updated_at AS updatedAt FROM assets ORDER BY id ASC`).all().map((asset) => {
-    const media = resolveMediaReference(database, asset.url, mediaBySourceUrl)
-    return {
-      ...asset,
-      url: media.publicUrl,
-      sourceUrl: asset.sourceUrl || media.sourceUrl,
-      mediaId: media.id,
-      mediaStatus: media.status,
-      mediaSourceUrl: media.sourceUrl,
-    }
-  })
-  const profileRow = mapProfile(database.prepare(`SELECT id, display_name AS displayName, romanized_name AS romanizedName, bio, avatar_url AS avatarUrl, banner_url AS bannerUrl, x_url AS xUrl, youtube_url AS youtubeUrl, updated_at AS updatedAt FROM profiles ORDER BY id LIMIT 1`).get())
-  const profile = profileRow ? (() => {
-    const avatar = resolveMediaReference(database, profileRow.avatarUrl, mediaBySourceUrl)
-    const banner = resolveMediaReference(database, profileRow.bannerUrl, mediaBySourceUrl)
-    return {
-      ...profileRow,
-      avatarUrl: avatar.publicUrl,
-      avatarId: avatar.id,
-      avatarStatus: avatar.status,
-      avatarSourceUrl: avatar.sourceUrl,
-      bannerUrl: banner.publicUrl,
-      bannerId: banner.id,
-      bannerStatus: banner.status,
-      bannerSourceUrl: banner.sourceUrl,
-    }
-  })() : null
+  const focusRow = database
+    .prepare(
+      `SELECT id, date_label AS dateLabel, title, description, image_url AS imageUrl, url, source_url AS sourceUrl, updated_at AS updatedAt FROM focus ORDER BY id LIMIT 1`,
+    )
+    .get()
+  const focus = focusRow
+    ? (() => {
+        const media = resolveMediaReference(
+          database,
+          focusRow.imageUrl,
+          mediaBySourceUrl,
+        )
+        return {
+          ...focusRow,
+          imageUrl: media.publicUrl,
+          imageId: media.id,
+          imageStatus: media.status,
+          imageSourceUrl: media.sourceUrl,
+        }
+      })()
+    : null
+  const timeline = database
+    .prepare(
+      `SELECT id, year, title, detail, sort_order AS sortOrder FROM timeline ORDER BY sort_order ASC, id ASC`,
+    )
+    .all()
+  const resources = database
+    .prepare(
+      `SELECT id, title, detail, icon, tone, url, sort_order AS sortOrder FROM resources ORDER BY sort_order ASC, id ASC`,
+    )
+    .all()
+  const assets = database
+    .prepare(
+      `SELECT id, kind, url, source_url AS sourceUrl, alt, updated_at AS updatedAt FROM assets ORDER BY id ASC`,
+    )
+    .all()
+    .map((asset) => {
+      const media = resolveMediaReference(database, asset.url, mediaBySourceUrl)
+      return {
+        ...asset,
+        url: media.publicUrl,
+        sourceUrl: asset.sourceUrl || media.sourceUrl,
+        mediaId: media.id,
+        mediaStatus: media.status,
+        mediaSourceUrl: media.sourceUrl,
+      }
+    })
+  const profileRow = mapProfile(
+    database
+      .prepare(
+        `SELECT id, display_name AS displayName, romanized_name AS romanizedName, bio, avatar_url AS avatarUrl, banner_url AS bannerUrl, x_url AS xUrl, youtube_url AS youtubeUrl, updated_at AS updatedAt FROM profiles ORDER BY id LIMIT 1`,
+      )
+      .get(),
+  )
+  const profile = profileRow
+    ? (() => {
+        const avatar = resolveMediaReference(
+          database,
+          profileRow.avatarUrl,
+          mediaBySourceUrl,
+        )
+        const banner = resolveMediaReference(
+          database,
+          profileRow.bannerUrl,
+          mediaBySourceUrl,
+        )
+        return {
+          ...profileRow,
+          avatarUrl: avatar.publicUrl,
+          avatarId: avatar.id,
+          avatarStatus: avatar.status,
+          avatarSourceUrl: avatar.sourceUrl,
+          bannerUrl: banner.publicUrl,
+          bannerId: banner.id,
+          bannerStatus: banner.status,
+          bannerSourceUrl: banner.sourceUrl,
+        }
+      })()
+    : null
   const latestSync = getLatestSync(database)
-  const mediaCache = mediaRows.reduce((summary, asset) => {
-    const media = mediaReferenceForAsset(asset)
-    const status = media?.status || asset.status
-    summary.total += 1
-    summary[status] = (summary[status] || 0) + 1
-    return summary
-  }, { total: 0 })
+  const mediaCache = mediaRows.reduce(
+    (summary, asset) => {
+      const media = mediaReferenceForAsset(asset)
+      const status = media?.status || asset.status
+      summary.total += 1
+      summary[status] = (summary[status] || 0) + 1
+      return summary
+    },
+    { total: 0 },
+  )
 
-  const dateCandidates = [profile?.updatedAt, focusRow?.updatedAt, ...posts.map((post) => post.publishedAt), ...videos.map((video) => video.publishedAt)]
+  const dateCandidates = [
+    profile?.updatedAt,
+    focusRow?.updatedAt,
+    ...posts.map((post) => post.publishedAt),
+    ...videos.map((video) => video.publishedAt),
+  ]
     .map((value) => Date.parse(value || ""))
     .filter((value) => !Number.isNaN(value))
-  const fetchedAt = latestSync?.finishedAt || (dateCandidates.length ? new Date(Math.max(...dateCandidates)).toISOString() : null)
+  const fetchedAt =
+    latestSync?.finishedAt ||
+    (dateCandidates.length
+      ? new Date(Math.max(...dateCandidates)).toISOString()
+      : null)
 
   return {
     profile,

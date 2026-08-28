@@ -5,19 +5,19 @@
 The database file is `data/kano.sqlite`. On startup the server creates the
 directory, schema, and missing seed records. The current tables are:
 
-| Table | Purpose |
-| --- | --- |
-| `profiles` | Name, bio, avatar, banner, and official entry points |
-| `posts` | X posts, publication time, engagement counts, and media |
-| `events` | X schedules and platform reservations |
-| `videos` | Published YouTube videos and scheduled streams |
-| `focus` | The page's “Latest focus” item |
-| `timeline` | Person and activity timeline |
-| `resources` | X, YouTube, Wikipedia, and other resource links |
-| `assets` | Schedule images and their sources |
-| `media_assets` | Remote media identities, cache metadata, and fetch status |
-| `media_links` | Links from cached media to posts, videos, profiles, and focus items |
-| `sync_runs` | Status, counts, and error summaries for each synchronization |
+| Table          | Purpose                                                             |
+| -------------- | ------------------------------------------------------------------- |
+| `profiles`     | Name, bio, avatar, banner, and official entry points                |
+| `posts`        | X posts, publication time, engagement counts, and media             |
+| `events`       | X schedules and platform reservations                               |
+| `videos`       | Published YouTube videos and scheduled streams                      |
+| `focus`        | The page's “Latest focus” item                                      |
+| `timeline`     | Person and activity timeline                                        |
+| `resources`    | X, YouTube, Wikipedia, and other resource links                     |
+| `assets`       | Schedule images and their sources                                   |
+| `media_assets` | Remote media identities, cache metadata, and fetch status           |
+| `media_links`  | Links from cached media to posts, videos, profiles, and focus items |
+| `sync_runs`    | Status, counts, and error summaries for each synchronization        |
 
 The API maps snake_case columns to camelCase and removes `raw_json`. The
 frontend must not depend on database fields that are not declared in the API
@@ -72,14 +72,14 @@ adapter.
 
 ## Environment Variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `X_HANDLE` | `kano_2525` | Public X account name |
-| `YOUTUBE_CHANNEL_ID` | Current main channel ID | YouTube channel identifier |
-| `SYNC_TIMEOUT_MS` | `7000` | Timeout for an individual network request |
-| `SKIP_X` | Unset | Set to `1` to skip X |
-| `SKIP_YOUTUBE` | Unset | Set to `1` to skip YouTube |
-| `PORT` | `8787` | Express listening port |
+| Variable             | Default                 | Purpose                                   |
+| -------------------- | ----------------------- | ----------------------------------------- |
+| `X_HANDLE`           | `kano_2525`             | Public X account name                     |
+| `YOUTUBE_CHANNEL_ID` | Current main channel ID | YouTube channel identifier                |
+| `SYNC_TIMEOUT_MS`    | `7000`                  | Timeout for an individual network request |
+| `SKIP_X`             | Unset                   | Set to `1` to skip X                      |
+| `SKIP_YOUTUBE`       | Unset                   | Set to `1` to skip YouTube                |
+| `PORT`               | `8787`                  | Express listening port                    |
 
 These are public-source or local runtime parameters, not credentials. If an
 authenticated API is added later, reassess its trust boundary and storage

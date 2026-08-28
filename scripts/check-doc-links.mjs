@@ -15,7 +15,9 @@ function markdownFiles(directory, relativeDirectory = "") {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const relativePath = normalizePath(path.join(relativeDirectory, entry.name))
     if (entry.isDirectory()) {
-      files.push(...markdownFiles(path.join(directory, entry.name), relativePath))
+      files.push(
+        ...markdownFiles(path.join(directory, entry.name), relativePath),
+      )
     } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
       files.push(relativePath)
     }
@@ -28,7 +30,8 @@ function targetPath(rawTarget) {
   const target = withoutTitle.startsWith("<")
     ? withoutTitle.slice(1, withoutTitle.indexOf(">"))
     : withoutTitle.split(/\s+/u, 1)[0]
-  if (!target || externalTargetPattern.test(target) || target.startsWith("#")) return null
+  if (!target || externalTargetPattern.test(target) || target.startsWith("#"))
+    return null
   const withoutFragment = target.split(/[?#]/u, 1)[0]
   if (!withoutFragment) return null
   try {
@@ -39,7 +42,12 @@ function targetPath(rawTarget) {
 }
 
 export function checkMarkdownLinks() {
-  const files = ["README.md", ...markdownFiles(path.join(repositoryRoot, "docs"), "docs"), "SECURITY.md", "AGENTS.md"]
+  const files = [
+    "README.md",
+    ...markdownFiles(path.join(repositoryRoot, "docs"), "docs"),
+    "SECURITY.md",
+    "AGENTS.md",
+  ]
     .filter((file, index, all) => all.indexOf(file) === index)
     .filter((file) => fs.existsSync(path.resolve(repositoryRoot, file)))
   const missing = []
@@ -54,7 +62,10 @@ export function checkMarkdownLinks() {
         const relativeTarget = targetPath(match[1])
         if (relativeTarget === null) continue
         linksChecked += 1
-        const fullTarget = path.resolve(path.dirname(path.resolve(repositoryRoot, file)), relativeTarget)
+        const fullTarget = path.resolve(
+          path.dirname(path.resolve(repositoryRoot, file)),
+          relativeTarget,
+        )
         if (!fs.existsSync(fullTarget)) {
           missing.push({ file, line: index + 1, target: relativeTarget })
         }
@@ -63,14 +74,22 @@ export function checkMarkdownLinks() {
   }
 
   if (missing.length > 0) {
-    console.error(`Documentation link check found ${missing.length} missing target(s):`)
-    for (const item of missing) console.error(`- ${item.file}:${item.line}: ${item.target}`)
+    console.error(
+      `Documentation link check found ${missing.length} missing target(s):`,
+    )
+    for (const item of missing)
+      console.error(`- ${item.file}:${item.line}: ${item.target}`)
     return 1
   }
-  console.log(`Documentation link check passed (${files.length} Markdown file(s), ${linksChecked} local link(s)).`)
+  console.log(
+    `Documentation link check passed (${files.length} Markdown file(s), ${linksChecked} local link(s)).`,
+  )
   return 0
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   process.exitCode = checkMarkdownLinks()
 }

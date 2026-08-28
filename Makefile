@@ -1,4 +1,4 @@
-.PHONY: help install dev dev-client dev-server build preview start seed sync check-sensitive sensitive-check privacy-check test-sensitive test-server check-docs check ci
+.PHONY: help install dev dev-client dev-server build preview start seed sync format format-check check-sensitive sensitive-check privacy-check test-sensitive test-server check-docs check ci
 
 NPM ?= npm
 
@@ -15,6 +15,8 @@ help:
 		'start            Start the production server' \
 		'seed             Seed the local SQLite snapshot' \
 		'sync             Sync public X and YouTube sources' \
+		'format           Format supported files with Prettier' \
+		'format-check     Check formatting with Prettier' \
 		'check-sensitive  Scan the workspace for sensitive information' \
 		'test-sensitive   Run scanner unit tests' \
 		'test-server      Run database and media-cache tests' \
@@ -48,6 +50,12 @@ seed:
 
 sync:
 	$(NPM) run sync
+
+format:
+	$(NPM) run format
+
+format-check:
+	$(NPM) run format:check
 
 check-sensitive:
 	$(NPM) run check-sensitive

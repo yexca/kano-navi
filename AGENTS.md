@@ -27,21 +27,21 @@ Read it first, then use the focused documents in `docs/` for more detail.
 
 ## Code Map
 
-| Path | Responsibility |
-| --- | --- |
-| `src/main.jsx` | Dashboard page, interactions, and API data mapping |
-| `src/index.css` | Global design tokens, layout, and responsive styling |
-| `src/components/ui/` | Reusable shadcn/ui-style primitives |
-| `server/database.js` | SQLite schema, seeding, upserts, and queries |
-| `server/media-cache.js` | Runtime media paths, identities, and atomic-write helpers |
-| `server/app.js` | Testable Express application, APIs, and guarded media route |
-| `server/index.js` | Runtime database and HTTP listener assembly |
-| `server/seed-data.js` | Initial public snapshot and resource directory |
-| `scripts/sync.mjs` | Server-side X and YouTube synchronization adapters |
-| `scripts/seed.mjs` | Idempotent initial snapshot seeding |
-| `public/assets/` | Tracked fixed branding fallbacks |
-| `data/` | Local runtime SQLite and ignored media cache files |
-| `docs/` | Documentation for Agents, developers, and maintainers |
+| Path                    | Responsibility                                              |
+| ----------------------- | ----------------------------------------------------------- |
+| `src/main.jsx`          | Dashboard page, interactions, and API data mapping          |
+| `src/index.css`         | Global design tokens, layout, and responsive styling        |
+| `src/components/ui/`    | Reusable shadcn/ui-style primitives                         |
+| `server/database.js`    | SQLite schema, seeding, upserts, and queries                |
+| `server/media-cache.js` | Runtime media paths, identities, and atomic-write helpers   |
+| `server/app.js`         | Testable Express application, APIs, and guarded media route |
+| `server/index.js`       | Runtime database and HTTP listener assembly                 |
+| `server/seed-data.js`   | Initial public snapshot and resource directory              |
+| `scripts/sync.mjs`      | Server-side X and YouTube synchronization adapters          |
+| `scripts/seed.mjs`      | Idempotent initial snapshot seeding                         |
+| `public/assets/`        | Tracked fixed branding fallbacks                            |
+| `data/`                 | Local runtime SQLite and ignored media cache files          |
+| `docs/`                 | Documentation for Agents, developers, and maintainers       |
 
 ## Data Contract
 

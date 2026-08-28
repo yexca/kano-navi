@@ -44,14 +44,16 @@ temporary credential in shell history, source code, or the database.
 
 ## Checks
 
-| Command | Purpose |
-| --- | --- |
-| `npm run build` | Verify the Vite production build |
-| `npm run test:sensitive` | Run sensitive-information scanner unit tests |
-| `npm run check-sensitive` | Scan auditable text in the current Git workspace |
-| `npm run docs:check-links` | Check local links in README and docs |
-| `make ci` | Install dependencies and run the checks plus the build |
-| `npm run test:server` | Test SQLite and media-cache contracts |
+| Command                    | Purpose                                                |
+| -------------------------- | ------------------------------------------------------ |
+| `npm run format`           | Format supported project files with Prettier           |
+| `npm run format:check`     | Check project formatting without changing files        |
+| `npm run build`            | Verify the Vite production build                       |
+| `npm run test:sensitive`   | Run sensitive-information scanner unit tests           |
+| `npm run check-sensitive`  | Scan auditable text in the current Git workspace       |
+| `npm run docs:check-links` | Check local links in README and docs                   |
+| `make ci`                  | Install dependencies and run the checks plus the build |
+| `npm run test:server`      | Test SQLite and media-cache contracts                  |
 
 For UI changes, an additional browser check is useful. For API or database
 changes, request `http://localhost:8787/api/health` and

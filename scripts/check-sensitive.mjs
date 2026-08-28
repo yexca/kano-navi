@@ -106,7 +106,13 @@ function walkFiles(directory, relativeDirectory = "") {
 }
 
 function repositoryFiles() {
-  const result = runGit(["ls-files", "--cached", "--others", "--exclude-standard", "-z"])
+  const result = runGit([
+    "ls-files",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+    "-z",
+  ])
   if (result.status === 0) {
     return result.stdout
       .toString("utf8")
@@ -123,7 +129,9 @@ function isIgnoredPath(file) {
 }
 
 function isBinaryPath(file) {
-  return binaryExtensions.has(path.posix.extname(normalizePath(file)).toLowerCase())
+  return binaryExtensions.has(
+    path.posix.extname(normalizePath(file)).toLowerCase(),
+  )
 }
 
 export function isSensitivePath(file) {
@@ -131,7 +139,10 @@ export function isSensitivePath(file) {
   if (isIgnoredPath(normalized)) return false
   const baseName = path.posix.basename(normalized).toLowerCase()
 
-  if (baseName === ".env" || (baseName.startsWith(".env.") && baseName !== ".env.example")) {
+  if (
+    baseName === ".env" ||
+    (baseName.startsWith(".env.") && baseName !== ".env.example")
+  ) {
     return true
   }
   if (
@@ -140,7 +151,9 @@ export function isSensitivePath(file) {
   ) {
     return true
   }
-  return /\.(?:db|sqlite(?:3)?|pem|key|p12|pfx|jks|keystore|log)$/iu.test(baseName)
+  return /\.(?:db|sqlite(?:3)?|pem|key|p12|pfx|jks|keystore|log)$/iu.test(
+    baseName,
+  )
 }
 
 function findSensitiveFiles(directory, relativeDirectory = "") {
@@ -156,12 +169,18 @@ function findSensitiveFiles(directory, relativeDirectory = "") {
     const relativePath = normalizePath(path.join(relativeDirectory, entry.name))
     if (entry.isDirectory()) {
       if (!ignoredDirectoryNames.has(entry.name)) {
-        findings.push(...findSensitiveFiles(path.join(directory, entry.name), relativePath))
+        findings.push(
+          ...findSensitiveFiles(path.join(directory, entry.name), relativePath),
+        )
       }
       continue
     }
     if (entry.isFile() && isSensitivePath(relativePath)) {
-      findings.push({ file: relativePath, line: null, kind: "sensitive runtime or credential file" })
+      findings.push({
+        file: relativePath,
+        line: null,
+        kind: "sensitive runtime or credential file",
+      })
     }
   }
   return findings
@@ -176,13 +195,19 @@ export function parsePrivacyAllowlist(contents) {
   try {
     parsed = JSON.parse(contents)
   } catch (error) {
-    throw new Error(`invalid JSON: ${error instanceof Error ? error.message : String(error)}`)
+    throw new Error(
+      `invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    )
   }
   if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
     throw new Error("root must be an object")
   }
   const rootKeys = Object.keys(parsed).sort()
-  if (rootKeys.join(",") !== "hosts,version" || parsed.version !== 1 || !Array.isArray(parsed.hosts)) {
+  if (
+    rootKeys.join(",") !== "hosts,version" ||
+    parsed.version !== 1 ||
+    !Array.isArray(parsed.hosts)
+  ) {
     throw new Error("root must contain only version 1 and a hosts array")
   }
 
@@ -206,12 +231,15 @@ export function parsePrivacyAllowlist(contents) {
       host.includes(":") ||
       !/^[a-z0-9.-]+$/u.test(host)
     ) {
-      throw new Error(`host ${entryNumber} must be a lowercase hostname without a scheme`)
+      throw new Error(
+        `host ${entryNumber} must be a lowercase hostname without a scheme`,
+      )
     }
     if (typeof entry.reason !== "string" || entry.reason.trim() === "") {
       throw new Error(`host ${entryNumber} must have a reason`)
     }
-    if (hosts.has(host)) throw new Error(`host ${entryNumber} duplicates an approved host`)
+    if (hosts.has(host))
+      throw new Error(`host ${entryNumber} duplicates an approved host`)
     hosts.set(host, entry.reason)
   }
   return hosts
@@ -222,7 +250,9 @@ function loadPrivacyAllowlist() {
   try {
     return parsePrivacyAllowlist(fs.readFileSync(fullPath, "utf8"))
   } catch (error) {
-    throw new Error(`${privacyAllowlistFile}: ${error instanceof Error ? error.message : String(error)}`)
+    throw new Error(
+      `${privacyAllowlistFile}: ${error instanceof Error ? error.message : String(error)}`,
+    )
   }
 }
 
@@ -230,9 +260,15 @@ export function isAllowedHost(host, approvedHosts = new Map()) {
   const normalized = canonicalHost(host).replace(/^\[|\]$/gu, "")
   if (reservedHosts.has(normalized)) return true
   if (normalized.startsWith("127.")) return true
-  if (normalized.endsWith(".localhost") || normalized.endsWith(".test") || normalized.endsWith(".invalid")) return true
+  if (
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".test") ||
+    normalized.endsWith(".invalid")
+  )
+    return true
   for (const approvedHost of approvedHosts.keys()) {
-    if (normalized === approvedHost || normalized.endsWith(`.${approvedHost}`)) return true
+    if (normalized === approvedHost || normalized.endsWith(`.${approvedHost}`))
+      return true
   }
   return false
 }
@@ -253,7 +289,11 @@ function isDocumentationIPv4(value) {
 }
 
 function isAllowedIPv4(value) {
-  return value === "0.0.0.0" || value.startsWith("127.") || isDocumentationIPv4(value)
+  return (
+    value === "0.0.0.0" ||
+    value.startsWith("127.") ||
+    isDocumentationIPv4(value)
+  )
 }
 
 function normalizedValue(value) {
@@ -264,8 +304,12 @@ export function isSafePlaceholder(value) {
   const normalized = normalizedValue(value).toLowerCase()
   return (
     normalized === "" ||
-    /^(?:false|true|null|undefined|none|unset|unknown|any|boolean|number|string(?:\[\])?)$/u.test(normalized) ||
-    /^(?:change-me|redacted|placeholder|dummy|example(?:[-_].*)?|synthetic(?:[-_].*)?|replace(?:[-_].*)?|your(?:[-_].*)?|not-a-real(?:[-_].*)?)$/u.test(normalized) ||
+    /^(?:false|true|null|undefined|none|unset|unknown|any|boolean|number|string(?:\[\])?)$/u.test(
+      normalized,
+    ) ||
+    /^(?:change-me|redacted|placeholder|dummy|example(?:[-_].*)?|synthetic(?:[-_].*)?|replace(?:[-_].*)?|your(?:[-_].*)?|not-a-real(?:[-_].*)?)$/u.test(
+      normalized,
+    ) ||
     /^\$\{\{[^}]+\}\}$/u.test(normalized) ||
     /^\$\{[^}]+\}$/u.test(normalized) ||
     /^\$[A-Za-z_][A-Za-z0-9_]*$/u.test(normalized) ||
@@ -278,7 +322,9 @@ export function isSafePlaceholder(value) {
 function isLiteralSensitiveValue(value) {
   const normalized = normalizedValue(value)
   if (isSafePlaceholder(normalized)) return false
-  return /^['"`]/u.test(value.trim()) || /^[A-Za-z0-9+/_=-]{8,}$/u.test(normalized)
+  return (
+    /^['"`]/u.test(value.trim()) || /^[A-Za-z0-9+/_=-]{8,}$/u.test(normalized)
+  )
 }
 
 function parseURL(candidate) {
@@ -295,7 +341,8 @@ function containsPrivatePath(text) {
 
 export function scanLine(entry, findings, approvedHosts = new Map()) {
   const text = entry.text || ""
-  if (containsPrivatePath(text)) findings.push({ ...entry, kind: "private local path" })
+  if (containsPrivatePath(text))
+    findings.push({ ...entry, kind: "private local path" })
 
   for (const pattern of knownTokenPatterns) {
     pattern.lastIndex = 0
@@ -312,7 +359,10 @@ export function scanLine(entry, findings, approvedHosts = new Map()) {
       sensitiveKeyPattern.test(assignment.groups.key) &&
       isLiteralSensitiveValue(assignment.groups.value)
     ) {
-      findings.push({ ...entry, kind: "literal value assigned to a sensitive key" })
+      findings.push({
+        ...entry,
+        kind: "literal value assigned to a sensitive key",
+      })
     }
   }
 
@@ -328,7 +378,10 @@ export function scanLine(entry, findings, approvedHosts = new Map()) {
       }
       for (const [name, value] of url.searchParams) {
         if (sensitiveQueryParameter.test(name) && !isSafePlaceholder(value)) {
-          findings.push({ ...entry, kind: "URL query contains a sensitive parameter" })
+          findings.push({
+            ...entry,
+            kind: "URL query contains a sensitive parameter",
+          })
           break
         }
       }
@@ -381,20 +434,30 @@ export function runSensitiveCheck() {
 
   const uniqueFindings = [
     ...new Map(
-      findings.map((finding) => [`${finding.file}:${finding.line}:${finding.kind}`, finding]),
+      findings.map((finding) => [
+        `${finding.file}:${finding.line}:${finding.kind}`,
+        finding,
+      ]),
     ).values(),
   ]
   if (uniqueFindings.length > 0) {
-    console.error(`Sensitive-information scan found ${uniqueFindings.length} item(s):`)
+    console.error(
+      `Sensitive-information scan found ${uniqueFindings.length} item(s):`,
+    )
     for (const finding of uniqueFindings) {
-      const location = finding.line === null ? finding.file : `${finding.file}:${finding.line}`
+      const location =
+        finding.line === null ? finding.file : `${finding.file}:${finding.line}`
       console.error(`- ${location}: ${finding.kind}`)
     }
-    console.error("Remove the sensitive value or document a public host in scripts/privacy-allowlist.json.")
+    console.error(
+      "Remove the sensitive value or document a public host in scripts/privacy-allowlist.json.",
+    )
     return 1
   }
 
-  console.log(`Sensitive-information scan passed (${scannedTextFiles} text file(s), ${skippedBinaryFiles} binary file(s) skipped).`)
+  console.log(
+    `Sensitive-information scan passed (${scannedTextFiles} text file(s), ${skippedBinaryFiles} binary file(s) skipped).`,
+  )
   return 0
 }
 
@@ -407,6 +470,9 @@ function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   main()
 }
