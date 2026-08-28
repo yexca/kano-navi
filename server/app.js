@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import express from "express"
 
+import { createAdminRouter } from "./admin-api.js"
 import { getDashboard, getLatestSync, getMediaAsset } from "./database.js"
 import {
   isAllowedMediaMimeType,
@@ -96,6 +97,9 @@ export function createApp({
   database,
   databaseLabel = "data/kano.sqlite",
   staticDirectory = null,
+  adminMode = "development",
+  adminPassword = "",
+  openAiKeyConfigured = Boolean(process.env.OPENAI_API_KEY),
 }) {
   if (!database) throw new Error("createApp requires a database")
 
@@ -127,6 +131,16 @@ export function createApp({
     response.set("Cache-Control", "no-store")
     response.json(getDashboard(database, { days }))
   })
+
+  app.use(
+    "/api/admin",
+    createAdminRouter({
+      database,
+      mode: adminMode,
+      adminPassword,
+      openAiKeyConfigured,
+    }),
+  )
 
   app.use("/api", (_request, response) =>
     response.status(404).json({ error: "api_not_found" }),

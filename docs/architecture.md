@@ -3,21 +3,21 @@
 ## System Shape
 
 ```text
-Public X / YouTube pages
+Public X / YouTube pages          OpenAI Responses API
+          |                                ^
+          v                                |
+scripts/sync.mjs ---- media download / schedule extraction
           |
           v
-scripts/sync.mjs  -- parse, normalize, register, and write
-          |
-          v
-data/kano.sqlite  -- server-side snapshot and media metadata
+data/kano.sqlite  -- snapshot, cursors, settings, and media metadata
           |
           +--> data/cache/media/ -- ignored content-addressed media files
           |
           v
-server/index.js   -- /api/health, /api/dashboard, and /media/<id>
+server/index.js   -- dashboard, admin API, health, and /media/<id>
           |
-          v
-src/main.jsx      -- React dashboard and interactions
+          +--> src/main.jsx  -- public dashboard
+          +--> src/admin.jsx -- hidden schedule administration
 ```
 
 Synchronization and page reads are separate paths. The browser reads the local
@@ -30,10 +30,11 @@ successful snapshot while a source is unavailable.
 ### Presentation: `src/`
 
 `src/main.jsx` maps dashboard JSON to component state, date filtering, theme
-switching, and accessible links. `src/components/ui/` contains basic UI
-primitives, while `src/index.css` contains layout and design tokens. The
-presentation layer must not import `better-sqlite3` or call X, YouTube, or a
-third-party proxy directly.
+switching, and accessible links. `src/admin.jsx` owns the hidden `/admin`
+interface for model selection and schedule CRUD. `src/components/ui/` contains
+basic UI primitives, while the CSS files contain layout and design tokens. The
+presentation layer must not import `better-sqlite3` or call X, YouTube, OpenAI,
+or a third-party proxy directly.
 
 ### API: `server/app.js` and `server/index.js`
 
@@ -44,6 +45,12 @@ Responses should remain stable and sanitized; do not expose
 `raw_json`, stack traces, credentials, or absolute local paths to the browser.
 Ready runtime media is served only through the opaque-ID `/media/:id` route.
 
+`server/admin-api.js` exposes session, model-setting, and event CRUD endpoints.
+`APP_MODE=development` bypasses authentication for local work. Production
+requires a configured password and uses in-memory HttpOnly cookie sessions;
+restarting the process invalidates all sessions. The API exposes whether an
+OpenAI key is configured, never its value.
+
 ### Persistence: `server/database.js`
 
 This module creates the SQLite schema, provides seed/upsert/query functions, and
@@ -52,19 +59,29 @@ internal `raw_json`, but API mapping removes it. Writes should use the existing
 transaction and upsert patterns so a partial synchronization cannot erase known
 records.
 
+Automatic event writes have lower precedence than `manual_locked` records.
+Manual edits and confirmations lock the row; manual deletion keeps a hidden
+tombstone so a later extraction cannot recreate the same event.
+
 `server/media-cache.js` owns cache-root path validation, source URL identities,
-content hashes, and atomic file writes. It has no HTTP or SQLite side effects.
+content hashes, and atomic file writes. `server/media-downloader.js` performs
+bounded downloads from the X and YouTube image hosts and promotes verified
+files to ready cache rows.
 
 ### Synchronization: `scripts/sync.mjs`
 
 The synchronization layer handles timeouts, parsing, field normalization, and
 `sync_runs` records:
 
-- X: read public profile status IDs, then read public status JSON.
-- YouTube: read channel RSS for videos, then inspect streams/video pages for scheduled times.
-- Schedule: retain X schedule information and YouTube reservations as unified `events`.
-- Media: register discovered remote URLs as pending `media_assets` rows and
-  `media_links`; a downloader can later promote them to ready files.
+- X: use Snowflake timestamps to limit the first run to seven days, then fetch
+  unknown IDs with a bounded known-item refresh allowance.
+- YouTube: keep six RSS entries on the first run, then follow a durable cursor;
+  active reservations are rechecked even when no new upload appears.
+- Schedule: retain YouTube reservations as unified `events`, and pass matching X
+  posts plus ready cached images to `server/schedule-extractor.js`. It calls the
+  OpenAI Responses API with a strict JSON schema only when a key is configured.
+- Media: register discovered URLs as `media_assets`/`media_links`, then download
+  a bounded pending batch during the same synchronization command.
 - If one source fails, record the error; only successfully obtained data is upserted and old data remains.
 
 ## Request and Failure Flow
@@ -75,6 +92,9 @@ The synchronization layer handles timeouts, parsing, field normalization, and
 3. The page shows the snapshot time. If the API is unavailable after a load, it keeps the known state and shows a retry affordance.
 4. A maintainer runs `npm run sync` on the server; the result is written to the database and `sync_runs`.
 5. The next page read shows the new snapshot without rebuilding the frontend.
+6. A maintainer who opens `/admin` can change the model name or curate events.
+   Those changes go through the local API and lock affected events against
+   automatic replacement.
 
 ## Extension Points
 

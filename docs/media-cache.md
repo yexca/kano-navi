@@ -5,8 +5,8 @@
 Platform media is runtime data, not a source-controlled frontend asset. X and
 YouTube URLs can expire, change, or become rate-limited, and loading them from
 the browser would make every page view a remote request. The media layer gives
-each discovered remote URL a stable database identity and leaves room for a
-separate downloader.
+each discovered remote URL a stable database identity and downloads it during
+server-side synchronization.
 
 ## Runtime Layout
 
@@ -44,7 +44,7 @@ The existing `media_url`, `thumbnail_url`, and image URL columns remain during
 the migration. They are source-snapshot fields and are not treated as safe
 browser URLs by the dashboard query.
 
-The first implementation accepts only AVIF, GIF, JPEG, PNG, and WebP. SVG and
+The cache accepts only AVIF, GIF, JPEG, PNG, and WebP. SVG and
 arbitrary document MIME types are rejected so cached platform input cannot be
 served as active same-origin content.
 
@@ -54,18 +54,27 @@ served as active same-origin content.
    `registerMediaCandidates`.
 2. The candidate is deduplicated by normalized source URL, recorded as
    `pending`, and linked to its owner. Registration does not download bytes.
-3. A future worker downloads with a bounded request, verifies the content hash,
-   writes a temporary file, atomically renames it into `sha256/`, and calls
-   `upsertMediaAsset` with `status = ready` and the relative cache path.
+3. `downloadPendingMedia` claims a bounded batch during `npm run sync`. It
+   downloads with a timeout and byte limit, verifies the image magic bytes and
+   declared MIME type, writes a temporary file, atomically renames it into
+   `sha256/`, and calls `upsertMediaAsset` with `status = ready`.
 4. A failed or unavailable request updates the row to `failed` or `missing`.
    Existing ready files are retained; a failed synchronization never clears a
    known snapshot.
 5. Retention and garbage collection can later use `last_seen_at` and
    `media_links` to remove unreferenced files deliberately.
 
-The current synchronization command implements steps 1 and 2. Downloading,
-image dimension probing, retries, and garbage collection are intentionally
-separate follow-up work.
+The downloader accepts only HTTPS URLs on `pbs.twimg.com` and `i.ytimg.com` and
+revalidates every redirect against the same allowlist. The host policy is kept
+in code because this is also an SSRF boundary; the broader privacy allowlist is
+not a download permission list. Retry scheduling, image dimension probing, and
+garbage collection remain follow-up work.
+
+Content-addressed paths are deliberately preferred over layouts such as
+`pics/x/<timestamp>` or `pics/youtube/<video-id>`. Ownership already lives in
+`media_links`; storing bytes by hash deduplicates identical files, makes path
+validation deterministic, and allows atomic replacement without trusting a
+platform identifier as a path component.
 
 ## HTTP Contract
 
@@ -85,6 +94,7 @@ browser does not silently fall back to a CDN.
 
 ## Verification
 
-Run `npm run test:server` for path, identity, registration, and dashboard
-contract tests. `make ci` runs those tests together with the sensitive scan,
-documentation checks, and the frontend build. CI does not download live media.
+Run `npm run test:server` for path, identity, registration, downloader-host,
+MIME, and dashboard contract tests. `make ci` runs those tests together with
+the sensitive scan, documentation checks, and the frontend build. Tests use
+synthetic response bodies; CI does not download live media.

@@ -1,0 +1,173 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import { createApp } from "./app.js"
+import { getEvent, initializeDatabase, upsertEvents } from "./database.js"
+
+async function listen(app) {
+  return new Promise((resolve) => {
+    const server = app.listen(0, "127.0.0.1", () => resolve(server))
+  })
+}
+
+async function close(server) {
+  if (!server) return
+  await new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  )
+}
+
+test("development admin API bypasses password authentication", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  let server
+  try {
+    server = await listen(
+      createApp({
+        database,
+        databaseLabel: ":memory:",
+        adminMode: "development",
+        openAiKeyConfigured: false,
+      }),
+    )
+    const { port } = server.address()
+    const session = await fetch(
+      `http://127.0.0.1:${port}/api/admin/session`,
+    ).then((response) => response.json())
+    assert.deepEqual(session, {
+      mode: "development",
+      requiresPassword: false,
+      authenticated: true,
+    })
+    const configResponse = await fetch(
+      `http://127.0.0.1:${port}/api/admin/config`,
+    )
+    assert.equal(configResponse.status, 200)
+    assert.equal((await configResponse.json()).openAiKeyConfigured, false)
+  } finally {
+    await close(server)
+    database.close()
+  }
+})
+
+test("production admin login guards model settings and manual schedule CRUD", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  let server
+  try {
+    assert.throws(
+      () =>
+        createApp({
+          database,
+          adminMode: "production",
+          adminPassword: "not-a-real",
+        }),
+      /at least 12 characters/u,
+    )
+
+    upsertEvents(database, [
+      {
+        id: "youtube-abcdefghijk",
+        source: "youtube",
+        source_item_id: "abcdefghijk",
+        source_key: "reservation",
+        title: "Automatic live",
+        starts_on: "2026-09-04",
+        starts_at: "2026-09-04T11:00:00.000Z",
+        event_type: "stream",
+        status: "已预约",
+        url: "https://www.youtube.com/watch?v=abcdefghijk",
+      },
+    ])
+    server = await listen(
+      createApp({
+        database,
+        databaseLabel: ":memory:",
+        adminMode: "production",
+        adminPassword: "not-a-real-password",
+        openAiKeyConfigured: false,
+      }),
+    )
+    const { port } = server.address()
+    const origin = `http://127.0.0.1:${port}`
+
+    const unauthenticated = await fetch(`${origin}/api/admin/config`)
+    assert.equal(unauthenticated.status, 401)
+    const failedLogin = await fetch(`${origin}/api/admin/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: "not-a-real-wrong-password" }),
+    })
+    assert.equal(failedLogin.status, 401)
+
+    const login = await fetch(`${origin}/api/admin/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: "not-a-real-password" }),
+    })
+    assert.equal(login.status, 200)
+    const setCookie = login.headers.get("set-cookie")
+    assert.match(setCookie, /HttpOnly/u)
+    assert.match(setCookie, /SameSite=Strict/u)
+    const cookie = setCookie.split(";", 1)[0]
+    const authenticatedHeaders = {
+      cookie,
+      "content-type": "application/json",
+    }
+
+    const invalidEvent = await fetch(`${origin}/api/admin/events`, {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        title: "Invalid end-only event",
+        startsOn: "2026-09-05",
+        startsAt: null,
+        endsAt: "2026-09-05T12:00:00.000Z",
+      }),
+    })
+    assert.equal(invalidEvent.status, 400)
+
+    const savedConfig = await fetch(`${origin}/api/admin/config`, {
+      method: "PUT",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({ llmModel: "gpt-4.1-mini" }),
+    })
+    assert.equal(savedConfig.status, 200)
+    assert.equal((await savedConfig.json()).llmModel, "gpt-4.1-mini")
+
+    const createdResponse = await fetch(`${origin}/api/admin/events`, {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        title: "Manual event",
+        detail: "Confirmed by an administrator",
+        startsOn: "2026-09-05",
+        startsAt: null,
+        endsAt: null,
+        timePrecision: "unknown",
+        status: "待确认",
+        eventType: "event",
+        url: "https://example.invalid/event",
+      }),
+    })
+    assert.equal(createdResponse.status, 201)
+    const created = (await createdResponse.json()).event
+    assert.equal(created.provenance, "manual")
+    assert.equal(created.manualLocked, 1)
+
+    const confirmedResponse = await fetch(
+      `${origin}/api/admin/events/youtube-abcdefghijk/confirm`,
+      { method: "POST", headers: { cookie } },
+    )
+    assert.equal(confirmedResponse.status, 200)
+    assert.equal(getEvent(database, "youtube-abcdefghijk").provenance, "manual")
+
+    const deletedResponse = await fetch(
+      `${origin}/api/admin/events/${encodeURIComponent(created.id)}`,
+      { method: "DELETE", headers: { cookie } },
+    )
+    assert.equal(deletedResponse.status, 204)
+    assert.ok(getEvent(database, created.id).deletedAt)
+  } finally {
+    await close(server)
+    database.close()
+  }
+})

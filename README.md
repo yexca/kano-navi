@@ -15,6 +15,7 @@ YouTube directly from the browser.
 
 ```bash
 npm install
+cp .env.example .env
 npm run dev
 ```
 
@@ -30,13 +31,20 @@ npm run build
 npm start
 ```
 
+The hidden administration page is available only by entering `/admin`
+directly; it is not linked from the dashboard. `APP_MODE=development` bypasses
+login. Before `npm start`, set `APP_MODE=production` and an
+`ADMIN_PASSWORD` of at least 12 characters in the ignored `.env` file.
+`OPENAI_API_KEY` may remain empty until automatic schedule extraction is needed.
+
 ## Data and API
 
 The SQLite file is `data/kano.sqlite`. When the server starts, it creates the
 schema and fills missing tables with the initial snapshot in
 `server/seed-data.js`. The main tables are `profiles`, `posts`, `events`,
 `videos`, `focus`, `timeline`, `resources`, `assets`, `media_assets`,
-`media_links`, and `sync_runs`.
+`media_links`, `sync_runs`, `sync_state`, `event_sources`, `app_settings`, and
+`schedule_extractions`.
 
 Dashboard endpoint:
 
@@ -68,19 +76,32 @@ npm run sync
 
 The server-side synchronization script:
 
-- reads public profile status IDs and public status JSON for X;
-- parses channel RSS and scheduled-video metadata for YouTube.
+- bootstraps at most seven days of X posts, then requests only unknown status
+  IDs plus a small configurable refresh budget;
+- stores the latest six RSS videos on the first YouTube run, then only newer
+  entries, while continuing to recheck active reservations;
+- downloads allowlisted X images and YouTube thumbnails into the runtime cache;
+- sends matching schedule posts and cached images to the OpenAI Responses API
+  for strict structured extraction when `OPENAI_API_KEY` is configured.
 
 Failures do not clear existing data. They are recorded in `sync_runs` together
-with the failure reason. Discovered media is registered during the same sync,
-but downloading is a separate cache-worker step. You can select a source or
-adjust the timeout with:
+with the failure reason. Invalid model output also leaves the previous schedule
+intact. The API key is read only from the process environment; the admin page
+stores only the selected model name. You can select a source or adjust the
+timeout with:
 
 ```bash
 X_HANDLE=kano_2525 YOUTUBE_CHANNEL_ID=UCShXNLMXCfstmWKH_q86B8w npm run sync
 SKIP_X=1 npm run sync
 SKIP_YOUTUBE=1 npm run sync
 ```
+
+See [.env.example](.env.example) for bootstrap windows, request budgets, media
+limits, and per-stage skip flags.
+
+The admin page can create, edit, confirm, and delete events. Any such operation
+marks the event as manually confirmed and locks it against later source or LLM
+updates. The public calendar labels automatic and manually confirmed entries.
 
 Public X and YouTube pages can be rate-limited, require a login, or change
 their structure, so the original platform page remains the source of truth. The

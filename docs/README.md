@@ -31,9 +31,12 @@ code, maintaining data, and reviewing security.
 - Page data comes from the local `data/kano.sqlite` snapshot. An empty database
   is initialized with the public snapshot in `server/seed-data.js`.
 - `scripts/sync.mjs` reads public X pages/APIs and YouTube RSS/pages to collect
-  updates and scheduled streams.
+  bounded incremental updates and scheduled streams. It then downloads pending
+  media and optionally extracts structured schedules through OpenAI.
 - `server/media-cache.js` defines the ignored runtime media store, safe path
   helpers, source identities, and atomic-write primitive.
+- `/admin` is an unlinked maintainer route for model selection and manual event
+  CRUD; production access requires the environment-provided admin password.
 - CI runs server/cache and sensitive-scanner tests, checks documentation and
   sensitive information, builds the frontend, and runs an API smoke check. It
   does not fetch live platform data.

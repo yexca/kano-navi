@@ -33,15 +33,22 @@ YouTube, or any other original source.
 4. Latest focus: one highlight traceable to a video or official reference.
 5. Channels and archive: recent YouTube uploads, a timeline, and a resource directory.
 
+A separate, unlinked `/admin` route lets the maintainer configure the schedule
+model and curate events. The public calendar labels automatic extraction and
+manual confirmation so visitors can distinguish their provenance.
+
 ## Current Status and Known Limits
 
 - The page and API run locally, and an initial dataset ships with the code.
 - X profile structure, the public status endpoint, and YouTube page structure may change. The synchronization script records warnings and retains the old snapshot; a failed fetch must not be interpreted as no update.
-- Activity times are displayed in the Japan time zone. Text inside source images still requires manual review.
-- The deployment is currently a single local SQLite instance with no background queue or multi-user editing interface.
-- Media registration exists, but the downloader, retry queue, image probing, and
-  garbage collection are still follow-up work; unready media is intentionally
-  shown as unavailable.
+- Activity times are displayed in the Japan time zone. Matching schedule posts
+  can be parsed through OpenAI with cached image input, but low-confidence or
+  important entries can still be manually confirmed and locked.
+- The deployment is a single local SQLite instance with one password-protected
+  maintainer surface, in-memory sessions, and no multi-user permission model.
+- Media registration and bounded download are implemented. Retry scheduling,
+  image dimension probing, and garbage collection remain follow-up work;
+  unready media is intentionally shown as unavailable.
 
 ## Maintainer Decision Rule
 

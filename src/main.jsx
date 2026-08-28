@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { AdminApp } from "@/admin"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -164,9 +165,17 @@ function formatDateTime(value, locale) {
   return `${parts.month}.${parts.day} · ${parts.hour}:${parts.minute}`
 }
 
-function formatEventDate(value, locale, t) {
-  if (!value) return { date: "—", time: t("common.pendingConfirmation") }
-  const date = new Date(value)
+function formatEventDate(event, locale, t) {
+  if (!event?.startsAt) {
+    const match = String(event?.startsOn || "").match(
+      /^(\d{4})-(\d{2})-(\d{2})$/u,
+    )
+    return {
+      date: match ? `${match[2]}.${match[3]}` : "—",
+      time: t("common.pendingConfirmation"),
+    }
+  }
+  const date = new Date(event.startsAt)
   if (Number.isNaN(date.getTime())) {
     return { date: "—", time: t("common.pendingConfirmation") }
   }
@@ -211,6 +220,10 @@ function eventIsUpcoming(event) {
   return Boolean(event.isUpcoming)
 }
 
+function eventDateKey(event) {
+  return event.startsOn || dateKey(event.startsAt)
+}
+
 function eventStatusClass(event) {
   if (eventIsUpcoming(event)) return "upcoming"
   if (/待|確認|确认|pending|tentative/i.test(event.status || "")) {
@@ -227,7 +240,7 @@ function Calendar({ selectedDate, events, locale, t, onSelect, onWeekChange }) {
   )
 
   const eventDates = useMemo(
-    () => new Set(events.map((event) => dateKey(event.startsAt))),
+    () => new Set(events.map(eventDateKey).filter(Boolean)),
     [events],
   )
   const todayKey = dateKey(new Date())
@@ -310,6 +323,12 @@ function Calendar({ selectedDate, events, locale, t, onSelect, onWeekChange }) {
 }
 
 function PostItem({ post, profile, locale, t }) {
+  const media = Array.isArray(post.media)
+    ? post.media.filter((item) => item?.url)
+    : post.mediaUrl
+      ? [{ url: post.mediaUrl, alt: post.mediaAlt }]
+      : []
+
   return (
     <article className="post-item">
       <div className="post-avatar">
@@ -325,16 +344,22 @@ function PostItem({ post, profile, locale, t }) {
           </time>
         </div>
         <p className="post-text">{post.text}</p>
-        {post.mediaUrl ? (
-          <a
-            className="post-media-link"
-            href={post.url}
-            target="_blank"
-            rel="noreferrer"
+        {media.length ? (
+          <div
+            className={`post-media-grid post-media-count-${Math.min(4, media.length)}`}
           >
-            <ImageIcon className="inline-icon" />
-            {t("feed.mediaAttachment")}
-          </a>
+            {media.slice(0, 4).map((item, index) => (
+              <a
+                href={post.url}
+                target="_blank"
+                rel="noreferrer"
+                key={item.id || item.url}
+                aria-label={`${t("feed.openMedia")} ${index + 1}`}
+              >
+                <img src={item.url} alt={item.alt || ""} loading="lazy" />
+              </a>
+            ))}
+          </div>
         ) : null}
         <div className="post-foot">
           <span>
@@ -588,8 +613,12 @@ function App() {
   const resources = dashboard.resources || []
   const timeline = dashboard.timeline || []
   const focus = dashboard.focus
-  const featuredVideo = focus?.url
-    ? videos.find((video) => video.url === focus.url) || null
+  const featuredVideo = focus
+    ? videos.find(
+        (video) =>
+          (focus.videoId && video.id === focus.videoId) ||
+          (focus.url && video.url === focus.url),
+      ) || null
     : null
   const recentVideos = featuredVideo
     ? videos.filter((video) => video.id !== featuredVideo.id)
@@ -624,7 +653,7 @@ function App() {
   const selectedEvents = useMemo(
     () =>
       events.filter(
-        (event) => dateKey(event.startsAt) === localDateKey(selectedDate),
+        (event) => eventDateKey(event) === localDateKey(selectedDate),
       ),
     [events, selectedDate],
   )
@@ -635,7 +664,9 @@ function App() {
           const upcomingDelta =
             Number(eventIsUpcoming(b)) - Number(eventIsUpcoming(a))
           if (upcomingDelta) return upcomingDelta
-          return Date.parse(a.startsAt || "") - Date.parse(b.startsAt || "")
+          return String(a.startsAt || a.startsOn).localeCompare(
+            String(b.startsAt || b.startsOn),
+          )
         })
         .slice(0, 6),
     [selectedEvents],
@@ -903,12 +934,15 @@ function App() {
                   <LoadingPanel t={t} />
                 ) : displayEvents.length ? (
                   displayEvents.map((event) => {
-                    const formatted = formatEventDate(event.startsAt, locale, t)
+                    const formatted = formatEventDate(event, locale, t)
                     const statusClass = eventStatusClass(event)
+                    const isManual =
+                      event.provenance === "manual" || event.manualLocked
+                    const EventContainer = event.url ? "a" : "div"
                     return (
-                      <a
+                      <EventContainer
                         className={`event-item event-item-${statusClass}`}
-                        href={event.url || "#"}
+                        href={event.url || undefined}
                         target={event.url ? "_blank" : undefined}
                         rel={event.url ? "noreferrer" : undefined}
                         key={event.id}
@@ -919,8 +953,17 @@ function App() {
                         </span>
                         <span className="event-copy">
                           <strong>{event.title}</strong>
-                          <span>
+                          <span className="event-detail">
                             {event.detail || t("calendar.publicEvent")}
+                          </span>
+                          <span
+                            className={`event-provenance ${isManual ? "is-manual" : "is-automatic"}`}
+                          >
+                            {t(
+                              isManual
+                                ? "calendar.sourceManual"
+                                : "calendar.sourceAutomatic",
+                            )}
                           </span>
                         </span>
                         <span className={`event-status ${statusClass}`}>
@@ -932,7 +975,7 @@ function App() {
                                   : "calendar.recorded",
                               )}
                         </span>
-                      </a>
+                      </EventContainer>
                     )
                   })
                 ) : (
@@ -1161,13 +1204,14 @@ function App() {
 }
 
 const rootElement = document.getElementById("root")
+const normalizedPath = window.location.pathname.replace(/\/+$/u, "") || "/"
 const reactRoot =
   globalThis.__kanoReactRoot && globalThis.__kanoRootElement === rootElement
     ? globalThis.__kanoReactRoot
     : createRoot(rootElement)
 globalThis.__kanoReactRoot = reactRoot
 globalThis.__kanoRootElement = rootElement
-reactRoot.render(<App />)
+reactRoot.render(normalizedPath === "/admin" ? <AdminApp /> : <App />)
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {

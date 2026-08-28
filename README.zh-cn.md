@@ -12,6 +12,7 @@ React + Vite + shadcn/ui 风格组件制作的非官方资料整理页。页面�
 
 ```bash
 npm install
+cp .env.example .env
 npm run dev
 ```
 
@@ -27,9 +28,14 @@ npm run build
 npm start
 ```
 
+管理页只允许手动输入 `/admin` 访问，主页不会显示入口。
+`APP_MODE=development` 时免登录；运行 `npm start` 前，应在不会提交的
+`.env` 中设为 `APP_MODE=production`，并配置至少 12 位的
+`ADMIN_PASSWORD`。暂时不使用自动日程识别时，`OPENAI_API_KEY` 可以留空。
+
 ## 数据与 API
 
-SQLite 文件位于 `data/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links` 和 `sync_runs`。
+SQLite 文件位于 `data/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings` 和 `schedule_extractions`。
 
 看板接口：
 
@@ -55,16 +61,25 @@ npm run sync
 
 同步脚本在服务端执行：
 
-- X：读取公开 profile 页面中的状态 ID，再请求 `api.vxtwitter.com` 的公开状态接口。
-- YouTube：解析频道 RSS 获取最新视频，并检查 `/streams` 与预约视频页面中的 `scheduledStartTime`。
+- X：首次最多回溯 7 天，后续只请求未知状态 ID，并按可配置的小额度刷新已知项。
+- YouTube：首次保存 RSS 中最近 6 条，后续只保存游标之后的新条目，同时持续复查仍活跃的预约。
+- 媒体：下载白名单内的 X 图片和 YouTube 缩略图，写入内容寻址缓存。
+- 日程：命中 schedule 关键词的帖子会在配置密钥后，通过 OpenAI Responses
+  API 结合帖子文字与缓存图片生成严格结构化结果。
 
-同步失败时不会清空已有数据，会在 `sync_runs` 中记录失败原因。同步脚本目前会登记发现的媒体，但实际下载仍是下一阶段的独立缓存任务。可用环境变量调整来源或跳过某一来源：
+同步失败时不会清空已有数据，会在 `sync_runs` 中记录失败原因；模型返回非法结构时也会保留旧日程。OpenAI 密钥只从进程环境读取，管理页和 SQLite 只保存模型名。可用环境变量调整来源或跳过某一来源：
 
 ```bash
 X_HANDLE=kano_2525 YOUTUBE_CHANNEL_ID=UCShXNLMXCfstmWKH_q86B8w npm run sync
 SKIP_X=1 npm run sync
 SKIP_YOUTUBE=1 npm run sync
 ```
+
+完整的首抓窗口、请求预算、媒体限制和分阶段跳过选项见
+[.env.example](.env.example)。
+
+管理页可以新增、编辑、确认和删除日程。任何人工操作都会把该记录标为
+“人工确认”并永久锁定，后续平台同步或 LLM 结果不能覆盖或复活它；主页日历会区分“自动识别”和“人工确认”。
 
 X / YouTube 的公开页面可能受到限流、登录墙或页面结构变化影响，因此同步结果应以原平台页面为准。页面上的“重新读取”只重新请求 SQLite API，不会触发外部抓取。
 

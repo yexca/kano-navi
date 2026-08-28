@@ -20,35 +20,48 @@ Read it first, then use the focused documents in `docs/` for more detail.
 - This is a fan-made, read-mostly status board. It is not operated by Kano Mahoro or any affiliated organization.
 - The frontend uses React, Vite, and shadcn/ui-style components. It only calls the local API; it must not fetch X, YouTube, or other platforms directly.
 - The Express service reads SQLite and exposes `/api/health`, `/api/dashboard`,
-  and the guarded `/media/:id` cache route.
-- External platform reads belong in `scripts/sync.mjs`. The results are stored as SQLite snapshots; opening the page or clicking refresh must not trigger an external fetch.
+  guarded `/api/admin/*` endpoints, and the guarded `/media/:id` cache route.
+- External reads belong to the synchronization path in `scripts/sync.mjs` and
+  its server-side media/schedule helpers. The results are stored as SQLite
+  snapshots; opening the page or clicking refresh must not trigger an external fetch.
 - If a source fails or is temporarily unavailable, retain the existing snapshot and record the outcome in `sync_runs`. Never replace known data with an empty result just because a fetch failed.
 - Public platform links are product data. When adding an external host, document the reason in `scripts/privacy-allowlist.json` and make the sensitive-information scan pass.
 
 ## Code Map
 
-| Path                    | Responsibility                                              |
-| ----------------------- | ----------------------------------------------------------- |
-| `src/main.jsx`          | Dashboard page, interactions, and API data mapping          |
-| `src/index.css`         | Global design tokens, layout, and responsive styling        |
-| `src/components/ui/`    | Reusable shadcn/ui-style primitives                         |
-| `server/database.js`    | SQLite schema, seeding, upserts, and queries                |
-| `server/media-cache.js` | Runtime media paths, identities, and atomic-write helpers   |
-| `server/app.js`         | Testable Express application, APIs, and guarded media route |
-| `server/index.js`       | Runtime database and HTTP listener assembly                 |
-| `server/seed-data.js`   | Initial public snapshot and resource directory              |
-| `scripts/sync.mjs`      | Server-side X and YouTube synchronization adapters          |
-| `scripts/seed.mjs`      | Idempotent initial snapshot seeding                         |
-| `public/assets/`        | Tracked fixed branding fallbacks                            |
-| `data/`                 | Local runtime SQLite and ignored media cache files          |
-| `docs/`                 | Documentation for Agents, developers, and maintainers       |
+| Path                           | Responsibility                                              |
+| ------------------------------ | ----------------------------------------------------------- |
+| `src/main.jsx`                 | Dashboard page, interactions, and API data mapping          |
+| `src/admin.jsx`                | Hidden `/admin` configuration and schedule editor           |
+| `src/index.css`                | Global design tokens, layout, and responsive styling        |
+| `src/admin.css`                | Admin-specific responsive layout                            |
+| `src/components/ui/`           | Reusable shadcn/ui-style primitives                         |
+| `server/database.js`           | SQLite schema, seeding, upserts, and queries                |
+| `server/media-cache.js`        | Runtime media paths, identities, and atomic-write helpers   |
+| `server/media-downloader.js`   | Bounded X/YouTube image downloader                          |
+| `server/schedule-extractor.js` | OpenAI structured schedule extraction                       |
+| `server/admin-api.js`          | Authenticated model configuration and event CRUD            |
+| `server/admin-auth.js`         | Development bypass and production session authentication    |
+| `server/app.js`                | Testable Express application, APIs, and guarded media route |
+| `server/index.js`              | Runtime database and HTTP listener assembly                 |
+| `server/seed-data.js`          | Initial public snapshot and resource directory              |
+| `scripts/sync.mjs`             | Server-side X and YouTube synchronization adapters          |
+| `scripts/seed.mjs`             | Idempotent initial snapshot seeding                         |
+| `public/assets/`               | Tracked fixed branding fallbacks                            |
+| `data/`                        | Local runtime SQLite and ignored media cache files          |
+| `docs/`                        | Documentation for Agents, developers, and maintainers       |
 
 ## Data Contract
 
 - `GET /api/health` returns service status, the database path relative to the project, and the latest synchronization summary.
 - `GET /api/dashboard?days=3` returns the profile, posts in the requested window, all events, videos, the latest focus item, the timeline, resource links, image assets, media-cache status, and synchronization metadata. The server clamps `days` to 1 through 30.
 - `GET /media/<opaque-id>` serves a cached file only when its database row is `ready` and its resolved path remains below `data/cache/media/`; invalid or unready IDs return `404`.
+- `/api/admin/*` is password-free only when `APP_MODE=development`. Production
+  requires `ADMIN_PASSWORD` with at least 12 characters and uses an HttpOnly
+  session cookie. The `/admin` page is intentionally absent from public navigation.
 - Timestamps are stored as parseable ISO 8601 strings. The display layer formats them in `Asia/Tokyo`.
+- Manual event edits, confirmations, and deletions set a durable lock. Source
+  synchronization and OpenAI extraction must not overwrite or resurrect them.
 - The current tables are created by the schema constant in `server/database.js`. When changing the schema, update the documentation, seed data, and verification steps together. Do not silently drop columns or clear snapshots.
 
 ## Common Commands
@@ -65,10 +78,10 @@ make check-docs          # Check local Markdown links
 make ci                  # Run the full local CI check
 ```
 
-Synchronization accepts `X_HANDLE`, `YOUTUBE_CHANNEL_ID`, `SYNC_TIMEOUT_MS`,
-`SKIP_X=1`, and `SKIP_YOUTUBE=1`. Credentials are not part of the current
-synchronization design. Do not put a token in source code, the database, a URL,
-or a log to work around a public-source limitation.
+Synchronization accepts the source, bootstrap, request-budget, media-limit,
+and skip variables documented in `.env.example`. `OPENAI_API_KEY` is the only
+credential used by synchronization: it stays in the process environment and
+must never be written to source code, SQLite, a URL, API output, or a log.
 
 ## Change and Verification Rules
 

@@ -7,15 +7,39 @@
 - Cached media is runtime state. The only file read route is `/media/:id`; it
   validates an opaque database ID, a ready status, and a resolved path below the
   cache root.
-- This is a public fan-made project; it does not collect visitor accounts, cookies, or personal profiles.
+- This is a public fan-made project; the public dashboard does not collect
+  visitor accounts or profiles. The production admin API uses one local session
+  cookie after password authentication.
 
 ## External Request Rules
 
-- Keep all external requests in reviewed server-side scripts under `scripts/`,
-  with fixed HTTP(S) destinations, timeouts, and failure handling.
+- Keep all external requests in the reviewed synchronization path under
+  `scripts/` and its server-side helpers, with fixed HTTP(S) destinations,
+  timeouts, limits, and failure handling.
 - Never embed usernames, passwords, tokens, or cookies in a URL. Do not write credentials from a response into `raw_json`, logs, or the UI.
 - Register a new source host and its purpose in `scripts/privacy-allowlist.json` first. The allowlist is a reviewable source record, not a comment-based way to bypass secret detection.
 - Extract only the fields needed from external HTML/JSON. Filter stack traces, absolute paths, and raw responses before displaying anything.
+
+The OpenAI boundary is opt-in. When `OPENAI_API_KEY` is configured, matching
+public schedule-post text and ready cached post images are sent to
+`api.openai.com` with `store: false`. The key is read from the process
+environment and is never returned by the admin API, stored in SQLite, embedded
+in a URL, or logged. The selected model name is not a secret and may be stored
+in `app_settings`.
+
+## Admin Authentication
+
+- `/admin` is intentionally unlinked, but path obscurity is not authentication.
+- `APP_MODE=development` bypasses login only for local development.
+- `APP_MODE=production` refuses to initialize unless `ADMIN_PASSWORD` contains
+  at least 12 characters.
+- Successful production login creates a random in-memory session with an
+  HttpOnly, SameSite=Strict cookie scoped to `/api/admin`. HTTPS requests also
+  receive the `Secure` attribute.
+- Failed logins are rate-limited per observed client address. Server restarts
+  clear all sessions.
+- Manual event mutations require the authenticated admin API and create durable
+  locks/tombstones so untrusted source or model output cannot overwrite them.
 
 ## Sensitive-Information Scan
 
@@ -25,7 +49,8 @@
 - literals assigned to sensitive keys such as `password`, `secret`, `token`, or `apiKey`;
 - credentials embedded in URLs or sensitive query parameters;
 - personal machine paths and non-documentation IPv4 addresses;
-- `.env`, `.npmrc`, private-key, and database files.
+- `.env`, `.npmrc`, private-key, and database files. The committed
+  `.env.example` contains only empty credentials and public/local defaults.
 
 Public platform URLs are allowed because they are product data. The scanner
 still checks that their hosts are in the allowlist or a reserved-domain set.
@@ -48,7 +73,7 @@ When a finding appears, fix the underlying content. Do not hide it with an
 GitHub Actions uses read-only repository permissions, `npm ci`, and fixed build
 commands. CI runs scanner and server/cache tests, the workspace scan,
 documentation-link check, Vite build, and local API smoke check; it does not
-call live X or YouTube.
+call live X, YouTube, image CDN, or OpenAI endpoints.
 Dependency upgrades and new external hosts should include a review of the lock
 file, allowlist, and synchronization boundary.
 

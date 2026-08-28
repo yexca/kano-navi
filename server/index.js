@@ -1,3 +1,5 @@
+import "dotenv/config"
+
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -7,6 +9,9 @@ import { databasePath, initializeDatabase } from "./database.js"
 const projectDirectory = path.dirname(fileURLToPath(import.meta.url))
 const distDirectory = path.resolve(projectDirectory, "../dist")
 const port = Number(process.env.PORT || 8787)
+const adminMode =
+  process.env.APP_MODE ||
+  (process.env.NODE_ENV === "production" ? "production" : "development")
 
 export const database = initializeDatabase()
 export const app = createApp({
@@ -16,6 +21,8 @@ export const app = createApp({
     databasePath,
   ),
   staticDirectory: distDirectory,
+  adminMode,
+  adminPassword: process.env.ADMIN_PASSWORD || "",
 })
 
 if (

@@ -22,6 +22,10 @@
       "reason": "Public image CDN URLs returned by X status data."
     },
     {
+      "host": "api.openai.com",
+      "reason": "OpenAI Responses API used server-side to extract structured schedules from matching public posts."
+    },
+    {
       "host": "youtube.com",
       "reason": "Public YouTube channel, video, RSS, and stream links."
     },
@@ -38,6 +42,10 @@
     {
       "host": "opencollective.com",
       "reason": "Public dependency funding metadata in package-lock.json."
+    },
+    {
+      "host": "dotenvx.com",
+      "reason": "Public dotenv dependency funding metadata in package-lock.json."
     },
     {
       "host": "feross.org",

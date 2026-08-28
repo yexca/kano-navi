@@ -95,6 +95,10 @@ export const seedData = {
     {
       id: "x-schedule-20260825",
       source: "x",
+      source_item_id: "2091752948837863590",
+      source_key: "2026-08-25T20:00",
+      provenance: "manual",
+      manual_locked: 1,
       title: "リズム天国 ミラクルスターズ",
       detail: "YouTube / 游戏配信",
       starts_at: "2026-08-25T20:00:00+09:00",
@@ -106,6 +110,10 @@ export const seedData = {
     {
       id: "x-schedule-20260826",
       source: "x",
+      source_item_id: "2091752948837863590",
+      source_key: "2026-08-26T20:00",
+      provenance: "manual",
+      manual_locked: 1,
       title: "リズム天国 ミラクルスターズ",
       detail: "YouTube / 游戏配信",
       starts_at: "2026-08-26T20:00:00+09:00",
@@ -117,6 +125,10 @@ export const seedData = {
     {
       id: "x-schedule-20260827",
       source: "x",
+      source_item_id: "2091752948837863590",
+      source_key: "2026-08-27T20:00",
+      provenance: "manual",
+      manual_locked: 1,
       title: "配信内容は未定",
       detail: "YouTube / 20:00",
       starts_at: "2026-08-27T20:00:00+09:00",
@@ -128,6 +140,10 @@ export const seedData = {
     {
       id: "x-schedule-20260828",
       source: "x",
+      source_item_id: "2091752948837863590",
+      source_key: "2026-08-28T22:00",
+      provenance: "manual",
+      manual_locked: 1,
       title: "メンバーシップ限定",
       detail: "鹿友以上〜 / 22:00",
       starts_at: "2026-08-28T22:00:00+09:00",
@@ -139,6 +155,10 @@ export const seedData = {
     {
       id: "x-schedule-20260829",
       source: "x",
+      source_item_id: "2091752948837863590",
+      source_key: "2026-08-29T09:00",
+      provenance: "manual",
+      manual_locked: 1,
       title: "ミリプロファンミ",
       detail: "朝、なにかするかも？",
       starts_at: "2026-08-29T09:00:00+09:00",
@@ -150,6 +170,9 @@ export const seedData = {
     {
       id: "youtube-aH1DIRyDnfc",
       source: "youtube",
+      source_item_id: "aH1DIRyDnfc",
+      source_key: "reservation",
+      provenance: "automatic",
       title: "50万人記念歌配信",
       detail: "歌枠 / YouTube Live",
       starts_at: "2026-08-30T21:00:00+09:00",
@@ -161,6 +184,9 @@ export const seedData = {
     {
       id: "youtube-C0goUsjfeTE",
       source: "youtube",
+      source_item_id: "C0goUsjfeTE",
+      source_key: "reservation",
+      provenance: "automatic",
       title: "8月もおつかれさまでした。色々、ありましたね",
       detail: "メンバーシップ限定 / YouTube",
       starts_at: "2026-08-28T22:00:00+09:00",
@@ -172,6 +198,9 @@ export const seedData = {
     {
       id: "youtube-0PISw7uR4UU",
       source: "youtube",
+      source_item_id: "0PISw7uR4UU",
+      source_key: "reservation",
+      provenance: "automatic",
       title: "鹿乃まほろ加入記念グッズ",
       detail: "YouTube Live / 预约",
       starts_at: "2026-09-23T00:00:00+09:00",
@@ -239,6 +268,7 @@ export const seedData = {
   ],
   focus: {
     id: 1,
+    video_id: "YzfwW0zTSpE",
     date_label: "08.22 · 初配信",
     title: "みんなの毎日を、まほろばに。",
     description:

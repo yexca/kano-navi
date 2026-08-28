@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import Database from "better-sqlite3"
@@ -61,18 +62,45 @@ const schema = `
   CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY,
     source TEXT NOT NULL,
+    source_item_id TEXT,
+    source_key TEXT,
     title TEXT NOT NULL,
     detail TEXT,
-    starts_at TEXT NOT NULL,
+    starts_on TEXT NOT NULL,
+    starts_at TEXT,
     ends_at TEXT,
+    timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
+    time_precision TEXT NOT NULL DEFAULT 'exact',
     status TEXT,
     event_type TEXT DEFAULT 'event',
     url TEXT,
     is_upcoming INTEGER DEFAULT 0,
+    provenance TEXT NOT NULL DEFAULT 'automatic',
+    manual_locked INTEGER NOT NULL DEFAULT 0,
+    confidence REAL,
+    extraction_id INTEGER,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
     raw_json TEXT
   );
 
-  CREATE INDEX IF NOT EXISTS events_starts_at_idx ON events (starts_at);
+  CREATE TABLE IF NOT EXISTS event_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+    source TEXT NOT NULL,
+    source_item_id TEXT NOT NULL,
+    source_key TEXT NOT NULL,
+    url TEXT,
+    raw_json TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS event_sources_identity_idx
+    ON event_sources (source, source_item_id, source_key);
+  CREATE INDEX IF NOT EXISTS event_sources_event_idx ON event_sources (event_id);
 
   CREATE TABLE IF NOT EXISTS videos (
     id TEXT PRIMARY KEY,
@@ -91,6 +119,7 @@ const schema = `
 
   CREATE TABLE IF NOT EXISTS focus (
     id INTEGER PRIMARY KEY,
+    video_id TEXT,
     date_label TEXT,
     title TEXT NOT NULL,
     description TEXT,
@@ -183,7 +212,223 @@ const schema = `
   );
 
   CREATE INDEX IF NOT EXISTS sync_runs_finished_at_idx ON sync_runs (finished_at DESC);
+
+  CREATE TABLE IF NOT EXISTS sync_state (
+    source TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    cursor_id TEXT,
+    cursor_time TEXT,
+    last_success_at TEXT,
+    metadata_json TEXT,
+    PRIMARY KEY (source, account_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS schedule_extractions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    source_item_id TEXT NOT NULL,
+    content_fingerprint TEXT NOT NULL,
+    extractor_version TEXT NOT NULL,
+    model TEXT NOT NULL,
+    status TEXT NOT NULL,
+    result_json TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS schedule_extractions_identity_idx
+    ON schedule_extractions (source, source_item_id, content_fingerprint, extractor_version);
 `
+
+const JAPAN_TIME_ZONE = "Asia/Tokyo"
+const japanDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: JAPAN_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+function dateKeyInJapan(value) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  const parts = japanDateFormatter
+    .formatToParts(date)
+    .reduce((result, part) => {
+      result[part.type] = part.value
+      return result
+    }, {})
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+function youtubeIdFromUrl(value) {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    if (url.hostname === "youtu.be") return url.pathname.slice(1) || null
+    if (url.hostname.endsWith("youtube.com")) {
+      return (
+        url.searchParams.get("v") ||
+        url.pathname.match(/\/(?:live|shorts)\/([^/]+)/u)?.[1] ||
+        null
+      )
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+function tableColumns(database, table) {
+  return new Set(
+    database
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .map((row) => row.name),
+  )
+}
+
+function migrateLegacyEvents(database) {
+  const columns = tableColumns(database, "events")
+  if (columns.has("starts_on")) return
+
+  const rows = database.prepare("SELECT * FROM events ORDER BY id").all()
+  const timestamp = nowIso()
+  database.exec("DROP TABLE IF EXISTS event_sources")
+  database.exec("DROP INDEX IF EXISTS events_starts_at_idx")
+  database.exec("ALTER TABLE events RENAME TO events_legacy")
+  database.exec(`
+    CREATE TABLE events (
+      id TEXT PRIMARY KEY,
+      source TEXT NOT NULL,
+      source_item_id TEXT,
+      source_key TEXT,
+      title TEXT NOT NULL,
+      detail TEXT,
+      starts_on TEXT NOT NULL,
+      starts_at TEXT,
+      ends_at TEXT,
+      timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
+      time_precision TEXT NOT NULL DEFAULT 'exact',
+      status TEXT,
+      event_type TEXT DEFAULT 'event',
+      url TEXT,
+      is_upcoming INTEGER DEFAULT 0,
+      provenance TEXT NOT NULL DEFAULT 'automatic',
+      manual_locked INTEGER NOT NULL DEFAULT 0,
+      confidence REAL,
+      extraction_id INTEGER,
+      deleted_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      raw_json TEXT
+    )
+  `)
+  const insert = database.prepare(`
+    INSERT INTO events (
+      id, source, source_item_id, source_key, title, detail, starts_on,
+      starts_at, ends_at, timezone, time_precision, status, event_type, url,
+      is_upcoming, provenance, manual_locked, confidence, extraction_id,
+      deleted_at, created_at, updated_at, raw_json
+    ) VALUES (
+      @id, @source, @source_item_id, @source_key, @title, @detail, @starts_on,
+      @starts_at, @ends_at, @timezone, @time_precision, @status, @event_type,
+      @url, @is_upcoming, @provenance, @manual_locked, @confidence,
+      @extraction_id, @deleted_at, @created_at, @updated_at, @raw_json
+    )
+  `)
+  const migrate = database.transaction(() => {
+    for (const row of rows) {
+      const manuallyCurated = row.source === "x"
+      insert.run({
+        ...row,
+        source_item_id: row.id,
+        source_key: row.id,
+        starts_on:
+          dateKeyInJapan(row.starts_at) || String(row.starts_at).slice(0, 10),
+        timezone: JAPAN_TIME_ZONE,
+        time_precision: "exact",
+        provenance: manuallyCurated ? "manual" : "automatic",
+        manual_locked: manuallyCurated ? 1 : 0,
+        confidence: null,
+        extraction_id: null,
+        deleted_at: null,
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+    }
+  })
+  migrate()
+  database.exec("DROP TABLE events_legacy")
+  database.exec(`
+    CREATE INDEX events_starts_at_idx ON events (starts_on, starts_at);
+    CREATE UNIQUE INDEX events_source_key_idx
+      ON events (source, source_item_id, source_key)
+      WHERE source_item_id IS NOT NULL AND source_key IS NOT NULL;
+    CREATE TABLE event_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL REFERENCES events (id) ON DELETE CASCADE,
+      source TEXT NOT NULL,
+      source_item_id TEXT NOT NULL,
+      source_key TEXT NOT NULL,
+      url TEXT,
+      raw_json TEXT,
+      deleted_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX event_sources_identity_idx
+      ON event_sources (source, source_item_id, source_key);
+    CREATE INDEX event_sources_event_idx ON event_sources (event_id);
+  `)
+  const insertSource = database.prepare(`
+    INSERT INTO event_sources (
+      event_id, source, source_item_id, source_key, url, raw_json, deleted_at,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
+  `)
+  const addSources = database.transaction(() => {
+    for (const row of rows) {
+      insertSource.run(
+        row.id,
+        row.source,
+        row.id,
+        row.id,
+        row.url || null,
+        row.raw_json || null,
+        timestamp,
+        timestamp,
+      )
+    }
+  })
+  addSources()
+}
+
+function migrateSchema(database) {
+  migrateLegacyEvents(database)
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS events_starts_at_idx
+      ON events (starts_on, starts_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS events_source_key_idx
+      ON events (source, source_item_id, source_key)
+      WHERE source_item_id IS NOT NULL AND source_key IS NOT NULL;
+  `)
+  const focusColumns = tableColumns(database, "focus")
+  if (!focusColumns.has("video_id")) {
+    database.exec("ALTER TABLE focus ADD COLUMN video_id TEXT")
+    const rows = database.prepare("SELECT id, url FROM focus").all()
+    const update = database.prepare(
+      "UPDATE focus SET video_id = ? WHERE id = ?",
+    )
+    for (const row of rows) update.run(youtubeIdFromUrl(row.url), row.id)
+  }
+}
 
 function json(value) {
   return value == null ? null : JSON.stringify(value)
@@ -326,6 +571,7 @@ export function openDatabase({ filename = databasePath } = {}) {
   database.pragma("journal_mode = WAL")
   database.pragma("foreign_keys = ON")
   database.exec(schema)
+  migrateSchema(database)
   return database
 }
 
@@ -379,36 +625,138 @@ function insertPost(database, post, overwrite) {
 }
 
 function insertEvent(database, event, overwrite) {
+  const timestamp = nowIso()
+  const startsAt = nullable(event.starts_at ?? event.startsAt)
+  const startsOn =
+    nullable(event.starts_on ?? event.startsOn) || dateKeyInJapan(startsAt)
+  if (!startsOn) throw new Error("event requires starts_on or starts_at")
+  const provenance = event.provenance === "manual" ? "manual" : "automatic"
+  const manualLocked =
+    event.manual_locked ??
+    event.manualLocked ??
+    (provenance === "manual" ? 1 : 0)
   const sql = overwrite
-    ? `INSERT INTO events (id, source, title, detail, starts_at, ends_at, status, event_type, url, is_upcoming, raw_json)
-       VALUES (@id, @source, @title, @detail, @starts_at, @ends_at, @status, @event_type, @url, @is_upcoming, @raw_json)
-       ON CONFLICT(id) DO UPDATE SET source=excluded.source, title=excluded.title, detail=excluded.detail,
-       starts_at=excluded.starts_at, ends_at=excluded.ends_at, status=excluded.status, event_type=excluded.event_type,
-       url=excluded.url, is_upcoming=excluded.is_upcoming, raw_json=excluded.raw_json`
-    : `INSERT OR IGNORE INTO events (id, source, title, detail, starts_at, ends_at, status, event_type, url, is_upcoming, raw_json)
-       VALUES (@id, @source, @title, @detail, @starts_at, @ends_at, @status, @event_type, @url, @is_upcoming, @raw_json)`
-  database.prepare(sql).run({
+    ? `INSERT INTO events (
+         id, source, source_item_id, source_key, title, detail, starts_on, starts_at,
+         ends_at, timezone, time_precision, status, event_type, url, is_upcoming,
+         provenance, manual_locked, confidence, extraction_id, deleted_at,
+         created_at, updated_at, raw_json
+       ) VALUES (
+         @id, @source, @source_item_id, @source_key, @title, @detail, @starts_on,
+         @starts_at, @ends_at, @timezone, @time_precision, @status, @event_type,
+         @url, @is_upcoming, @provenance, @manual_locked, @confidence,
+         @extraction_id, @deleted_at, @created_at, @updated_at, @raw_json
+       )
+       ON CONFLICT(id) DO UPDATE SET
+         source=excluded.source, source_item_id=excluded.source_item_id,
+         source_key=excluded.source_key, title=excluded.title, detail=excluded.detail,
+         starts_on=excluded.starts_on, starts_at=excluded.starts_at,
+         ends_at=excluded.ends_at, timezone=excluded.timezone,
+         time_precision=excluded.time_precision, status=excluded.status,
+         event_type=excluded.event_type, url=excluded.url,
+         is_upcoming=excluded.is_upcoming, provenance=excluded.provenance,
+         manual_locked=excluded.manual_locked, confidence=excluded.confidence,
+         extraction_id=excluded.extraction_id, deleted_at=excluded.deleted_at,
+         updated_at=excluded.updated_at, raw_json=excluded.raw_json
+       WHERE events.manual_locked = 0`
+    : `INSERT OR IGNORE INTO events (
+         id, source, source_item_id, source_key, title, detail, starts_on, starts_at,
+         ends_at, timezone, time_precision, status, event_type, url, is_upcoming,
+         provenance, manual_locked, confidence, extraction_id, deleted_at,
+         created_at, updated_at, raw_json
+       ) VALUES (
+         @id, @source, @source_item_id, @source_key, @title, @detail, @starts_on,
+         @starts_at, @ends_at, @timezone, @time_precision, @status, @event_type,
+         @url, @is_upcoming, @provenance, @manual_locked, @confidence,
+         @extraction_id, @deleted_at, @created_at, @updated_at, @raw_json
+       )`
+  const values = {
     id: String(event.id),
     source: event.source || "manual",
+    source_item_id:
+      nullable(event.source_item_id ?? event.sourceItemId) || String(event.id),
+    source_key:
+      nullable(event.source_key ?? event.sourceKey) || String(event.id),
     title: event.title || "未命名活动",
     detail: nullable(event.detail),
-    starts_at: event.starts_at || new Date().toISOString(),
-    ends_at: nullable(event.ends_at),
+    starts_on: startsOn,
+    starts_at: startsAt,
+    ends_at: nullable(event.ends_at ?? event.endsAt),
+    timezone: event.timezone || JAPAN_TIME_ZONE,
+    time_precision:
+      event.time_precision ??
+      event.timePrecision ??
+      (startsAt ? "exact" : "unknown"),
     status: nullable(event.status),
-    event_type: event.event_type || "event",
+    event_type: event.event_type ?? event.eventType ?? "event",
     url: nullable(event.url),
-    is_upcoming: event.is_upcoming ? 1 : 0,
+    is_upcoming: (event.is_upcoming ?? event.isUpcoming) ? 1 : 0,
+    provenance,
+    manual_locked: manualLocked ? 1 : 0,
+    confidence:
+      event.confidence == null || !Number.isFinite(Number(event.confidence))
+        ? null
+        : Number(event.confidence),
+    extraction_id: asIntegerOrNull(event.extraction_id ?? event.extractionId),
+    deleted_at: nullable(event.deleted_at ?? event.deletedAt),
+    created_at: nullable(event.created_at ?? event.createdAt) || timestamp,
+    updated_at: nullable(event.updated_at ?? event.updatedAt) || timestamp,
     raw_json: json(event),
-  })
+  }
+  const result = database.prepare(sql).run(values)
+  return { changes: result.changes, values }
+}
+
+function insertEventSource(database, event, eventId, timestamp = nowIso()) {
+  const source = String(event.source || "manual")
+  const sourceItemId = String(
+    event.source_item_id ?? event.sourceItemId ?? eventId,
+  )
+  const sourceKey = String(event.source_key ?? event.sourceKey ?? eventId)
+  database
+    .prepare(
+      `
+      INSERT INTO event_sources (
+        event_id, source, source_item_id, source_key, url, raw_json, deleted_at,
+        created_at, updated_at
+      ) VALUES (
+        @event_id, @source, @source_item_id, @source_key, @url, @raw_json,
+        NULL, @created_at, @updated_at
+      )
+      ON CONFLICT(source, source_item_id, source_key) DO UPDATE SET
+        event_id=excluded.event_id,
+        url=COALESCE(excluded.url, event_sources.url),
+        raw_json=COALESCE(excluded.raw_json, event_sources.raw_json),
+        deleted_at=NULL,
+        updated_at=excluded.updated_at
+    `,
+    )
+    .run({
+      event_id: String(eventId),
+      source,
+      source_item_id: sourceItemId,
+      source_key: sourceKey,
+      url: nullable(event.url),
+      raw_json: json(event),
+      created_at: timestamp,
+      updated_at: timestamp,
+    })
 }
 
 function insertVideo(database, video, overwrite) {
   const sql = overwrite
     ? `INSERT INTO videos (id, source, title, published_at, scheduled_at, url, thumbnail_url, kind, is_upcoming, raw_json)
        VALUES (@id, @source, @title, @published_at, @scheduled_at, @url, @thumbnail_url, @kind, @is_upcoming, @raw_json)
-       ON CONFLICT(id) DO UPDATE SET source=excluded.source, title=excluded.title, published_at=excluded.published_at,
-       scheduled_at=excluded.scheduled_at, url=excluded.url, thumbnail_url=excluded.thumbnail_url, kind=excluded.kind,
-       is_upcoming=excluded.is_upcoming, raw_json=excluded.raw_json`
+       ON CONFLICT(id) DO UPDATE SET source=excluded.source, title=excluded.title,
+       published_at=COALESCE(excluded.published_at, videos.published_at),
+       scheduled_at=COALESCE(excluded.scheduled_at, videos.scheduled_at),
+       url=excluded.url, thumbnail_url=COALESCE(excluded.thumbnail_url, videos.thumbnail_url),
+       kind=COALESCE(excluded.kind, videos.kind),
+       is_upcoming=CASE
+         WHEN excluded.scheduled_at IS NULL AND videos.scheduled_at IS NOT NULL THEN videos.is_upcoming
+         ELSE excluded.is_upcoming
+       END,
+       raw_json=excluded.raw_json`
     : `INSERT OR IGNORE INTO videos (id, source, title, published_at, scheduled_at, url, thumbnail_url, kind, is_upcoming, raw_json)
        VALUES (@id, @source, @title, @published_at, @scheduled_at, @url, @thumbnail_url, @kind, @is_upcoming, @raw_json)`
   database.prepare(sql).run({
@@ -427,15 +775,18 @@ function insertVideo(database, video, overwrite) {
 
 function insertFocus(database, focus, overwrite) {
   const sql = overwrite
-    ? `INSERT INTO focus (id, date_label, title, description, image_url, url, source_url, updated_at, raw_json)
-       VALUES (@id, @date_label, @title, @description, @image_url, @url, @source_url, @updated_at, @raw_json)
-       ON CONFLICT(id) DO UPDATE SET date_label=excluded.date_label, title=excluded.title, description=excluded.description,
+    ? `INSERT INTO focus (id, video_id, date_label, title, description, image_url, url, source_url, updated_at, raw_json)
+       VALUES (@id, @video_id, @date_label, @title, @description, @image_url, @url, @source_url, @updated_at, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET video_id=excluded.video_id, date_label=excluded.date_label, title=excluded.title, description=excluded.description,
        image_url=excluded.image_url, url=excluded.url, source_url=excluded.source_url, updated_at=excluded.updated_at,
        raw_json=excluded.raw_json`
-    : `INSERT OR IGNORE INTO focus (id, date_label, title, description, image_url, url, source_url, updated_at, raw_json)
-       VALUES (@id, @date_label, @title, @description, @image_url, @url, @source_url, @updated_at, @raw_json)`
+    : `INSERT OR IGNORE INTO focus (id, video_id, date_label, title, description, image_url, url, source_url, updated_at, raw_json)
+       VALUES (@id, @video_id, @date_label, @title, @description, @image_url, @url, @source_url, @updated_at, @raw_json)`
   database.prepare(sql).run({
     id: Number(focus.id || 1),
+    video_id: nullable(
+      focus.video_id ?? focus.videoId ?? youtubeIdFromUrl(focus.url),
+    ),
     date_label: nullable(focus.date_label),
     title: focus.title || "最近焦点",
     description: nullable(focus.description),
@@ -594,8 +945,8 @@ function collectSeedMediaCandidates(data) {
 
 /**
  * Register remote media discovered by a source adapter. Registration is
- * intentionally separate from downloading: a later worker can claim pending
- * rows and update their cache metadata without changing the source snapshot.
+ * intentionally separate from downloading: the sync pipeline can claim pending
+ * rows after all source snapshots have been registered.
  */
 export function registerMediaCandidates(database, candidates = []) {
   const timestamp = nowIso()
@@ -618,7 +969,7 @@ export function registerMediaCandidates(database, candidates = []) {
   return register(candidates)
 }
 
-/** Upsert metadata written by a future downloader after a successful fetch. */
+/** Upsert metadata written by the downloader after a successful fetch. */
 export function upsertMediaAsset(database, asset) {
   const sourceUrl = normalizeSourceUrl(mediaSource(asset))
   if (!sourceUrl) throw new Error("media asset requires an HTTP(S) source URL")
@@ -878,8 +1229,10 @@ export function seedDatabase(
   const seed = database.transaction(() => {
     insertProfile(database, data.profile, overwrite)
     for (const post of data.posts || []) insertPost(database, post, overwrite)
-    for (const event of data.events || [])
+    for (const event of data.events || []) {
       insertEvent(database, event, overwrite)
+      insertEventSource(database, event, event.id)
+    }
     for (const video of data.videos || [])
       insertVideo(database, video, overwrite)
     if (data.focus) insertFocus(database, data.focus, overwrite)
@@ -917,9 +1270,12 @@ export function upsertPosts(database, posts = []) {
 }
 
 export function upsertEvents(database, events = []) {
-  const run = database.transaction((rows) =>
-    rows.forEach((event) => insertEvent(database, event, true)),
-  )
+  const run = database.transaction((rows) => {
+    for (const event of rows) {
+      insertEvent(database, event, true)
+      insertEventSource(database, event, event.id)
+    }
+  })
   run(events)
 }
 
@@ -937,6 +1293,373 @@ export function upsertAssets(database, assets = []) {
   )
   run(assets)
   registerMediaCandidates(database, assets.flatMap(mediaCandidatesFromAsset))
+}
+
+const eventAdminColumns = `
+  id, source, source_item_id AS sourceItemId, source_key AS sourceKey,
+  title, detail, starts_on AS startsOn, starts_at AS startsAt,
+  ends_at AS endsAt, timezone, time_precision AS timePrecision,
+  status, event_type AS eventType, url, provenance,
+  manual_locked AS manualLocked, confidence, extraction_id AS extractionId,
+  deleted_at AS deletedAt, created_at AS createdAt, updated_at AS updatedAt
+`
+
+export function getEvent(database, id) {
+  return (
+    database
+      .prepare(`SELECT ${eventAdminColumns} FROM events WHERE id = ?`)
+      .get(String(id)) || null
+  )
+}
+
+export function listAdminEvents(database, { includeDeleted = false } = {}) {
+  const where = includeDeleted ? "" : "WHERE deleted_at IS NULL"
+  return database
+    .prepare(
+      `SELECT ${eventAdminColumns} FROM events ${where}
+       ORDER BY starts_on DESC, COALESCE(starts_at, starts_on) DESC, id ASC`,
+    )
+    .all()
+    .map((event) => ({
+      ...event,
+      manualLocked: Boolean(event.manualLocked),
+    }))
+}
+
+export function createManualEvent(database, event) {
+  const id = String(event.id || `manual-${crypto.randomUUID()}`)
+  if (getEvent(database, id)) throw new Error("event already exists")
+  const value = {
+    ...event,
+    id,
+    source: "manual",
+    source_item_id: id,
+    source_key: id,
+    provenance: "manual",
+    manual_locked: 1,
+    deleted_at: null,
+  }
+  const create = database.transaction(() => {
+    insertEvent(database, value, false)
+    insertEventSource(database, value, id)
+  })
+  create()
+  return getEvent(database, id)
+}
+
+export function updateManualEvent(database, id, event) {
+  const existing = getEvent(database, id)
+  if (!existing) return null
+  const startsAt = nullable(event.starts_at ?? event.startsAt)
+  const startsOn =
+    nullable(event.starts_on ?? event.startsOn) || dateKeyInJapan(startsAt)
+  if (!startsOn) throw new Error("event requires starts_on or starts_at")
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `UPDATE events SET
+         title=@title, detail=@detail, starts_on=@starts_on,
+         starts_at=@starts_at, ends_at=@ends_at, timezone=@timezone,
+         time_precision=@time_precision, status=@status,
+         event_type=@event_type, url=@url, provenance='manual',
+         manual_locked=1, deleted_at=NULL, updated_at=@updated_at,
+         raw_json=@raw_json
+       WHERE id=@id`,
+    )
+    .run({
+      id: String(id),
+      title: String(event.title || "").trim() || existing.title,
+      detail: nullable(event.detail),
+      starts_on: startsOn,
+      starts_at: startsAt,
+      ends_at: nullable(event.ends_at ?? event.endsAt),
+      timezone: event.timezone || existing.timezone || JAPAN_TIME_ZONE,
+      time_precision:
+        event.time_precision ??
+        event.timePrecision ??
+        (startsAt ? "exact" : "unknown"),
+      status: nullable(event.status),
+      event_type: event.event_type ?? event.eventType ?? existing.eventType,
+      url: nullable(event.url),
+      updated_at: timestamp,
+      raw_json: json({ ...event, provenance: "manual", manualLocked: true }),
+    })
+  insertEventSource(
+    database,
+    {
+      ...event,
+      source: "manual",
+      source_item_id: String(id),
+      source_key: "confirmed",
+    },
+    id,
+    timestamp,
+  )
+  return getEvent(database, id)
+}
+
+export function deleteManualEvent(database, id) {
+  const timestamp = nowIso()
+  const result = database
+    .prepare(
+      `UPDATE events SET provenance='manual', manual_locked=1,
+       deleted_at=?, updated_at=? WHERE id=?`,
+    )
+    .run(timestamp, timestamp, String(id))
+  return result.changes > 0
+}
+
+export function replaceAutomaticEventsForSource(
+  database,
+  { source, sourceItemId, extractionId = null, events = [] },
+) {
+  const timestamp = nowIso()
+  const replace = database.transaction(() => {
+    const activeKeys = new Set()
+    for (const event of events) {
+      const sourceKey = String(event.source_key ?? event.sourceKey ?? event.id)
+      activeKeys.add(sourceKey)
+      const value = {
+        ...event,
+        source: event.canonicalSource || source,
+        source_item_id: String(event.canonicalSourceItemId || sourceItemId),
+        source_key: String(event.canonicalSourceKey || sourceKey),
+        provenance: "automatic",
+        manual_locked: 0,
+        extraction_id: extractionId,
+        deleted_at: null,
+      }
+      insertEvent(database, value, true)
+      insertEventSource(
+        database,
+        {
+          ...event,
+          source,
+          source_item_id: String(sourceItemId),
+          source_key: sourceKey,
+        },
+        event.id,
+        timestamp,
+      )
+    }
+
+    const previous = database
+      .prepare(
+        `SELECT id, event_id AS eventId, source_key AS sourceKey
+         FROM event_sources
+         WHERE source = ? AND source_item_id = ? AND deleted_at IS NULL`,
+      )
+      .all(String(source), String(sourceItemId))
+    const hideSource = database.prepare(
+      "UPDATE event_sources SET deleted_at=?, updated_at=? WHERE id=?",
+    )
+    const activeSourceCount = database.prepare(
+      "SELECT COUNT(*) AS count FROM event_sources WHERE event_id=? AND deleted_at IS NULL",
+    )
+    const hideEvent = database.prepare(
+      `UPDATE events SET deleted_at=?, updated_at=?
+       WHERE id=? AND manual_locked=0`,
+    )
+    let retired = 0
+    for (const row of previous) {
+      if (activeKeys.has(row.sourceKey)) continue
+      hideSource.run(timestamp, timestamp, row.id)
+      retired += 1
+      if (activeSourceCount.get(row.eventId).count === 0) {
+        hideEvent.run(timestamp, timestamp, row.eventId)
+      }
+    }
+    return {
+      upserted: events.length,
+      retired,
+    }
+  })
+  return replace()
+}
+
+export function getAppSetting(database, key, fallback = null) {
+  return (
+    database.prepare("SELECT value FROM app_settings WHERE key = ?").get(key)
+      ?.value ?? fallback
+  )
+}
+
+export function setAppSetting(database, key, value) {
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`,
+    )
+    .run(String(key), String(value), timestamp)
+  return { key: String(key), value: String(value), updatedAt: timestamp }
+}
+
+export function getSyncState(database, source, accountId) {
+  const row = database
+    .prepare(
+      `SELECT source, account_id AS accountId, cursor_id AS cursorId,
+       cursor_time AS cursorTime, last_success_at AS lastSuccessAt,
+       metadata_json AS metadataJson
+       FROM sync_state WHERE source = ? AND account_id = ?`,
+    )
+    .get(String(source), String(accountId))
+  if (!row) return null
+  const { metadataJson, ...state } = row
+  return { ...state, metadata: parseJson(metadataJson) || {} }
+}
+
+export function upsertSyncState(
+  database,
+  { source, accountId, cursorId = null, cursorTime = null, metadata = {} },
+) {
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `INSERT INTO sync_state (
+         source, account_id, cursor_id, cursor_time, last_success_at, metadata_json
+       ) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(source, account_id) DO UPDATE SET
+         cursor_id=excluded.cursor_id, cursor_time=excluded.cursor_time,
+         last_success_at=excluded.last_success_at,
+         metadata_json=excluded.metadata_json`,
+    )
+    .run(
+      String(source),
+      String(accountId),
+      nullable(cursorId),
+      nullable(cursorTime),
+      timestamp,
+      json(metadata),
+    )
+  return getSyncState(database, source, accountId)
+}
+
+export function getScheduleExtraction(
+  database,
+  { source, sourceItemId, contentFingerprint, extractorVersion },
+) {
+  return (
+    database
+      .prepare(
+        `SELECT id, source, source_item_id AS sourceItemId,
+         content_fingerprint AS contentFingerprint,
+         extractor_version AS extractorVersion, model, status,
+         result_json AS resultJson, error, created_at AS createdAt,
+         updated_at AS updatedAt
+         FROM schedule_extractions
+         WHERE source=? AND source_item_id=? AND content_fingerprint=?
+           AND extractor_version=?`,
+      )
+      .get(
+        String(source),
+        String(sourceItemId),
+        String(contentFingerprint),
+        String(extractorVersion),
+      ) || null
+  )
+}
+
+export function upsertScheduleExtraction(
+  database,
+  {
+    source,
+    sourceItemId,
+    contentFingerprint,
+    extractorVersion,
+    model,
+    status,
+    result = null,
+    error = null,
+  },
+) {
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `INSERT INTO schedule_extractions (
+         source, source_item_id, content_fingerprint, extractor_version,
+         model, status, result_json, error, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(source, source_item_id, content_fingerprint, extractor_version)
+       DO UPDATE SET model=excluded.model, status=excluded.status,
+         result_json=excluded.result_json, error=excluded.error,
+         updated_at=excluded.updated_at`,
+    )
+    .run(
+      String(source),
+      String(sourceItemId),
+      String(contentFingerprint),
+      String(extractorVersion),
+      String(model),
+      String(status),
+      json(result),
+      nullable(error),
+      timestamp,
+      timestamp,
+    )
+  return getScheduleExtraction(database, {
+    source,
+    sourceItemId,
+    contentFingerprint,
+    extractorVersion,
+  })
+}
+
+export function getKnownPostIds(database, ids = []) {
+  const normalized = [...new Set(ids.map(String))]
+  if (!normalized.length) return new Set()
+  const placeholders = normalized.map(() => "?").join(", ")
+  return new Set(
+    database
+      .prepare(`SELECT id FROM posts WHERE id IN (${placeholders})`)
+      .all(...normalized)
+      .map((row) => String(row.id)),
+  )
+}
+
+export function listScheduleCandidatePosts(database, { limit = 20 } = {}) {
+  const boundedLimit = Math.min(100, Math.max(1, Number(limit) || 20))
+  return database
+    .prepare(
+      `SELECT id, source, label, text, published_at AS publishedAt, url,
+       media_url AS mediaUrl, media_alt AS mediaAlt, raw_json AS rawJson
+       FROM posts
+       WHERE source='x' AND type='notice' AND (
+         label LIKE 'SCHEDULE%' OR lower(text) LIKE '%schedule%'
+         OR text LIKE '%スケジュール%' OR text LIKE '%予定%'
+       )
+       ORDER BY published_at DESC LIMIT ?`,
+    )
+    .all(boundedLimit)
+    .map(({ rawJson, ...post }) => ({
+      ...post,
+      raw: parseJson(rawJson),
+    }))
+}
+
+export function getVideoRecord(database, id) {
+  return (
+    database
+      .prepare(
+        `SELECT id, source, title, published_at AS publishedAt,
+         scheduled_at AS scheduledAt, url, thumbnail_url AS thumbnailUrl,
+         kind, is_upcoming AS isUpcoming
+         FROM videos WHERE id = ?`,
+      )
+      .get(String(id)) || null
+  )
+}
+
+export function listActiveVideoIds(database, { limit = 20 } = {}) {
+  const boundedLimit = Math.min(100, Math.max(1, Number(limit) || 20))
+  return database
+    .prepare(
+      `SELECT id FROM videos
+       WHERE is_upcoming=1 OR scheduled_at IS NOT NULL
+       ORDER BY COALESCE(scheduled_at, published_at) DESC LIMIT ?`,
+    )
+    .all(boundedLimit)
+    .map((row) => String(row.id))
 }
 
 export function startSyncRun(
@@ -1001,6 +1724,16 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
   const mediaBySourceUrl = new Map(
     mediaRows.map((asset) => [asset.sourceUrl, asset]),
   )
+  const mediaById = new Map(mediaRows.map((asset) => [asset.id, asset]))
+  const postMediaLinks = listMediaLinks(database, { ownerType: "post" }).filter(
+    (link) => link.role === "post-image",
+  )
+  const postMediaByOwner = new Map()
+  for (const link of postMediaLinks) {
+    if (!postMediaByOwner.has(link.ownerId))
+      postMediaByOwner.set(link.ownerId, [])
+    postMediaByOwner.get(link.ownerId).push(link)
+  }
   const posts = database
     .prepare(
       `SELECT id, source, type, label, text, published_at AS publishedAt, url, likes, reposts, replies, media_url AS mediaUrl, media_alt AS mediaAlt
@@ -1012,31 +1745,73 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
       return Number.isNaN(timestamp) || timestamp >= windowStart
     })
     .map((post) => {
-      const media = resolveMediaReference(
+      const fallbackMedia = resolveMediaReference(
         database,
         post.mediaUrl,
         mediaBySourceUrl,
       )
+      const linkedMedia = (postMediaByOwner.get(String(post.id)) || [])
+        .sort((a, b) => a.position - b.position)
+        .map((link) => {
+          const media = mediaReferenceForAsset(mediaById.get(link.mediaId))
+          if (!media) return null
+          return {
+            id: media.id,
+            url: media.publicUrl,
+            status: media.status,
+            sourceUrl: media.sourceUrl,
+            alt: link.alt || post.mediaAlt || null,
+            position: link.position,
+            width: media.width,
+            height: media.height,
+          }
+        })
+        .filter(Boolean)
+      const media = linkedMedia.length
+        ? linkedMedia
+        : post.mediaUrl
+          ? [
+              {
+                id: fallbackMedia.id,
+                url: fallbackMedia.publicUrl,
+                status: fallbackMedia.status,
+                sourceUrl: fallbackMedia.sourceUrl,
+                alt: post.mediaAlt || null,
+                position: 0,
+                width: fallbackMedia.width ?? null,
+                height: fallbackMedia.height ?? null,
+              },
+            ]
+          : []
+      const primaryMedia = media[0] || fallbackMedia
       return {
         ...post,
-        mediaUrl: media.publicUrl,
-        mediaId: media.id,
-        mediaStatus: media.status,
-        mediaSourceUrl: media.sourceUrl,
+        media,
+        mediaUrl: primaryMedia.url ?? primaryMedia.publicUrl ?? null,
+        mediaId: primaryMedia.id,
+        mediaStatus: primaryMedia.status,
+        mediaSourceUrl: primaryMedia.sourceUrl,
       }
     })
 
+  const todayKey = dateKeyInJapan(now)
   const events = database
     .prepare(
-      `SELECT id, source, title, detail, starts_at AS startsAt, ends_at AS endsAt, status, event_type AS eventType, url
-    FROM events ORDER BY starts_at ASC`,
+      `SELECT id, source, source_item_id AS sourceItemId, title, detail,
+       starts_on AS startsOn, starts_at AS startsAt, ends_at AS endsAt,
+       timezone, time_precision AS timePrecision, status,
+       event_type AS eventType, url, provenance, manual_locked AS manualLocked
+       FROM events WHERE deleted_at IS NULL
+       ORDER BY starts_on ASC, COALESCE(starts_at, starts_on) ASC`,
     )
     .all()
     .map((event) => ({
       ...event,
+      manualLocked: Boolean(event.manualLocked),
       isUpcoming:
-        !Number.isNaN(Date.parse(event.startsAt)) &&
-        Date.parse(event.startsAt) >= now.getTime(),
+        event.startsAt && !Number.isNaN(Date.parse(event.startsAt))
+          ? Date.parse(event.startsAt) >= now.getTime()
+          : Boolean(event.startsOn && todayKey && event.startsOn >= todayKey),
     }))
 
   const videos = database
@@ -1048,11 +1823,9 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
     .all()
     .map((video) => ({
       ...video,
-      isUpcoming:
-        Boolean(video.isUpcoming) ||
-        Boolean(
-          video.scheduledAt && Date.parse(video.scheduledAt) >= now.getTime(),
-        ),
+      isUpcoming: video.scheduledAt
+        ? Date.parse(video.scheduledAt) >= now.getTime()
+        : Boolean(video.isUpcoming),
     }))
     .map((video) => {
       const media = resolveMediaReference(
@@ -1071,7 +1844,9 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
 
   const focusRow = database
     .prepare(
-      `SELECT id, date_label AS dateLabel, title, description, image_url AS imageUrl, url, source_url AS sourceUrl, updated_at AS updatedAt FROM focus ORDER BY id LIMIT 1`,
+      `SELECT id, video_id AS videoId, date_label AS dateLabel, title,
+       description, image_url AS imageUrl, url, source_url AS sourceUrl,
+       updated_at AS updatedAt FROM focus ORDER BY id LIMIT 1`,
     )
     .get()
   const focus = focusRow
