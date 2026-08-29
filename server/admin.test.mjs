@@ -2,7 +2,13 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { createApp } from "./app.js"
-import { getEvent, initializeDatabase, upsertEvents } from "./database.js"
+import {
+  getEvent,
+  getDashboard,
+  initializeDatabase,
+  upsertEvents,
+  upsertVideos,
+} from "./database.js"
 
 async function listen(app) {
   return new Promise((resolve) => {
@@ -77,6 +83,22 @@ test("production admin login guards model settings and manual schedule CRUD", as
         url: "https://www.youtube.com/watch?v=abcdefghijk",
       },
     ])
+    upsertVideos(database, [
+      {
+        id: "video-admin-1",
+        source: "youtube",
+        title: "Admin video one",
+        published_at: "2026-08-01T00:00:00.000Z",
+        url: "https://www.youtube.com/watch?v=video-admin-1",
+      },
+      {
+        id: "video-admin-2",
+        source: "youtube",
+        title: "Admin video two",
+        published_at: "2026-08-02T00:00:00.000Z",
+        url: "https://www.youtube.com/watch?v=video-admin-2",
+      },
+    ])
     server = await listen(
       createApp({
         database,
@@ -128,10 +150,35 @@ test("production admin login guards model settings and manual schedule CRUD", as
     const savedConfig = await fetch(`${origin}/api/admin/config`, {
       method: "PUT",
       headers: authenticatedHeaders,
-      body: JSON.stringify({ llmModel: "gpt-4.1-mini" }),
+      body: JSON.stringify({
+        llmModel: "gpt-4.1-mini",
+        scheduleExtractionEnabled: false,
+        scheduleKeywords: ["周表", "配信予定"],
+        featuredVideoId: "video-admin-2",
+      }),
     })
     assert.equal(savedConfig.status, 200)
-    assert.equal((await savedConfig.json()).llmModel, "gpt-4.1-mini")
+    const savedConfigPayload = await savedConfig.json()
+    assert.equal(savedConfigPayload.llmModel, "gpt-4.1-mini")
+    assert.equal(savedConfigPayload.scheduleExtractionEnabled, false)
+    assert.deepEqual(savedConfigPayload.scheduleKeywords, ["周表", "配信予定"])
+    assert.equal(savedConfigPayload.featuredVideoId, "video-admin-2")
+    assert.deepEqual(
+      (
+        await fetch(`${origin}/api/admin/videos`, {
+          headers: { cookie },
+        }).then((response) => response.json())
+      ).videos.map((video) => video.id),
+      ["video-admin-2", "video-admin-1"],
+    )
+    assert.equal(getDashboard(database).meta.featuredVideoId, "video-admin-2")
+
+    const invalidFeatured = await fetch(`${origin}/api/admin/config`, {
+      method: "PUT",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({ featuredVideoId: "missing-video" }),
+    })
+    assert.equal(invalidFeatured.status, 400)
 
     const createdResponse = await fetch(`${origin}/api/admin/events`, {
       method: "POST",

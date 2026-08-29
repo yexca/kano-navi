@@ -29,9 +29,10 @@ successful snapshot while a source is unavailable.
 
 ### Presentation: `src/`
 
-`src/main.jsx` maps dashboard JSON to component state, date filtering, theme
-switching, and accessible links. `src/admin.jsx` owns the hidden `/admin`
-interface for model selection and schedule CRUD. `src/components/ui/` contains
+`src/main.jsx` maps dashboard JSON to component state, calendar navigation, theme
+switching, account-source labels, and accessible links. `src/admin.jsx` owns the
+hidden `/admin` interface for schedule-extractor settings, Featured-video
+selection, and schedule CRUD. `src/components/ui/` contains
 basic UI primitives, while the CSS files contain layout and design tokens. The
 presentation layer must not import `better-sqlite3` or call X, YouTube, OpenAI,
 or a third-party proxy directly.
@@ -45,7 +46,8 @@ Responses should remain stable and sanitized; do not expose
 `raw_json`, stack traces, credentials, or absolute local paths to the browser.
 Ready runtime media is served only through the opaque-ID `/media/:id` route.
 
-`server/admin-api.js` exposes session, model-setting, and event CRUD endpoints.
+`server/admin-api.js` exposes session, model/schedule/video settings, video
+listing, and event CRUD endpoints.
 `APP_MODE=development` bypasses authentication for local work. Production
 requires a configured password and uses in-memory HttpOnly cookie sessions;
 restarting the process invalidates all sessions. The API exposes whether an
@@ -73,8 +75,9 @@ files to ready cache rows.
 The synchronization layer handles timeouts, parsing, field normalization, and
 `sync_runs` records:
 
-- X: use Snowflake timestamps to limit the first run to seven days, then fetch
-  unknown IDs with a bounded known-item refresh allowance.
+- X: use Snowflake timestamps per configured account to limit each first run to
+  seven days, then fetch unknown IDs with a bounded known-item refresh allowance;
+  successful account snapshots are merged by publication time.
 - YouTube: keep six RSS entries on the first run, then follow a durable cursor;
   active reservations are rechecked even when no new upload appears.
 - Schedule: retain YouTube reservations as unified `events`, and pass matching X
@@ -92,9 +95,9 @@ The synchronization layer handles timeouts, parsing, field normalization, and
 3. The page shows the snapshot time. If the API is unavailable after a load, it keeps the known state and shows a retry affordance.
 4. A maintainer runs `npm run sync` on the server; the result is written to the database and `sync_runs`.
 5. The next page read shows the new snapshot without rebuilding the frontend.
-6. A maintainer who opens `/admin` can change the model name or curate events.
-   Those changes go through the local API and lock affected events against
-   automatic replacement.
+6. A maintainer who opens `/admin` can change the model, schedule-candidate
+   settings, Featured video, or curate events. Those changes go through the
+   local API and lock affected events against automatic replacement.
 
 ## Extension Points
 

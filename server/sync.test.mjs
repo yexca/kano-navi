@@ -5,6 +5,7 @@ import {
   getSyncState,
   getVideoRecord,
   initializeDatabase,
+  setAppSetting,
   upsertPosts,
 } from "./database.js"
 
@@ -27,6 +28,7 @@ test("X bootstrap stays within seven days and later requests only new posts", as
   const originalFetch = globalThis.fetch
   const originalEnvironment = {
     X_BOOTSTRAP_DAYS: process.env.X_BOOTSTRAP_DAYS,
+    X_HANDLES: process.env.X_HANDLES,
     X_MAX_STATUS_REQUESTS: process.env.X_MAX_STATUS_REQUESTS,
     X_REFRESH_KNOWN: process.env.X_REFRESH_KNOWN,
   }
@@ -37,10 +39,12 @@ test("X bootstrap stays within seven days and later requests only new posts", as
     snowflakeFor(new Date(now - 8 * 24 * 60 * 60 * 1000)),
   ]
   const newId = snowflakeFor(new Date(now - 5 * 60 * 1000))
+  const oldUnknownId = snowflakeFor(new Date(now - 9 * 24 * 60 * 60 * 1000))
   let profileIds = firstIds
   const requestedIds = []
   try {
     process.env.X_BOOTSTRAP_DAYS = "7"
+    process.env.X_HANDLES = "kano_2525"
     process.env.X_MAX_STATUS_REQUESTS = "20"
     process.env.X_REFRESH_KNOWN = "0"
     globalThis.fetch = async (url) => {
@@ -80,7 +84,7 @@ test("X bootstrap stays within seven days and later requests only new posts", as
     )
 
     requestedIds.length = 0
-    profileIds = [newId, ...firstIds.slice(0, 2)]
+    profileIds = [newId, ...firstIds.slice(0, 2), oldUnknownId]
     const incremental = await syncX(database)
     assert.equal(incremental.count, 1)
     assert.equal(incremental.requested, 1)
@@ -92,6 +96,95 @@ test("X bootstrap stays within seven days and later requests only new posts", as
     assert.equal(
       getSyncState(database, "x", "kano_2525").metadata.bootstrap,
       false,
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+    for (const [key, value] of Object.entries(originalEnvironment)) {
+      if (value == null) delete process.env[key]
+      else process.env[key] = value
+    }
+    database.close()
+  }
+})
+
+test("X sync aggregates accounts and keeps failed detail requests within the shared budget", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const originalFetch = globalThis.fetch
+  const originalEnvironment = {
+    X_HANDLES: process.env.X_HANDLES,
+    X_MAX_STATUS_REQUESTS: process.env.X_MAX_STATUS_REQUESTS,
+    X_REFRESH_KNOWN: process.env.X_REFRESH_KNOWN,
+  }
+  const now = Date.now()
+  const primaryIds = [
+    snowflakeFor(new Date(now - 60 * 60 * 1000)),
+    snowflakeFor(new Date(now - 2 * 60 * 60 * 1000)),
+  ]
+  const secondaryIds = [
+    snowflakeFor(new Date(now - 30 * 60 * 1000)),
+    snowflakeFor(new Date(now - 90 * 60 * 1000)),
+  ]
+  const profiles = {
+    kano_2525: primaryIds,
+    _Kanotic: secondaryIds,
+  }
+  let detailRequests = 0
+  try {
+    process.env.X_HANDLES = "kano_2525,_Kanotic"
+    process.env.X_MAX_STATUS_REQUESTS = "3"
+    process.env.X_REFRESH_KNOWN = "0"
+    setAppSetting(database, "schedule_keywords", JSON.stringify(["WEEKLY"]))
+    globalThis.fetch = async (url) => {
+      const value = String(url)
+      const profileMatch = value.match(/^https:\/\/x\.com\/(.+)$/u)
+      if (profileMatch) {
+        const handle = profileMatch[1]
+        return response(
+          profiles[handle]
+            .map((id) => `<a href="/${handle}/status/${id}">post</a>`)
+            .join(""),
+        )
+      }
+      const statusMatch = value.match(
+        /^https:\/\/api\.vxtwitter\.com\/([^/]+)\/status\/(\d+)$/u,
+      )
+      assert.ok(statusMatch)
+      detailRequests += 1
+      const [, handle, id] = statusMatch
+      if (handle === "kano_2525") return response("failed", { status: 503 })
+      return response(
+        JSON.stringify({
+          tweetID: id,
+          text: "WEEKLY schedule",
+          date: snowflakeDate(id).toISOString(),
+          author: { screenName: "_Kanotic" },
+          mediaURLs: ["https://pbs.twimg.com/media/weekly.png"],
+        }),
+        { headers: { "content-type": "application/json" } },
+      )
+    }
+
+    const result = await syncX(database)
+    assert.equal(detailRequests, 3)
+    assert.equal(result.requested, 3)
+    assert.equal(result.count, 1)
+    assert.equal(result.errors.length, 1)
+    assert.deepEqual(
+      database
+        .prepare("SELECT account_handle AS accountHandle FROM posts")
+        .all(),
+      [{ accountHandle: "_Kanotic" }],
+    )
+    assert.equal(getSyncState(database, "x", "kano_2525"), null)
+    assert.equal(
+      getSyncState(database, "x", "_Kanotic").metadata.bootstrap,
+      true,
+    )
+    assert.equal(
+      database
+        .prepare("SELECT url FROM assets WHERE id='weekly-schedule'")
+        .get().url,
+      "https://pbs.twimg.com/media/weekly.png",
     )
   } finally {
     globalThis.fetch = originalFetch

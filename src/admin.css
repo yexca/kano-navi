@@ -60,6 +60,7 @@
 
 .admin-topbar-actions svg,
 .admin-model-form button svg,
+.admin-config-form button svg,
 .admin-form-actions svg,
 .admin-event-actions svg,
 .admin-schedule-header button svg {
@@ -124,19 +125,22 @@
   font-weight: 900;
 }
 
-.admin-model-form {
+.admin-model-form,
+.admin-config-form {
   display: grid;
   gap: 12px;
   margin-top: 24px;
 }
 
 .admin-model-form label,
+.admin-config-form label,
 .admin-field {
   display: grid;
   gap: 7px;
 }
 
 .admin-model-form label > span,
+.admin-config-form label > span,
 .admin-field > span,
 .admin-login label {
   color: hsl(var(--muted-foreground));
@@ -145,6 +149,7 @@
 }
 
 .admin-model-form input,
+.admin-config-form input:not([type="checkbox"]),
 .admin-field input,
 .admin-field textarea,
 .admin-field select,
@@ -165,6 +170,7 @@
 }
 
 .admin-model-form input,
+.admin-config-form input:not([type="checkbox"]),
 .admin-field input,
 .admin-field select,
 .admin-login input {
@@ -179,12 +185,31 @@
 }
 
 .admin-model-form input:focus,
+.admin-config-form input:focus,
 .admin-field input:focus,
 .admin-field textarea:focus,
 .admin-field select:focus,
 .admin-login input:focus {
   border-color: hsl(var(--ring));
   box-shadow: 0 0 0 3px rgba(242, 100, 104, 0.12);
+}
+
+.admin-toggle-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-toggle-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: #f26468;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .admin-key-status {

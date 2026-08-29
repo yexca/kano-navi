@@ -5,6 +5,7 @@ import test from "node:test"
 import {
   getEvent,
   initializeDatabase,
+  setAppSetting,
   upsertMediaAsset,
   upsertPosts,
 } from "./database.js"
@@ -12,6 +13,7 @@ import { resolveMediaCachePath, writeMediaFileAtomic } from "./media-cache.js"
 import {
   callOpenAiScheduleExtraction,
   extractSchedulePost,
+  extractPendingSchedules,
 } from "./schedule-extractor.js"
 
 test("OpenAI structured extraction uses cached vision input and caches results", async () => {
@@ -109,6 +111,15 @@ test("OpenAI structured extraction uses cached vision input and caches results",
     assert.equal(cached.status, "cached")
     assert.equal(calls, 1)
 
+    const changedModel = await extractSchedulePost(database, post, {
+      apiKey: "not-a-real-api-key",
+      model: "gpt-4.1-mini",
+      fetchImpl,
+    })
+    assert.equal(changedModel.status, "success")
+    assert.equal(calls, 2)
+    assert.equal(requestBody.model, "gpt-4.1-mini")
+
     const invalid = await extractSchedulePost(
       database,
       { ...post, text: `${post.text} 更新` },
@@ -149,6 +160,51 @@ test("schedule extraction skips safely when no API key is configured", async () 
       { apiKey: "" },
     )
     assert.deepEqual(result, { status: "skipped", reason: "missing_api_key" })
+  } finally {
+    database.close()
+  }
+})
+
+test("schedule extraction honors its independent enable flag and keywords", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  try {
+    upsertPosts(database, [
+      {
+        id: "custom-keyword-post",
+        source: "x",
+        text: "WEEKLY_BOARD",
+        published_at: "2026-08-28T01:00:00.000Z",
+        url: "https://x.com/example/status/1234567890123456793",
+      },
+      {
+        id: "default-keyword-post",
+        source: "x",
+        label: "SCHEDULE / 日程",
+        text: "通常内容",
+        published_at: "2026-08-28T02:00:00.000Z",
+        url: "https://x.com/example/status/1234567890123456794",
+      },
+    ])
+    setAppSetting(
+      database,
+      "schedule_keywords",
+      JSON.stringify(["WEEKLY_BOARD"]),
+    )
+    setAppSetting(database, "schedule_extraction_enabled", "0")
+    assert.deepEqual(await extractPendingSchedules(database), {
+      attempted: 0,
+      success: 0,
+      cached: 0,
+      skipped: 0,
+      failed: 0,
+      disabled: true,
+    })
+
+    setAppSetting(database, "schedule_extraction_enabled", "1")
+    const result = await extractPendingSchedules(database, { apiKey: "" })
+    assert.equal(result.attempted, 1)
+    assert.equal(result.skipped, 1)
+    assert.deepEqual(result.keywords, ["WEEKLY_BOARD"])
   } finally {
     database.close()
   }

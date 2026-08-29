@@ -3,10 +3,14 @@ import express from "express"
 import {
   createManualEvent,
   deleteManualEvent,
+  getFeaturedVideoId,
   getAppSetting,
   getEvent,
+  getScheduleExtractionConfig,
+  listAdminVideos,
   listAdminEvents,
   setAppSetting,
+  setFeaturedVideoId,
   updateManualEvent,
 } from "./database.js"
 import { createAdminAuth } from "./admin-auth.js"
@@ -64,6 +68,48 @@ function publicUrl(value) {
   } catch (error) {
     if (error instanceof AdminInputError) throw error
     throw new AdminInputError("url is invalid")
+  }
+}
+
+function booleanValue(value, name) {
+  if (typeof value === "boolean") return value
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase()
+  if (["1", "true", "yes", "on"].includes(normalized)) return true
+  if (["0", "false", "no", "off"].includes(normalized)) return false
+  throw new AdminInputError(`${name} must be a boolean`)
+}
+
+function scheduleKeywords(value) {
+  const values = Array.isArray(value)
+    ? value
+    : String(value ?? "").split(/[\n,，]+/u)
+  const normalized = [
+    ...new Set(values.map((item) => String(item || "").trim()).filter(Boolean)),
+  ]
+  if (normalized.length > 30)
+    throw new AdminInputError("scheduleKeywords contains too many entries")
+  if (normalized.some((keyword) => keyword.length > 80))
+    throw new AdminInputError(
+      "scheduleKeywords contains an entry that is too long",
+    )
+  return normalized
+}
+
+function configPayload(database, openAiKeyConfigured, updatedAt = null) {
+  const schedule = getScheduleExtractionConfig(database)
+  return {
+    llmModel: getAppSetting(
+      database,
+      "llm_model",
+      process.env.OPENAI_MODEL || defaultScheduleModel,
+    ),
+    openAiKeyConfigured,
+    scheduleExtractionEnabled: schedule.enabled,
+    scheduleKeywords: schedule.keywords,
+    featuredVideoId: getFeaturedVideoId(database),
+    ...(updatedAt ? { updatedAt } : {}),
   }
 }
 
@@ -155,34 +201,64 @@ export function createAdminRouter({
   router.use(auth.requireAuth)
 
   router.get("/config", (_request, response) => {
-    response.json({
-      llmModel: getAppSetting(
-        database,
-        "llm_model",
-        process.env.OPENAI_MODEL || defaultScheduleModel,
-      ),
-      openAiKeyConfigured,
-    })
+    response.json(configPayload(database, openAiKeyConfigured))
   })
   router.put(
     "/config",
     route((request, response) => {
-      const model = text(request.body?.llmModel, {
-        name: "llmModel",
-        required: true,
-        max: 128,
-      })
-      if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(model)) {
-        throw new AdminInputError("llmModel contains unsupported characters")
+      const body = request.body || {}
+      let updatedAt = null
+      if (Object.prototype.hasOwnProperty.call(body, "llmModel")) {
+        const model = text(body.llmModel, {
+          name: "llmModel",
+          required: true,
+          max: 128,
+        })
+        if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(model)) {
+          throw new AdminInputError("llmModel contains unsupported characters")
+        }
+        updatedAt = setAppSetting(database, "llm_model", model).updatedAt
       }
-      const setting = setAppSetting(database, "llm_model", model)
-      response.json({
-        llmModel: setting.value,
-        openAiKeyConfigured,
-        updatedAt: setting.updatedAt,
-      })
+      if (
+        Object.prototype.hasOwnProperty.call(body, "scheduleExtractionEnabled")
+      ) {
+        const enabled = booleanValue(
+          body.scheduleExtractionEnabled,
+          "scheduleExtractionEnabled",
+        )
+        updatedAt = setAppSetting(
+          database,
+          "schedule_extraction_enabled",
+          enabled ? "1" : "0",
+        ).updatedAt
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "scheduleKeywords")) {
+        const keywords = scheduleKeywords(body.scheduleKeywords)
+        updatedAt = setAppSetting(
+          database,
+          "schedule_keywords",
+          JSON.stringify(keywords),
+        ).updatedAt
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "featuredVideoId")) {
+        const featuredVideoId = text(body.featuredVideoId, {
+          name: "featuredVideoId",
+          max: 64,
+        })
+        try {
+          setFeaturedVideoId(database, featuredVideoId)
+          updatedAt = new Date().toISOString()
+        } catch (error) {
+          throw new AdminInputError(error.message)
+        }
+      }
+      response.json(configPayload(database, openAiKeyConfigured, updatedAt))
     }),
   )
+
+  router.get("/videos", (_request, response) => {
+    response.json({ videos: listAdminVideos(database) })
+  })
 
   router.get("/events", (request, response) => {
     response.json({

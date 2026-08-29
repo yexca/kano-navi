@@ -24,6 +24,8 @@ Express, so cached media has the same browser URL in development and production.
 The public dashboard is `/`. The admin interface is available only by entering
 `/admin`; no public navigation links to it. The example environment defaults to
 `APP_MODE=development`, so local admin requests do not require a password.
+The admin page can configure the OpenAI model, schedule extraction enablement
+and keywords, Featured video, and manual schedule records.
 
 For production, set `APP_MODE=production` and an `ADMIN_PASSWORD` containing at
 least 12 characters in the ignored `.env` file, then run:
@@ -50,8 +52,9 @@ temporary credential in shell history, source code, or the database.
 
 `OPENAI_API_KEY` is optional. With no key, the schedule-extraction stage reports
 a safe skip. Once configured, it is read only by the server-side synchronization
-process. The admin page changes `OPENAI_MODEL`'s effective database setting but
-does not accept, display, or persist the key.
+process. The admin page changes the effective model and candidate settings but
+does not accept, display, or persist the key. X synchronization reads both
+handles in `X_HANDLES` and keeps a separate cursor for each account.
 
 ## Checks
 

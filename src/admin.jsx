@@ -318,7 +318,11 @@ export function AdminApp() {
   const [session, setSession] = useState(null)
   const [config, setConfig] = useState(null)
   const [events, setEvents] = useState([])
+  const [videos, setVideos] = useState([])
   const [model, setModel] = useState("")
+  const [scheduleEnabled, setScheduleEnabled] = useState(true)
+  const [scheduleKeywords, setScheduleKeywords] = useState("")
+  const [featuredVideoId, setFeaturedVideoId] = useState("")
   const [editor, setEditor] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [notice, setNotice] = useState("")
@@ -344,13 +348,18 @@ export function AdminApp() {
   }, [])
 
   const loadData = useCallback(async () => {
-    const [configPayload, eventsPayload] = await Promise.all([
+    const [configPayload, eventsPayload, videosPayload] = await Promise.all([
       request("/config"),
       request("/events"),
+      request("/videos"),
     ])
     setConfig(configPayload)
     setModel(configPayload.llmModel)
+    setScheduleEnabled(configPayload.scheduleExtractionEnabled !== false)
+    setScheduleKeywords((configPayload.scheduleKeywords || []).join("\n"))
+    setFeaturedVideoId(configPayload.featuredVideoId || "")
     setEvents(eventsPayload.events)
+    setVideos(videosPayload.videos || [])
   }, [])
 
   useEffect(() => {
@@ -384,21 +393,30 @@ export function AdminApp() {
       setSession((current) => ({ ...current, authenticated: false }))
       setConfig(null)
       setEvents([])
+      setVideos([])
     } catch (logoutError) {
       setError(logoutError.message)
     }
   }
 
-  const saveModel = async (event) => {
+  const saveConfig = async (event) => {
     event.preventDefault()
     setError("")
     try {
       const payload = await request("/config", {
         method: "PUT",
-        body: JSON.stringify({ llmModel: model }),
+        body: JSON.stringify({
+          llmModel: model,
+          scheduleExtractionEnabled: scheduleEnabled,
+          scheduleKeywords,
+          featuredVideoId: featuredVideoId || null,
+        }),
       })
       setConfig(payload)
-      setNotice("模型设置已保存")
+      setScheduleEnabled(payload.scheduleExtractionEnabled !== false)
+      setScheduleKeywords((payload.scheduleKeywords || []).join("\n"))
+      setFeaturedVideoId(payload.featuredVideoId || "")
+      setNotice("设置已保存")
     } catch (saveError) {
       setError(saveError.message)
     }
@@ -514,11 +532,11 @@ export function AdminApp() {
             </span>
             <div>
               <p className="admin-kicker">OPENAI</p>
-              <h2 id="llm-settings-title">日程识别模型</h2>
+              <h2 id="llm-settings-title">内容设置</h2>
             </div>
           </div>
-          <form className="admin-model-form" onSubmit={saveModel}>
-            <label>
+          <form className="admin-config-form" onSubmit={saveConfig}>
+            <label className="admin-field admin-field-wide">
               <span>模型名称</span>
               <input
                 value={model}
@@ -526,9 +544,42 @@ export function AdminApp() {
                 required
               />
             </label>
-            <Button type="submit">
-              <Save /> 保存模型
-            </Button>
+            <label className="admin-field admin-field-wide admin-toggle-field">
+              <span>启用日程自动识别</span>
+              <input
+                type="checkbox"
+                checked={scheduleEnabled}
+                onChange={(event) => setScheduleEnabled(event.target.checked)}
+              />
+            </label>
+            <label className="admin-field admin-field-wide">
+              <span>日程关键词</span>
+              <textarea
+                value={scheduleKeywords}
+                onChange={(event) => setScheduleKeywords(event.target.value)}
+                rows={3}
+                placeholder="每行一个关键词"
+              />
+            </label>
+            <label className="admin-field admin-field-wide">
+              <span>Featured video</span>
+              <select
+                value={featuredVideoId}
+                onChange={(event) => setFeaturedVideoId(event.target.value)}
+              >
+                <option value="">不设置</option>
+                {videos.map((video) => (
+                  <option value={video.id} key={video.id}>
+                    {video.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="admin-form-actions admin-field-wide">
+              <Button type="submit">
+                <Save /> 保存设置
+              </Button>
+            </div>
           </form>
           <div
             className={`admin-key-status ${config?.openAiKeyConfigured ? "is-ready" : ""}`}

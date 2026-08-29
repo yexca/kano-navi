@@ -29,32 +29,32 @@ Read it first, then use the focused documents in `docs/` for more detail.
 
 ## Code Map
 
-| Path                           | Responsibility                                              |
-| ------------------------------ | ----------------------------------------------------------- |
-| `src/main.jsx`                 | Dashboard page, interactions, and API data mapping          |
-| `src/admin.jsx`                | Hidden `/admin` configuration and schedule editor           |
-| `src/index.css`                | Global design tokens, layout, and responsive styling        |
-| `src/admin.css`                | Admin-specific responsive layout                            |
-| `src/components/ui/`           | Reusable shadcn/ui-style primitives                         |
-| `server/database.js`           | SQLite schema, seeding, upserts, and queries                |
-| `server/media-cache.js`        | Runtime media paths, identities, and atomic-write helpers   |
-| `server/media-downloader.js`   | Bounded X/YouTube image downloader                          |
-| `server/schedule-extractor.js` | OpenAI structured schedule extraction                       |
-| `server/admin-api.js`          | Authenticated model configuration and event CRUD            |
-| `server/admin-auth.js`         | Development bypass and production session authentication    |
-| `server/app.js`                | Testable Express application, APIs, and guarded media route |
-| `server/index.js`              | Runtime database and HTTP listener assembly                 |
-| `server/seed-data.js`          | Initial public snapshot and resource directory              |
-| `scripts/sync.mjs`             | Server-side X and YouTube synchronization adapters          |
-| `scripts/seed.mjs`             | Idempotent initial snapshot seeding                         |
-| `public/assets/`               | Tracked fixed branding fallbacks                            |
-| `data/`                        | Local runtime SQLite and ignored media cache files          |
-| `docs/`                        | Documentation for Agents, developers, and maintainers       |
+| Path                           | Responsibility                                                  |
+| ------------------------------ | --------------------------------------------------------------- |
+| `src/main.jsx`                 | Dashboard page, interactions, and API data mapping              |
+| `src/admin.jsx`                | Hidden `/admin` configuration and schedule editor               |
+| `src/index.css`                | Global design tokens, layout, and responsive styling            |
+| `src/admin.css`                | Admin-specific responsive layout                                |
+| `src/components/ui/`           | Reusable shadcn/ui-style primitives                             |
+| `server/database.js`           | SQLite schema, seeding, upserts, and queries                    |
+| `server/media-cache.js`        | Runtime media paths, identities, and atomic-write helpers       |
+| `server/media-downloader.js`   | Bounded X/YouTube image downloader                              |
+| `server/schedule-extractor.js` | OpenAI structured schedule extraction                           |
+| `server/admin-api.js`          | Authenticated model/schedule/video configuration and event CRUD |
+| `server/admin-auth.js`         | Development bypass and production session authentication        |
+| `server/app.js`                | Testable Express application, APIs, and guarded media route     |
+| `server/index.js`              | Runtime database and HTTP listener assembly                     |
+| `server/seed-data.js`          | Initial public snapshot and resource directory                  |
+| `scripts/sync.mjs`             | Server-side X and YouTube synchronization adapters              |
+| `scripts/seed.mjs`             | Idempotent initial snapshot seeding                             |
+| `public/assets/`               | Tracked fixed branding fallbacks                                |
+| `data/`                        | Local runtime SQLite and ignored media cache files              |
+| `docs/`                        | Documentation for Agents, developers, and maintainers           |
 
 ## Data Contract
 
 - `GET /api/health` returns service status, the database path relative to the project, and the latest synchronization summary.
-- `GET /api/dashboard?days=3` returns the profile, posts in the requested window, all events, videos, the latest focus item, the timeline, resource links, image assets, media-cache status, and synchronization metadata. The server clamps `days` to 1 through 30.
+- `GET /api/dashboard?days=3` returns the profile, aggregated posts in the requested window, all events, videos, the manually selected focus item, the timeline, resource links, image assets, media-cache status, and synchronization metadata (including configured X accounts and the Featured video ID). The server clamps `days` to 1 through 30.
 - `GET /media/<opaque-id>` serves a cached file only when its database row is `ready` and its resolved path remains below `data/cache/media/`; invalid or unready IDs return `404`.
 - `/api/admin/*` is password-free only when `APP_MODE=development`. Production
   requires `ADMIN_PASSWORD` with at least 12 characters and uses an HttpOnly
@@ -62,6 +62,8 @@ Read it first, then use the focused documents in `docs/` for more detail.
 - Timestamps are stored as parseable ISO 8601 strings. The display layer formats them in `Asia/Tokyo`.
 - Manual event edits, confirmations, and deletions set a durable lock. Source
   synchronization and OpenAI extraction must not overwrite or resurrect them.
+- X posts carry `accountHandle` so the public feed can identify the source
+  account without exposing the internal classification used by extraction.
 - The current tables are created by the schema constant in `server/database.js`. When changing the schema, update the documentation, seed data, and verification steps together. Do not silently drop columns or clear snapshots.
 
 ## Common Commands

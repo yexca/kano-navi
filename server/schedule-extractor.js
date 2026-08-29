@@ -4,6 +4,7 @@ import fs from "node:fs"
 import {
   getAppSetting,
   getMediaAsset,
+  getScheduleExtractionConfig,
   getScheduleExtraction,
   listMediaLinks,
   listScheduleCandidatePosts,
@@ -347,7 +348,10 @@ export async function extractSchedulePost(
     contentFingerprint,
     extractorVersion: scheduleExtractorVersion,
   })
-  if (existing?.status === "success") {
+  if (
+    existing?.status === "success" &&
+    String(existing.model || "") === String(model || "")
+  ) {
     return { status: "cached", extractionId: existing.id }
   }
 
@@ -399,10 +403,29 @@ export async function extractSchedulePost(
 }
 
 export async function extractPendingSchedules(database, options = {}) {
+  const scheduleConfig = getScheduleExtractionConfig(database)
+  if (!scheduleConfig.enabled) {
+    return {
+      attempted: 0,
+      success: 0,
+      cached: 0,
+      skipped: 0,
+      failed: 0,
+      disabled: true,
+    }
+  }
   const posts = listScheduleCandidatePosts(database, {
     limit: options.limit || 20,
+    keywords: options.keywords || scheduleConfig.keywords,
   })
-  const summary = { attempted: 0, success: 0, cached: 0, skipped: 0, failed: 0 }
+  const summary = {
+    attempted: 0,
+    success: 0,
+    cached: 0,
+    skipped: 0,
+    failed: 0,
+    keywords: scheduleConfig.keywords,
+  }
   for (const post of posts) {
     const result = await extractSchedulePost(database, post, options)
     summary.attempted += 1

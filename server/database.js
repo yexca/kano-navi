@@ -44,6 +44,7 @@ const schema = `
   CREATE TABLE IF NOT EXISTS posts (
     id TEXT PRIMARY KEY,
     source TEXT NOT NULL,
+    account_handle TEXT,
     type TEXT NOT NULL DEFAULT 'daily',
     label TEXT,
     text TEXT NOT NULL,
@@ -248,6 +249,15 @@ const schema = `
 `
 
 const JAPAN_TIME_ZONE = "Asia/Tokyo"
+export const DEFAULT_X_HANDLES = ["kano_2525", "_Kanotic"]
+export const DEFAULT_SCHEDULE_KEYWORDS = [
+  "schedule",
+  "スケジュール",
+  "配信予定",
+  "週間予定",
+  "今週の予定",
+  "予定",
+]
 const japanDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: JAPAN_TIME_ZONE,
   year: "numeric",
@@ -283,6 +293,66 @@ function youtubeIdFromUrl(value) {
     return null
   }
   return null
+}
+
+function normalizeXHandle(value) {
+  const handle = String(value || "")
+    .trim()
+    .replace(/^@/u, "")
+  return /^[A-Za-z0-9_]{1,30}$/u.test(handle) ? handle : null
+}
+
+function xHandleFromUrl(value) {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    if (
+      !/(?:^|\.)x\.com$/iu.test(url.hostname) &&
+      !/(?:^|\.)twitter\.com$/iu.test(url.hostname)
+    ) {
+      return null
+    }
+    const firstSegment = decodeURIComponent(
+      url.pathname.split("/").filter(Boolean)[0] || "",
+    )
+    if (
+      ["i", "intent", "share", "search", "hashtag"].includes(
+        firstSegment.toLowerCase(),
+      )
+    )
+      return null
+    return normalizeXHandle(firstSegment)
+  } catch {
+    return null
+  }
+}
+
+function parseListSetting(value, fallback, { fallbackOnEmpty = true } = {}) {
+  if (value == null || value === "") return fallbackOnEmpty ? [...fallback] : []
+  let values = value
+  try {
+    const parsed = JSON.parse(String(value))
+    if (Array.isArray(parsed)) values = parsed
+  } catch {
+    values = String(value).split(/[\n,，]+/u)
+  }
+  const normalized = [
+    ...new Set(values.map((item) => String(item).trim()).filter(Boolean)),
+  ]
+  return normalized.length || !fallbackOnEmpty ? normalized : [...fallback]
+}
+
+function configuredXHandles(database) {
+  const stored = database
+    .prepare("SELECT value FROM app_settings WHERE key = 'x_accounts'")
+    .get()?.value
+  const environment = process.env.X_HANDLES || process.env.X_HANDLE
+  const candidates = parseListSetting(environment || stored, DEFAULT_X_HANDLES)
+    .map(normalizeXHandle)
+    .filter(Boolean)
+  return [...new Set(candidates.map((handle) => handle.toLowerCase()))].map(
+    (lower) => candidates.find((handle) => handle.toLowerCase() === lower),
+  )
 }
 
 function tableColumns(database, table) {
@@ -428,6 +498,31 @@ function migrateSchema(database) {
     )
     for (const row of rows) update.run(youtubeIdFromUrl(row.url), row.id)
   }
+
+  const postColumns = tableColumns(database, "posts")
+  if (!postColumns.has("account_handle")) {
+    database.exec("ALTER TABLE posts ADD COLUMN account_handle TEXT")
+  }
+  const legacyPosts = database
+    .prepare(
+      "SELECT id, url FROM posts WHERE account_handle IS NULL OR account_handle = ''",
+    )
+    .all()
+  if (legacyPosts.length) {
+    const updatePost = database.prepare(
+      "UPDATE posts SET account_handle = ? WHERE id = ?",
+    )
+    const migratePosts = database.transaction(() => {
+      for (const post of legacyPosts) {
+        const handle = xHandleFromUrl(post.url)
+        if (handle) updatePost.run(handle, post.id)
+      }
+    })
+    migratePosts()
+  }
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS posts_account_handle_idx ON posts (account_handle, published_at DESC)",
+  )
 }
 
 function json(value) {
@@ -600,21 +695,30 @@ function insertProfile(database, profile, overwrite) {
 
 function insertPost(database, post, overwrite) {
   const sql = overwrite
-    ? `INSERT INTO posts (id, source, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, raw_json)
-       VALUES (@id, @source, @type, @label, @text, @published_at, @url, @likes, @reposts, @replies, @media_url, @media_alt, @raw_json)
-       ON CONFLICT(id) DO UPDATE SET source=excluded.source, type=excluded.type, label=excluded.label, text=excluded.text,
+    ? `INSERT INTO posts (id, source, account_handle, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, raw_json)
+       VALUES (@id, @source, @account_handle, @type, @label, @text, @published_at, @url, @likes, @reposts, @replies, @media_url, @media_alt, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET source=excluded.source, account_handle=excluded.account_handle, type=excluded.type, label=excluded.label, text=excluded.text,
        published_at=excluded.published_at, url=excluded.url, likes=excluded.likes, reposts=excluded.reposts,
        replies=excluded.replies, media_url=excluded.media_url, media_alt=excluded.media_alt, raw_json=excluded.raw_json`
-    : `INSERT OR IGNORE INTO posts (id, source, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, raw_json)
-       VALUES (@id, @source, @type, @label, @text, @published_at, @url, @likes, @reposts, @replies, @media_url, @media_alt, @raw_json)`
+    : `INSERT OR IGNORE INTO posts (id, source, account_handle, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, raw_json)
+       VALUES (@id, @source, @account_handle, @type, @label, @text, @published_at, @url, @likes, @reposts, @replies, @media_url, @media_alt, @raw_json)`
+  const source = post.source || "x"
+  const url = post.url || ""
+  const accountHandle =
+    source === "x"
+      ? normalizeXHandle(
+          post.account_handle ?? post.accountHandle ?? xHandleFromUrl(url),
+        )
+      : null
   database.prepare(sql).run({
     id: String(post.id),
-    source: post.source || "x",
+    source,
+    account_handle: nullable(accountHandle),
     type: post.type || "daily",
     label: nullable(post.label),
     text: post.text || "",
     published_at: post.published_at || new Date().toISOString(),
-    url: post.url || "",
+    url,
     likes: numberOrZero(post.likes),
     reposts: numberOrZero(post.reposts),
     replies: numberOrZero(post.replies),
@@ -1245,6 +1349,37 @@ export function seedDatabase(
   })
   seed()
   registerMediaCandidates(database, collectSeedMediaCandidates(data))
+  if (getAppSetting(database, "x_accounts", null) == null) {
+    const seedHandles = [
+      xHandleFromUrl(data?.profile?.x_url),
+      ...DEFAULT_X_HANDLES,
+    ].filter(Boolean)
+    setAppSetting(
+      database,
+      "x_accounts",
+      JSON.stringify([...new Set(seedHandles)]),
+    )
+  }
+  if (getAppSetting(database, "schedule_extraction_enabled", null) == null) {
+    const enabled = settingBoolean(
+      process.env.SCHEDULE_EXTRACTION_ENABLED ?? "1",
+      true,
+    )
+    setAppSetting(database, "schedule_extraction_enabled", enabled ? "1" : "0")
+  }
+  if (getAppSetting(database, "schedule_keywords", null) == null) {
+    const keywords = normalizedScheduleKeywords(
+      process.env.SCHEDULE_KEYWORDS ?? DEFAULT_SCHEDULE_KEYWORDS,
+    )
+    setAppSetting(database, "schedule_keywords", JSON.stringify(keywords))
+  }
+  if (getAppSetting(database, "featured_video_id", null) == null) {
+    const seedFeatured =
+      data?.focus?.video_id ??
+      data?.focus?.videoId ??
+      youtubeIdFromUrl(data?.focus?.url)
+    if (seedFeatured) setAppSetting(database, "featured_video_id", seedFeatured)
+  }
 }
 
 export function initializeDatabase({
@@ -1495,6 +1630,102 @@ export function setAppSetting(database, key, value) {
   return { key: String(key), value: String(value), updatedAt: timestamp }
 }
 
+function settingBoolean(value, fallback = true) {
+  if (value == null || value === "") return fallback
+  if (typeof value === "boolean") return value
+  const normalized = String(value).trim().toLowerCase()
+  if (["1", "true", "yes", "on"].includes(normalized)) return true
+  if (["0", "false", "no", "off"].includes(normalized)) return false
+  return fallback
+}
+
+function normalizedScheduleKeywords(value) {
+  const values = parseListSetting(value, DEFAULT_SCHEDULE_KEYWORDS, {
+    fallbackOnEmpty: false,
+  })
+  return [
+    ...new Set(
+      values
+        .map((keyword) => String(keyword).trim())
+        .filter((keyword) => keyword.length > 0 && keyword.length <= 80),
+    ),
+  ]
+}
+
+export function getScheduleExtractionConfig(database) {
+  const enabledSetting = getAppSetting(
+    database,
+    "schedule_extraction_enabled",
+    process.env.SCHEDULE_EXTRACTION_ENABLED ?? "1",
+  )
+  const keywordsSetting = getAppSetting(
+    database,
+    "schedule_keywords",
+    process.env.SCHEDULE_KEYWORDS ?? DEFAULT_SCHEDULE_KEYWORDS,
+  )
+  return {
+    enabled: settingBoolean(enabledSetting, true),
+    keywords: normalizedScheduleKeywords(keywordsSetting),
+  }
+}
+
+export function getConfiguredXHandles(database) {
+  return configuredXHandles(database)
+}
+
+export function getFeaturedVideoId(database) {
+  const configured = database
+    .prepare("SELECT value FROM app_settings WHERE key = 'featured_video_id'")
+    .get()?.value
+  if (configured !== undefined) {
+    const configuredId = String(configured || "") || null
+    return configuredId && getVideoRecord(database, configuredId)
+      ? configuredId
+      : null
+  }
+  const legacyId =
+    database
+      .prepare("SELECT video_id AS videoId FROM focus ORDER BY id LIMIT 1")
+      .get()?.videoId || null
+  return legacyId && getVideoRecord(database, legacyId) ? legacyId : null
+}
+
+export function listAdminVideos(database, { limit = 100 } = {}) {
+  const boundedLimit = Math.min(200, Math.max(1, Number(limit) || 100))
+  const videos = database
+    .prepare(
+      `SELECT id, source, title, published_at AS publishedAt,
+       scheduled_at AS scheduledAt, url, thumbnail_url AS thumbnailUrl,
+       kind, is_upcoming AS isUpcoming
+       FROM videos
+       ORDER BY COALESCE(scheduled_at, published_at) DESC, id ASC
+       LIMIT ?`,
+    )
+    .all(boundedLimit)
+  const featuredVideoId = getFeaturedVideoId(database)
+  if (
+    featuredVideoId &&
+    !videos.some((video) => video.id === featuredVideoId)
+  ) {
+    const featuredVideo = getVideoRecord(database, featuredVideoId)
+    if (featuredVideo) videos.push(featuredVideo)
+  }
+  return videos.map((video) => ({
+    ...video,
+    isUpcoming: Boolean(video.isUpcoming),
+  }))
+}
+
+export function setFeaturedVideoId(database, videoId) {
+  const normalizedValue = String(videoId ?? "").trim()
+  const normalized = nullable(normalizedValue)
+  if (normalized && !getVideoRecord(database, normalized)) {
+    throw new Error("featured video does not exist")
+  }
+  setAppSetting(database, "featured_video_id", normalized || "")
+  return normalized
+}
+
 export function getSyncState(database, source, accountId) {
   const row = database
     .prepare(
@@ -1617,24 +1848,38 @@ export function getKnownPostIds(database, ids = []) {
   )
 }
 
-export function listScheduleCandidatePosts(database, { limit = 20 } = {}) {
+export function listScheduleCandidatePosts(
+  database,
+  { limit = 20, keywords = null } = {},
+) {
   const boundedLimit = Math.min(100, Math.max(1, Number(limit) || 20))
+  const configuredKeywords = normalizedScheduleKeywords(
+    keywords == null
+      ? getScheduleExtractionConfig(database).keywords
+      : keywords,
+  )
+  const loweredKeywords = configuredKeywords.map((keyword) =>
+    keyword.toLowerCase(),
+  )
   return database
     .prepare(
       `SELECT id, source, label, text, published_at AS publishedAt, url,
+       account_handle AS accountHandle,
        media_url AS mediaUrl, media_alt AS mediaAlt, raw_json AS rawJson
        FROM posts
-       WHERE source='x' AND type='notice' AND (
-         label LIKE 'SCHEDULE%' OR lower(text) LIKE '%schedule%'
-         OR text LIKE '%スケジュール%' OR text LIKE '%予定%'
-       )
-       ORDER BY published_at DESC LIMIT ?`,
+       WHERE source='x'
+       ORDER BY published_at DESC`,
     )
-    .all(boundedLimit)
+    .all()
     .map(({ rawJson, ...post }) => ({
       ...post,
       raw: parseJson(rawJson),
     }))
+    .filter((post) => {
+      const haystack = String(post.text || "").toLocaleLowerCase()
+      return loweredKeywords.some((keyword) => haystack.includes(keyword))
+    })
+    .slice(0, boundedLimit)
 }
 
 export function getVideoRecord(database, id) {
@@ -1736,7 +1981,9 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
   }
   const posts = database
     .prepare(
-      `SELECT id, source, type, label, text, published_at AS publishedAt, url, likes, reposts, replies, media_url AS mediaUrl, media_alt AS mediaAlt
+      `SELECT id, source, account_handle AS accountHandle, type, label, text,
+       published_at AS publishedAt, url, likes, reposts, replies,
+       media_url AS mediaUrl, media_alt AS mediaAlt
     FROM posts ORDER BY published_at DESC`,
     )
     .all()
@@ -1745,6 +1992,9 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
       return Number.isNaN(timestamp) || timestamp >= windowStart
     })
     .map((post) => {
+      const accountHandle =
+        post.accountHandle ||
+        (post.source === "x" ? xHandleFromUrl(post.url) : null)
       const fallbackMedia = resolveMediaReference(
         database,
         post.mediaUrl,
@@ -1786,6 +2036,11 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
       const primaryMedia = media[0] || fallbackMedia
       return {
         ...post,
+        accountHandle,
+        accountUrl:
+          accountHandle && post.source === "x"
+            ? `https://x.com/${accountHandle}`
+            : null,
         media,
         mediaUrl: primaryMedia.url ?? primaryMedia.publicUrl ?? null,
         mediaId: primaryMedia.id,
@@ -1814,6 +2069,7 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
           : Boolean(event.startsOn && todayKey && event.startsOn >= todayKey),
     }))
 
+  const featuredVideoId = getFeaturedVideoId(database)
   const videos = database
     .prepare(
       `SELECT id, source, title, published_at AS publishedAt, scheduled_at AS scheduledAt, url,
@@ -1821,6 +2077,14 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
     ORDER BY COALESCE(scheduled_at, published_at) DESC LIMIT 30`,
     )
     .all()
+  if (
+    featuredVideoId &&
+    !videos.some((video) => video.id === featuredVideoId)
+  ) {
+    const featuredRow = getVideoRecord(database, featuredVideoId)
+    if (featuredRow) videos.push(featuredRow)
+  }
+  const mappedVideos = videos
     .map((video) => ({
       ...video,
       isUpcoming: video.scheduledAt
@@ -1939,7 +2203,7 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
     profile?.updatedAt,
     focusRow?.updatedAt,
     ...posts.map((post) => post.publishedAt),
-    ...videos.map((video) => video.publishedAt),
+    ...mappedVideos.map((video) => video.publishedAt),
   ]
     .map((value) => Date.parse(value || ""))
     .filter((value) => !Number.isNaN(value))
@@ -1953,7 +2217,7 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
     profile,
     posts,
     events,
-    videos,
+    videos: mappedVideos,
     focus,
     timeline,
     resources,
@@ -1964,6 +2228,8 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
       postWindowDays: days,
       generatedAt: now.toISOString(),
       mediaCache,
+      featuredVideoId,
+      xAccounts: configuredXHandles(database),
     },
   }
 }

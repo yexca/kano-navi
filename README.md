@@ -52,9 +52,10 @@ Dashboard endpoint:
 GET /api/dashboard?days=3
 ```
 
-The response contains the profile, recent X posts, all events, YouTube videos
-and scheduled streams, the latest focus item, timeline, resource links, schedule
-images, and synchronization metadata. `days` can be set from 1 to 30.
+The response contains the profile, recent posts aggregated from both configured
+X accounts, all events, YouTube videos and scheduled streams, the manually
+selected Featured item, timeline, resource links, schedule images, and
+synchronization metadata. `days` can be set from 1 to 30.
 
 Remote images are registered in `media_assets` and linked through
 `media_links`. Ready files are exposed through a versioned
@@ -76,22 +77,24 @@ npm run sync
 
 The server-side synchronization script:
 
-- bootstraps at most seven days of X posts, then requests only unknown status
-  IDs plus a small configurable refresh budget;
+- bootstraps at most seven days of posts for each configured X account, then
+  requests only unknown status IDs plus a small configurable refresh budget;
 - stores the latest six RSS videos on the first YouTube run, then only newer
   entries, while continuing to recheck active reservations;
 - downloads allowlisted X images and YouTube thumbnails into the runtime cache;
-- sends matching schedule posts and cached images to the OpenAI Responses API
-  for strict structured extraction when `OPENAI_API_KEY` is configured.
+- sends posts matching the separately configured schedule keywords and cached
+  images to the OpenAI Responses API for strict structured extraction when
+  `OPENAI_API_KEY` is configured.
 
 Failures do not clear existing data. They are recorded in `sync_runs` together
 with the failure reason. Invalid model output also leaves the previous schedule
 intact. The API key is read only from the process environment; the admin page
-stores only the selected model name. You can select a source or adjust the
+stores only non-secret settings, including the model, schedule keywords, and
+Featured video. You can select a source or adjust the
 timeout with:
 
 ```bash
-X_HANDLE=kano_2525 YOUTUBE_CHANNEL_ID=UCShXNLMXCfstmWKH_q86B8w npm run sync
+X_HANDLES=kano_2525,_Kanotic YOUTUBE_CHANNEL_ID=UCShXNLMXCfstmWKH_q86B8w npm run sync
 SKIP_X=1 npm run sync
 SKIP_YOUTUBE=1 npm run sync
 ```

@@ -31,7 +31,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Tooltip,
   TooltipContent,
@@ -63,7 +62,13 @@ const emptyDashboard = {
   timeline: [],
   resources: [],
   assets: [],
-  meta: { fetchedAt: null, lastSync: null, postWindowDays },
+  meta: {
+    fetchedAt: null,
+    lastSync: null,
+    postWindowDays,
+    xAccounts: ["kano_2525", "_Kanotic"],
+    featuredVideoId: null,
+  },
 }
 
 const intlLocales = {
@@ -336,9 +341,18 @@ function PostItem({ post, profile, locale, t }) {
       </div>
       <div>
         <div className="post-meta">
-          <span className={`post-type post-type-${post.type || "daily"}`}>
-            {post.label || t("feed.defaultLabel")}
-          </span>
+          {post.accountHandle ? (
+            <a
+              className="post-source"
+              href={post.accountUrl || `https://x.com/${post.accountHandle}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              @{post.accountHandle}
+            </a>
+          ) : (
+            <span className="post-source">X</span>
+          )}
           <time className="post-time" dateTime={post.publishedAt}>
             {formatDateTime(post.publishedAt, locale)}
           </time>
@@ -423,10 +437,12 @@ function VideoItem({ video, locale }) {
   )
 }
 
-function FeaturedVideo({ video, focus, locale, t }) {
+function FeaturedVideo({ video, focus = {}, locale, t }) {
   const isUpcoming = Boolean(video.isUpcoming)
-  const thumbnailUrl = focus.imageUrl || video.thumbnailUrl
-  const title = focus.title || video.title
+  const usesFocusCopy = focus.videoId === video.id
+  const thumbnailUrl =
+    usesFocusCopy && focus.imageUrl ? focus.imageUrl : video.thumbnailUrl
+  const title = usesFocusCopy && focus.title ? focus.title : video.title
 
   return (
     <article className="featured-video">
@@ -458,7 +474,7 @@ function FeaturedVideo({ video, focus, locale, t }) {
           <span>{video.kind || (isUpcoming ? "UPCOMING LIVE" : "VIDEO")}</span>
         </div>
         <h3>{title}</h3>
-        {focus.description ? <p>{focus.description}</p> : null}
+        {usesFocusCopy && focus.description ? <p>{focus.description}</p> : null}
         <div className="featured-video-actions">
           <Button asChild className="primary-button">
             <a href={video.url} target="_blank" rel="noreferrer">
@@ -467,13 +483,15 @@ function FeaturedVideo({ video, focus, locale, t }) {
             </a>
           </Button>
           <time>
-            {focus.dateLabel ||
+            {(usesFocusCopy && focus.dateLabel) ||
               formatDateTime(
-                video.scheduledAt || video.publishedAt || focus.updatedAt,
+                video.scheduledAt ||
+                  video.publishedAt ||
+                  (usesFocusCopy ? focus.updatedAt : null),
                 locale,
               )}
           </time>
-          {focus.sourceUrl ? (
+          {usesFocusCopy && focus.sourceUrl ? (
             <a
               className="quiet-link"
               href={focus.sourceUrl}
@@ -534,7 +552,6 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState(false)
-  const [activeFilter, setActiveFilter] = useState("all")
   const [selectedDate, setSelectedDate] = useState(japanToday)
   const [isDark, setIsDark] = useState(() => {
     const saved = window.localStorage.getItem("kano-theme")
@@ -607,18 +624,23 @@ function App() {
     avatarUrl: profileData.avatarUrl || fallbackProfile.avatarUrl,
     bannerUrl: profileData.bannerUrl || fallbackProfile.bannerUrl,
   }
+  const xAccounts = dashboard.meta?.xAccounts?.length
+    ? dashboard.meta.xAccounts
+    : ["kano_2525", "_Kanotic"]
   const posts = dashboard.posts || []
   const events = dashboard.events || []
   const videos = dashboard.videos || []
   const resources = dashboard.resources || []
   const timeline = dashboard.timeline || []
   const focus = dashboard.focus
-  const featuredVideo = focus
-    ? videos.find(
-        (video) =>
-          (focus.videoId && video.id === focus.videoId) ||
-          (focus.url && video.url === focus.url),
-      ) || null
+  const featuredVideoId = Object.prototype.hasOwnProperty.call(
+    dashboard.meta || {},
+    "featuredVideoId",
+  )
+    ? dashboard.meta.featuredVideoId
+    : focus?.videoId
+  const featuredVideo = featuredVideoId
+    ? videos.find((video) => video.id === featuredVideoId) || null
     : null
   const recentVideos = featuredVideo
     ? videos.filter((video) => video.id !== featuredVideo.id)
@@ -636,19 +658,6 @@ function App() {
         : t("sync.needsReview")
       : t("sync.snapshot")
   const syncTime = formatSyncTime(dashboard.meta, locale, t)
-
-  const filterCounts = useMemo(
-    () => ({
-      all: posts.length,
-      notice: posts.filter((post) => post.type === "notice").length,
-      daily: posts.filter((post) => post.type === "daily").length,
-    }),
-    [posts],
-  )
-  const visiblePosts =
-    activeFilter === "all"
-      ? posts
-      : posts.filter((post) => post.type === activeFilter)
 
   const selectedEvents = useMemo(
     () =>
@@ -844,37 +853,26 @@ function App() {
                   <p className="panel-index">01 / X FEED</p>
                   <h2>{t("feed.title")}</h2>
                 </div>
-                <a
-                  className="header-link"
-                  href={profile.xUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  @kano_2525 <ArrowUpRight className="inline-icon" />
-                </a>
+                <span className="header-link-group">
+                  {xAccounts.map((handle) => (
+                    <a
+                      className="header-link"
+                      href={`https://x.com/${handle}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      key={handle}
+                    >
+                      @{handle} <ArrowUpRight className="inline-icon" />
+                    </a>
+                  ))}
+                </span>
               </div>
-              <Tabs value={activeFilter} onValueChange={setActiveFilter}>
-                <TabsList
-                  className="filter-tabs"
-                  aria-label={t("feed.filterLabel")}
-                >
-                  <TabsTrigger className="filter-tab" value="all">
-                    {t("feed.all")} <span>{pad(filterCounts.all)}</span>
-                  </TabsTrigger>
-                  <TabsTrigger className="filter-tab" value="notice">
-                    {t("feed.notices")} <span>{pad(filterCounts.notice)}</span>
-                  </TabsTrigger>
-                  <TabsTrigger className="filter-tab" value="daily">
-                    {t("feed.daily")} <span>{pad(filterCounts.daily)}</span>
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
               {isLoading ? (
                 <LoadingPanel t={t} />
               ) : (
                 <div className="feed-list">
-                  {visiblePosts.length ? (
-                    visiblePosts.map((post) => (
+                  {posts.length ? (
+                    posts.map((post) => (
                       <PostItem
                         key={post.id}
                         post={post}
@@ -1050,7 +1048,7 @@ function App() {
                   {featuredVideo ? (
                     <FeaturedVideo
                       video={featuredVideo}
-                      focus={focus}
+                      focus={focus || {}}
                       locale={locale}
                       t={t}
                     />

@@ -8,7 +8,7 @@ directory, schema, and missing seed records. The current tables are:
 | Table                  | Purpose                                                                 |
 | ---------------------- | ----------------------------------------------------------------------- |
 | `profiles`             | Name, bio, avatar, banner, and official entry points                    |
-| `posts`                | X posts, publication time, engagement counts, and media                 |
+| `posts`                | X posts, account source, publication time, engagement counts, and media |
 | `events`               | Unified schedules, provenance, confidence, manual locks, and tombstones |
 | `event_sources`        | Source post/reservation identities attached to each event               |
 | `videos`               | Published YouTube videos and scheduled streams                          |
@@ -20,7 +20,7 @@ directory, schema, and missing seed records. The current tables are:
 | `media_links`          | Links from cached media to posts, videos, profiles, and focus items     |
 | `sync_runs`            | Status, counts, and error summaries for each synchronization            |
 | `sync_state`           | Durable per-account X and YouTube cursors                               |
-| `app_settings`         | Non-secret application settings such as the selected model name         |
+| `app_settings`         | Non-secret model, schedule-extractor, X-account, and Featured settings  |
 | `schedule_extractions` | Versioned OpenAI inputs, outcomes, and structured result metadata       |
 
 The API maps snake_case columns to camelCase and removes `raw_json`. The
@@ -50,13 +50,16 @@ remain automatic. The migration does not clear snapshots.
 
 ### X
 
-The script reads the public profile named by `X_HANDLE` (default `kano_2525`),
-extracts status IDs, and decodes their Snowflake timestamps before making detail
-requests. With no cursor, IDs older than `X_BOOTSTRAP_DAYS` (seven by default)
-are skipped. Later runs prioritize unknown IDs and may refresh only a small
-`X_REFRESH_KNOWN` budget. Discovery and detail-request limits cap the work per
-run. The page displays posts from the most recent `days` window, three days by
-default; older records may remain in SQLite.
+The script reads each public profile named by `X_HANDLES` (default
+`kano_2525,_Kanotic`), extracts status IDs, and decodes their Snowflake
+timestamps before making detail requests. Each account has its own cursor in
+`sync_state`; with no cursor, IDs older than `X_BOOTSTRAP_DAYS` (seven by
+default) are skipped. Later runs prioritize unknown IDs and may refresh only a
+small `X_REFRESH_KNOWN` budget. Discovery and detail-request limits cap the
+work per run; `X_MAX_STATUS_REQUESTS` is the total detail-request budget shared
+by all configured accounts. Successful posts are stored with `account_handle`
+and returned as one time-ordered feed. `X_HANDLE` remains a single-account
+compatibility fallback.
 
 Each discovered image URL is registered and linked to its post. A bounded media
 stage later in the same command downloads pending files from `pbs.twimg.com`.
@@ -77,8 +80,10 @@ hosts (`i1.ytimg.com` through `i4.ytimg.com`).
 
 ### OpenAI Schedule Extraction
 
-X posts whose normalized label starts with `SCHEDULE` are extraction candidates.
-If `OPENAI_API_KEY` is absent, this stage skips without changing events. If it is
+Schedule extraction is independent of the public feed's old `notice/daily`
+classification. The admin-configurable `schedule_extraction_enabled` flag and
+`schedule_keywords` list decide which X post text is a candidate. If
+`OPENAI_API_KEY` is absent, this stage skips without changing events. If it is
 present, `server/schedule-extractor.js` sends the public post text and any ready
 cached post images to the OpenAI Responses API. The request disables storage and
 uses a strict JSON schema. A second local validator rejects invalid calendar
@@ -91,8 +96,14 @@ store `starts_on`, a null `starts_at`, and `time_precision = unknown`; the model
 must not invent a specific time.
 
 The effective model comes from `app_settings.llm_model`, falling back to
-`OPENAI_MODEL` and then `gpt-4o-mini`. Only the model name is stored in SQLite;
-the API key remains in the process environment.
+`OPENAI_MODEL` and then `gpt-4o-mini`. Only non-secret settings are stored in
+SQLite; the API key remains in the process environment. Candidates from either
+X account use the same idempotent fingerprint and manual-lock rules.
+
+The `featured_video_id` setting is maintained through `/admin`. It points to an
+existing local `videos` row (or an empty value for no Featured item), and source
+synchronization never changes it. The dashboard includes the selected video
+even when it falls outside the most recent 30 rows.
 
 ## Event Precedence
 
@@ -114,29 +125,32 @@ it. The dashboard hides tombstones and labels visible automatic/manual events.
 
 ## Environment Variables
 
-| Variable                      | Default       | Purpose                                                      |
-| ----------------------------- | ------------- | ------------------------------------------------------------ |
-| `APP_MODE`                    | Development   | `development` bypasses admin login; `production` requires it |
-| `ADMIN_PASSWORD`              | Empty         | Production admin password, minimum 12 characters             |
-| `OPENAI_API_KEY`              | Empty         | Optional Responses API credential, environment only          |
-| `OPENAI_MODEL`                | `gpt-4o-mini` | Initial/fallback schedule extraction model                   |
-| `OPENAI_TIMEOUT_MS`           | `30000`       | Timeout for one Responses API request                        |
-| `PORT`                        | `8787`        | Express listening port                                       |
-| `X_HANDLE`                    | `kano_2525`   | Public X account name                                        |
-| `X_BOOTSTRAP_DAYS`            | `7`           | First-run X lookback in days                                 |
-| `X_DISCOVERY_LIMIT`           | `50`          | Maximum discovered status IDs considered                     |
-| `X_MAX_STATUS_REQUESTS`       | `12`          | Maximum X detail requests per run                            |
-| `X_REFRESH_KNOWN`             | `1`           | Known X posts refreshed per run                              |
-| `YOUTUBE_CHANNEL_ID`          | Main channel  | YouTube channel identifier                                   |
-| `YOUTUBE_BOOTSTRAP_VIDEOS`    | `6`           | First-run RSS entries stored                                 |
-| `YOUTUBE_MAX_DETAIL_REQUESTS` | `12`          | Reservation pages inspected per run                          |
-| `SYNC_TIMEOUT_MS`             | `7000`        | Timeout for a source network request                         |
-| `SYNC_REQUEST_DELAY_MS`       | `150`         | Delay between source detail requests                         |
-| `MEDIA_DOWNLOAD_LIMIT`        | `20`          | Pending images attempted per run                             |
-| `MEDIA_DOWNLOAD_TIMEOUT_MS`   | `10000`       | Timeout for an image request                                 |
-| `MEDIA_MAX_BYTES`             | `10485760`    | Maximum bytes accepted for one image                         |
-| `SKIP_X`, `SKIP_YOUTUBE`      | `0`           | Set an individual source flag to `1` to skip it              |
-| `SKIP_MEDIA`, `SKIP_LLM`      | `0`           | Set a post-processing stage flag to `1` to skip it           |
+| Variable                      | Default              | Purpose                                                      |
+| ----------------------------- | -------------------- | ------------------------------------------------------------ |
+| `APP_MODE`                    | Development          | `development` bypasses admin login; `production` requires it |
+| `ADMIN_PASSWORD`              | Empty                | Production admin password, minimum 12 characters             |
+| `OPENAI_API_KEY`              | Empty                | Optional Responses API credential, environment only          |
+| `OPENAI_MODEL`                | `gpt-4o-mini`        | Initial/fallback schedule extraction model                   |
+| `OPENAI_TIMEOUT_MS`           | `30000`              | Timeout for one Responses API request                        |
+| `PORT`                        | `8787`               | Express listening port                                       |
+| `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Enable the automatic schedule stage                          |
+| `SCHEDULE_KEYWORDS`           | `schedule,...`       | Comma-separated schedule candidate keywords                  |
+| `X_HANDLES`                   | `kano_2525,_Kanotic` | Comma-separated public X account names                       |
+| `X_HANDLE`                    | Empty                | Single-account compatibility fallback                        |
+| `X_BOOTSTRAP_DAYS`            | `7`                  | First-run X lookback in days                                 |
+| `X_DISCOVERY_LIMIT`           | `50`                 | Maximum discovered status IDs considered                     |
+| `X_MAX_STATUS_REQUESTS`       | `12`                 | Maximum X detail requests per run                            |
+| `X_REFRESH_KNOWN`             | `1`                  | Known X posts refreshed per run                              |
+| `YOUTUBE_CHANNEL_ID`          | Main channel         | YouTube channel identifier                                   |
+| `YOUTUBE_BOOTSTRAP_VIDEOS`    | `6`                  | First-run RSS entries stored                                 |
+| `YOUTUBE_MAX_DETAIL_REQUESTS` | `12`                 | Reservation pages inspected per run                          |
+| `SYNC_TIMEOUT_MS`             | `7000`               | Timeout for a source network request                         |
+| `SYNC_REQUEST_DELAY_MS`       | `150`                | Delay between source detail requests                         |
+| `MEDIA_DOWNLOAD_LIMIT`        | `20`                 | Pending images attempted per run                             |
+| `MEDIA_DOWNLOAD_TIMEOUT_MS`   | `10000`              | Timeout for an image request                                 |
+| `MEDIA_MAX_BYTES`             | `10485760`           | Maximum bytes accepted for one image                         |
+| `SKIP_X`, `SKIP_YOUTUBE`      | `0`                  | Set an individual source flag to `1` to skip it              |
+| `SKIP_MEDIA`, `SKIP_LLM`      | `0`                  | Set a post-processing stage flag to `1` to skip it           |
 
 `.env.example` is the complete non-secret inventory. `ADMIN_PASSWORD` and
 `OPENAI_API_KEY` are credentials; never place real values in source code,

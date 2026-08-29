@@ -28,14 +28,16 @@ YouTube, or any other original source.
 ## Page Information Architecture
 
 1. Identity header: banner, avatar, name, bio, and the latest snapshot time.
-2. Recent activity: roughly three days of X posts with all, announcement, and daily filters.
+2. Recent activity: roughly three days of aggregated X posts from both public
+   accounts, with the account handle shown as the source.
 3. Schedule: a navigable calendar and future-first event list containing X schedules and YouTube reservations.
 4. Latest focus: one highlight traceable to a video or official reference.
 5. Channels and archive: recent YouTube uploads, a timeline, and a resource directory.
 
 A separate, unlinked `/admin` route lets the maintainer configure the schedule
-model and curate events. The public calendar labels automatic extraction and
-manual confirmation so visitors can distinguish their provenance.
+extractor, choose the Featured video, and curate events. The public calendar
+labels automatic extraction and manual confirmation so visitors can distinguish
+their provenance.
 
 ## Current Status and Known Limits
 

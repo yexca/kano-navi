@@ -7,13 +7,20 @@ import Database from "better-sqlite3"
 
 import {
   deleteManualEvent,
+  getAppSetting,
   getEvent,
+  getFeaturedVideoId,
   getDashboard,
+  getScheduleExtractionConfig,
   initializeDatabase,
   listAdminEvents,
   replaceAutomaticEventsForSource,
+  seedDatabase,
+  setFeaturedVideoId,
   updateManualEvent,
   upsertMediaAsset,
+  upsertPosts,
+  upsertVideos,
 } from "./database.js"
 import {
   mediaIdForSourceUrl,
@@ -233,5 +240,111 @@ test("manual edits and tombstones cannot be overwritten by automatic extraction"
     )
   } finally {
     database.close()
+  }
+})
+
+test("dashboard aggregates X account sources and keeps Featured selection separate from focus copy", () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  try {
+    upsertPosts(database, [
+      {
+        id: "post-main",
+        source: "x",
+        account_handle: "kano_2525",
+        text: "main post",
+        published_at: "2026-08-28T12:00:00.000Z",
+        url: "https://x.com/kano_2525/status/post-main",
+      },
+      {
+        id: "post-sub",
+        source: "x",
+        account_handle: "_Kanotic",
+        text: "sub post",
+        published_at: "2026-08-28T13:00:00.000Z",
+        url: "https://x.com/_Kanotic/status/post-sub",
+      },
+    ])
+    upsertVideos(database, [
+      {
+        id: "video-focus",
+        source: "youtube",
+        title: "Original focus video",
+        published_at: "2026-08-20T00:00:00.000Z",
+        url: "https://www.youtube.com/watch?v=video-focus",
+      },
+      {
+        id: "video-featured",
+        source: "youtube",
+        title: "Manually selected video",
+        published_at: "2026-08-28T14:00:00.000Z",
+        url: "https://www.youtube.com/watch?v=video-featured",
+      },
+    ])
+    database
+      .prepare(
+        `INSERT INTO focus (id, video_id, title, updated_at)
+         VALUES (1, 'video-focus', 'Original focus copy', '2026-08-20T00:00:00.000Z')`,
+      )
+      .run()
+    database
+      .prepare(
+        `INSERT INTO app_settings (key, value, updated_at)
+         VALUES ('x_accounts', '["kano_2525","_Kanotic"]', '2026-08-20T00:00:00.000Z')`,
+      )
+      .run()
+
+    assert.equal(
+      setFeaturedVideoId(database, "video-featured"),
+      "video-featured",
+    )
+    assert.equal(getAppSetting(database, "featured_video_id"), "video-featured")
+    assert.equal(getFeaturedVideoId(database), "video-featured")
+
+    const dashboard = getDashboard(database, {
+      days: 3,
+      now: new Date("2026-08-29T00:00:00.000Z"),
+    })
+    assert.deepEqual(
+      dashboard.posts.map((post) => [
+        post.id,
+        post.accountHandle,
+        post.accountUrl,
+      ]),
+      [
+        ["post-sub", "_Kanotic", "https://x.com/_Kanotic"],
+        ["post-main", "kano_2525", "https://x.com/kano_2525"],
+      ],
+    )
+    assert.deepEqual(dashboard.meta.xAccounts, ["kano_2525", "_Kanotic"])
+    assert.equal(dashboard.meta.featuredVideoId, "video-featured")
+    assert.equal(dashboard.focus.videoId, "video-focus")
+    assert.equal(
+      dashboard.videos.find((video) => video.id === "video-featured").title,
+      "Manually selected video",
+    )
+  } finally {
+    database.close()
+  }
+})
+
+test("schedule environment settings seed only the initial database defaults", () => {
+  const originalEnabled = process.env.SCHEDULE_EXTRACTION_ENABLED
+  const originalKeywords = process.env.SCHEDULE_KEYWORDS
+  process.env.SCHEDULE_EXTRACTION_ENABLED = "0"
+  process.env.SCHEDULE_KEYWORDS = "WEEKLY_BOARD,配信予定"
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  try {
+    seedDatabase(database)
+    assert.equal(getAppSetting(database, "schedule_extraction_enabled"), "0")
+    assert.deepEqual(getScheduleExtractionConfig(database), {
+      enabled: false,
+      keywords: ["WEEKLY_BOARD", "配信予定"],
+    })
+  } finally {
+    database.close()
+    if (originalEnabled == null) delete process.env.SCHEDULE_EXTRACTION_ENABLED
+    else process.env.SCHEDULE_EXTRACTION_ENABLED = originalEnabled
+    if (originalKeywords == null) delete process.env.SCHEDULE_KEYWORDS
+    else process.env.SCHEDULE_KEYWORDS = originalKeywords
   }
 })

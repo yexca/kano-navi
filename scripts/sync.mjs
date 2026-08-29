@@ -6,12 +6,14 @@ import { XMLParser } from "fast-xml-parser"
 
 import {
   finishSyncRun,
+  getScheduleExtractionConfig,
   getKnownPostIds,
   getSyncState,
   getVideoRecord,
   initializeDatabase,
   listActiveVideoIds,
   startSyncRun,
+  setAppSetting,
   upsertAssets,
   upsertEvents,
   upsertPosts,
@@ -22,7 +24,7 @@ import {
 import { downloadPendingMedia } from "../server/media-downloader.js"
 import { extractPendingSchedules } from "../server/schedule-extractor.js"
 
-const DEFAULT_X_HANDLE = "kano_2525"
+const DEFAULT_X_HANDLES = ["kano_2525", "_Kanotic"]
 const DEFAULT_YOUTUBE_CHANNEL = "UCShXNLMXCfstmWKH_q86B8w"
 const TWITTER_EPOCH_MS = 1_288_834_974_657n
 const timeoutMs = boundedInteger(
@@ -44,6 +46,40 @@ function boundedInteger(value, fallback, minimum, maximum) {
   return Number.isInteger(parsed)
     ? Math.min(maximum, Math.max(minimum, parsed))
     : fallback
+}
+
+function normalizeXHandle(value) {
+  const handle = String(value || "")
+    .trim()
+    .replace(/^@/u, "")
+  return /^[A-Za-z0-9_]{1,30}$/u.test(handle) ? handle : null
+}
+
+function configuredXHandles() {
+  const configured = process.env.X_HANDLES || process.env.X_HANDLE
+  const values = configured
+    ? String(configured).split(/[\n,，]+/u)
+    : DEFAULT_X_HANDLES
+  const handles = [...new Set(values.map(normalizeXHandle).filter(Boolean))]
+  return handles.length ? handles : [...DEFAULT_X_HANDLES]
+}
+
+function matchesAnyKeyword(value, keywords = []) {
+  const haystack = String(value || "").toLocaleLowerCase()
+  return keywords.some((keyword) =>
+    haystack.includes(String(keyword || "").toLocaleLowerCase()),
+  )
+}
+
+function compareSnowflakeIds(left, right) {
+  const leftValue = String(left || "")
+  const rightValue = String(right || "")
+  if (!/^\d+$/u.test(leftValue) || !/^\d+$/u.test(rightValue)) return null
+  return BigInt(leftValue) === BigInt(rightValue)
+    ? 0
+    : BigInt(leftValue) > BigInt(rightValue)
+      ? 1
+      : -1
 }
 
 function delay(milliseconds) {
@@ -162,7 +198,7 @@ function getTweetId(payload) {
   return String(payload?.tweetID || payload?.tweetId || payload?.id || "")
 }
 
-function mapTweet(payload, fallbackId, handle = DEFAULT_X_HANDLE) {
+function mapTweet(payload, fallbackId, handle = DEFAULT_X_HANDLES[0]) {
   const id = getTweetId(payload) || String(fallbackId)
   const text = payload?.text || payload?.tweetText || payload?.description || ""
   const publishedAt = parseDate(
@@ -191,6 +227,7 @@ function mapTweet(payload, fallbackId, handle = DEFAULT_X_HANDLE) {
   return {
     id,
     source: "x",
+    account_handle: handle,
     type: inferred.type,
     label: inferred.label,
     text,
@@ -224,10 +261,153 @@ function extractStatusIds(html) {
   return [...ids].sort((a, b) => (BigInt(a) > BigInt(b) ? -1 : 1))
 }
 
-export async function syncX(database) {
-  const handle = process.env.X_HANDLE || DEFAULT_X_HANDLE
+async function syncXAccount(
+  database,
+  handle,
+  {
+    discoveryLimit,
+    requestLimit,
+    bootstrapDays,
+    refreshKnown,
+    scheduleKeywords = [],
+    isPrimary = false,
+  },
+) {
   const profileUrl = `https://x.com/${handle}`
   const html = await fetchText(profileUrl)
+  const ids = extractStatusIds(html).slice(0, discoveryLimit)
+  if (!ids.length) throw new Error("无法从 X 公开页面找到状态 ID")
+
+  const state = getSyncState(database, "x", handle)
+  const knownIds = getKnownPostIds(database, ids)
+  const cutoff = Date.now() - bootstrapDays * 24 * 60 * 60 * 1000
+  const cursorTime = Date.parse(state?.cursorTime || "")
+  const isAfterCursor = (id) => {
+    if (!state) return true
+    const byId = compareSnowflakeIds(id, state.cursorId)
+    if (byId != null) return byId > 0
+    const createdAt = snowflakeDate(id)?.getTime()
+    return Number.isFinite(createdAt) && Number.isFinite(cursorTime)
+      ? createdAt > cursorTime
+      : true
+  }
+  let knownRefreshes = 0
+  const candidates = ids
+    .filter((id) => {
+      const createdAt = snowflakeDate(id)
+      if (!state && createdAt && createdAt.getTime() < cutoff) return false
+      if (!knownIds.has(id)) return isAfterCursor(id)
+      if (knownRefreshes < refreshKnown) {
+        knownRefreshes += 1
+        return true
+      }
+      return false
+    })
+    .slice(0, Math.max(0, requestLimit))
+
+  const posts = []
+  const errors = []
+  let requestedCount = 0
+  for (const [index, id] of candidates.entries()) {
+    requestedCount += 1
+    try {
+      const payload = await fetchJson(
+        `https://api.vxtwitter.com/${handle}/status/${id}`,
+      )
+      const post = mapTweet(payload, id, handle)
+      const screenName = post?.author_screen_name?.replace(/^@/u, "")
+      if (
+        post &&
+        (!screenName || screenName.toLowerCase() === handle.toLowerCase())
+      ) {
+        posts.push(post)
+      }
+    } catch (error) {
+      errors.push(`${id}: ${error.message}`)
+    }
+    if (index < candidates.length - 1) await delay(requestDelayMs)
+  }
+  if (candidates.length && !posts.length) {
+    const error = new Error(
+      `X 状态接口没有返回可用动态${errors.length ? ` (${errors[0]})` : ""}`,
+    )
+    error.requested = requestedCount
+    throw error
+  }
+
+  if (posts.length) upsertPosts(database, posts)
+  const schedulePost = posts
+    .filter(
+      (post) =>
+        matchesAnyKeyword(post.text, scheduleKeywords) && post.media_url,
+    )
+    .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))[0]
+  const scheduleAsset = schedulePost
+    ? {
+        id: "weekly-schedule",
+        kind: "schedule",
+        url: schedulePost.media_url,
+        source_url: schedulePost.url,
+        alt: schedulePost.media_alt || "Kano Mahoro weekly schedule",
+        updated_at: schedulePost.published_at,
+      }
+    : null
+
+  if (isPrimary) {
+    const existingProfile = database
+      .prepare("SELECT * FROM profiles ORDER BY id LIMIT 1")
+      .get()
+    const author = posts.find((post) => post.author_name || post.author_avatar)
+    if (existingProfile && author) {
+      upsertProfile(database, {
+        id: existingProfile.id,
+        display_name: existingProfile.display_name,
+        romanized_name: existingProfile.romanized_name,
+        bio: existingProfile.bio,
+        avatar_url: existingProfile.avatar_url?.startsWith("/assets/")
+          ? existingProfile.avatar_url
+          : author.author_avatar || existingProfile.avatar_url,
+        banner_url: existingProfile.banner_url,
+        x_url: existingProfile.x_url,
+        youtube_url: existingProfile.youtube_url,
+        updated_at: new Date().toISOString(),
+      })
+    }
+  }
+
+  const newestPost = posts[0]
+  const newestDiscoveredId = ids[0]
+  const nextCursorId = newestPost?.id || newestDiscoveredId
+  const nextCursorTime =
+    newestPost?.published_at || snowflakeDate(newestDiscoveredId)?.toISOString()
+  const shouldAdvanceCursor =
+    !state || isAfterCursor(nextCursorId) || !state.cursorId
+  upsertSyncState(database, {
+    source: "x",
+    accountId: handle,
+    cursorId: shouldAdvanceCursor ? nextCursorId : state.cursorId,
+    cursorTime: shouldAdvanceCursor ? nextCursorTime : state.cursorTime,
+    metadata: {
+      handle,
+      discovered: ids.length,
+      requested: candidates.length,
+      bootstrap: !state,
+    },
+  })
+  return {
+    handle,
+    count: posts.length,
+    discovered: ids.length,
+    requested: candidates.length,
+    scheduleAssets: scheduleAsset ? 1 : 0,
+    scheduleAsset,
+    errors,
+  }
+}
+
+export async function syncX(database) {
+  const handles = configuredXHandles()
+  const scheduleKeywords = getScheduleExtractionConfig(database).keywords
   const discoveryLimit = boundedInteger(
     process.env.X_DISCOVERY_LIMIT,
     50,
@@ -242,110 +422,60 @@ export async function syncX(database) {
   )
   const bootstrapDays = boundedInteger(process.env.X_BOOTSTRAP_DAYS, 7, 1, 30)
   const refreshKnown = boundedInteger(process.env.X_REFRESH_KNOWN, 1, 0, 5)
-  const ids = extractStatusIds(html).slice(0, discoveryLimit)
-  if (!ids.length) throw new Error("无法从 X 公开页面找到状态 ID")
-
-  const state = getSyncState(database, "x", handle)
-  const knownIds = getKnownPostIds(database, ids)
-  const cutoff = Date.now() - bootstrapDays * 24 * 60 * 60 * 1000
-  let knownRefreshes = 0
-  const candidates = ids
-    .filter((id) => {
-      const createdAt = snowflakeDate(id)
-      if (!state && createdAt && createdAt.getTime() < cutoff) return false
-      if (!knownIds.has(id)) return true
-      if (knownRefreshes < refreshKnown) {
-        knownRefreshes += 1
-        return true
-      }
-      return false
-    })
-    .slice(0, requestLimit)
-
-  const posts = []
+  const accounts = []
   const errors = []
-  for (const [index, id] of candidates.entries()) {
+  let remainingRequests = requestLimit
+  let requestedTotal = 0
+  for (const [index, handle] of handles.entries()) {
+    const remainingAccounts = handles.length - index
+    const accountLimit =
+      remainingRequests > 0
+        ? Math.max(1, Math.ceil(remainingRequests / remainingAccounts))
+        : 0
     try {
-      const payload = await fetchJson(
-        `https://api.vxtwitter.com/${handle}/status/${id}`,
-      )
-      const post = mapTweet(payload, id, handle)
-      const screenName = post?.author_screen_name
-      if (
-        post &&
-        (!screenName || screenName.toLowerCase() === handle.toLowerCase())
-      ) {
-        posts.push(post)
-      }
+      const result = await syncXAccount(database, handle, {
+        discoveryLimit,
+        requestLimit: accountLimit,
+        bootstrapDays,
+        refreshKnown,
+        scheduleKeywords,
+        isPrimary: index === 0,
+      })
+      accounts.push(result)
+      requestedTotal += result.requested
+      remainingRequests = Math.max(0, remainingRequests - result.requested)
     } catch (error) {
-      errors.push(`${id}: ${error.message}`)
+      const consumed = Math.max(0, Number(error.requested) || 0)
+      requestedTotal += consumed
+      remainingRequests = Math.max(0, remainingRequests - consumed)
+      errors.push(`${handle}: ${error.message}`)
     }
-    if (index < candidates.length - 1) await delay(requestDelayMs)
   }
-  if (candidates.length && !posts.length) {
+  if (!accounts.length) {
     throw new Error(
-      `X 状态接口没有返回可用动态${errors.length ? ` (${errors[0]})` : ""}`,
+      `X 所有账号同步失败${errors.length ? ` (${errors[0]})` : ""}`,
     )
   }
-
-  if (posts.length) upsertPosts(database, posts)
-  const schedulePost = posts.find(
-    (post) => /^SCHEDULE\b/u.test(post.label || "") && post.media_url,
-  )
-  if (schedulePost) {
-    upsertAssets(database, [
-      {
-        id: "weekly-schedule",
-        kind: "schedule",
-        url: schedulePost.media_url,
-        source_url: schedulePost.url,
-        alt: schedulePost.media_alt || "Kano Mahoro weekly schedule",
-        updated_at: schedulePost.published_at,
-      },
-    ])
-  }
-
-  const existingProfile = database
-    .prepare("SELECT * FROM profiles ORDER BY id LIMIT 1")
-    .get()
-  const author = posts.find((post) => post.author_name || post.author_avatar)
-  if (existingProfile && author) {
-    upsertProfile(database, {
-      id: existingProfile.id,
-      display_name: existingProfile.display_name,
-      romanized_name: existingProfile.romanized_name,
-      bio: existingProfile.bio,
-      avatar_url: existingProfile.avatar_url?.startsWith("/assets/")
-        ? existingProfile.avatar_url
-        : author.author_avatar || existingProfile.avatar_url,
-      banner_url: existingProfile.banner_url,
-      x_url: existingProfile.x_url,
-      youtube_url: existingProfile.youtube_url,
-      updated_at: new Date().toISOString(),
-    })
-  }
-
-  const newestPost = posts[0]
-  const newestDiscoveredId = ids[0]
-  upsertSyncState(database, {
-    source: "x",
-    accountId: handle,
-    cursorId: newestPost?.id || newestDiscoveredId,
-    cursorTime:
-      newestPost?.published_at ||
-      snowflakeDate(newestDiscoveredId)?.toISOString(),
-    metadata: {
-      discovered: ids.length,
-      requested: candidates.length,
-      bootstrap: !state,
-    },
-  })
+  const scheduleAsset = accounts
+    .map((account) => account.scheduleAsset)
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]
+  if (scheduleAsset) upsertAssets(database, [scheduleAsset])
+  setAppSetting(database, "x_accounts", JSON.stringify(handles))
   return {
-    count: posts.length,
-    discovered: ids.length,
-    requested: candidates.length,
-    scheduleAssets: schedulePost ? 1 : 0,
-    errors,
+    count: accounts.reduce((sum, account) => sum + account.count, 0),
+    discovered: accounts.reduce((sum, account) => sum + account.discovered, 0),
+    requested: requestedTotal,
+    scheduleAssets: scheduleAsset ? 1 : 0,
+    accounts: accounts.map(
+      ({ scheduleAsset: _scheduleAsset, ...account }) => account,
+    ),
+    errors: [
+      ...errors,
+      ...accounts.flatMap((account) =>
+        account.errors.map((message) => `${account.handle}: ${message}`),
+      ),
+    ],
   }
 }
 
