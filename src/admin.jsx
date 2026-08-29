@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   CalendarClock,
   Check,
+  Download,
+  Image as ImageIcon,
   KeyRound,
   LoaderCircle,
   LockKeyhole,
@@ -10,7 +12,9 @@ import {
   Plus,
   Save,
   Settings2,
+  Search,
   Trash2,
+  Upload,
   X,
 } from "lucide-react"
 
@@ -314,11 +318,323 @@ function formatEventTime(event) {
   return parts ? `${parts.hour}:${parts.minute} JST` : "时间未定"
 }
 
+const profileSlotLabels = {
+  avatar: "头像",
+  banner: "横幅",
+}
+
+function profileSourceLabel(source) {
+  if (source === "youtube") return "YouTube"
+  if (source === "upload") return "本地上传"
+  return "X"
+}
+
+function ProfileMediaManager({ value, onChange, onNotice, onError }) {
+  const [slot, setSlot] = useState("avatar")
+  const [source, setSource] = useState("x")
+  const [sourceUrl, setSourceUrl] = useState("")
+  const [busyKey, setBusyKey] = useState("")
+
+  const items = value?.items || []
+  const active = value?.active || {}
+
+  const applyPayload = (payload) => {
+    if (payload?.items) onChange(payload)
+  }
+
+  const discover = async (targetSlot, targetSource) => {
+    const key = `discover-${targetSlot}-${targetSource}`
+    setBusyKey(key)
+    onError("")
+    try {
+      const payload = await request("/profile-media/discover", {
+        method: "POST",
+        body: JSON.stringify({ slot: targetSlot, source: targetSource }),
+      })
+      applyPayload(payload)
+      onNotice(
+        `${profileSourceLabel(targetSource)} ${profileSlotLabels[targetSlot]} 候选已更新`,
+      )
+    } catch (discoverError) {
+      onError(discoverError.message)
+    } finally {
+      setBusyKey("")
+    }
+  }
+
+  const addUrl = async (event) => {
+    event.preventDefault()
+    if (!sourceUrl.trim()) return
+    setBusyKey("add-url")
+    onError("")
+    try {
+      const payload = await request("/profile-media", {
+        method: "POST",
+        body: JSON.stringify({ slot, source, sourceUrl }),
+      })
+      applyPayload(payload)
+      setSourceUrl("")
+      onNotice("图片候选已添加")
+    } catch (addError) {
+      onError(addError.message)
+    } finally {
+      setBusyKey("")
+    }
+  }
+
+  const upload = async (event, targetSlot) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+    setBusyKey(`upload-${targetSlot}`)
+    onError("")
+    try {
+      const response = await fetch(
+        `/api/admin/profile-media/upload/${targetSlot}`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            accept: "application/json",
+            "content-type": file.type || "application/octet-stream",
+          },
+          body: file,
+        },
+      )
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok)
+        throw new Error(
+          payload.message || payload.error || `API ${response.status}`,
+        )
+      applyPayload(payload)
+      setSlot(targetSlot)
+      onNotice(`${profileSlotLabels[targetSlot]}候选已上传，请选择启用`)
+    } catch (uploadError) {
+      onError(uploadError.message)
+    } finally {
+      setBusyKey("")
+    }
+  }
+
+  const mutateItem = async (item, action) => {
+    const key = `${action}-${item.id}`
+    setBusyKey(key)
+    onError("")
+    try {
+      const payload = await request(
+        `/profile-media/${encodeURIComponent(item.id)}/${action}`,
+        {
+          method: "POST",
+        },
+      )
+      applyPayload(payload)
+      onNotice(
+        action === "select"
+          ? `${profileSlotLabels[item.slot]}已切换`
+          : "候选图片已下载",
+      )
+    } catch (mutateError) {
+      onError(mutateError.message)
+    } finally {
+      setBusyKey("")
+    }
+  }
+
+  return (
+    <section
+      className="admin-profile-media"
+      aria-labelledby="profile-media-title"
+    >
+      <div className="admin-section-heading">
+        <span className="admin-section-icon">
+          <ImageIcon />
+        </span>
+        <div>
+          <p className="admin-kicker">PROFILE MEDIA</p>
+          <h2 id="profile-media-title">头像与横幅</h2>
+        </div>
+      </div>
+      <p className="admin-profile-help">
+        只在这里手动发现或上传，普通同步不会自动替换当前素材。
+      </p>
+      <div className="admin-profile-slots">
+        {Object.keys(profileSlotLabels).map((targetSlot) => {
+          const current = active[targetSlot]
+          const slotItems = items.filter((item) => item.slot === targetSlot)
+          return (
+            <article className="admin-profile-slot" key={targetSlot}>
+              <div
+                className={`admin-profile-current admin-profile-current-${targetSlot}`}
+              >
+                {current?.publicUrl ? (
+                  <img src={current.publicUrl} alt="" />
+                ) : (
+                  <span aria-hidden="true">
+                    <ImageIcon />
+                  </span>
+                )}
+                <div>
+                  <strong>{profileSlotLabels[targetSlot]}</strong>
+                  <small>
+                    {current
+                      ? `${profileSourceLabel(current.source)} · 当前使用`
+                      : "尚未选择"}
+                  </small>
+                </div>
+              </div>
+              <div className="admin-profile-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => discover(targetSlot, "x")}
+                  disabled={busyKey !== ""}
+                >
+                  {busyKey === `discover-${targetSlot}-x` ? (
+                    <LoaderCircle className="admin-spin" />
+                  ) : (
+                    <Search />
+                  )}
+                  发现 X
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => discover(targetSlot, "youtube")}
+                  disabled={busyKey !== ""}
+                >
+                  {busyKey === `discover-${targetSlot}-youtube` ? (
+                    <LoaderCircle className="admin-spin" />
+                  ) : (
+                    <Search />
+                  )}
+                  发现 YouTube
+                </Button>
+                <label className="admin-upload-button">
+                  <Upload />
+                  上传
+                  <input
+                    type="file"
+                    accept="image/avif,image/gif,image/jpeg,image/png,image/webp"
+                    onChange={(event) => upload(event, targetSlot)}
+                    disabled={busyKey !== ""}
+                  />
+                </label>
+              </div>
+              <form className="admin-profile-url-form" onSubmit={addUrl}>
+                <select
+                  value={slot === targetSlot ? source : "x"}
+                  onChange={(event) => {
+                    setSlot(targetSlot)
+                    setSource(event.target.value)
+                  }}
+                  aria-label={`${profileSlotLabels[targetSlot]}来源`}
+                >
+                  <option value="x">X 图片地址</option>
+                  <option value="youtube">YouTube 图片地址</option>
+                </select>
+                <input
+                  type="url"
+                  value={slot === targetSlot ? sourceUrl : ""}
+                  onFocus={() => setSlot(targetSlot)}
+                  onChange={(event) => {
+                    setSlot(targetSlot)
+                    setSourceUrl(event.target.value)
+                  }}
+                  placeholder="手动粘贴图片地址"
+                  aria-label={`${profileSlotLabels[targetSlot]}图片地址`}
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  variant="outline"
+                  disabled={busyKey !== ""}
+                  aria-label="添加图片地址"
+                >
+                  <Plus />
+                </Button>
+              </form>
+              <div className="admin-profile-candidates">
+                {slotItems.map((item) => (
+                  <div className="admin-profile-candidate" key={item.id}>
+                    <div className="admin-profile-candidate-preview">
+                      {item.previewUrl ? (
+                        <img src={item.previewUrl} alt="" />
+                      ) : (
+                        <ImageIcon />
+                      )}
+                    </div>
+                    <div className="admin-profile-candidate-copy">
+                      <strong>{profileSourceLabel(item.source)}</strong>
+                      <small>
+                        {item.status === "ready"
+                          ? "已下载"
+                          : item.status === "failed"
+                            ? "下载失败"
+                            : "待下载"}
+                      </small>
+                    </div>
+                    <div className="admin-profile-candidate-actions">
+                      {item.status !== "ready" ? (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => mutateItem(item, "download")}
+                          disabled={busyKey !== ""}
+                          aria-label="下载候选"
+                          title="下载候选"
+                        >
+                          {busyKey === `download-${item.id}` ? (
+                            <LoaderCircle className="admin-spin" />
+                          ) : (
+                            <Download />
+                          )}
+                        </Button>
+                      ) : null}
+                      {item.status === "ready" && !item.isActive ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => mutateItem(item, "select")}
+                          disabled={busyKey !== ""}
+                        >
+                          <Check /> 选择
+                        </Button>
+                      ) : item.isActive ? (
+                        <Badge variant="mint">当前使用</Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+                {!slotItems.length ? (
+                  <p className="admin-profile-empty">暂无候选</p>
+                ) : null}
+              </div>
+            </article>
+          )
+        })}
+      </div>
+      <p className="admin-profile-footnote">
+        候选按来源下载到 <code>data/x</code> 或 <code>data/youtube</code>
+        ；本地上传和选择后的头像、横幅写入 <code>data/avatar</code>
+        ，选择操作会原子替换对应槽位。
+      </p>
+    </section>
+  )
+}
+
 export function AdminApp() {
   const [session, setSession] = useState(null)
   const [config, setConfig] = useState(null)
   const [events, setEvents] = useState([])
   const [videos, setVideos] = useState([])
+  const [profileMedia, setProfileMedia] = useState({
+    items: [],
+    active: { avatar: null, banner: null },
+  })
   const [model, setModel] = useState("")
   const [scheduleEnabled, setScheduleEnabled] = useState(true)
   const [scheduleKeywords, setScheduleKeywords] = useState("")
@@ -348,11 +664,13 @@ export function AdminApp() {
   }, [])
 
   const loadData = useCallback(async () => {
-    const [configPayload, eventsPayload, videosPayload] = await Promise.all([
-      request("/config"),
-      request("/events"),
-      request("/videos"),
-    ])
+    const [configPayload, eventsPayload, videosPayload, profileMediaPayload] =
+      await Promise.all([
+        request("/config"),
+        request("/events"),
+        request("/videos"),
+        request("/profile-media"),
+      ])
     setConfig(configPayload)
     setModel(configPayload.llmModel)
     setScheduleEnabled(configPayload.scheduleExtractionEnabled !== false)
@@ -360,6 +678,7 @@ export function AdminApp() {
     setFeaturedVideoId(configPayload.featuredVideoId || "")
     setEvents(eventsPayload.events)
     setVideos(videosPayload.videos || [])
+    setProfileMedia(profileMediaPayload)
   }, [])
 
   useEffect(() => {
@@ -394,6 +713,7 @@ export function AdminApp() {
       setConfig(null)
       setEvents([])
       setVideos([])
+      setProfileMedia({ items: [], active: { avatar: null, banner: null } })
     } catch (logoutError) {
       setError(logoutError.message)
     }
@@ -590,6 +910,13 @@ export function AdminApp() {
               : "OPENAI_API_KEY 尚未配置，自动识别会安全跳过"}
           </div>
         </section>
+
+        <ProfileMediaManager
+          value={profileMedia}
+          onChange={setProfileMedia}
+          onNotice={setNotice}
+          onError={setError}
+        />
 
         <section
           className="admin-schedules"

@@ -7,17 +7,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  Heart,
+  ExternalLink,
   Image as ImageIcon,
   Languages,
   LoaderCircle,
-  MessageCircle,
   Moon,
   Play,
   RefreshCw,
-  Repeat2,
   Sun,
   WifiOff,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -62,6 +61,8 @@ const emptyDashboard = {
   timeline: [],
   resources: [],
   assets: [],
+  scheduleImages: [],
+  profileMedia: { avatar: null, banner: null },
   meta: {
     fetchedAt: null,
     lastSync: null,
@@ -128,6 +129,17 @@ function addDays(date, amount) {
 function startOfWeek(date) {
   const daysSinceMonday = (date.getDay() + 6) % 7
   return addDays(date, -daysSinceMonday)
+}
+
+function scheduleAssetWeekStart(asset) {
+  if (asset?.weekStart) return asset.weekStart
+  if (!asset?.updatedAt) return ""
+  const parsed = new Date(asset.updatedAt)
+  if (Number.isNaN(parsed.getTime())) return ""
+  const key = dateKey(parsed)
+  if (!key) return ""
+  const [year, month, day] = key.split("-").map(Number)
+  return localDateKey(startOfWeek(new Date(year, month - 1, day)))
 }
 
 function formatWeekLabel(weekStart, locale) {
@@ -230,10 +242,14 @@ function eventDateKey(event) {
 }
 
 function eventStatusClass(event) {
+  const status = String(event.status || "").toLowerCase()
+  if (/cancel|取消|中止/.test(status)) return "cancelled"
   if (eventIsUpcoming(event)) return "upcoming"
-  if (/待|確認|确认|pending|tentative/i.test(event.status || "")) {
+  if (
+    event.timePrecision === "unknown" ||
+    /待|確認|确认|pending|tentative|未定|unknown/.test(status)
+  )
     return "pending"
-  }
   return "done"
 }
 
@@ -251,10 +267,15 @@ function Calendar({ selectedDate, events, locale, t, onSelect, onWeekChange }) {
   const todayKey = dateKey(new Date())
   const selectedKey = localDateKey(selectedDate)
   const weekLabel = formatWeekLabel(weekStart, locale)
+  const weekdays = t("calendar.weekdays")
 
   return (
-    <>
-      <div className="calendar-toolbar">
+    <div className="calendar-selector">
+      <div
+        className="calendar-strip"
+        role="group"
+        aria-label={t("calendar.weekLabel", { range: weekLabel })}
+      >
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -269,7 +290,39 @@ function Calendar({ selectedDate, events, locale, t, onSelect, onWeekChange }) {
           </TooltipTrigger>
           <TooltipContent>{t("calendar.previousWeek")}</TooltipContent>
         </Tooltip>
-        <strong>{weekLabel}</strong>
+        <div
+          className="calendar-days"
+          role="grid"
+          aria-label={t("calendar.weekLabel", { range: weekLabel })}
+        >
+          {days.map((date, index) => {
+            const key = localDateKey(date)
+            const hasEvent = eventDates.has(key)
+            const isToday = key === todayKey
+            const isSelected = key === selectedKey
+            const spokenDate = formatCalendarDate(date, locale)
+            return (
+              <button
+                key={key}
+                type="button"
+                role="gridcell"
+                className={`calendar-day${isToday ? " is-today" : ""}${isSelected ? " is-selected" : ""}${hasEvent ? " has-event" : ""}`}
+                aria-current={isToday ? "date" : undefined}
+                aria-selected={isSelected}
+                aria-label={
+                  hasEvent
+                    ? t("calendar.dayWithEvent", { date: spokenDate })
+                    : spokenDate
+                }
+                onClick={() => onSelect(date)}
+              >
+                <span className="calendar-day-label">
+                  {weekdays[index]} {date.getDate()}
+                </span>
+              </button>
+            )
+          })}
+        </div>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -285,49 +338,11 @@ function Calendar({ selectedDate, events, locale, t, onSelect, onWeekChange }) {
           <TooltipContent>{t("calendar.nextWeek")}</TooltipContent>
         </Tooltip>
       </div>
-      <div className="calendar-weekdays" aria-hidden="true">
-        {t("calendar.weekdays").map((weekday) => (
-          <span key={weekday}>{weekday}</span>
-        ))}
-      </div>
-      <div
-        className="calendar-grid"
-        role="grid"
-        aria-label={t("calendar.weekLabel", {
-          range: weekLabel,
-        })}
-      >
-        {days.map((date) => {
-          const key = localDateKey(date)
-          const hasEvent = eventDates.has(key)
-          const isToday = key === todayKey
-          const isSelected = key === selectedKey
-          const spokenDate = formatCalendarDate(date, locale)
-          return (
-            <button
-              key={key}
-              type="button"
-              role="gridcell"
-              className={`calendar-day${isToday ? " is-today" : ""}${isSelected ? " is-selected" : ""}${hasEvent ? " has-event" : ""}`}
-              aria-current={isToday ? "date" : undefined}
-              aria-selected={isSelected}
-              aria-label={
-                hasEvent
-                  ? t("calendar.dayWithEvent", { date: spokenDate })
-                  : spokenDate
-              }
-              onClick={() => onSelect(date)}
-            >
-              {date.getDate()}
-            </button>
-          )
-        })}
-      </div>
-    </>
+    </div>
   )
 }
 
-function PostItem({ post, profile, locale, t }) {
+function PostItem({ post, profile, locale, t, onOpenMedia }) {
   const media = Array.isArray(post.media)
     ? post.media.filter((item) => item?.url)
     : post.mediaUrl
@@ -353,9 +368,25 @@ function PostItem({ post, profile, locale, t }) {
           ) : (
             <span className="post-source">X</span>
           )}
-          <time className="post-time" dateTime={post.publishedAt}>
-            {formatDateTime(post.publishedAt, locale)}
-          </time>
+          <span className="post-meta-actions">
+            <time className="post-time" dateTime={post.publishedAt}>
+              {formatDateTime(post.publishedAt, locale)}
+            </time>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  className="post-external-link"
+                  href={post.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={t("feed.originalPost")}
+                >
+                  <ExternalLink className="inline-icon" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>{t("feed.originalPost")}</TooltipContent>
+            </Tooltip>
+          </span>
         </div>
         <p className="post-text">{post.text}</p>
         {media.length ? (
@@ -363,41 +394,90 @@ function PostItem({ post, profile, locale, t }) {
             className={`post-media-grid post-media-count-${Math.min(4, media.length)}`}
           >
             {media.slice(0, 4).map((item, index) => (
-              <a
-                href={post.url}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                className="post-media-button"
+                onClick={() => onOpenMedia(media, index)}
                 key={item.id || item.url}
                 aria-label={`${t("feed.openMedia")} ${index + 1}`}
               >
                 <img src={item.url} alt={item.alt || ""} loading="lazy" />
-              </a>
+              </button>
             ))}
           </div>
         ) : null}
-        <div className="post-foot">
-          <span>
-            <Heart className="inline-icon" /> {formatNumber(post.likes, locale)}
-          </span>
-          <span>
-            <Repeat2 className="inline-icon" />{" "}
-            {formatNumber(post.reposts, locale)}
-          </span>
-          <span>
-            <MessageCircle className="inline-icon" />{" "}
-            {formatNumber(post.replies, locale)}
-          </span>
-          <a
-            className="post-link"
-            href={post.url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("feed.originalPost")} <ArrowUpRight className="inline-icon" />
-          </a>
-        </div>
       </div>
     </article>
+  )
+}
+
+function ImageLightbox({ media, index, onClose, onPrevious, onNext, t }) {
+  const closeButtonRef = useRef(null)
+  useEffect(() => {
+    if (!media?.length) return undefined
+    const previouslyFocused = document.activeElement
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onClose()
+      if (event.key === "ArrowLeft" && media.length > 1) onPrevious()
+      if (event.key === "ArrowRight" && media.length > 1) onNext()
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    document.body.classList.add("has-lightbox")
+    closeButtonRef.current?.focus()
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      document.body.classList.remove("has-lightbox")
+      if (previouslyFocused && typeof previouslyFocused.focus === "function")
+        previouslyFocused.focus()
+    }
+  }, [media, onClose, onNext, onPrevious])
+
+  if (!media?.length || !media[index]) return null
+  const item = media[index]
+  return (
+    <div
+      className="media-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t("feed.openMedia")}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <button
+        ref={closeButtonRef}
+        type="button"
+        className="lightbox-close"
+        onClick={onClose}
+        aria-label={t("common.close")}
+      >
+        <X className="inline-icon" />
+      </button>
+      <button
+        type="button"
+        className="lightbox-nav lightbox-prev"
+        onClick={onPrevious}
+        disabled={media.length < 2}
+        aria-label={t("feed.previousImage")}
+      >
+        <ChevronLeft className="inline-icon" />
+      </button>
+      <figure className="lightbox-figure">
+        <img src={item.url} alt={item.alt || ""} />
+        <figcaption>
+          {index + 1} / {media.length}
+        </figcaption>
+      </figure>
+      <button
+        type="button"
+        className="lightbox-nav lightbox-next"
+        onClick={onNext}
+        disabled={media.length < 2}
+        aria-label={t("feed.nextImage")}
+      >
+        <ChevronRight className="inline-icon" />
+      </button>
+    </div>
   )
 }
 
@@ -561,6 +641,7 @@ function App() {
   })
   const [locale, setLocale] = useState(getInitialLocale)
   const [toast, setToast] = useState(null)
+  const [lightbox, setLightbox] = useState(null)
   const hasLoadedRef = useRef(false)
   const t = useMemo(() => createTranslator(locale), [locale])
 
@@ -645,8 +726,15 @@ function App() {
   const recentVideos = featuredVideo
     ? videos.filter((video) => video.id !== featuredVideo.id)
     : videos
-  const scheduleAsset = dashboard.assets?.find(
-    (asset) => asset.kind === "schedule" && asset.url,
+  const currentWeekStart = localDateKey(startOfWeek(selectedDate))
+  const scheduleAssets = dashboard.scheduleImages?.length
+    ? dashboard.scheduleImages
+    : dashboard.assets || []
+  const scheduleAsset = scheduleAssets.find(
+    (asset) =>
+      asset.kind === "schedule" &&
+      asset.url &&
+      scheduleAssetWeekStart(asset) === currentWeekStart,
   )
   const syncStatus = dashboard.meta?.lastSync?.status
   const syncWarning = Boolean(syncStatus && syncStatus !== "success")
@@ -682,13 +770,39 @@ function App() {
   )
   const upcomingCount = events.filter(eventIsUpcoming).length
 
-  const handleWeekChange = (offset) => {
+  const handleWeekChange = useCallback((offset) => {
     setSelectedDate((current) => addDays(current, offset * 7))
-  }
+  }, [])
 
-  const handleSelectDate = (date) => {
+  const handleSelectDate = useCallback((date) => {
     setSelectedDate(date)
-  }
+  }, [])
+
+  const openMedia = useCallback((media, index) => {
+    if (!media?.length) return
+    setLightbox({ media, index })
+  }, [])
+
+  const closeLightbox = useCallback(() => setLightbox(null), [])
+  const previousLightboxImage = useCallback(() => {
+    setLightbox((current) => {
+      if (!current?.media?.length) return current
+      return {
+        ...current,
+        index:
+          (current.index - 1 + current.media.length) % current.media.length,
+      }
+    })
+  }, [])
+  const nextLightboxImage = useCallback(() => {
+    setLightbox((current) => {
+      if (!current?.media?.length) return current
+      return {
+        ...current,
+        index: (current.index + 1) % current.media.length,
+      }
+    })
+  }, [])
 
   return (
     <TooltipProvider delayDuration={250}>
@@ -879,6 +993,7 @@ function App() {
                         profile={profile}
                         locale={locale}
                         t={t}
+                        onOpenMedia={openMedia}
                       />
                     ))
                   ) : (
@@ -970,7 +1085,9 @@ function App() {
                             : t(
                                 statusClass === "pending"
                                   ? "calendar.pending"
-                                  : "calendar.recorded",
+                                  : statusClass === "cancelled"
+                                    ? "calendar.cancelled"
+                                    : "calendar.recorded",
                               )}
                         </span>
                       </EventContainer>
@@ -985,12 +1102,23 @@ function App() {
                       <strong>{t("calendar.emptyTitle")}</strong>
                       <span>{t("calendar.emptyHint")}</span>
                     </span>
-                    <span className="event-status pending">
-                      {t("calendar.pending")}
+                    <span className="event-status empty">
+                      {t("calendar.none")}
                     </span>
                   </div>
                 )}
               </div>
+              <p className="calendar-note">
+                {t("calendar.notePrefix")}
+                <a href={profile.xUrl} target="_blank" rel="noreferrer">
+                  X
+                </a>
+                {t("calendar.noteBetween")}
+                <a href={profile.youtubeUrl} target="_blank" rel="noreferrer">
+                  YouTube
+                </a>
+                {t("calendar.noteSuffix")}
+              </p>
               {scheduleAsset ? (
                 <a
                   className="schedule-preview"
@@ -1009,18 +1137,9 @@ function App() {
                     <ArrowUpRight className="inline-icon" />
                   </span>
                 </a>
-              ) : null}
-              <p className="calendar-note">
-                {t("calendar.notePrefix")}
-                <a href={profile.xUrl} target="_blank" rel="noreferrer">
-                  X
-                </a>
-                {t("calendar.noteBetween")}
-                <a href={profile.youtubeUrl} target="_blank" rel="noreferrer">
-                  YouTube
-                </a>
-                {t("calendar.noteSuffix")}
-              </p>
+              ) : (
+                <p className="schedule-empty">{t("calendar.scheduleEmpty")}</p>
+              )}
             </Card>
 
             <Card className="panel media-panel" id="media">
@@ -1197,6 +1316,14 @@ function App() {
       >
         {toast ? t(toast.key, toast.values) : ""}
       </div>
+      <ImageLightbox
+        media={lightbox?.media}
+        index={lightbox?.index || 0}
+        onClose={closeLightbox}
+        onPrevious={previousLightboxImage}
+        onNext={nextLightboxImage}
+        t={t}
+      />
     </TooltipProvider>
   )
 }

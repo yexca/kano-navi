@@ -398,6 +398,8 @@ export const seedData = {
       url: "",
       source_url: "https://x.com/kano_2525/status/2091752948837863590",
       alt: "鹿乃まほろ的本周活动 schedule 图片",
+      week_start: "2026-08-24",
+      source_account: "kano_2525",
     },
   ],
 }

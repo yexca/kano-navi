@@ -3,14 +3,88 @@ import path from "node:path"
 import express from "express"
 
 import { createAdminRouter } from "./admin-api.js"
-import { getDashboard, getLatestSync, getMediaAsset } from "./database.js"
 import {
+  getActiveProfileMedia,
+  getDashboard,
+  getLatestSync,
+  getMediaAsset,
+} from "./database.js"
+import {
+  avatarMediaDirectory,
   isAllowedMediaMimeType,
   isSafeContentHash,
   isSafeMediaId,
   mediaCacheDirectory,
   resolveMediaCachePath,
 } from "./media-cache.js"
+
+function createProfileMediaHandler(database) {
+  return (request, response) => {
+    const slot = String(request.params.slot || "").toLowerCase()
+    if (slot !== "avatar" && slot !== "banner") {
+      response.status(404).json({ error: "profile_media_not_found" })
+      return
+    }
+    const asset = getActiveProfileMedia(database, slot)
+    const filePath = asset?.activeCachePath
+      ? resolveMediaCachePath(asset.activeCachePath)
+      : null
+    if (
+      !asset ||
+      !asset.isActive ||
+      asset.status !== "ready" ||
+      !isSafeContentHash(asset.sha256) ||
+      !filePath
+    ) {
+      response.status(404).json({ error: "profile_media_not_ready" })
+      return
+    }
+    const requestedVersion = request.query.v
+    if (
+      requestedVersion != null &&
+      (!isSafeContentHash(String(requestedVersion)) ||
+        requestedVersion !== asset.sha256)
+    ) {
+      response.status(404).json({ error: "profile_media_version_not_found" })
+      return
+    }
+    let resolvedFilePath
+    try {
+      resolvedFilePath = fs.realpathSync(filePath)
+      const avatarRoot = fs.realpathSync(avatarMediaDirectory)
+      if (
+        resolvedFilePath !== avatarRoot &&
+        !resolvedFilePath.startsWith(`${avatarRoot}${path.sep}`)
+      ) {
+        response.status(404).json({ error: "profile_media_not_found" })
+        return
+      }
+      if (!fs.statSync(resolvedFilePath).isFile()) throw new Error("not a file")
+    } catch {
+      response.status(404).json({ error: "profile_media_not_found" })
+      return
+    }
+    const mimeType = String(asset.mimeType || "")
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase()
+    if (!isAllowedMediaMimeType(mimeType)) {
+      response.status(404).json({ error: "profile_media_not_found" })
+      return
+    }
+    response.set("Content-Type", mimeType)
+    response.set("Content-Security-Policy", "default-src 'none'; sandbox")
+    response.set("X-Content-Type-Options", "nosniff")
+    response.set(
+      "Cache-Control",
+      requestedVersion == null
+        ? "public, max-age=0, must-revalidate"
+        : "public, max-age=31536000, immutable",
+    )
+    response.set("ETag", `"${asset.sha256}"`)
+    response.sendFile(resolvedFilePath)
+  }
+}
 
 function createCachedMediaHandler(database) {
   return (request, response) => {
@@ -95,7 +169,7 @@ function createCachedMediaHandler(database) {
 
 export function createApp({
   database,
-  databaseLabel = "data/kano.sqlite",
+  databaseLabel = "data/database/kano.sqlite",
   staticDirectory = null,
   adminMode = "development",
   adminPassword = "",
@@ -106,6 +180,10 @@ export function createApp({
   const app = express()
   app.disable("x-powered-by")
   app.use(express.json({ limit: "32kb" }))
+
+  // Profile slots are stable public URLs while their selected files remain
+  // replaceable under the ignored runtime directory.
+  app.get("/media/profile/:slot", createProfileMediaHandler(database))
 
   // The route performs a database lookup instead of accepting a file path.
   app.get("/media/:id", createCachedMediaHandler(database))

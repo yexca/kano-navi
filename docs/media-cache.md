@@ -12,16 +12,24 @@ server-side synchronization.
 
 ```text
 data/
-  kano.sqlite
-  cache/
-    media/
-      sha256/<first-two>/<content-sha256>.<extension>
-      tmp/<temporary-file>.part
+  database/
+    kano.sqlite
+  x/
+    sha256/<first-two>/<content-sha256>.<extension>
+  youtube/
+    sha256/<first-two>/<content-sha256>.<extension>
+  avatar/
+    avatar.<extension>
+    banner.<extension>
+  .tmp/
+    <temporary-file>.part
 ```
 
-`data/cache/` is ignored by Git. `data/cache/.gitkeep` only preserves the
-runtime root in a fresh checkout. The tracked `public/assets/` directory is
-reserved for fixed fallback branding such as the avatar and banner.
+The whole `data/` directory is ignored by Git. It is created on demand by the
+server or synchronization command. The tracked `public/assets/` directory is
+reserved for fixed fallback branding. Discovered X and YouTube profile
+candidates stay in their source namespaces; local uploads and the selected
+avatar and banner files remain runtime data in `data/avatar/`.
 
 ## Database Model
 
@@ -30,7 +38,9 @@ reserved for fixed fallback branding such as the avatar and banner.
 - `id`: a 64-character SHA-256 identity derived from the source URL;
 - `source`, `source_url`: the platform adapter and original public URL;
 - `status`: `pending`, `ready`, `missing`, or `failed`;
-- `cache_path`: a path relative to `data/cache/media/`, never an absolute path;
+- `cache_path`: a path relative to the runtime `data/` directory, normally
+  `x/`, `youtube/`, or the legacy `cache/media/` namespace; never an absolute
+  path;
 - `mime_type`, `extension`, `byte_size`, `sha256`, `width`, and `height`;
 - fetch/check/seen timestamps, validators (`etag`, `last_modified`), and the
   last error for maintainer diagnosis.
@@ -56,8 +66,9 @@ served as active same-origin content.
    `pending`, and linked to its owner. Registration does not download bytes.
 3. `downloadPendingMedia` claims a bounded batch during `npm run sync`. It
    downloads with a timeout and byte limit, verifies the image magic bytes and
-   declared MIME type, writes a temporary file, atomically renames it into
-   `sha256/`, and calls `upsertMediaAsset` with `status = ready`.
+   declared MIME type, writes a temporary file, atomically renames it into the
+   source namespace's `sha256/` directory, and calls `upsertMediaAsset` with
+   `status = ready`.
 4. A failed or unavailable request updates the row to `failed` or `missing`.
    Existing ready files are retained; a failed synchronization never clears a
    known snapshot.

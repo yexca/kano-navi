@@ -39,7 +39,7 @@ login. Before `npm start`, set `APP_MODE=production` and an
 
 ## Data and API
 
-The SQLite file is `data/kano.sqlite`. When the server starts, it creates the
+The SQLite file is `data/database/kano.sqlite`. When the server starts, it creates the
 schema and fills missing tables with the initial snapshot in
 `server/seed-data.js`. The main tables are `profiles`, `posts`, `events`,
 `videos`, `focus`, `timeline`, `resources`, `assets`, `media_assets`,
@@ -61,7 +61,10 @@ Remote images are registered in `media_assets` and linked through
 `media_links`. Ready files are exposed through a versioned
 `GET /media/<opaque-id>?v=<content-sha256>` URL; pending or failed files are
 returned as `null` media URLs so the browser does not make a direct CDN request.
-The runtime files live under the ignored `data/cache/` directory.
+SQLite and downloaded media live under the ignored `data/` runtime directory:
+`data/database/`, `data/x/`, `data/youtube/`, and `data/avatar/`. New media is
+stored content-addressably under its source namespace; the old cache layout is
+read only for local migration compatibility.
 
 Health endpoint:
 
@@ -129,8 +132,10 @@ npm run seed -- --overwrite
 ```
 
 `public/assets/` contains only fixed branding fallbacks. Changing thumbnails
-and schedule images belong in the ignored runtime cache. This is a fan-made
-project, and resource links point to the original public pages.
+and schedule images belong in the ignored `data/x/` or `data/youtube/` folders;
+discovered profile candidates follow their source namespace, while uploaded and
+selected profile media belongs in `data/avatar/`. This is a fan-made project,
+and resource links point to the original public pages.
 
 ## Local Checks
 

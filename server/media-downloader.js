@@ -69,7 +69,7 @@ async function readBodyLimited(response, maxBytes) {
   return Buffer.concat(chunks, size)
 }
 
-function sniffImageMimeType(body) {
+export function sniffImageMimeType(body) {
   if (
     body.length >= 3 &&
     body[0] === 0xff &&
@@ -155,6 +155,7 @@ export async function downloadMediaAsset(
     const written = await writeMediaFileAtomic({
       content: body,
       extension: extensionForMimeType(sniffedMimeType),
+      source: asset.source,
     })
     const ready = upsertMediaAsset(database, {
       source: asset.source,

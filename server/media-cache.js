@@ -7,16 +7,22 @@ const moduleDirectory = path.dirname(fileURLToPath(import.meta.url))
 const projectDirectory = path.resolve(moduleDirectory, "..")
 
 /**
- * Runtime media files deliberately live outside `public/` and the Vite output.
- * The database stores paths relative to this directory, never absolute paths.
+ * Runtime files deliberately live outside `public/` and the Vite output.
+ * Database paths are relative to this root and are never absolute paths.
  */
-export const cacheDirectory = path.join(projectDirectory, "data", "cache")
-export const mediaCacheDirectory = path.join(cacheDirectory, "media")
-export const mediaCacheContentDirectory = path.join(
-  mediaCacheDirectory,
-  "sha256",
+export const runtimeDataDirectory = path.join(projectDirectory, "data")
+export const cacheDirectory = runtimeDataDirectory
+export const mediaCacheDirectory = runtimeDataDirectory
+export const legacyMediaCacheDirectory = path.join(
+  runtimeDataDirectory,
+  "cache",
+  "media",
 )
-export const mediaCacheTempDirectory = path.join(mediaCacheDirectory, "tmp")
+export const xMediaDirectory = path.join(runtimeDataDirectory, "x")
+export const youtubeMediaDirectory = path.join(runtimeDataDirectory, "youtube")
+export const avatarMediaDirectory = path.join(runtimeDataDirectory, "avatar")
+export const mediaCacheContentDirectory = path.join(xMediaDirectory, "sha256")
+export const mediaCacheTempDirectory = path.join(runtimeDataDirectory, ".tmp")
 export const publicAssetsDirectory = path.join(
   projectDirectory,
   "public",
@@ -33,6 +39,8 @@ export const MEDIA_STATUS = Object.freeze({
 export const mediaIdPattern = /^[a-f0-9]{64}$/u
 const sha256Pattern = /^[a-f0-9]{64}$/u
 const extensionPattern = /^[a-z0-9]{1,12}$/u
+const mediaNamespacePattern = /^[a-z][a-z0-9_-]{0,31}$/u
+const mediaNamespaces = new Set(["x", "youtube", "avatar"])
 
 const mimeExtensions = new Map([
   ["image/avif", "avif"],
@@ -45,13 +53,42 @@ const mimeExtensions = new Map([
 /** Create the runtime directories used by a future downloader. */
 export function ensureMediaCacheDirectories() {
   for (const directory of [
-    cacheDirectory,
-    mediaCacheDirectory,
+    runtimeDataDirectory,
+    xMediaDirectory,
+    youtubeMediaDirectory,
+    avatarMediaDirectory,
     mediaCacheContentDirectory,
     mediaCacheTempDirectory,
   ]) {
     fs.mkdirSync(directory, { recursive: true })
   }
+}
+
+export function mediaNamespaceForSource(source) {
+  const normalized = String(source || "")
+    .trim()
+    .toLowerCase()
+  if (normalized === "youtube" || normalized.includes("youtube"))
+    return "youtube"
+  if (
+    normalized === "avatar" ||
+    normalized === "banner" ||
+    normalized === "profile" ||
+    normalized === "upload" ||
+    normalized.includes("profile")
+  ) {
+    return "avatar"
+  }
+  return "x"
+}
+
+function validMediaNamespace(value) {
+  const namespace = String(value || "")
+    .trim()
+    .toLowerCase()
+  return mediaNamespaces.has(namespace) && mediaNamespacePattern.test(namespace)
+    ? namespace
+    : null
 }
 
 /**
@@ -126,11 +163,30 @@ export function extensionForSourceUrl(sourceUrl, fallback = "bin") {
 }
 
 /** Build a relative content-addressed path after validating its components. */
-export function cacheRelativePathForHash(contentHash, extension = "bin") {
+export function cacheRelativePathForHash(
+  contentHash,
+  extension = "bin",
+  namespace = null,
+) {
   const hash = String(contentHash || "").toLowerCase()
   if (!sha256Pattern.test(hash)) throw new Error("invalid media content hash")
   const safeExtension = sanitizeExtension(extension)
-  return path.posix.join("sha256", hash.slice(0, 2), `${hash}.${safeExtension}`)
+  // Calls that predate source namespaces keep the legacy relative form. New
+  // callers pass an explicit namespace so source ownership is visible on disk.
+  if (namespace == null)
+    return path.posix.join(
+      "sha256",
+      hash.slice(0, 2),
+      `${hash}.${safeExtension}`,
+    )
+  const safeNamespace = validMediaNamespace(namespace)
+  if (!safeNamespace) throw new Error("invalid media namespace")
+  return path.posix.join(
+    safeNamespace,
+    "sha256",
+    hash.slice(0, 2),
+    `${hash}.${safeExtension}`,
+  )
 }
 
 /**
@@ -145,11 +201,38 @@ export function resolveMediaCachePath(relativePath) {
     return null
   if (normalized.split("/").some((part) => part === "..")) return null
 
+  // Legacy rows used `sha256/...` under data/cache/media. Keep them readable
+  // while all new writes use an explicit source namespace.
+  if (normalized.startsWith("sha256/")) {
+    const legacyRoot = path.resolve(legacyMediaCacheDirectory)
+    const legacyCandidate = path.resolve(legacyRoot, normalized)
+    if (
+      legacyCandidate === legacyRoot ||
+      legacyCandidate.startsWith(`${legacyRoot}${path.sep}`)
+    ) {
+      return legacyCandidate
+    }
+  }
+
+  const [namespace] = normalized.split("/")
+  if (!validMediaNamespace(namespace)) return null
   const root = path.resolve(mediaCacheDirectory)
   const candidate = path.resolve(root, normalized)
   if (candidate !== root && !candidate.startsWith(`${root}${path.sep}`))
     return null
   return candidate
+}
+
+export function profileSlotRelativePath(slot, extension = "bin") {
+  const normalizedSlot = String(slot || "")
+    .trim()
+    .toLowerCase()
+  if (!["avatar", "banner"].includes(normalizedSlot))
+    throw new Error("invalid profile media slot")
+  return path.posix.join(
+    "avatar",
+    `${normalizedSlot}.${sanitizeExtension(extension)}`,
+  )
 }
 
 export function publicMediaUrl(mediaId, contentHash = null) {
@@ -196,6 +279,7 @@ export async function writeMediaFileAtomic({
   content,
   contentHash,
   extension = "bin",
+  source = null,
 }) {
   const body = Buffer.isBuffer(content) ? content : Buffer.from(content)
   const actualHash = sha256ForContent(body)
@@ -207,12 +291,15 @@ export async function writeMediaFileAtomic({
   }
 
   ensureMediaCacheDirectories()
-  const relativePath = cacheRelativePathForHash(actualHash, extension)
+  const namespace = source == null ? null : mediaNamespaceForSource(source)
+  const relativePath = cacheRelativePathForHash(
+    actualHash,
+    extension,
+    namespace,
+  )
   const destination = resolveMediaCachePath(relativePath)
   const temporaryName = `${actualHash}.${process.pid}.${crypto.randomUUID()}.part`
-  const temporaryPath = resolveMediaCachePath(
-    path.posix.join("tmp", temporaryName),
-  )
+  const temporaryPath = path.join(mediaCacheTempDirectory, temporaryName)
   if (!destination || !temporaryPath)
     throw new Error("unable to resolve media cache path")
 

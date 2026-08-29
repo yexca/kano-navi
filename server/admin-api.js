@@ -1,3 +1,5 @@
+import fs from "node:fs"
+import path from "node:path"
 import express from "express"
 
 import {
@@ -9,12 +11,32 @@ import {
   getScheduleExtractionConfig,
   listAdminVideos,
   listAdminEvents,
+  listProfileMedia,
+  getProfileMedia,
+  selectProfileMedia,
+  upsertProfileMediaCandidate,
   setAppSetting,
   setFeaturedVideoId,
   updateManualEvent,
 } from "./database.js"
 import { createAdminAuth } from "./admin-auth.js"
 import { defaultScheduleModel } from "./schedule-extractor.js"
+import {
+  avatarMediaDirectory,
+  isAllowedMediaMimeType,
+  legacyMediaCacheDirectory,
+  resolveMediaCachePath,
+  xMediaDirectory,
+  youtubeMediaDirectory,
+} from "./media-cache.js"
+import {
+  discoverProfileMedia,
+  downloadProfileMedia,
+  isProfileSlot,
+  isProfileSource,
+  maxProfileImageBytes,
+  saveUploadedProfileMedia,
+} from "./profile-media.js"
 
 class AdminInputError extends Error {}
 
@@ -180,6 +202,85 @@ function route(handler) {
   }
 }
 
+function asyncRoute(handler) {
+  return (request, response, next) => {
+    Promise.resolve()
+      .then(() => handler(request, response, next))
+      .catch((error) => {
+        if (error instanceof AdminInputError) {
+          response
+            .status(400)
+            .json({ error: "invalid_input", message: error.message })
+          return
+        }
+        next(error)
+      })
+  }
+}
+
+function profileMediaPayload(database) {
+  const items = listProfileMedia(database).map((item) => ({
+    ...item,
+    previewUrl:
+      item.status === "ready"
+        ? `/api/admin/profile-media/${encodeURIComponent(item.id)}/preview`
+        : null,
+  }))
+  return {
+    items,
+    active: {
+      avatar:
+        items.find((item) => item.slot === "avatar" && item.isActive) || null,
+      banner:
+        items.find((item) => item.slot === "banner" && item.isActive) || null,
+    },
+  }
+}
+
+function profileMediaPreview(database, request, response) {
+  const item = getProfileMedia(database, request.params.id)
+  if (!item || item.status !== "ready" || !item.cachePath) {
+    response.status(404).json({ error: "profile_media_not_ready" })
+    return
+  }
+  const filePath = resolveMediaCachePath(item.cachePath)
+  if (!filePath) {
+    response.status(404).json({ error: "profile_media_not_found" })
+    return
+  }
+  try {
+    const resolved = fs.realpathSync(filePath)
+    const roots = [
+      avatarMediaDirectory,
+      xMediaDirectory,
+      youtubeMediaDirectory,
+      legacyMediaCacheDirectory,
+    ].flatMap((root) => {
+      try {
+        return [fs.realpathSync(root)]
+      } catch {
+        return []
+      }
+    })
+    if (
+      !roots.some(
+        (root) =>
+          resolved === root || resolved.startsWith(`${root}${path.sep}`),
+      )
+    )
+      throw new Error("outside profile media root")
+    if (!fs.statSync(resolved).isFile()) throw new Error("not a file")
+    if (!isAllowedMediaMimeType(item.mimeType))
+      throw new Error("unsupported MIME")
+    response.set("Content-Type", item.mimeType)
+    response.set("Content-Security-Policy", "default-src 'none'; sandbox")
+    response.set("X-Content-Type-Options", "nosniff")
+    response.sendFile(resolved)
+  } catch {
+    response.status(404).json({ error: "profile_media_not_found" })
+  }
+}
+
 export function createAdminRouter({
   database,
   mode = "development",
@@ -253,6 +354,106 @@ export function createAdminRouter({
         }
       }
       response.json(configPayload(database, openAiKeyConfigured, updatedAt))
+    }),
+  )
+
+  router.get("/profile-media", (_request, response) => {
+    response.json(profileMediaPayload(database))
+  })
+  router.get("/profile-media/:id/preview", (request, response) => {
+    profileMediaPreview(database, request, response)
+  })
+  router.post(
+    "/profile-media",
+    route((request, response) => {
+      const body = request.body || {}
+      const slot = text(body.slot, { name: "slot", required: true, max: 16 })
+      const source = text(body.source, {
+        name: "source",
+        required: true,
+        max: 16,
+      })
+      if (
+        !isProfileSlot(slot) ||
+        !isProfileSource(source) ||
+        source === "upload"
+      )
+        throw new AdminInputError("slot or source is invalid")
+      const sourceUrl = publicUrl(body.sourceUrl)
+      if (!sourceUrl) throw new AdminInputError("sourceUrl is required")
+      const item = upsertProfileMediaCandidate(database, {
+        slot,
+        source,
+        sourceRef: text(body.sourceRef, { name: "sourceRef", max: 2000 }),
+        sourceUrl,
+      })
+      response.status(201).json({ item, ...profileMediaPayload(database) })
+    }),
+  )
+  router.post(
+    "/profile-media/discover",
+    asyncRoute(async (request, response) => {
+      const slot = text(request.body?.slot, {
+        name: "slot",
+        required: true,
+        max: 16,
+      })
+      const source = text(request.body?.source, {
+        name: "source",
+        required: true,
+        max: 16,
+      })
+      if (
+        !isProfileSlot(slot) ||
+        !isProfileSource(source) ||
+        source === "upload"
+      )
+        throw new AdminInputError("slot or source is invalid")
+      const result = await discoverProfileMedia(database, { slot, source })
+      response.json({ ...result, ...profileMediaPayload(database) })
+    }),
+  )
+  router.post(
+    "/profile-media/upload/:slot",
+    express.raw({
+      type: (request) =>
+        /^(?:image\/|application\/octet-stream(?:;|$))/iu.test(
+          String(request.headers["content-type"] || ""),
+        ),
+      limit: maxProfileImageBytes,
+    }),
+    asyncRoute(async (request, response) => {
+      const slot = text(request.params.slot, {
+        name: "slot",
+        required: true,
+        max: 16,
+      })
+      if (!isProfileSlot(slot)) throw new AdminInputError("slot is invalid")
+      if (!Buffer.isBuffer(request.body) || !request.body.length)
+        throw new AdminInputError("image body is required")
+      const item = await saveUploadedProfileMedia(
+        database,
+        slot,
+        request.body,
+        {
+          mimeType: request.headers["content-type"],
+        },
+      )
+      response.status(201).json({ item, ...profileMediaPayload(database) })
+    }),
+  )
+  router.post(
+    "/profile-media/:id/download",
+    asyncRoute(async (request, response) => {
+      const item = await downloadProfileMedia(database, request.params.id)
+      response.json({ item, ...profileMediaPayload(database) })
+    }),
+  )
+  router.post(
+    "/profile-media/:id/select",
+    route((request, response) => {
+      const item = selectProfileMedia(database, request.params.id)
+      response.json({ item, ...profileMediaPayload(database) })
     }),
   )
 

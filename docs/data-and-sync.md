@@ -2,7 +2,7 @@
 
 ## SQLite Snapshot
 
-The database file is `data/kano.sqlite`. On startup the server creates the
+The database file is `data/database/kano.sqlite`. On startup the server creates the
 directory, schema, and missing seed records. The current tables are:
 
 | Table                  | Purpose                                                                 |
@@ -63,6 +63,15 @@ compatibility fallback.
 
 Each discovered image URL is registered and linked to its post. A bounded media
 stage later in the same command downloads pending files from `pbs.twimg.com`.
+The X adapter also accepts media and schedule keywords carried by a quoted
+tweet (`qrt`) in the detail response.
+When a schedule asset already has a source status URL but no image URL, the
+synchronizer adds up to `X_SCHEDULE_REFRESH_LIMIT` recent source IDs per
+account to the detail-request queue. On a cursorless bootstrap with no asset
+source for an account, a bounded set of keyword-matching snapshot posts can
+serve the same purpose. These requests supplement the profile HTML without
+bypassing the shared `X_MAX_STATUS_REQUESTS` budget and can recover a schedule
+post that has fallen out of the profile page's visible status list.
 
 ### YouTube
 
@@ -141,6 +150,7 @@ it. The dashboard hides tombstones and labels visible automatic/manual events.
 | `X_DISCOVERY_LIMIT`           | `50`                 | Maximum discovered status IDs considered                     |
 | `X_MAX_STATUS_REQUESTS`       | `12`                 | Maximum X detail requests per run                            |
 | `X_REFRESH_KNOWN`             | `1`                  | Known X posts refreshed per run                              |
+| `X_SCHEDULE_REFRESH_LIMIT`    | `1`                  | Missing schedule source posts prioritized per account        |
 | `YOUTUBE_CHANNEL_ID`          | Main channel         | YouTube channel identifier                                   |
 | `YOUTUBE_BOOTSTRAP_VIDEOS`    | `6`                  | First-run RSS entries stored                                 |
 | `YOUTUBE_MAX_DETAIL_REQUESTS` | `12`                 | Reservation pages inspected per run                          |

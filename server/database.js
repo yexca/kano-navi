@@ -5,25 +5,35 @@ import Database from "better-sqlite3"
 import { fileURLToPath } from "node:url"
 import { seedData } from "./seed-data.js"
 import {
+  avatarMediaDirectory,
+  legacyMediaCacheDirectory,
   MEDIA_STATUS,
   cacheRelativePathForHash,
   ensureMediaCacheDirectories,
   extensionForMimeType,
   isSafeContentHash,
   isSafeMediaId,
+  mediaNamespaceForSource,
   mediaIdForSourceUrl,
+  xMediaDirectory,
+  youtubeMediaDirectory,
+  profileSlotRelativePath,
   normalizeMediaMimeType,
   normalizeSourceUrl,
   publicAssetExists,
   publicMediaUrl,
   resolveMediaCachePath,
+  mediaCacheTempDirectory,
+  sanitizeExtension,
 } from "./media-cache.js"
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url))
 const projectDir = path.resolve(moduleDir, "..")
 
 export const dataDirectory = path.join(projectDir, "data")
-export const databasePath = path.join(dataDirectory, "kano.sqlite")
+export const databaseDirectory = path.join(dataDirectory, "database")
+export const databasePath = path.join(databaseDirectory, "kano.sqlite")
+const legacyDatabasePath = path.join(dataDirectory, "kano.sqlite")
 
 const schema = `
   PRAGMA foreign_keys = ON;
@@ -157,9 +167,36 @@ const schema = `
     url TEXT NOT NULL,
     source_url TEXT,
     alt TEXT,
+    week_start TEXT,
+    source_account TEXT,
     updated_at TEXT,
     raw_json TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS profile_media (
+    id TEXT PRIMARY KEY,
+    slot TEXT NOT NULL,
+    source TEXT NOT NULL,
+    source_ref TEXT,
+    source_url TEXT,
+    cache_path TEXT,
+    active_cache_path TEXT,
+    mime_type TEXT,
+    extension TEXT,
+    byte_size INTEGER,
+    sha256 TEXT,
+    width INTEGER,
+    height INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending',
+    is_active INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    raw_json TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS profile_media_slot_idx
+    ON profile_media (slot, is_active, updated_at DESC);
 
   CREATE TABLE IF NOT EXISTS media_assets (
     id TEXT PRIMARY KEY,
@@ -523,6 +560,14 @@ function migrateSchema(database) {
   database.exec(
     "CREATE INDEX IF NOT EXISTS posts_account_handle_idx ON posts (account_handle, published_at DESC)",
   )
+
+  const assetColumns = tableColumns(database, "assets")
+  if (!assetColumns.has("week_start")) {
+    database.exec("ALTER TABLE assets ADD COLUMN week_start TEXT")
+  }
+  if (!assetColumns.has("source_account")) {
+    database.exec("ALTER TABLE assets ADD COLUMN source_account TEXT")
+  }
 }
 
 function json(value) {
@@ -659,8 +704,25 @@ function insertMediaLink(database, row, timestamp = nowIso()) {
 }
 
 export function openDatabase({ filename = databasePath } = {}) {
-  if (filename !== ":memory:")
-    fs.mkdirSync(path.dirname(path.resolve(filename)), { recursive: true })
+  if (filename !== ":memory:") {
+    const resolvedFilename = path.resolve(filename)
+    fs.mkdirSync(path.dirname(resolvedFilename), { recursive: true })
+    // Move the pre-namespace database once when upgrading an existing local
+    // checkout. SQLite WAL sidecars travel with it when present.
+    if (
+      resolvedFilename === path.resolve(databasePath) &&
+      !fs.existsSync(resolvedFilename) &&
+      fs.existsSync(legacyDatabasePath)
+    ) {
+      fs.renameSync(legacyDatabasePath, resolvedFilename)
+      for (const suffix of ["-wal", "-shm"]) {
+        const oldSidecar = `${legacyDatabasePath}${suffix}`
+        const newSidecar = `${resolvedFilename}${suffix}`
+        if (fs.existsSync(oldSidecar) && !fs.existsSync(newSidecar))
+          fs.renameSync(oldSidecar, newSidecar)
+      }
+    }
+  }
   ensureMediaCacheDirectories()
   const database = new Database(filename)
   database.pragma("journal_mode = WAL")
@@ -942,18 +1004,21 @@ function insertResource(database, resource, overwrite) {
 
 function insertAsset(database, asset, overwrite) {
   const sql = overwrite
-    ? `INSERT INTO assets (id, kind, url, source_url, alt, updated_at, raw_json)
-       VALUES (@id, @kind, @url, @source_url, @alt, @updated_at, @raw_json)
+    ? `INSERT INTO assets (id, kind, url, source_url, alt, week_start, source_account, updated_at, raw_json)
+       VALUES (@id, @kind, @url, @source_url, @alt, @week_start, @source_account, @updated_at, @raw_json)
        ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, url=excluded.url, source_url=excluded.source_url,
-       alt=excluded.alt, updated_at=excluded.updated_at, raw_json=excluded.raw_json`
-    : `INSERT OR IGNORE INTO assets (id, kind, url, source_url, alt, updated_at, raw_json)
-       VALUES (@id, @kind, @url, @source_url, @alt, @updated_at, @raw_json)`
+       alt=excluded.alt, week_start=excluded.week_start, source_account=excluded.source_account,
+       updated_at=excluded.updated_at, raw_json=excluded.raw_json`
+    : `INSERT OR IGNORE INTO assets (id, kind, url, source_url, alt, week_start, source_account, updated_at, raw_json)
+       VALUES (@id, @kind, @url, @source_url, @alt, @week_start, @source_account, @updated_at, @raw_json)`
   database.prepare(sql).run({
     id: String(asset.id),
     kind: asset.kind || "image",
     url: asset.url || "",
     source_url: nullable(asset.source_url),
     alt: nullable(asset.alt),
+    week_start: nullable(asset.week_start ?? asset.weekStart),
+    source_account: nullable(asset.source_account ?? asset.sourceAccount),
     updated_at: nullable(asset.updated_at),
     raw_json: json(asset),
   })
@@ -1039,7 +1104,6 @@ function mediaCandidatesFromAsset(asset) {
 
 function collectSeedMediaCandidates(data) {
   return [
-    ...mediaCandidatesFromProfile(data?.profile),
     ...(data?.posts || []).flatMap(mediaCandidatesFromPost),
     ...(data?.videos || []).flatMap(mediaCandidatesFromVideo),
     ...(data?.focus ? mediaCandidatesFromFocus(data.focus) : []),
@@ -1110,11 +1174,17 @@ export function upsertMediaAsset(database, asset) {
       throw new Error("ready media asset requires an allowed image MIME type")
     if (!requestedHash)
       throw new Error("ready media asset requires a content hash")
+    const expectedExtension = extensionForMimeType(normalizedMimeType)
+    const cachePathValue = String(requestedCachePath)
+    const namespace = cachePathValue.startsWith("sha256/")
+      ? null
+      : mediaNamespaceForSource(asset?.source)
     const expectedPath = cacheRelativePathForHash(
       requestedHash,
-      extensionForMimeType(normalizedMimeType),
+      expectedExtension,
+      namespace,
     )
-    if (String(requestedCachePath) !== expectedPath)
+    if (cachePathValue !== expectedPath)
       throw new Error("ready media cache path does not match its content hash")
     const fullPath = resolveMediaCachePath(expectedPath)
     try {
@@ -1231,6 +1301,281 @@ export function listMediaAssets(database, { status } = {}) {
       `SELECT ${mediaAssetColumns} FROM media_assets ORDER BY updated_at DESC, id ASC`,
     )
     .all()
+}
+
+const profileMediaColumns = `
+  id, slot, source, source_ref AS sourceRef, source_url AS sourceUrl,
+  cache_path AS cachePath, active_cache_path AS activeCachePath,
+  mime_type AS mimeType, extension, byte_size AS byteSize, sha256, width, height,
+  status, is_active AS isActive, last_error AS lastError,
+  created_at AS createdAt, updated_at AS updatedAt
+`
+
+const profileMediaSlotNames = new Set(["avatar", "banner"])
+const profileMediaSources = new Set(["x", "youtube", "upload"])
+
+function profileMediaSourceRoot(source) {
+  const namespace = mediaNamespaceForSource(source)
+  if (namespace === "youtube") return path.resolve(youtubeMediaDirectory)
+  if (namespace === "avatar") return path.resolve(avatarMediaDirectory)
+  return path.resolve(xMediaDirectory)
+}
+
+function pathInsideRoot(filePath, root) {
+  return filePath === root || filePath.startsWith(`${root}${path.sep}`)
+}
+
+function normalizedProfileSlot(value) {
+  const slot = String(value || "")
+    .trim()
+    .toLowerCase()
+  return profileMediaSlotNames.has(slot) ? slot : null
+}
+
+function normalizedProfileSource(value) {
+  const source = String(value || "")
+    .trim()
+    .toLowerCase()
+  return profileMediaSources.has(source) ? source : null
+}
+
+function profileMediaCandidateId(slot, sourceUrl) {
+  return crypto
+    .createHash("sha256")
+    .update(`${slot}\0${sourceUrl}`)
+    .digest("hex")
+}
+
+function mapProfileMedia(row) {
+  if (!row) return null
+  return {
+    ...row,
+    isActive: Boolean(row.isActive),
+    publicUrl:
+      row.isActive &&
+      row.status === MEDIA_STATUS.READY &&
+      isSafeContentHash(row.sha256)
+        ? `/media/profile/${row.slot}?v=${row.sha256}`
+        : null,
+  }
+}
+
+export function getProfileMedia(database, id) {
+  if (!id) return null
+  return mapProfileMedia(
+    database
+      .prepare(`SELECT ${profileMediaColumns} FROM profile_media WHERE id = ?`)
+      .get(String(id)),
+  )
+}
+
+export function listProfileMedia(database, { slot = null } = {}) {
+  const normalizedSlot = slot == null ? null : normalizedProfileSlot(slot)
+  if (slot != null && !normalizedSlot) return []
+  const rows = normalizedSlot
+    ? database
+        .prepare(
+          `SELECT ${profileMediaColumns} FROM profile_media WHERE slot = ? ORDER BY is_active DESC, updated_at DESC, id ASC`,
+        )
+        .all(normalizedSlot)
+    : database
+        .prepare(
+          `SELECT ${profileMediaColumns} FROM profile_media ORDER BY slot ASC, is_active DESC, updated_at DESC, id ASC`,
+        )
+        .all()
+  return rows.map(mapProfileMedia)
+}
+
+export function getActiveProfileMedia(database, slot) {
+  const normalizedSlot = normalizedProfileSlot(slot)
+  if (!normalizedSlot) return null
+  return mapProfileMedia(
+    database
+      .prepare(
+        `SELECT ${profileMediaColumns} FROM profile_media WHERE slot = ? AND is_active = 1 LIMIT 1`,
+      )
+      .get(normalizedSlot),
+  )
+}
+
+/** Register a manually discovered profile image without downloading it. */
+export function upsertProfileMediaCandidate(database, candidate = {}) {
+  const slot = normalizedProfileSlot(candidate.slot)
+  if (!slot) throw new Error("invalid profile media slot")
+  const source = normalizedProfileSource(candidate.source)
+  if (!source) throw new Error("invalid profile media source")
+  const sourceUrl = candidate.sourceUrl
+    ? normalizeSourceUrl(candidate.sourceUrl)
+    : null
+  if (source !== "upload" && !sourceUrl)
+    throw new Error("profile media requires an HTTP(S) source URL")
+  const id = String(
+    candidate.id ||
+      (sourceUrl
+        ? profileMediaCandidateId(slot, sourceUrl)
+        : `upload-${crypto.randomUUID()}`),
+  )
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `INSERT INTO profile_media (
+         id, slot, source, source_ref, source_url, status, is_active,
+         created_at, updated_at, raw_json
+       ) VALUES (@id, @slot, @source, @source_ref, @source_url, 'pending', 0,
+         @created_at, @updated_at, @raw_json)
+       ON CONFLICT(id) DO UPDATE SET
+         slot=excluded.slot, source=excluded.source,
+         source_ref=COALESCE(excluded.source_ref, profile_media.source_ref),
+         source_url=COALESCE(excluded.source_url, profile_media.source_url),
+         status=CASE WHEN profile_media.status = 'ready' THEN 'ready' ELSE 'pending' END,
+         last_error=CASE WHEN profile_media.status = 'ready' THEN profile_media.last_error ELSE NULL END,
+         updated_at=excluded.updated_at,
+         raw_json=COALESCE(excluded.raw_json, profile_media.raw_json)`,
+    )
+    .run({
+      id,
+      slot,
+      source,
+      source_ref: nullable(candidate.sourceRef ?? candidate.source_ref),
+      source_url: sourceUrl,
+      created_at: timestamp,
+      updated_at: timestamp,
+      raw_json: json(candidate),
+    })
+  return getProfileMedia(database, id)
+}
+
+export function updateProfileMediaReady(
+  database,
+  id,
+  {
+    cachePath,
+    mimeType,
+    sha256,
+    byteSize = null,
+    width = null,
+    height = null,
+  } = {},
+) {
+  const existing = getProfileMedia(database, id)
+  if (!existing) return null
+  const normalizedMime = normalizeMediaMimeType(mimeType)
+  const hash = String(sha256 || "").toLowerCase()
+  if (!normalizedMime || !isSafeContentHash(hash))
+    throw new Error("invalid profile media metadata")
+  const extension = extensionForMimeType(normalizedMime)
+  const expectedPath = cacheRelativePathForHash(
+    hash,
+    extension,
+    mediaNamespaceForSource(existing.source),
+  )
+  if (String(cachePath || "") !== expectedPath)
+    throw new Error("invalid profile media cache path")
+  const filePath = resolveMediaCachePath(expectedPath)
+  let stat
+  try {
+    stat = fs.statSync(filePath)
+  } catch {
+    stat = null
+  }
+  if (!stat?.isFile())
+    throw new Error("profile media cache file does not exist")
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `UPDATE profile_media SET cache_path=?, mime_type=?, extension=?, byte_size=?,
+       sha256=?, width=?, height=?, status='ready', last_error=NULL, updated_at=?
+       WHERE id=?`,
+    )
+    .run(
+      expectedPath,
+      normalizedMime,
+      extension,
+      asIntegerOrNull(byteSize) ?? stat.size,
+      hash,
+      asIntegerOrNull(width),
+      asIntegerOrNull(height),
+      timestamp,
+      String(id),
+    )
+  return getProfileMedia(database, id)
+}
+
+export function markProfileMediaFailed(database, id, error) {
+  const existing = getProfileMedia(database, id)
+  if (!existing) return null
+  database
+    .prepare(
+      `UPDATE profile_media SET status='failed', last_error=?, updated_at=? WHERE id=?`,
+    )
+    .run(
+      String(error || "profile media download failed").slice(0, 500),
+      nowIso(),
+      String(id),
+    )
+  return getProfileMedia(database, id)
+}
+
+export function selectProfileMedia(database, id) {
+  const candidate = getProfileMedia(database, id)
+  if (!candidate || candidate.status !== MEDIA_STATUS.READY)
+    throw new Error("profile media is not ready")
+  const sourcePath = candidate.cachePath
+    ? resolveMediaCachePath(candidate.cachePath)
+    : null
+  if (!sourcePath) throw new Error("profile media cache path is invalid")
+  ensureMediaCacheDirectories()
+  const resolvedSource = fs.realpathSync(sourcePath)
+  const allowedRoots = [
+    profileMediaSourceRoot(candidate.source),
+    path.resolve(legacyMediaCacheDirectory),
+  ]
+  if (!allowedRoots.some((root) => pathInsideRoot(resolvedSource, root))) {
+    throw new Error("profile media cache path is outside profile storage")
+  }
+  const extension = sanitizeExtension(
+    candidate.extension || extensionForMimeType(candidate.mimeType),
+  )
+  const destinationRelative = profileSlotRelativePath(candidate.slot, extension)
+  const destination = resolveMediaCachePath(destinationRelative)
+  if (!destination) throw new Error("profile media destination is invalid")
+  const temporary = path.join(
+    mediaCacheTempDirectory,
+    `${candidate.slot}.${process.pid}.${crypto.randomUUID()}.part`,
+  )
+  try {
+    fs.copyFileSync(resolvedSource, temporary, fs.constants.COPYFILE_FICLONE)
+    fs.renameSync(temporary, destination)
+  } catch (error) {
+    try {
+      fs.rmSync(temporary, { force: true })
+    } catch {
+      /* best effort cleanup */
+    }
+    throw error
+  }
+  const timestamp = nowIso()
+  const select = database.transaction(() => {
+    database
+      .prepare(
+        "UPDATE profile_media SET is_active=0, updated_at=? WHERE slot=?",
+      )
+      .run(timestamp, candidate.slot)
+    database
+      .prepare(
+        `UPDATE profile_media SET is_active=1, active_cache_path=?, updated_at=? WHERE id=?`,
+      )
+      .run(destinationRelative, timestamp, String(id))
+  })
+  select()
+  return getProfileMedia(database, id)
+}
+
+export function profileMediaSlots(database) {
+  return {
+    avatar: getActiveProfileMedia(database, "avatar"),
+    banner: getActiveProfileMedia(database, "banner"),
+  }
 }
 
 export function listMediaLinks(database, { mediaId, ownerType, ownerId } = {}) {
@@ -1393,7 +1738,6 @@ export function initializeDatabase({
 
 export function upsertProfile(database, profile) {
   insertProfile(database, profile, true)
-  registerMediaCandidates(database, mediaCandidatesFromProfile(profile))
 }
 
 export function upsertPosts(database, posts = []) {
@@ -1882,6 +2226,27 @@ export function listScheduleCandidatePosts(
     .slice(0, boundedLimit)
 }
 
+/**
+ * Return schedule assets with source-post metadata. The synchronizer uses
+ * these rows to identify missing media and recover a source post that a
+ * profile page no longer exposes in its HTML.
+ */
+export function listScheduleAssets(database, { limit = 20 } = {}) {
+  const boundedLimit = Math.min(100, Math.max(1, Number(limit) || 20))
+  return database
+    .prepare(
+      `SELECT id, kind, url, source_url AS sourceUrl, alt,
+       week_start AS weekStart, source_account AS sourceAccount,
+       updated_at AS updatedAt
+       FROM assets
+       WHERE kind = 'schedule' AND source_url IS NOT NULL
+         AND TRIM(source_url) <> ''
+       ORDER BY COALESCE(week_start, updated_at) DESC, id ASC
+       LIMIT ?`,
+    )
+    .all(boundedLimit)
+}
+
 export function getVideoRecord(database, id) {
   return (
     database
@@ -2141,7 +2506,9 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
     .all()
   const assets = database
     .prepare(
-      `SELECT id, kind, url, source_url AS sourceUrl, alt, updated_at AS updatedAt FROM assets ORDER BY id ASC`,
+      `SELECT id, kind, url, source_url AS sourceUrl, alt,
+       week_start AS weekStart, source_account AS sourceAccount,
+       updated_at AS updatedAt FROM assets ORDER BY id ASC`,
     )
     .all()
     .map((asset) => {
@@ -2155,6 +2522,17 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
         mediaSourceUrl: media.sourceUrl,
       }
     })
+  const scheduleImages = assets
+    .filter((asset) => asset.kind === "schedule" && asset.url)
+    .sort((a, b) => {
+      const weekDelta = String(b.weekStart || "").localeCompare(
+        String(a.weekStart || ""),
+      )
+      return (
+        weekDelta ||
+        String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
+      )
+    })
   const profileRow = mapProfile(
     database
       .prepare(
@@ -2164,6 +2542,7 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
   )
   const profile = profileRow
     ? (() => {
+        const activeProfileMedia = profileMediaSlots(database)
         const avatar = resolveMediaReference(
           database,
           profileRow.avatarUrl,
@@ -2176,14 +2555,18 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
         )
         return {
           ...profileRow,
-          avatarUrl: avatar.publicUrl,
-          avatarId: avatar.id,
-          avatarStatus: avatar.status,
-          avatarSourceUrl: avatar.sourceUrl,
-          bannerUrl: banner.publicUrl,
-          bannerId: banner.id,
-          bannerStatus: banner.status,
-          bannerSourceUrl: banner.sourceUrl,
+          avatarUrl: activeProfileMedia.avatar?.publicUrl || avatar.publicUrl,
+          avatarId: activeProfileMedia.avatar?.id || avatar.id,
+          avatarStatus: activeProfileMedia.avatar?.status || avatar.status,
+          avatarSourceUrl:
+            activeProfileMedia.avatar?.sourceUrl || avatar.sourceUrl,
+          avatarSource: activeProfileMedia.avatar?.source || null,
+          bannerUrl: activeProfileMedia.banner?.publicUrl || banner.publicUrl,
+          bannerId: activeProfileMedia.banner?.id || banner.id,
+          bannerStatus: activeProfileMedia.banner?.status || banner.status,
+          bannerSourceUrl:
+            activeProfileMedia.banner?.sourceUrl || banner.sourceUrl,
+          bannerSource: activeProfileMedia.banner?.source || null,
         }
       })()
     : null
@@ -2222,6 +2605,8 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
     timeline,
     resources,
     assets,
+    scheduleImages,
+    profileMedia: profileMediaSlots(database),
     meta: {
       fetchedAt,
       lastSync: latestSync,

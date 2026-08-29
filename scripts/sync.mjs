@@ -11,6 +11,8 @@ import {
   getSyncState,
   getVideoRecord,
   initializeDatabase,
+  listScheduleAssets,
+  listScheduleCandidatePosts,
   listActiveVideoIds,
   startSyncRun,
   setAppSetting,
@@ -26,6 +28,13 @@ import { extractPendingSchedules } from "../server/schedule-extractor.js"
 
 const DEFAULT_X_HANDLES = ["kano_2525", "_Kanotic"]
 const DEFAULT_YOUTUBE_CHANNEL = "UCShXNLMXCfstmWKH_q86B8w"
+const X_STATUS_HOSTS = new Set([
+  "x.com",
+  "www.x.com",
+  "twitter.com",
+  "www.twitter.com",
+  "mobile.twitter.com",
+])
 const TWITTER_EPOCH_MS = 1_288_834_974_657n
 const timeoutMs = boundedInteger(
   process.env.SYNC_TIMEOUT_MS,
@@ -40,6 +49,35 @@ const requestDelayMs = boundedInteger(
   10_000,
 )
 const userAgent = "kano-status-board/0.1 (+local sync)"
+
+const japanDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+function japanDateKey(value) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  const parts = japanDateFormatter
+    .formatToParts(date)
+    .reduce((result, part) => {
+      result[part.type] = part.value
+      return result
+    }, {})
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+function weekStartInJapan(value) {
+  const key = japanDateKey(value)
+  if (!key) return null
+  const [year, month, day] = key.split("-").map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7
+  date.setUTCDate(date.getUTCDate() - daysSinceMonday)
+  return date.toISOString().slice(0, 10)
+}
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value ?? ""), 10)
@@ -178,13 +216,35 @@ function inferPostType(text = "") {
 }
 
 function getMediaUrls(payload) {
+  return getMediaUrlsAtDepth(payload, 0)
+}
+
+function getQuotedPayload(payload) {
+  return (
+    [
+      payload?.qrt,
+      payload?.quotedTweet,
+      payload?.quoted_tweet,
+      payload?.quote,
+    ].find((candidate) => candidate && typeof candidate === "object") || null
+  )
+}
+
+function getTweetText(payload) {
+  return payload?.text || payload?.tweetText || payload?.description || ""
+}
+
+function getMediaUrlsAtDepth(payload, depth) {
+  if (!payload || typeof payload !== "object" || depth > 2) return []
   const candidates = [
-    ...(Array.isArray(payload?.mediaURLs) ? payload.mediaURLs : []),
-    ...(Array.isArray(payload?.media_urls) ? payload.media_urls : []),
-    ...(Array.isArray(payload?.media_extended)
-      ? payload.media_extended.map((item) => item?.url || item?.media_url)
-      : []),
+    ...asArray(payload?.mediaURLs),
+    ...asArray(payload?.media_urls),
+    ...asArray(payload?.media_extended).map(
+      (item) => item?.url || item?.media_url,
+    ),
   ]
+  const quoted = getQuotedPayload(payload)
+  if (quoted) candidates.push(...getMediaUrlsAtDepth(quoted, depth + 1))
   return [
     ...new Set(
       candidates.filter(
@@ -194,13 +254,36 @@ function getMediaUrls(payload) {
   ]
 }
 
+function statusIdFromUrl(value) {
+  if (typeof value !== "string" || value.trim() === "") return null
+  try {
+    const url = new URL(value)
+    if (!X_STATUS_HOSTS.has(url.hostname.toLowerCase())) return null
+    return url.pathname.match(/^\/[^/]+\/status\/(\d+)/u)?.[1] || null
+  } catch {
+    return null
+  }
+}
+
+function handleFromStatusUrl(value) {
+  if (typeof value !== "string" || value.trim() === "") return null
+  try {
+    const url = new URL(value)
+    if (!X_STATUS_HOSTS.has(url.hostname.toLowerCase())) return null
+    const match = url.pathname.match(/^\/([^/]+)\/status\/\d+/u)
+    return match ? normalizeXHandle(decodeURIComponent(match[1])) : null
+  } catch {
+    return null
+  }
+}
+
 function getTweetId(payload) {
   return String(payload?.tweetID || payload?.tweetId || payload?.id || "")
 }
 
 function mapTweet(payload, fallbackId, handle = DEFAULT_X_HANDLES[0]) {
   const id = getTweetId(payload) || String(fallbackId)
-  const text = payload?.text || payload?.tweetText || payload?.description || ""
+  const text = getTweetText(payload)
   const publishedAt = parseDate(
     payload?.date_epoch ??
       payload?.dateEpoch ??
@@ -209,6 +292,8 @@ function mapTweet(payload, fallbackId, handle = DEFAULT_X_HANDLES[0]) {
   )
   if (!id || !text || !publishedAt) return null
   const inferred = inferPostType(text)
+  const quotedText = getTweetText(getQuotedPayload(payload))
+  const searchText = [text, quotedText].filter(Boolean).join("\n")
   const author = payload?.author || payload?.user || {}
   const authorName =
     author?.name || author?.displayName || payload?.user_name || null
@@ -231,6 +316,7 @@ function mapTweet(payload, fallbackId, handle = DEFAULT_X_HANDLES[0]) {
     type: inferred.type,
     label: inferred.label,
     text,
+    search_text: searchText,
     published_at: publishedAt,
     url: (
       payload?.tweetURL ||
@@ -261,6 +347,83 @@ function extractStatusIds(html) {
   return [...ids].sort((a, b) => (BigInt(a) > BigInt(b) ? -1 : 1))
 }
 
+function collectScheduleRefreshCandidates(
+  database,
+  handle,
+  scheduleKeywords,
+  { includePostCandidates = false } = {},
+) {
+  const candidates = []
+  const seen = new Set()
+  let hasScheduleAssetSource = false
+  const add = ({
+    sourceUrl,
+    sourceAccount = null,
+    mediaUrl = null,
+    weekStart = null,
+    updatedAt = null,
+    publishedAt = null,
+  }) => {
+    if (mediaUrl) return
+    const id = statusIdFromUrl(sourceUrl)
+    if (!id || seen.has(id)) return
+    const sourceHandle =
+      normalizeXHandle(sourceAccount) || handleFromStatusUrl(sourceUrl)
+    if (
+      sourceHandle &&
+      sourceHandle.toLocaleLowerCase() !== handle.toLocaleLowerCase()
+    ) {
+      return
+    }
+    seen.add(id)
+    candidates.push({
+      id,
+      weekStart,
+      publishedAt: publishedAt || updatedAt || snowflakeDate(id)?.toISOString(),
+    })
+  }
+
+  for (const asset of listScheduleAssets(database, { limit: 100 })) {
+    const sourceHandle =
+      normalizeXHandle(asset.sourceAccount) ||
+      handleFromStatusUrl(asset.sourceUrl)
+    if (
+      sourceHandle &&
+      sourceHandle.toLocaleLowerCase() === handle.toLocaleLowerCase()
+    ) {
+      hasScheduleAssetSource = true
+    }
+    add({
+      sourceUrl: asset.sourceUrl,
+      sourceAccount: asset.sourceAccount,
+      mediaUrl: asset.url,
+      weekStart: asset.weekStart,
+      updatedAt: asset.updatedAt,
+    })
+  }
+  if (includePostCandidates && !hasScheduleAssetSource) {
+    for (const post of listScheduleCandidatePosts(database, {
+      limit: 100,
+      keywords: scheduleKeywords,
+    })) {
+      add({
+        sourceUrl: post.url,
+        sourceAccount: post.accountHandle,
+        mediaUrl: post.mediaUrl,
+        publishedAt: post.publishedAt,
+      })
+    }
+  }
+
+  return candidates.sort((left, right) => {
+    const byId = compareSnowflakeIds(right.id, left.id)
+    if (byId != null && byId !== 0) return byId
+    return String(right.weekStart || right.publishedAt || "").localeCompare(
+      String(left.weekStart || left.publishedAt || ""),
+    )
+  })
+}
+
 async function syncXAccount(
   database,
   handle,
@@ -270,17 +433,44 @@ async function syncXAccount(
     bootstrapDays,
     refreshKnown,
     scheduleKeywords = [],
+    scheduleRefreshLimit = 1,
     isPrimary = false,
   },
 ) {
   const profileUrl = `https://x.com/${handle}`
   const html = await fetchText(profileUrl)
-  const ids = extractStatusIds(html).slice(0, discoveryLimit)
-  if (!ids.length) throw new Error("无法从 X 公开页面找到状态 ID")
-
+  const discoveredIds = extractStatusIds(html).slice(0, discoveryLimit)
   const state = getSyncState(database, "x", handle)
-  const knownIds = getKnownPostIds(database, ids)
   const cutoff = Date.now() - bootstrapDays * 24 * 60 * 60 * 1000
+  const scheduleCandidates = collectScheduleRefreshCandidates(
+    database,
+    handle,
+    scheduleKeywords,
+    { includePostCandidates: !state },
+  )
+    .filter((candidate) => {
+      const createdAt = snowflakeDate(candidate.id)
+      return createdAt && createdAt.getTime() >= cutoff
+    })
+    .slice(0, scheduleRefreshLimit)
+  const scheduleIds = scheduleCandidates.map((candidate) => candidate.id)
+  const ids = [...new Set([...scheduleIds, ...discoveredIds])]
+  if (!ids.length) throw new Error("无法从 X 公开页面找到状态 ID")
+  if (requestLimit <= 0) {
+    return {
+      handle,
+      count: 0,
+      discovered: discoveredIds.length,
+      supplemented: scheduleIds.length,
+      requested: 0,
+      scheduleAssets: 0,
+      scheduleAsset: null,
+      errors: ["X 状态请求预算已耗尽"],
+    }
+  }
+
+  const knownIds = getKnownPostIds(database, ids)
+  const priorityIds = new Set(scheduleIds)
   const cursorTime = Date.parse(state?.cursorTime || "")
   const isAfterCursor = (id) => {
     if (!state) return true
@@ -296,6 +486,7 @@ async function syncXAccount(
     .filter((id) => {
       const createdAt = snowflakeDate(id)
       if (!state && createdAt && createdAt.getTime() < cutoff) return false
+      if (priorityIds.has(id)) return true
       if (!knownIds.has(id)) return isAfterCursor(id)
       if (knownRefreshes < refreshKnown) {
         knownRefreshes += 1
@@ -339,44 +530,28 @@ async function syncXAccount(
   const schedulePost = posts
     .filter(
       (post) =>
-        matchesAnyKeyword(post.text, scheduleKeywords) && post.media_url,
+        matchesAnyKeyword(post.search_text || post.text, scheduleKeywords) &&
+        post.media_url,
     )
     .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))[0]
   const scheduleAsset = schedulePost
     ? {
-        id: "weekly-schedule",
+        id: `schedule-${weekStartInJapan(schedulePost.published_at) || schedulePost.id}`,
         kind: "schedule",
         url: schedulePost.media_url,
         source_url: schedulePost.url,
         alt: schedulePost.media_alt || "Kano Mahoro weekly schedule",
+        week_start: weekStartInJapan(schedulePost.published_at),
+        source_account: handle,
         updated_at: schedulePost.published_at,
       }
     : null
 
-  if (isPrimary) {
-    const existingProfile = database
-      .prepare("SELECT * FROM profiles ORDER BY id LIMIT 1")
-      .get()
-    const author = posts.find((post) => post.author_name || post.author_avatar)
-    if (existingProfile && author) {
-      upsertProfile(database, {
-        id: existingProfile.id,
-        display_name: existingProfile.display_name,
-        romanized_name: existingProfile.romanized_name,
-        bio: existingProfile.bio,
-        avatar_url: existingProfile.avatar_url?.startsWith("/assets/")
-          ? existingProfile.avatar_url
-          : author.author_avatar || existingProfile.avatar_url,
-        banner_url: existingProfile.banner_url,
-        x_url: existingProfile.x_url,
-        youtube_url: existingProfile.youtube_url,
-        updated_at: new Date().toISOString(),
-      })
-    }
-  }
-
-  const newestPost = posts[0]
-  const newestDiscoveredId = ids[0]
+  const newestPost = [...posts].sort(
+    (left, right) =>
+      Date.parse(right.published_at) - Date.parse(left.published_at),
+  )[0]
+  const newestDiscoveredId = discoveredIds[0] || ids[0]
   const nextCursorId = newestPost?.id || newestDiscoveredId
   const nextCursorTime =
     newestPost?.published_at || snowflakeDate(newestDiscoveredId)?.toISOString()
@@ -389,16 +564,19 @@ async function syncXAccount(
     cursorTime: shouldAdvanceCursor ? nextCursorTime : state.cursorTime,
     metadata: {
       handle,
-      discovered: ids.length,
+      discovered: discoveredIds.length,
       requested: candidates.length,
+      supplemented: scheduleIds.length,
       bootstrap: !state,
     },
   })
   return {
     handle,
     count: posts.length,
-    discovered: ids.length,
+    discovered: discoveredIds.length,
     requested: candidates.length,
+    supplemented: scheduleIds.length,
+    scheduleCandidates: scheduleIds.length,
     scheduleAssets: scheduleAsset ? 1 : 0,
     scheduleAsset,
     errors,
@@ -422,6 +600,12 @@ export async function syncX(database) {
   )
   const bootstrapDays = boundedInteger(process.env.X_BOOTSTRAP_DAYS, 7, 1, 30)
   const refreshKnown = boundedInteger(process.env.X_REFRESH_KNOWN, 1, 0, 5)
+  const scheduleRefreshLimit = boundedInteger(
+    process.env.X_SCHEDULE_REFRESH_LIMIT,
+    1,
+    0,
+    5,
+  )
   const accounts = []
   const errors = []
   let remainingRequests = requestLimit
@@ -439,6 +623,7 @@ export async function syncX(database) {
         bootstrapDays,
         refreshKnown,
         scheduleKeywords,
+        scheduleRefreshLimit,
         isPrimary: index === 0,
       })
       accounts.push(result)
@@ -456,17 +641,28 @@ export async function syncX(database) {
       `X 所有账号同步失败${errors.length ? ` (${errors[0]})` : ""}`,
     )
   }
-  const scheduleAsset = accounts
+  const scheduleAssets = accounts
     .map((account) => account.scheduleAsset)
     .filter(Boolean)
-    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]
-  if (scheduleAsset) upsertAssets(database, [scheduleAsset])
+  const scheduleAsset = [...scheduleAssets].sort(
+    (a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at),
+  )[0]
+  if (scheduleAssets.length) upsertAssets(database, scheduleAssets)
+  // Keep the old well-known ID as a compatibility alias for older snapshots;
+  // the dashboard prefers the week-qualified records when both exist.
+  if (scheduleAsset) {
+    upsertAssets(database, [{ ...scheduleAsset, id: "weekly-schedule" }])
+  }
   setAppSetting(database, "x_accounts", JSON.stringify(handles))
   return {
     count: accounts.reduce((sum, account) => sum + account.count, 0),
     discovered: accounts.reduce((sum, account) => sum + account.discovered, 0),
+    supplemented: accounts.reduce(
+      (sum, account) => sum + (account.supplemented || 0),
+      0,
+    ),
     requested: requestedTotal,
-    scheduleAssets: scheduleAsset ? 1 : 0,
+    scheduleAssets: scheduleAssets.length,
     accounts: accounts.map(
       ({ scheduleAsset: _scheduleAsset, ...account }) => account,
     ),
@@ -564,13 +760,6 @@ function extractYoutubeIds(html) {
   }
   return [...ids]
 }
-
-const japanDateFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Tokyo",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-})
 
 export async function syncYoutube(database) {
   const channelId = process.env.YOUTUBE_CHANNEL_ID || DEFAULT_YOUTUBE_CHANNEL

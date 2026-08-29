@@ -35,7 +35,7 @@ npm start
 
 ## 数据与 API
 
-SQLite 文件位于 `data/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings` 和 `schedule_extractions`。
+SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings` 和 `schedule_extractions`。
 
 看板接口：
 
@@ -45,7 +45,7 @@ GET /api/dashboard?days=3
 
 返回 profile、最近窗口内聚合的两个 X 账号动态、全部日程、YouTube 视频与预约、手动选择的 Featured 视频、时间轴、资料入口、schedule 图片和同步元数据。`days` 可设为 1–30。
 
-远程图片会登记到 `media_assets`，并通过 `media_links` 关联推文、视频和其他内容。缓存完成的文件由带内容版本的 `GET /media/<opaque-id>?v=<content-sha256>` 提供；尚未缓存或缓存失败时，API 会返回 `null` 媒体地址，浏览器不会改为直连平台 CDN。运行时文件保存在已被 Git 忽略的 `data/cache/`。
+远程图片会登记到 `media_assets`，并通过 `media_links` 关联推文、视频和其他内容。缓存完成的文件由带内容版本的 `GET /media/<opaque-id>?v=<content-sha256>` 提供；尚未缓存或缓存失败时，API 会返回 `null` 媒体地址，浏览器不会改为直连平台 CDN。运行时文件统一保存在已被 Git 忽略的 `data/`：数据库在 `data/database/`，X 图片在 `data/x/`，YouTube 图片在 `data/youtube/`，管理员选中的头像和横幅在 `data/avatar/`。
 
 健康检查：
 
@@ -97,7 +97,7 @@ npm run seed
 npm run seed -- --overwrite
 ```
 
-`public/assets` 只保留固定的头像、横幅等兜底素材；会随平台内容变化的缩略图和 schedule 图片属于 `data/cache/` 运行时缓存，不进入 Git。页面为 fan-made 项目，相关平台链接均指向原始页面。
+`public/assets` 只保留固定的兜底素材；会随平台内容变化的缩略图和 schedule 图片属于 `data/x/` 或 `data/youtube/` 运行时缓存，头像和横幅候选按来源写入对应目录，本地上传和人工选择后的头像、横幅属于 `data/avatar/`，均不进入 Git。页面为 fan-made 项目，相关平台链接均指向原始页面。
 
 ## 本地检查
 

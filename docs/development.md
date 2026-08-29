@@ -84,11 +84,16 @@ and `/api/dashboard?days=3` and verify the fields and stale-snapshot behavior.
 ## Files and Environment
 
 - `data/` is runtime state; SQLite, WAL, and SHM files stay out of version control.
-- `data/cache/` is ignored runtime media state. Do not add downloaded thumbnails
-  or schedule images to Git; use the media tables and cache route.
+- `data/` is ignored runtime state. The database lives in `data/database/`,
+  downloaded X and YouTube media live in `data/x/` and `data/youtube/`, profile
+  candidates follow their source namespace, and uploads plus selected profile
+  media live in `data/avatar/`. Do not add runtime files to Git; use the media
+  tables and cache routes.
 - `dist/`, `node_modules/`, and local test artifacts should not be committed.
 - Fixed branding fallbacks live in `public/assets/`; changing platform media
-  belongs in the ignored runtime cache.
+  belongs in the ignored `data/x/` or `data/youtube/` folders. Profile
+  candidates follow those source folders, while uploads and selected profile
+  media belong in `data/avatar/`.
 - `.env` is ignored and holds local runtime values. `.env.example` is the
   committed inventory and intentionally contains empty credential fields.
 - Environment variables are for local runtime parameters. When adding one,

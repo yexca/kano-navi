@@ -9,9 +9,11 @@ Public X / YouTube pages          OpenAI Responses API
 scripts/sync.mjs ---- media download / schedule extraction
           |
           v
-data/kano.sqlite  -- snapshot, cursors, settings, and media metadata
+data/database/kano.sqlite  -- snapshot, cursors, settings, and media metadata
           |
-          +--> data/cache/media/ -- ignored content-addressed media files
+          +--> data/x/       -- ignored content-addressed X media files
+          +--> data/youtube/ -- ignored content-addressed YouTube media files
+          +--> data/avatar/  -- ignored selected profile media
           |
           v
 server/index.js   -- dashboard, admin API, health, and /media/<id>
@@ -56,7 +58,7 @@ OpenAI key is configured, never its value.
 ### Persistence: `server/database.js`
 
 This module creates the SQLite schema, provides seed/upsert/query functions, and
-keeps the database at `data/kano.sqlite`. Raw source data may be retained in
+keeps the database at `data/database/kano.sqlite`. Raw source data may be retained in
 internal `raw_json`, but API mapping removes it. Writes should use the existing
 transaction and upsert patterns so a partial synchronization cannot erase known
 records.

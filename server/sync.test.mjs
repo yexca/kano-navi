@@ -6,11 +6,12 @@ import {
   getVideoRecord,
   initializeDatabase,
   setAppSetting,
+  upsertAssets,
   upsertPosts,
 } from "./database.js"
 
 process.env.SYNC_REQUEST_DELAY_MS = "0"
-const { runSync, snowflakeDate, syncX, syncYoutube } =
+const { mapTweet, runSync, snowflakeDate, syncX, syncYoutube } =
   await import("../scripts/sync.mjs")
 
 const twitterEpochMs = 1_288_834_974_657n
@@ -107,6 +108,113 @@ test("X bootstrap stays within seven days and later requests only new posts", as
   }
 })
 
+test("X bootstrap refreshes a recent schedule source outside profile discovery", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const originalFetch = globalThis.fetch
+  const originalEnvironment = {
+    X_BOOTSTRAP_DAYS: process.env.X_BOOTSTRAP_DAYS,
+    X_HANDLES: process.env.X_HANDLES,
+    X_MAX_STATUS_REQUESTS: process.env.X_MAX_STATUS_REQUESTS,
+    X_REFRESH_KNOWN: process.env.X_REFRESH_KNOWN,
+    X_SCHEDULE_REFRESH_LIMIT: process.env.X_SCHEDULE_REFRESH_LIMIT,
+  }
+  const now = Date.now()
+  const scheduleId = snowflakeFor(new Date(now - 2 * 24 * 60 * 60 * 1000))
+  const visibleId = snowflakeFor(new Date(now - 60 * 60 * 1000))
+  const scheduleSourceUrl = `https://x.com/kano_2525/status/${scheduleId}`
+  const imageUrl = "https://pbs.twimg.com/media/schedule.png"
+  upsertAssets(database, [
+    {
+      id: "weekly-schedule",
+      kind: "schedule",
+      url: "",
+      source_url: scheduleSourceUrl,
+      week_start: "2026-08-24",
+      source_account: "kano_2525",
+    },
+  ])
+  const requestedIds = []
+  try {
+    process.env.X_BOOTSTRAP_DAYS = "7"
+    process.env.X_HANDLES = "kano_2525"
+    process.env.X_MAX_STATUS_REQUESTS = "2"
+    process.env.X_REFRESH_KNOWN = "0"
+    process.env.X_SCHEDULE_REFRESH_LIMIT = "1"
+    globalThis.fetch = async (url) => {
+      const value = String(url)
+      if (value === "https://x.com/kano_2525") {
+        return response(`<a href="/kano_2525/status/${visibleId}">post</a>`)
+      }
+      const id = value.match(/\/status\/(\d+)$/u)?.[1]
+      assert.ok(id)
+      requestedIds.push(id)
+      const isSchedule = id === scheduleId
+      return response(
+        JSON.stringify({
+          tweetID: id,
+          text: isSchedule ? "今週のスケジュール" : "普通の投稿",
+          date: snowflakeDate(id).toISOString(),
+          author: { screenName: "kano_2525" },
+          mediaURLs: isSchedule ? [imageUrl] : [],
+        }),
+        { headers: { "content-type": "application/json" } },
+      )
+    }
+
+    const result = await syncX(database)
+    assert.equal(result.scheduleAssets, 1)
+    assert.equal(result.supplemented, 1)
+    assert.equal(requestedIds[0], scheduleId)
+    assert.equal(
+      database
+        .prepare("SELECT url FROM assets WHERE id='weekly-schedule'")
+        .get().url,
+      imageUrl,
+    )
+    assert.equal(
+      database
+        .prepare("SELECT media_url AS mediaUrl FROM posts WHERE id=?")
+        .get(scheduleId).mediaUrl,
+      imageUrl,
+    )
+
+    requestedIds.length = 0
+    const incremental = await syncX(database)
+    assert.equal(incremental.supplemented, 0)
+    assert.equal(incremental.scheduleAssets, 0)
+    assert.deepEqual(requestedIds, [])
+  } finally {
+    globalThis.fetch = originalFetch
+    for (const [key, value] of Object.entries(originalEnvironment)) {
+      if (value == null) delete process.env[key]
+      else process.env[key] = value
+    }
+    database.close()
+  }
+})
+
+test("X includes quoted tweet text and media when mapping a post", () => {
+  const post = mapTweet(
+    {
+      tweetID: "2099999999999999999",
+      text: "引用しました",
+      date_epoch: Math.floor(Date.now() / 1000),
+      author: { screenName: "_Kanotic" },
+      qrt: {
+        text: "今週のスケジュール",
+        mediaURLs: ["https://pbs.twimg.com/media/quoted-schedule.png"],
+      },
+    },
+    "2099999999999999999",
+    "_Kanotic",
+  )
+  assert.equal(
+    post.media_url,
+    "https://pbs.twimg.com/media/quoted-schedule.png",
+  )
+  assert.match(post.search_text, /今週のスケジュール/u)
+})
+
 test("X sync aggregates accounts and keeps failed detail requests within the shared budget", async () => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
   const originalFetch = globalThis.fetch
@@ -186,6 +294,66 @@ test("X sync aggregates accounts and keeps failed detail requests within the sha
         .get().url,
       "https://pbs.twimg.com/media/weekly.png",
     )
+  } finally {
+    globalThis.fetch = originalFetch
+    for (const [key, value] of Object.entries(originalEnvironment)) {
+      if (value == null) delete process.env[key]
+      else process.env[key] = value
+    }
+    database.close()
+  }
+})
+
+test("X does not advance an account cursor when its detail budget is zero", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const originalFetch = globalThis.fetch
+  const originalEnvironment = {
+    X_HANDLES: process.env.X_HANDLES,
+    X_MAX_STATUS_REQUESTS: process.env.X_MAX_STATUS_REQUESTS,
+    X_BOOTSTRAP_DAYS: process.env.X_BOOTSTRAP_DAYS,
+    X_REFRESH_KNOWN: process.env.X_REFRESH_KNOWN,
+  }
+  const now = Date.now()
+  const ids = {
+    kano_2525: snowflakeFor(new Date(now - 60 * 60 * 1000)),
+    _Kanotic: snowflakeFor(new Date(now - 30 * 60 * 1000)),
+  }
+  let detailRequests = 0
+  try {
+    process.env.X_HANDLES = "kano_2525,_Kanotic"
+    process.env.X_MAX_STATUS_REQUESTS = "1"
+    process.env.X_BOOTSTRAP_DAYS = "7"
+    process.env.X_REFRESH_KNOWN = "0"
+    globalThis.fetch = async (url) => {
+      const value = String(url)
+      const profileMatch = value.match(/^https:\/\/x\.com\/(.+)$/u)
+      if (profileMatch) {
+        const handle = profileMatch[1]
+        return response(`<a href="/${handle}/status/${ids[handle]}">post</a>`)
+      }
+      detailRequests += 1
+      const match = value.match(/\/status\/(\d+)$/u)
+      assert.ok(match)
+      return response(
+        JSON.stringify({
+          tweetID: match[1],
+          text: `post ${match[1]}`,
+          date: snowflakeDate(match[1]).toISOString(),
+          author: { screenName: "kano_2525" },
+        }),
+        { headers: { "content-type": "application/json" } },
+      )
+    }
+
+    const result = await syncX(database)
+    assert.equal(detailRequests, 1)
+    assert.equal(result.requested, 1)
+    assert.equal(
+      getSyncState(database, "x", "kano_2525")?.cursorId,
+      ids.kano_2525,
+    )
+    assert.equal(getSyncState(database, "x", "_Kanotic"), null)
+    assert.match(result.errors[0], /_Kanotic/u)
   } finally {
     globalThis.fetch = originalFetch
     for (const [key, value] of Object.entries(originalEnvironment)) {

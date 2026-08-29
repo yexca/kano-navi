@@ -48,14 +48,14 @@ Read it first, then use the focused documents in `docs/` for more detail.
 | `scripts/sync.mjs`             | Server-side X and YouTube synchronization adapters              |
 | `scripts/seed.mjs`             | Idempotent initial snapshot seeding                             |
 | `public/assets/`               | Tracked fixed branding fallbacks                                |
-| `data/`                        | Local runtime SQLite and ignored media cache files              |
+| `data/`                        | Ignored runtime database, source media, and profile media       |
 | `docs/`                        | Documentation for Agents, developers, and maintainers           |
 
 ## Data Contract
 
 - `GET /api/health` returns service status, the database path relative to the project, and the latest synchronization summary.
 - `GET /api/dashboard?days=3` returns the profile, aggregated posts in the requested window, all events, videos, the manually selected focus item, the timeline, resource links, image assets, media-cache status, and synchronization metadata (including configured X accounts and the Featured video ID). The server clamps `days` to 1 through 30.
-- `GET /media/<opaque-id>` serves a cached file only when its database row is `ready` and its resolved path remains below `data/cache/media/`; invalid or unready IDs return `404`.
+- `GET /media/<opaque-id>` serves a cached file only when its database row is `ready` and its resolved path remains below the ignored `data/x/`, `data/youtube/`, or legacy cache roots; invalid or unready IDs return `404`. Selected profile media is exposed through `/media/profile/avatar` and `/media/profile/banner`.
 - `/api/admin/*` is password-free only when `APP_MODE=development`. Production
   requires `ADMIN_PASSWORD` with at least 12 characters and uses an HttpOnly
   session cookie. The `/admin` page is intentionally absent from public navigation.
@@ -90,7 +90,7 @@ must never be written to source code, SQLite, a URL, API output, or a log.
 - Begin with `git status --short` and preserve existing user changes. Do not use destructive reset or checkout commands.
 - Follow the existing React, Tailwind token, and UI-component patterns. Do not add a new state or request layer for a one-off page change.
 - New external requests belong in the server-side synchronization scripts and must have a timeout, error handling, and snapshot-retention behavior.
-- Remote images belong in `data/cache/` after synchronization; register them with `media_assets`/`media_links` and do not commit downloaded files.
+- Remote images belong in the ignored `data/x/` or `data/youtube/` namespace after synchronization; discovered profile candidates follow their source namespace, while selected profile media belongs in `data/avatar/`. Register source media with `media_assets`/`media_links` and do not commit downloaded files.
 - For UI changes, at minimum run `npm run build`. For data or API changes, also run `npm run seed` and a health check or relevant script. For documentation changes, run `make check-docs`.
 - Before a commit, run `make ci` and `make check-sensitive`, then review the scanner output manually. CI must not depend on live X or YouTube requests.
 - An Agent must not create commits, push, or rewrite someone else's changes unless the user explicitly asks for it.
