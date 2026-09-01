@@ -6,15 +6,23 @@ import {
   getMediaAsset,
   getScheduleExtractionConfig,
   getScheduleExtraction,
+  getLlmProvider,
+  getLlmProviderSecret,
+  getLlmRouteProviders,
   listMediaLinks,
   listScheduleCandidatePosts,
   replaceAutomaticEventsForSource,
+  updateLlmProviderStatus,
   upsertScheduleExtraction,
 } from "./database.js"
 import { resolveMediaCachePath } from "./media-cache.js"
+import { decryptSecret } from "./secret-store.js"
 
 export const scheduleExtractorVersion = "openai-schedule-v1"
 export const defaultScheduleModel = "gpt-4o-mini"
+const defaultOpenAiBaseUrl = "https://api.openai.com/v1"
+const scheduleInstructions =
+  "Extract only schedule entries explicitly supported by the Japanese post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Return an empty events array when there is no concrete schedule."
 
 const scheduleSchema = {
   type: "object",
@@ -247,34 +255,57 @@ function normalizeExtractedEvents(result, post) {
   })
 }
 
-async function callOpenAiScheduleExtraction(
-  post,
-  images,
-  {
-    apiKey,
-    model,
-    fetchImpl = fetch,
-    endpoint = "https://api.openai.com/v1/responses",
-    timeoutMs = 30_000,
-  },
-) {
-  const content = [
-    {
-      type: "input_text",
-      text: `Source post published at ${post.publishedAt}. Source URL: ${post.url}\n\n${post.text}`,
-    },
-  ]
-  for (const image of images) {
-    const body = fs.readFileSync(image.filePath)
-    content.push({
-      type: "input_image",
-      image_url: `data:${image.mimeType};base64,${body.toString("base64")}`,
-      detail: "high",
-    })
+function providerEndpoint(provider) {
+  const base = String(provider.baseUrl || defaultOpenAiBaseUrl).replace(
+    /\/+$/u,
+    "",
+  )
+  if (/(?:\/responses|\/chat\/completions)$/u.test(base)) return base
+  return provider.protocol === "openai-chat-completions"
+    ? `${base}/chat/completions`
+    : `${base}/responses`
+}
+
+function imageDataUrl(image) {
+  const body = fs.readFileSync(image.filePath)
+  return `data:${image.mimeType};base64,${body.toString("base64")}`
+}
+
+function responseTextFromChat(payload) {
+  const content = payload?.choices?.[0]?.message?.content
+  if (typeof content === "string") return content
+  if (Array.isArray(content)) {
+    const text = content
+      .filter((part) => part?.type === "text" && typeof part.text === "string")
+      .map((part) => part.text)
+      .join("\n")
+    if (text) return text
   }
-  const timeout = Number.isFinite(Number(timeoutMs))
-    ? Math.min(120_000, Math.max(1, Number(timeoutMs)))
+  throw new Error("LLM response did not contain structured output")
+}
+
+function timeoutValue(value) {
+  return Number.isFinite(Number(value))
+    ? Math.min(120_000, Math.max(1, Number(value)))
     : 30_000
+}
+
+function retryDelay(attempt) {
+  return Math.min(1000, 100 * 2 ** Math.max(0, attempt))
+}
+
+function wait(milliseconds) {
+  return milliseconds > 0
+    ? new Promise((resolve) => setTimeout(resolve, milliseconds))
+    : Promise.resolve()
+}
+
+async function requestLlm(
+  endpoint,
+  body,
+  { apiKey, fetchImpl = fetch, timeoutMs },
+) {
+  const timeout = timeoutValue(timeoutMs)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
   let response
@@ -286,22 +317,7 @@ async function callOpenAiScheduleExtraction(
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        store: false,
-        instructions:
-          "Extract only schedule entries explicitly supported by the Japanese post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Return an empty events array when there is no concrete schedule.",
-        input: [{ role: "user", content }],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "kano_schedule_extraction",
-            strict: true,
-            schema: scheduleSchema,
-          },
-        },
-        max_output_tokens: 4000,
-      }),
+      body: JSON.stringify(body),
     })
   } catch (error) {
     if (controller.signal.aborted) throw new Error("OpenAI request timed out")
@@ -310,31 +326,273 @@ async function callOpenAiScheduleExtraction(
     clearTimeout(timer)
   }
   if (!response.ok) {
-    const message = String(await response.text()).slice(0, 500)
-    throw new Error(
-      `OpenAI ${response.status}: ${message || response.statusText}`,
-    )
+    // Do not persist or log an upstream response body: providers sometimes
+    // echo authorization material or other sensitive request fields.
+    throw new Error(`LLM request failed (HTTP ${response.status})`)
   }
-  const payload = await response.json()
+  return response.json()
+}
+
+async function callOpenAiScheduleExtraction(
+  post,
+  images,
+  {
+    apiKey,
+    model,
+    protocol = "openai-responses",
+    fetchImpl = fetch,
+    endpoint,
+    baseUrl,
+    timeoutMs = 30_000,
+  },
+) {
+  const provider = { protocol, baseUrl: baseUrl || defaultOpenAiBaseUrl }
+  const resolvedEndpoint = endpoint || providerEndpoint(provider)
+  const content = [
+    {
+      type: "input_text",
+      text: `Source post published at ${post.publishedAt}. Source URL: ${post.url}\n\n${post.text}`,
+    },
+  ]
+  for (const image of images) {
+    content.push({
+      type: "input_image",
+      image_url: imageDataUrl(image),
+      detail: "high",
+    })
+  }
+  if (protocol === "openai-chat-completions") {
+    const chatContent = [
+      {
+        type: "text",
+        text: `Source post published at ${post.publishedAt}. Source URL: ${post.url}\n\n${post.text}`,
+      },
+      ...images.map((image) => ({
+        type: "image_url",
+        image_url: { url: imageDataUrl(image), detail: "high" },
+      })),
+    ]
+    const payload = await requestLlm(
+      resolvedEndpoint,
+      {
+        model,
+        messages: [
+          { role: "system", content: scheduleInstructions },
+          { role: "user", content: chatContent },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "kano_schedule_extraction",
+            strict: true,
+            schema: scheduleSchema,
+          },
+        },
+        max_output_tokens: 4000,
+      },
+      { apiKey, fetchImpl, timeoutMs },
+    )
+    return JSON.parse(responseTextFromChat(payload))
+  }
+  const payload = await requestLlm(
+    resolvedEndpoint,
+    {
+      model,
+      store: false,
+      instructions: scheduleInstructions,
+      input: [{ role: "user", content }],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "kano_schedule_extraction",
+          strict: true,
+          schema: scheduleSchema,
+        },
+      },
+      max_output_tokens: 4000,
+    },
+    { apiKey, fetchImpl, timeoutMs },
+  )
   return JSON.parse(extractResponseText(payload))
 }
 
-export async function extractSchedulePost(
+function legacyProvider(database, options) {
+  const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY ?? ""
+  if (!apiKey) return null
+  return {
+    id: "legacy-openai",
+    name: "Legacy OpenAI",
+    protocol: options.protocol || "openai-responses",
+    baseUrl:
+      options.baseUrl || process.env.OPENAI_BASE_URL || defaultOpenAiBaseUrl,
+    endpoint: options.endpoint,
+    model:
+      options.model ||
+      getAppSetting(
+        database,
+        "llm_model",
+        process.env.OPENAI_MODEL || defaultScheduleModel,
+      ),
+    timeoutMs:
+      options.timeoutMs ?? Number(process.env.OPENAI_TIMEOUT_MS || 30_000),
+    maxRetries: 0,
+    apiKey,
+    persisted: false,
+  }
+}
+
+function configuredProviders(database, options) {
+  const hasExplicitProvider =
+    options.apiKey != null ||
+    options.endpoint != null ||
+    options.model != null ||
+    options.baseUrl != null ||
+    options.protocol != null
+  if (hasExplicitProvider) {
+    const provider = legacyProvider(database, options)
+    return provider ? [provider] : []
+  }
+  const config = getScheduleExtractionConfig(database)
+  const ids = config.providerOrder.length
+    ? config.providerOrder
+    : getLlmRouteProviders(database, "schedule_vision")
+  const providers = []
+  for (const id of ids) {
+    const row = getLlmProvider(database, id)
+    if (!row || !row.enabled || !row.visionCapable) continue
+    const secret = getLlmProviderSecret(database, id)
+    let apiKey = null
+    if (secret?.apiKeyCiphertext) {
+      try {
+        apiKey = decryptSecret(
+          secret.apiKeyCiphertext,
+          process.env.LLM_SECRETS_KEY || "",
+        )
+      } catch {
+        apiKey = null
+      }
+    } else if (id === "openai-default") {
+      apiKey = process.env.OPENAI_API_KEY || null
+    }
+    if (!apiKey) continue
+    providers.push({ ...row, apiKey, persisted: true })
+  }
+  if (!providers.length) {
+    const fallback = legacyProvider(database, options)
+    if (fallback) providers.push(fallback)
+  }
+  return providers
+}
+
+function providerExtractorVersion(provider) {
+  return `${scheduleExtractorVersion}:${provider.id}:${provider.protocol}`
+}
+
+async function extractWithProvider(
   database,
   post,
-  {
-    apiKey = process.env.OPENAI_API_KEY || "",
-    model = getAppSetting(
-      database,
-      "llm_model",
-      process.env.OPENAI_MODEL || defaultScheduleModel,
-    ),
-    fetchImpl = fetch,
-    endpoint,
-    timeoutMs = Number(process.env.OPENAI_TIMEOUT_MS || 30_000),
-  } = {},
+  images,
+  contentFingerprint,
+  provider,
+  { fetchImpl = fetch } = {},
 ) {
-  if (!apiKey) return { status: "skipped", reason: "missing_api_key" }
+  const extractorVersion = providerExtractorVersion(provider)
+  const existing = getScheduleExtraction(database, {
+    source: "x",
+    sourceItemId: post.id,
+    contentFingerprint,
+    extractorVersion,
+  })
+  if (
+    existing?.status === "success" &&
+    String(existing.model || "") === String(provider.model || "")
+  ) {
+    return {
+      status: "cached",
+      extractionId: existing.id,
+      providerId: provider.id,
+    }
+  }
+  const running = upsertScheduleExtraction(database, {
+    source: "x",
+    sourceItemId: post.id,
+    contentFingerprint,
+    extractorVersion,
+    model: provider.model,
+    status: "running",
+  })
+  let lastError = null
+  const maxRetries = Math.min(3, Math.max(0, Number(provider.maxRetries) || 0))
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      const result = await callOpenAiScheduleExtraction(post, images, {
+        apiKey: provider.apiKey,
+        model: provider.model,
+        protocol: provider.protocol,
+        baseUrl: provider.baseUrl,
+        endpoint: provider.endpoint,
+        fetchImpl,
+        timeoutMs: provider.timeoutMs,
+      })
+      const events = normalizeExtractedEvents(result, post)
+      const replacement = replaceAutomaticEventsForSource(database, {
+        source: "x",
+        sourceItemId: post.id,
+        extractionId: running.id,
+        events,
+      })
+      upsertScheduleExtraction(database, {
+        source: "x",
+        sourceItemId: post.id,
+        contentFingerprint,
+        extractorVersion,
+        model: provider.model,
+        status: "success",
+        result,
+      })
+      if (provider.persisted)
+        updateLlmProviderStatus(database, provider.id, { status: "success" })
+      return {
+        status: "success",
+        extractionId: running.id,
+        providerId: provider.id,
+        attempts: attempt + 1,
+        ...replacement,
+      }
+    } catch (error) {
+      lastError = error
+      if (attempt < maxRetries) await wait(retryDelay(attempt))
+    }
+  }
+  {
+    const error = lastError || new Error("provider request failed")
+    upsertScheduleExtraction(database, {
+      source: "x",
+      sourceItemId: post.id,
+      contentFingerprint,
+      extractorVersion,
+      model: provider.model,
+      status: "failed",
+      error: error.message,
+    })
+    if (provider.persisted)
+      updateLlmProviderStatus(database, provider.id, {
+        status: "failed",
+        error: error.message,
+      })
+    return {
+      status: "failed",
+      extractionId: running.id,
+      providerId: provider.id,
+      error: error.message,
+      attempts: maxRetries + 1,
+    }
+  }
+}
+
+export async function extractSchedulePost(database, post, options = {}) {
+  const providers = configuredProviders(database, options)
+  if (!providers.length) return { status: "skipped", reason: "missing_api_key" }
   const images = readyPostImages(database, post.id)
   const contentFingerprint = sha256(
     JSON.stringify({
@@ -342,69 +600,41 @@ export async function extractSchedulePost(
       images: images.map((image) => image.sha256),
     }),
   )
-  const existing = getScheduleExtraction(database, {
-    source: "x",
-    sourceItemId: post.id,
-    contentFingerprint,
-    extractorVersion: scheduleExtractorVersion,
-  })
-  if (
-    existing?.status === "success" &&
-    String(existing.model || "") === String(model || "")
-  ) {
-    return { status: "cached", extractionId: existing.id }
+  const attempts = []
+  for (const provider of providers) {
+    const result = await extractWithProvider(
+      database,
+      post,
+      images,
+      contentFingerprint,
+      provider,
+      options,
+    )
+    attempts.push(result)
+    if (result.status === "success" || result.status === "cached")
+      return { ...result, attempts }
   }
-
-  const running = upsertScheduleExtraction(database, {
-    source: "x",
-    sourceItemId: post.id,
-    contentFingerprint,
-    extractorVersion: scheduleExtractorVersion,
-    model,
-    status: "running",
-  })
-  try {
-    const result = await callOpenAiScheduleExtraction(post, images, {
-      apiKey,
-      model,
-      fetchImpl,
-      endpoint,
-      timeoutMs,
-    })
-    const events = normalizeExtractedEvents(result, post)
-    const replacement = replaceAutomaticEventsForSource(database, {
-      source: "x",
-      sourceItemId: post.id,
-      extractionId: running.id,
-      events,
-    })
-    upsertScheduleExtraction(database, {
-      source: "x",
-      sourceItemId: post.id,
-      contentFingerprint,
-      extractorVersion: scheduleExtractorVersion,
-      model,
-      status: "success",
-      result,
-    })
-    return { status: "success", extractionId: running.id, ...replacement }
-  } catch (error) {
-    upsertScheduleExtraction(database, {
-      source: "x",
-      sourceItemId: post.id,
-      contentFingerprint,
-      extractorVersion: scheduleExtractorVersion,
-      model,
-      status: "failed",
-      error: error.message,
-    })
-    return { status: "failed", extractionId: running.id, error: error.message }
+  const last = attempts.at(-1)
+  return {
+    status: "failed",
+    error: last?.error || "all configured LLM providers failed",
+    attempts,
   }
 }
 
 export async function extractPendingSchedules(database, options = {}) {
   const scheduleConfig = getScheduleExtractionConfig(database)
-  if (!scheduleConfig.enabled) {
+  if (!scheduleConfig.keywordEnabled) {
+    return {
+      attempted: 0,
+      success: 0,
+      cached: 0,
+      skipped: 0,
+      failed: 0,
+      disabled: true,
+    }
+  }
+  if (!scheduleConfig.visionEnabled) {
     return {
       attempted: 0,
       success: 0,
@@ -425,6 +655,7 @@ export async function extractPendingSchedules(database, options = {}) {
     skipped: 0,
     failed: 0,
     keywords: scheduleConfig.keywords,
+    providers: scheduleConfig.providerOrder,
   }
   for (const post of posts) {
     const result = await extractSchedulePost(database, post, options)

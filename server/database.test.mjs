@@ -7,6 +7,7 @@ import Database from "better-sqlite3"
 
 import {
   deleteManualEvent,
+  bumpDashboardRevision,
   getAppSetting,
   getEvent,
   getFeaturedVideoId,
@@ -14,11 +15,13 @@ import {
   getScheduleExtractionConfig,
   initializeDatabase,
   listAdminEvents,
+  listAdminEventsPage,
   replaceAutomaticEventsForSource,
   seedDatabase,
   setFeaturedVideoId,
   updateManualEvent,
   upsertMediaAsset,
+  upsertEvents,
   upsertPosts,
   upsertVideos,
 } from "./database.js"
@@ -346,5 +349,102 @@ test("schedule environment settings seed only the initial database defaults", ()
     else process.env.SCHEDULE_EXTRACTION_ENABLED = originalEnabled
     if (originalKeywords == null) delete process.env.SCHEDULE_KEYWORDS
     else process.env.SCHEDULE_KEYWORDS = originalKeywords
+  }
+})
+
+test("admin schedule pages support literal search, filters, and stable bounds", () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  try {
+    upsertEvents(database, [
+      {
+        id: "page-event-1",
+        source: "x",
+        title: "alpha 100%",
+        detail: "first",
+        starts_on: "2026-09-01",
+        provenance: "automatic",
+      },
+      {
+        id: "page-event-2",
+        source: "youtube",
+        title: "beta 100x",
+        detail: "second",
+        starts_on: "2026-09-02",
+        provenance: "automatic",
+      },
+      {
+        id: "page-event-3",
+        source: "manual",
+        title: "gamma",
+        detail: "third",
+        starts_on: "2026-09-03",
+        provenance: "manual",
+        manual_locked: 1,
+      },
+      {
+        id: "page-event-4",
+        source: "x",
+        title: "delta",
+        detail: "fourth",
+        starts_on: "2026-09-04",
+        provenance: "automatic",
+      },
+      {
+        id: "page-event-5",
+        source: "x",
+        title: "epsilon",
+        detail: "fifth",
+        starts_on: "2026-09-05",
+        provenance: "automatic",
+      },
+    ])
+    assert.equal(deleteManualEvent(database, "page-event-4"), true)
+
+    const first = listAdminEventsPage(database, { page: 1, pageSize: 2 })
+    assert.deepEqual(
+      first.items.map((event) => event.id),
+      ["page-event-5", "page-event-3"],
+    )
+    assert.equal(first.total, 4)
+    assert.equal(first.totalPages, 2)
+    assert.equal(first.hasPrevious, false)
+    assert.equal(first.hasNext, true)
+
+    const clamped = listAdminEventsPage(database, { page: 99, pageSize: 2 })
+    assert.equal(clamped.page, 2)
+    assert.equal(clamped.hasPrevious, true)
+    assert.equal(clamped.hasNext, false)
+
+    const literal = listAdminEventsPage(database, {
+      search: "100%",
+      includeDeleted: true,
+    })
+    assert.deepEqual(
+      literal.items.map((event) => event.id),
+      ["page-event-1"],
+    )
+
+    const filtered = listAdminEventsPage(database, {
+      provenance: "automatic",
+      source: "x",
+      from: "2026-09-01",
+      to: "2026-09-05",
+      includeDeleted: false,
+      pageSize: 100,
+    })
+    assert.deepEqual(
+      filtered.items.map((event) => event.id),
+      ["page-event-5", "page-event-1"],
+    )
+
+    const empty = listAdminEventsPage(database, { search: "no-match" })
+    assert.equal(empty.total, 0)
+    assert.equal(empty.totalPages, 1)
+    assert.deepEqual(empty.items, [])
+
+    const revision = bumpDashboardRevision(database)
+    assert.equal(bumpDashboardRevision(database), revision + 1)
+  } finally {
+    database.close()
   }
 })

@@ -14,6 +14,8 @@ const badgeVariants = cva(
         blue: "border-transparent bg-periwinkle/20 text-[#4e5da5]",
         mint: "border-transparent bg-lagoon/60 text-[#28745c]",
         butter: "border-transparent bg-butter/45 text-[#765a1a]",
+        neutral: "border-transparent bg-secondary text-secondary-foreground",
+        sky: "border-transparent bg-periwinkle/20 text-[#4e5da5]",
       },
     },
     defaultVariants: { variant: "default" },

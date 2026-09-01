@@ -34,10 +34,13 @@ YouTube, or any other original source.
 4. Latest focus: one highlight traceable to a video or official reference.
 5. Channels and archive: recent YouTube uploads, a timeline, and a resource directory.
 
-A separate, unlinked `/admin` route lets the maintainer configure the schedule
-extractor, choose the Featured video, and curate events. The public calendar
-labels automatic extraction and manual confirmation so visitors can distinguish
-their provenance.
+A separate, unlinked `/admin` route presents a classic maintainer console with
+paginated schedule management, independent keyword and vision stages, ordered
+OpenAI-compatible providers, Featured-video selection, profile media, and event
+curation. The public calendar labels automatic extraction and manual confirmation
+so visitors can distinguish their provenance. A `/mcp` integration endpoint
+offers sanitized read tools without a key and narrowly scoped, bearer-protected
+automation; confirmation and other human-only actions remain in `/admin`.
 
 ## Current Status and Known Limits
 
@@ -48,6 +51,8 @@ their provenance.
   important entries can still be manually confirmed and locked.
 - The deployment is a single local SQLite instance with one password-protected
   maintainer surface, in-memory sessions, and no multi-user permission model.
+  MCP control uses a separate environment token and does not inherit the admin
+  session.
 - Media registration and bounded download are implemented. Retry scheduling,
   image dimension probing, and garbage collection remain follow-up work;
   unready media is intentionally shown as unavailable.

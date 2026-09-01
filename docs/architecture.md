@@ -16,10 +16,12 @@ data/database/kano.sqlite  -- snapshot, cursors, settings, and media metadata
           +--> data/avatar/  -- ignored selected profile media
           |
           v
-server/index.js   -- dashboard, admin API, health, and /media/<id>
+server/index.js   -- dashboard, admin API, health, /media/<id>, and /mcp
           |
           +--> src/main.jsx  -- public dashboard
           +--> src/admin.jsx -- hidden schedule administration
+          |
+          +--> server/sync-jobs.js -- single-flight asynchronous jobs
 ```
 
 Synchronization and page reads are separate paths. The browser reads the local
@@ -48,8 +50,11 @@ Responses should remain stable and sanitized; do not expose
 `raw_json`, stack traces, credentials, or absolute local paths to the browser.
 Ready runtime media is served only through the opaque-ID `/media/:id` route.
 
-`server/admin-api.js` exposes session, model/schedule/video settings, video
-listing, and event CRUD endpoints.
+`server/admin-api.js` exposes session, model/schedule/video settings, provider
+management, paginated event queries, asynchronous job status, video listing,
+and event CRUD endpoints. Mutating requests with a browser `Origin` are checked
+against the local origin; production still relies on the HttpOnly admin session
+and SameSite cookie.
 `APP_MODE=development` bypasses authentication for local work. Production
 requires a configured password and uses in-memory HttpOnly cookie sessions;
 restarting the process invalidates all sessions. The API exposes whether an
@@ -72,7 +77,7 @@ content hashes, and atomic file writes. `server/media-downloader.js` performs
 bounded downloads from the X and YouTube image hosts and promotes verified
 files to ready cache rows.
 
-### Synchronization: `scripts/sync.mjs`
+### Synchronization: `scripts/sync.mjs` and `server/sync-jobs.js`
 
 The synchronization layer handles timeouts, parsing, field normalization, and
 `sync_runs` records:
@@ -82,9 +87,11 @@ The synchronization layer handles timeouts, parsing, field normalization, and
   successful account snapshots are merged by publication time.
 - YouTube: keep six RSS entries on the first run, then follow a durable cursor;
   active reservations are rechecked even when no new upload appears.
-- Schedule: retain YouTube reservations as unified `events`, and pass matching X
-  posts plus ready cached images to `server/schedule-extractor.js`. It calls the
-  OpenAI Responses API with a strict JSON schema only when a key is configured.
+- Schedule: retain YouTube reservations as unified `events`, first select X
+  candidates with the keyword stage, then pass matching posts plus ready cached
+  images to `server/schedule-extractor.js`. The visual stage supports multiple
+  OpenAI-compatible Responses or Chat Completions providers in an ordered
+  failover route. API keys are encrypted at rest with `LLM_SECRETS_KEY`.
 - Media: register discovered URLs as `media_assets`/`media_links`, then download
   a bounded pending batch during the same synchronization command.
 - If one source fails, record the error; only successfully obtained data is upserted and old data remains.
@@ -95,11 +102,30 @@ The synchronization layer handles timeouts, parsing, field normalization, and
 2. The API reads SQLite, calculates each event's `isUpcoming`, resolves ready
    media to `/media/<id>`, and returns the snapshot plus synchronization metadata.
 3. The page shows the snapshot time. If the API is unavailable after a load, it keeps the known state and shows a retry affordance.
-4. A maintainer runs `npm run sync` on the server; the result is written to the database and `sync_runs`.
-5. The next page read shows the new snapshot without rebuilding the frontend.
-6. A maintainer who opens `/admin` can change the model, schedule-candidate
+4. A maintainer or an authorized MCP client starts an asynchronous job. The
+   single-flight job manager writes a `sync_runs` row with `job_id` and
+   `triggered_by`; a failed source retains the previous snapshot.
+5. Completion increments `dashboard_revision`. The public page polls the small
+   revision endpoint and reloads its stored snapshot; page refresh never starts
+   an external fetch.
+6. A maintainer who opens `/admin` can change the model, provider route,
+   schedule-candidate
    settings, Featured video, or curate events. Those changes go through the
    local API and lock affected events against automatic replacement.
+
+### MCP boundary: `/mcp`
+
+`/mcp` uses stateless Streamable HTTP. `dashboard_read`, `schedule_list`,
+`posts_list`, and `health_read` are public read-only tools and do not require a
+credential. Control tools are only registered for requests carrying
+`Authorization: Bearer <MCP_CONTROL_TOKEN>`: they can advance a dashboard
+revision, start or inspect an asynchronous sync, or run the automatic schedule
+scan. The token is independent of `ADMIN_PASSWORD` and browser sessions.
+
+The endpoint deliberately has no tool for manual event confirmation, editing,
+deletion, bulk approval, profile-media selection/upload, SQL, file paths, DOM
+commands, or arbitrary URL proxying. Human confirmation remains a human-only
+workflow at `/admin`.
 
 ## Extension Points
 

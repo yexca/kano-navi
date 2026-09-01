@@ -5,23 +5,25 @@
 The database file is `data/database/kano.sqlite`. On startup the server creates the
 directory, schema, and missing seed records. The current tables are:
 
-| Table                  | Purpose                                                                 |
-| ---------------------- | ----------------------------------------------------------------------- |
-| `profiles`             | Name, bio, avatar, banner, and official entry points                    |
-| `posts`                | X posts, account source, publication time, engagement counts, and media |
-| `events`               | Unified schedules, provenance, confidence, manual locks, and tombstones |
-| `event_sources`        | Source post/reservation identities attached to each event               |
-| `videos`               | Published YouTube videos and scheduled streams                          |
-| `focus`                | The page's latest focus item and stable YouTube video ID                |
-| `timeline`             | Person and activity timeline                                            |
-| `resources`            | X, YouTube, Wikipedia, and other resource links                         |
-| `assets`               | Schedule images and their sources                                       |
-| `media_assets`         | Remote media identities, cache metadata, and fetch status               |
-| `media_links`          | Links from cached media to posts, videos, profiles, and focus items     |
-| `sync_runs`            | Status, counts, and error summaries for each synchronization            |
-| `sync_state`           | Durable per-account X and YouTube cursors                               |
-| `app_settings`         | Non-secret model, schedule-extractor, X-account, and Featured settings  |
-| `schedule_extractions` | Versioned OpenAI inputs, outcomes, and structured result metadata       |
+| Table                  | Purpose                                                                   |
+| ---------------------- | ------------------------------------------------------------------------- |
+| `profiles`             | Name, bio, avatar, banner, and official entry points                      |
+| `posts`                | X posts, account source, publication time, engagement counts, and media   |
+| `events`               | Unified schedules, provenance, confidence, manual locks, and tombstones   |
+| `event_sources`        | Source post/reservation identities attached to each event                 |
+| `videos`               | Published YouTube videos and scheduled streams                            |
+| `focus`                | The page's latest focus item and stable YouTube video ID                  |
+| `timeline`             | Person and activity timeline                                              |
+| `resources`            | X, YouTube, Wikipedia, and other resource links                           |
+| `assets`               | Schedule images and their sources                                         |
+| `media_assets`         | Remote media identities, cache metadata, and fetch status                 |
+| `media_links`          | Links from cached media to posts, videos, profiles, and focus items       |
+| `sync_runs`            | Status, counts, error summaries, trigger, and asynchronous job identity   |
+| `sync_state`           | Durable per-account X and YouTube cursors                                 |
+| `app_settings`         | Non-secret model, schedule-extractor, X-account, and Featured settings    |
+| `schedule_extractions` | Versioned OpenAI inputs, outcomes, and structured result metadata         |
+| `llm_providers`        | OpenAI-compatible endpoints, capability flags, health, and encrypted keys |
+| `llm_route_providers`  | Ordered provider failover routes (including `schedule_vision`)            |
 
 The API maps snake_case columns to camelCase and removes `raw_json`. The
 frontend must not depend on database fields that are not declared in the API
@@ -87,16 +89,16 @@ Video thumbnails are registered and linked to their rows, then the bounded media
 stage downloads pending files from `i.ytimg.com` or its official numbered CDN
 hosts (`i1.ytimg.com` through `i4.ytimg.com`).
 
-### OpenAI Schedule Extraction
+### Schedule Extraction Pipeline
 
 Schedule extraction is independent of the public feed's old `notice/daily`
-classification. The admin-configurable `schedule_extraction_enabled` flag and
-`schedule_keywords` list decide which X post text is a candidate. If
-`OPENAI_API_KEY` is absent, this stage skips without changing events. If it is
-present, `server/schedule-extractor.js` sends the public post text and any ready
-cached post images to the OpenAI Responses API. The request disables storage and
-uses a strict JSON schema. A second local validator rejects invalid calendar
-dates, time formats, enumerations, or confidence values before any event write.
+classification. Stage one uses the admin-configurable keyword list to select X
+post candidates. Stage two sends the public post text and any ready cached
+images to the ordered `schedule_vision` provider route. Each provider can use
+the OpenAI Responses or Chat Completions shape, and a failed request is retried
+according to its bounded setting before the next provider is attempted. A
+second local validator rejects invalid calendar dates, time formats,
+enumerations, or confidence values before any event write.
 
 Input fingerprints and the extractor version make successful results
 idempotent. Model failures and invalid results are recorded in
@@ -104,10 +106,15 @@ idempotent. Model failures and invalid results are recorded in
 store `starts_on`, a null `starts_at`, and `time_precision = unknown`; the model
 must not invent a specific time.
 
-The effective model comes from `app_settings.llm_model`, falling back to
-`OPENAI_MODEL` and then `gpt-4o-mini`. Only non-secret settings are stored in
-SQLite; the API key remains in the process environment. Candidates from either
-X account use the same idempotent fingerprint and manual-lock rules.
+The legacy model comes from `app_settings.llm_model`, falling back to
+`OPENAI_MODEL` and then `gpt-4o-mini`. The legacy environment key remains a
+compatibility fallback for the seeded `openai-default` provider. Keys entered
+for additional providers are encrypted with `LLM_SECRETS_KEY`; ciphertext is
+never returned by an API response or written to extraction `raw_json`.
+Candidates from either X account use the same idempotent fingerprint and
+manual-lock rules. The two stage flags are stored as
+`schedule_keyword_enabled` and `schedule_vision_enabled` and can be changed
+independently in `/admin`.
 
 The `featured_video_id` setting is maintained through `/admin`. It points to an
 existing local `videos` row (or an empty value for no Featured item), and source
@@ -141,9 +148,14 @@ it. The dashboard hides tombstones and labels visible automatic/manual events.
 | `OPENAI_API_KEY`              | Empty                | Optional Responses API credential, environment only          |
 | `OPENAI_MODEL`                | `gpt-4o-mini`        | Initial/fallback schedule extraction model                   |
 | `OPENAI_TIMEOUT_MS`           | `30000`              | Timeout for one Responses API request                        |
+| `LLM_SECRETS_KEY`             | Empty                | Environment-only master key for encrypted provider API keys  |
 | `PORT`                        | `8787`               | Express listening port                                       |
 | `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Enable the automatic schedule stage                          |
+| `SCHEDULE_KEYWORD_ENABLED`    | `1`                  | Enable keyword candidate selection                           |
+| `SCHEDULE_VISION_ENABLED`     | `1`                  | Enable visual LLM extraction                                 |
 | `SCHEDULE_KEYWORDS`           | `schedule,...`       | Comma-separated schedule candidate keywords                  |
+| `MCP_ENABLED`                 | `1`                  | Expose the stateless `/mcp` endpoint                         |
+| `MCP_CONTROL_TOKEN`           | Empty                | Bearer token for MCP mutation tools                          |
 | `X_HANDLES`                   | `kano_2525,_Kanotic` | Comma-separated public X account names                       |
 | `X_HANDLE`                    | Empty                | Single-account compatibility fallback                        |
 | `X_BOOTSTRAP_DAYS`            | `7`                  | First-run X lookback in days                                 |
@@ -163,8 +175,8 @@ it. The dashboard hides tombstones and labels visible automatic/manual events.
 | `SKIP_MEDIA`, `SKIP_LLM`      | `0`                  | Set a post-processing stage flag to `1` to skip it           |
 
 `.env.example` is the complete non-secret inventory. `ADMIN_PASSWORD` and
-`OPENAI_API_KEY` are credentials; never place real values in source code,
-SQLite, URLs, API responses, or logs.
+`OPENAI_API_KEY`, `LLM_SECRETS_KEY`, and `MCP_CONTROL_TOKEN` are credentials;
+never place real values in source code, SQLite, URLs, API responses, or logs.
 
 ## Manual Maintenance
 
@@ -172,3 +184,11 @@ Use `/admin` instead of direct SQL for event maintenance. Creating, editing,
 confirming, or deleting through that API records manual precedence and preserves
 source links. Direct database edits can omit the lock/tombstone rules and should
 be reserved for reviewed recovery work.
+
+The `/mcp` endpoint is intentionally narrower than `/admin`. Its public tools
+read the prepared snapshot and sanitized schedule/status views. Bearer-protected
+tools may request a revision, start a full synchronization, or run the automatic
+keyword/vision scan; all of these return an asynchronous job result. MCP has no
+manual confirmation, edit, delete, profile-media selection/upload, SQL, file, or
+arbitrary URL-proxy operation. A page refresh or revision request never performs
+an external fetch.

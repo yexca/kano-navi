@@ -35,8 +35,14 @@ code, maintaining data, and reviewing security.
   media and optionally extracts structured schedules through OpenAI.
 - `server/media-cache.js` defines the ignored runtime media store, safe path
   helpers, source identities, and atomic-write primitive.
-- `/admin` is an unlinked maintainer route for model selection and manual event
-  CRUD; production access requires the environment-provided admin password.
+- `/admin` is an unlinked maintainer route with a classic sidebar console for
+  paginated schedule maintenance, keyword/vision stages, multiple model
+  providers, and profile media; production access requires the
+  environment-provided admin password.
+- `/mcp` is a stateless integration endpoint. Public read tools need no key;
+  synchronization, automatic scanning, and revision controls require a
+  dedicated bearer token. Human confirmation and other admin mutations are
+  never exposed there.
 - CI runs server/cache and sensitive-scanner tests, checks documentation and
   sensitive information, builds the frontend, and runs an API smoke check. It
   does not fetch live platform data.

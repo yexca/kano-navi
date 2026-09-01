@@ -246,7 +246,9 @@ const schema = `
     finished_at TEXT,
     status TEXT NOT NULL,
     message TEXT,
-    counts_json TEXT
+    counts_json TEXT,
+    triggered_by TEXT,
+    job_id TEXT
   );
 
   CREATE INDEX IF NOT EXISTS sync_runs_finished_at_idx ON sync_runs (finished_at DESC);
@@ -283,6 +285,37 @@ const schema = `
 
   CREATE UNIQUE INDEX IF NOT EXISTS schedule_extractions_identity_idx
     ON schedule_extractions (source, source_item_id, content_fingerprint, extractor_version);
+
+  CREATE TABLE IF NOT EXISTS llm_providers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    protocol TEXT NOT NULL DEFAULT 'openai-responses',
+    base_url TEXT NOT NULL,
+    model TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    vision_capable INTEGER NOT NULL DEFAULT 1,
+    timeout_ms INTEGER NOT NULL DEFAULT 30000,
+    max_retries INTEGER NOT NULL DEFAULT 0,
+    api_key_ciphertext TEXT,
+    last_status TEXT,
+    last_error TEXT,
+    last_checked_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS llm_route_providers (
+    route TEXT NOT NULL,
+    provider_id TEXT NOT NULL REFERENCES llm_providers (id) ON DELETE CASCADE,
+    priority INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (route, provider_id),
+    UNIQUE (route, priority)
+  );
+
+  CREATE INDEX IF NOT EXISTS llm_route_providers_order_idx
+    ON llm_route_providers (route, priority);
 `
 
 const JAPAN_TIME_ZONE = "Asia/Tokyo"
@@ -295,6 +328,8 @@ export const DEFAULT_SCHEDULE_KEYWORDS = [
   "今週の予定",
   "予定",
 ]
+export const SCHEDULE_VISION_ROUTE = "schedule_vision"
+export const LLM_PROTOCOLS = ["openai-responses", "openai-chat-completions"]
 const japanDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: JAPAN_TIME_ZONE,
   year: "numeric",
@@ -568,6 +603,17 @@ function migrateSchema(database) {
   if (!assetColumns.has("source_account")) {
     database.exec("ALTER TABLE assets ADD COLUMN source_account TEXT")
   }
+
+  const syncRunColumns = tableColumns(database, "sync_runs")
+  if (!syncRunColumns.has("triggered_by")) {
+    database.exec("ALTER TABLE sync_runs ADD COLUMN triggered_by TEXT")
+  }
+  if (!syncRunColumns.has("job_id")) {
+    database.exec("ALTER TABLE sync_runs ADD COLUMN job_id TEXT")
+  }
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS sync_runs_job_idx ON sync_runs (job_id, id DESC)",
+  )
 }
 
 function json(value) {
@@ -1718,6 +1764,46 @@ export function seedDatabase(
     )
     setAppSetting(database, "schedule_keywords", JSON.stringify(keywords))
   }
+  if (getAppSetting(database, "schedule_keyword_enabled", null) == null) {
+    const enabled = settingBoolean(
+      process.env.SCHEDULE_KEYWORD_ENABLED ??
+        getAppSetting(database, "schedule_extraction_enabled", "1"),
+      true,
+    )
+    setAppSetting(database, "schedule_keyword_enabled", enabled ? "1" : "0")
+  }
+  if (getAppSetting(database, "schedule_vision_enabled", null) == null) {
+    const enabled = settingBoolean(
+      process.env.SCHEDULE_VISION_ENABLED ??
+        getAppSetting(database, "schedule_extraction_enabled", "1"),
+      true,
+    )
+    setAppSetting(database, "schedule_vision_enabled", enabled ? "1" : "0")
+  }
+  if (getAppSetting(database, "dashboard_revision", null) == null) {
+    setAppSetting(database, "dashboard_revision", "0")
+  }
+  if (!database.prepare("SELECT 1 FROM llm_providers LIMIT 1").get()) {
+    const legacyModel = getAppSetting(
+      database,
+      "llm_model",
+      process.env.OPENAI_MODEL || "gpt-4o-mini",
+    )
+    upsertLlmProvider(database, {
+      id: "openai-default",
+      name: "OpenAI 默认",
+      protocol: "openai-responses",
+      baseUrl: "https://api.openai.com/v1",
+      model: legacyModel,
+      enabled: true,
+      visionCapable: true,
+      timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
+      maxRetries: 0,
+      replaceApiKey: false,
+      apiKeyCiphertext: null,
+    })
+    setLlmRouteProviders(database, SCHEDULE_VISION_ROUTE, ["openai-default"])
+  }
   if (getAppSetting(database, "featured_video_id", null) == null) {
     const seedFeatured =
       data?.focus?.video_id ??
@@ -1803,6 +1889,86 @@ export function listAdminEvents(database, { includeDeleted = false } = {}) {
       ...event,
       manualLocked: Boolean(event.manualLocked),
     }))
+}
+
+export function listAdminEventsPage(
+  database,
+  {
+    page = 1,
+    pageSize = 25,
+    includeDeleted = false,
+    search = "",
+    provenance = "",
+    source = "",
+    from = "",
+    to = "",
+  } = {},
+) {
+  const boundedPageSize = Math.min(
+    100,
+    Math.max(1, Math.trunc(Number(pageSize)) || 25),
+  )
+  const normalizedPage = Math.max(1, Math.trunc(Number(page)) || 1)
+  const clauses = []
+  const values = []
+  if (!includeDeleted) clauses.push("deleted_at IS NULL")
+  const normalizedSearch = String(search || "").trim()
+  if (normalizedSearch) {
+    clauses.push(
+      "(title LIKE ? ESCAPE '\\' OR detail LIKE ? ESCAPE '\\' OR status LIKE ? ESCAPE '\\')",
+    )
+    const escaped = normalizedSearch.replace(
+      /[\\%_]/gu,
+      (character) => `\\${character}`,
+    )
+    const pattern = `%${escaped}%`
+    values.push(pattern, pattern, pattern)
+  }
+  if (["automatic", "manual"].includes(String(provenance))) {
+    clauses.push("provenance = ?")
+    values.push(String(provenance))
+  }
+  if (String(source || "").trim()) {
+    clauses.push("source = ?")
+    values.push(String(source).trim())
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(String(from || ""))) {
+    clauses.push("starts_on >= ?")
+    values.push(String(from))
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(String(to || ""))) {
+    clauses.push("starts_on <= ?")
+    values.push(String(to))
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
+  const total = Number(
+    database
+      .prepare(`SELECT COUNT(*) AS count FROM events ${where}`)
+      .get(...values).count,
+  )
+  const totalPages = Math.max(1, Math.ceil(total / boundedPageSize))
+  const safePage = Math.min(normalizedPage, totalPages)
+  const rows = database
+    .prepare(
+      `SELECT ${eventAdminColumns} FROM events ${where}
+       ORDER BY starts_on DESC, COALESCE(starts_at, starts_on) DESC, id ASC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...values, boundedPageSize, (safePage - 1) * boundedPageSize)
+    .map((event) => ({
+      ...event,
+      manualLocked: Boolean(event.manualLocked),
+    }))
+  return {
+    items: rows,
+    events: rows,
+    page: safePage,
+    pageSize: boundedPageSize,
+    total,
+    totalPages,
+    hasPrevious: safePage > 1,
+    hasNext: safePage < totalPages,
+  }
 }
 
 export function createManualEvent(database, event) {
@@ -1974,6 +2140,209 @@ export function setAppSetting(database, key, value) {
   return { key: String(key), value: String(value), updatedAt: timestamp }
 }
 
+const llmProviderColumns = `
+  id, name, protocol, base_url AS baseUrl, model,
+  enabled, vision_capable AS visionCapable, timeout_ms AS timeoutMs,
+  max_retries AS maxRetries, api_key_ciphertext AS apiKeyCiphertext,
+  last_status AS lastStatus, last_error AS lastError,
+  last_checked_at AS lastCheckedAt, created_at AS createdAt, updated_at AS updatedAt
+`
+const llmProviderColumnsWithAlias = `
+  p.id, p.name, p.protocol, p.base_url AS baseUrl, p.model,
+  p.enabled, p.vision_capable AS visionCapable, p.timeout_ms AS timeoutMs,
+  p.max_retries AS maxRetries, p.api_key_ciphertext AS apiKeyCiphertext,
+  p.last_status AS lastStatus, p.last_error AS lastError,
+  p.last_checked_at AS lastCheckedAt, p.created_at AS createdAt, p.updated_at AS updatedAt
+`
+
+function mapLlmProvider(row) {
+  if (!row) return null
+  const {
+    apiKeyCiphertext,
+    routePriority: _routePriority,
+    ...publicFields
+  } = row
+  return {
+    ...publicFields,
+    enabled: Boolean(row.enabled),
+    visionCapable: Boolean(row.visionCapable),
+    apiKeyConfigured: Boolean(apiKeyCiphertext),
+  }
+}
+
+export function getLlmProvider(database, id) {
+  return mapLlmProvider(
+    database
+      .prepare(`SELECT ${llmProviderColumns} FROM llm_providers WHERE id = ?`)
+      .get(String(id)),
+  )
+}
+
+/** Internal credential lookup. The ciphertext is never returned by API payloads. */
+export function getLlmProviderSecret(database, id) {
+  return (
+    database
+      .prepare(
+        "SELECT id, api_key_ciphertext AS apiKeyCiphertext FROM llm_providers WHERE id = ?",
+      )
+      .get(String(id)) || null
+  )
+}
+
+export function listLlmProviders(database, { route = null } = {}) {
+  const rows = route
+    ? database
+        .prepare(
+          `SELECT ${llmProviderColumnsWithAlias}, r.priority AS routePriority
+           FROM llm_providers p
+           JOIN llm_route_providers r ON r.provider_id = p.id
+           WHERE r.route = ?
+           ORDER BY r.priority ASC, p.id ASC`,
+        )
+        .all(String(route))
+    : database
+        .prepare(
+          `SELECT ${llmProviderColumns}, NULL AS routePriority FROM llm_providers
+           ORDER BY enabled DESC, updated_at DESC, id ASC`,
+        )
+        .all()
+  return rows.map((row) => ({
+    ...mapLlmProvider(row),
+    ...(row.routePriority == null ? {} : { priority: row.routePriority }),
+  }))
+}
+
+export function upsertLlmProvider(database, provider = {}) {
+  const id = String(provider.id || "").trim()
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(id))
+    throw new Error("invalid LLM provider id")
+  const timestamp = nowIso()
+  const protocol = LLM_PROTOCOLS.includes(String(provider.protocol))
+    ? String(provider.protocol)
+    : "openai-responses"
+  const baseUrl = String(provider.baseUrl || provider.base_url || "").trim()
+  const model = String(provider.model || "").trim()
+  if (!baseUrl || !model)
+    throw new Error("LLM provider requires baseUrl and model")
+  const timeoutMs = Math.min(
+    120000,
+    Math.max(
+      1000,
+      Number(provider.timeoutMs ?? provider.timeout_ms ?? 30000) || 30000,
+    ),
+  )
+  const maxRetries = Math.min(
+    3,
+    Math.max(0, Number(provider.maxRetries ?? provider.max_retries ?? 0) || 0),
+  )
+  const replaceApiKey = Boolean(provider.replaceApiKey)
+  const encryptedCredential = replaceApiKey
+    ? nullable(provider.apiKeyCiphertext)
+    : null
+  database
+    .prepare(
+      `INSERT INTO llm_providers (
+         id, name, protocol, base_url, model, enabled, vision_capable,
+         timeout_ms, max_retries, api_key_ciphertext, last_status, last_error,
+         last_checked_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name=excluded.name, protocol=excluded.protocol, base_url=excluded.base_url,
+         model=excluded.model, enabled=excluded.enabled,
+         vision_capable=excluded.vision_capable, timeout_ms=excluded.timeout_ms,
+         max_retries=excluded.max_retries,
+         api_key_ciphertext=CASE WHEN ? = 1 THEN excluded.api_key_ciphertext
+           ELSE llm_providers.api_key_ciphertext END,
+         updated_at=excluded.updated_at`,
+    )
+    .run(
+      id,
+      String(provider.name || id)
+        .trim()
+        .slice(0, 120) || id,
+      protocol,
+      baseUrl,
+      model,
+      provider.enabled === false ? 0 : 1,
+      provider.visionCapable === false ? 0 : 1,
+      timeoutMs,
+      maxRetries,
+      encryptedCredential,
+      timestamp,
+      timestamp,
+      replaceApiKey ? 1 : 0,
+    )
+  return getLlmProvider(database, id)
+}
+
+export function updateLlmProviderStatus(
+  database,
+  id,
+  { status = null, error = null } = {},
+) {
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `UPDATE llm_providers SET last_status=?, last_error=?,
+       last_checked_at=?, updated_at=? WHERE id=?`,
+    )
+    .run(
+      nullable(status),
+      nullable(error)?.slice(0, 500) || null,
+      timestamp,
+      timestamp,
+      String(id),
+    )
+  return getLlmProvider(database, id)
+}
+
+export function deleteLlmProvider(database, id) {
+  const result = database
+    .prepare("DELETE FROM llm_providers WHERE id = ?")
+    .run(String(id))
+  return result.changes > 0
+}
+
+export function getLlmRouteProviders(database, route = SCHEDULE_VISION_ROUTE) {
+  return database
+    .prepare(
+      `SELECT p.id FROM llm_route_providers r
+       JOIN llm_providers p ON p.id = r.provider_id
+       WHERE r.route = ? ORDER BY r.priority ASC, p.id ASC`,
+    )
+    .all(String(route))
+    .map((row) => String(row.id))
+}
+
+export function setLlmRouteProviders(
+  database,
+  route = SCHEDULE_VISION_ROUTE,
+  providerIds = [],
+) {
+  const ids = [
+    ...new Set(providerIds.map((id) => String(id).trim()).filter(Boolean)),
+  ]
+  for (const id of ids) {
+    if (!getLlmProvider(database, id))
+      throw new Error(`LLM provider does not exist: ${id}`)
+  }
+  const timestamp = nowIso()
+  const update = database.transaction(() => {
+    database
+      .prepare("DELETE FROM llm_route_providers WHERE route = ?")
+      .run(String(route))
+    const insert = database.prepare(
+      `INSERT INTO llm_route_providers (route, provider_id, priority, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    ids.forEach((id, priority) =>
+      insert.run(String(route), id, priority, timestamp, timestamp),
+    )
+  })
+  update()
+  return getLlmRouteProviders(database, route)
+}
+
 function settingBoolean(value, fallback = true) {
   if (value == null || value === "") return fallback
   if (typeof value === "boolean") return value
@@ -2007,9 +2376,55 @@ export function getScheduleExtractionConfig(database) {
     "schedule_keywords",
     process.env.SCHEDULE_KEYWORDS ?? DEFAULT_SCHEDULE_KEYWORDS,
   )
-  return {
-    enabled: settingBoolean(enabledSetting, true),
+  const legacyEnabled = settingBoolean(enabledSetting, true)
+  const keywordEnabled = settingBoolean(
+    getAppSetting(
+      database,
+      "schedule_keyword_enabled",
+      process.env.SCHEDULE_KEYWORD_ENABLED ?? enabledSetting,
+    ),
+    legacyEnabled,
+  )
+  const visionEnabled = settingBoolean(
+    getAppSetting(
+      database,
+      "schedule_vision_enabled",
+      process.env.SCHEDULE_VISION_ENABLED ?? enabledSetting,
+    ),
+    legacyEnabled,
+  )
+  const config = {
+    enabled: keywordEnabled && visionEnabled,
     keywords: normalizedScheduleKeywords(keywordsSetting),
+  }
+  // Keep the original enumerable response shape for existing integrations;
+  // richer stage fields remain available to server-side callers and are
+  // explicitly selected by the admin API.
+  Object.defineProperties(config, {
+    keywordEnabled: { value: keywordEnabled, enumerable: false },
+    visionEnabled: { value: visionEnabled, enumerable: false },
+    providerOrder: {
+      value: getLlmRouteProviders(database, SCHEDULE_VISION_ROUTE),
+      enumerable: false,
+    },
+  })
+  return config
+}
+
+/**
+ * Return the complete persisted schedule pipeline configuration.  The legacy
+ * getScheduleExtractionConfig() keeps its small enumerable shape for callers
+ * that compare the old response verbatim; new admin/API consumers should use
+ * this explicit shape instead.
+ */
+export function getDetailedScheduleExtractionConfig(database) {
+  const config = getScheduleExtractionConfig(database)
+  return {
+    enabled: config.enabled,
+    keywordEnabled: config.keywordEnabled,
+    visionEnabled: config.visionEnabled,
+    keywords: [...config.keywords],
+    providerOrder: [...config.providerOrder],
   }
 }
 
@@ -2220,7 +2635,8 @@ export function listScheduleCandidatePosts(
       raw: parseJson(rawJson),
     }))
     .filter((post) => {
-      const haystack = String(post.text || "").toLocaleLowerCase()
+      const haystack =
+        `${String(post.label || "")} ${String(post.text || "")}`.toLocaleLowerCase()
       return loweredKeywords.some((keyword) => haystack.includes(keyword))
     })
     .slice(0, boundedLimit)
@@ -2276,12 +2692,21 @@ export function startSyncRun(
   database,
   source,
   startedAt = new Date().toISOString(),
+  { triggeredBy = null, jobId = null } = {},
 ) {
+  if (startedAt && typeof startedAt === "object") {
+    const options = startedAt
+    startedAt = options.startedAt || new Date().toISOString()
+    triggeredBy = options.triggeredBy ?? null
+    jobId = options.jobId ?? null
+  }
   const result = database
     .prepare(
-      `INSERT INTO sync_runs (source, started_at, status) VALUES (?, ?, 'running')`,
+      `INSERT INTO sync_runs
+       (source, started_at, status, triggered_by, job_id)
+       VALUES (?, ?, 'running', ?, ?)`,
     )
-    .run(source, startedAt)
+    .run(source, startedAt, nullable(triggeredBy), nullable(jobId))
   return Number(result.lastInsertRowid)
 }
 
@@ -2319,13 +2744,85 @@ function mapRows(rows) {
 export function getLatestSync(database) {
   const row = database
     .prepare(
-      `SELECT id, source, started_at AS startedAt, finished_at AS finishedAt, status, message, counts_json AS countsJson
+      `SELECT id, source, started_at AS startedAt, finished_at AS finishedAt,
+       status, message, counts_json AS countsJson,
+       triggered_by AS triggeredBy, job_id AS jobId
     FROM sync_runs WHERE status != 'running' ORDER BY COALESCE(finished_at, started_at) DESC LIMIT 1`,
     )
     .get()
   if (!row) return null
   const { countsJson: _countsJson, ...summary } = row
   return { ...summary, counts: parseJson(row.countsJson) || {} }
+}
+
+export function getSyncRun(database, idOrJobId) {
+  const value = String(idOrJobId ?? "").trim()
+  if (!value) return null
+  const row = database
+    .prepare(
+      `SELECT id, source, started_at AS startedAt, finished_at AS finishedAt,
+       status, message, counts_json AS countsJson,
+       triggered_by AS triggeredBy, job_id AS jobId
+       FROM sync_runs
+       WHERE id = ? OR job_id = ?
+       ORDER BY id DESC LIMIT 1`,
+    )
+    .get(/^[0-9]+$/u.test(value) ? Number(value) : -1, value)
+  if (!row) return null
+  const { countsJson, ...summary } = row
+  return { ...summary, counts: parseJson(countsJson) || {} }
+}
+
+export function listSyncRuns(
+  database,
+  { limit = 20, jobId = null, status = null } = {},
+) {
+  const boundedLimit = Math.min(100, Math.max(1, Number(limit) || 20))
+  const clauses = []
+  const values = []
+  if (jobId != null && String(jobId).trim()) {
+    clauses.push("job_id = ?")
+    values.push(String(jobId).trim())
+  }
+  if (status != null && String(status).trim()) {
+    clauses.push("status = ?")
+    values.push(String(status).trim())
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
+  return database
+    .prepare(
+      `SELECT id, source, started_at AS startedAt, finished_at AS finishedAt,
+       status, message, counts_json AS countsJson,
+       triggered_by AS triggeredBy, job_id AS jobId
+       FROM sync_runs ${where}
+       ORDER BY COALESCE(finished_at, started_at) DESC, id DESC
+       LIMIT ?`,
+    )
+    .all(...values, Math.trunc(boundedLimit))
+    .map((row) => {
+      const { countsJson, ...summary } = row
+      return { ...summary, counts: parseJson(countsJson) || {} }
+    })
+}
+
+export function getDashboardRevision(database) {
+  const value = getAppSetting(database, "dashboard_revision", "0")
+  const revision = Number.parseInt(String(value), 10)
+  return Number.isInteger(revision) && revision >= 0 ? revision : 0
+}
+
+export function bumpDashboardRevision(database) {
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `INSERT INTO app_settings (key, value, updated_at)
+       VALUES ('dashboard_revision', '1', ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value = CAST(COALESCE(app_settings.value, '0') AS INTEGER) + 1,
+         updated_at = excluded.updated_at`,
+    )
+    .run(timestamp)
+  return getDashboardRevision(database)
 }
 
 export function getDashboard(database, { days = 3, now = new Date() } = {}) {
@@ -2613,6 +3110,7 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
       postWindowDays: days,
       generatedAt: now.toISOString(),
       mediaCache,
+      revision: getDashboardRevision(database),
       featuredVideoId,
       xAccounts: configuredXHandles(database),
     },

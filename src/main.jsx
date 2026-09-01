@@ -643,6 +643,7 @@ function App() {
   const [toast, setToast] = useState(null)
   const [lightbox, setLightbox] = useState(null)
   const hasLoadedRef = useRef(false)
+  const dashboardRevisionRef = useRef(null)
   const t = useMemo(() => createTranslator(locale), [locale])
 
   const loadDashboard = useCallback(async ({ announce = false } = {}) => {
@@ -660,6 +661,7 @@ function App() {
         profile: payload.profile || fallbackProfile,
         meta: { ...emptyDashboard.meta, ...payload.meta },
       })
+      dashboardRevisionRef.current = payload.meta?.revision ?? null
       hasLoadedRef.current = true
       setFetchError(false)
       if (announce) setToast({ key: "toast.reloaded" })
@@ -676,6 +678,36 @@ function App() {
 
   useEffect(() => {
     loadDashboard()
+  }, [loadDashboard])
+
+  // MCP and server-side jobs advance a durable revision. Polling this small
+  // endpoint lets an already-open public page refresh its stored snapshot
+  // without exposing a browser-control or DOM API.
+  useEffect(() => {
+    let active = true
+    const checkRevision = async () => {
+      try {
+        const response = await fetch(
+          `/api/dashboard/revision?since=${encodeURIComponent(String(dashboardRevisionRef.current ?? ""))}`,
+          { headers: { accept: "application/json" } },
+        )
+        if (!response.ok || !active) return
+        const payload = await response.json()
+        if (
+          dashboardRevisionRef.current != null &&
+          Number(payload.revision) !== Number(dashboardRevisionRef.current)
+        ) {
+          await loadDashboard()
+        }
+      } catch {
+        // The regular dashboard request owns the visible error state.
+      }
+    }
+    const timer = window.setInterval(checkRevision, 8000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
   }, [loadDashboard])
 
   useEffect(() => {

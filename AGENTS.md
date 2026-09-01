@@ -20,7 +20,8 @@ Read it first, then use the focused documents in `docs/` for more detail.
 - This is a fan-made, read-mostly status board. It is not operated by Kano Mahoro or any affiliated organization.
 - The frontend uses React, Vite, and shadcn/ui-style components. It only calls the local API; it must not fetch X, YouTube, or other platforms directly.
 - The Express service reads SQLite and exposes `/api/health`, `/api/dashboard`,
-  guarded `/api/admin/*` endpoints, and the guarded `/media/:id` cache route.
+  guarded `/api/admin/*` endpoints, the public-read/scoped-control `/mcp` route,
+  and the guarded `/media/:id` cache route.
 - External reads belong to the synchronization path in `scripts/sync.mjs` and
   its server-side media/schedule helpers. The results are stored as SQLite
   snapshots; opening the page or clicking refresh must not trigger an external fetch.
@@ -32,15 +33,18 @@ Read it first, then use the focused documents in `docs/` for more detail.
 | Path                           | Responsibility                                                  |
 | ------------------------------ | --------------------------------------------------------------- |
 | `src/main.jsx`                 | Dashboard page, interactions, and API data mapping              |
-| `src/admin.jsx`                | Hidden `/admin` configuration and schedule editor               |
+| `src/admin.jsx`                | Hidden `/admin` console, provider settings, and schedule editor |
 | `src/index.css`                | Global design tokens, layout, and responsive styling            |
 | `src/admin.css`                | Admin-specific responsive layout                                |
 | `src/components/ui/`           | Reusable shadcn/ui-style primitives                             |
 | `server/database.js`           | SQLite schema, seeding, upserts, and queries                    |
 | `server/media-cache.js`        | Runtime media paths, identities, and atomic-write helpers       |
 | `server/media-downloader.js`   | Bounded X/YouTube image downloader                              |
-| `server/schedule-extractor.js` | OpenAI structured schedule extraction                           |
-| `server/admin-api.js`          | Authenticated model/schedule/video configuration and event CRUD |
+| `server/schedule-extractor.js` | Keyword-filtered multi-provider schedule extraction             |
+| `server/admin-api.js`          | Authenticated provider/schedule/video configuration and CRUD    |
+| `server/mcp-api.js`            | Sanitized MCP reads and bearer-scoped automation tools          |
+| `server/sync-jobs.js`          | Single-flight asynchronous sync and scan jobs                   |
+| `server/secret-store.js`       | Environment-keyed encryption for provider API keys              |
 | `server/admin-auth.js`         | Development bypass and production session authentication        |
 | `server/app.js`                | Testable Express application, APIs, and guarded media route     |
 | `server/index.js`              | Runtime database and HTTP listener assembly                     |
@@ -59,9 +63,16 @@ Read it first, then use the focused documents in `docs/` for more detail.
 - `/api/admin/*` is password-free only when `APP_MODE=development`. Production
   requires `ADMIN_PASSWORD` with at least 12 characters and uses an HttpOnly
   session cookie. The `/admin` page is intentionally absent from public navigation.
+- `/mcp` exposes sanitized read-only tools without a key. Revision, sync, and
+  automatic-scan tools require `Authorization: Bearer <MCP_CONTROL_TOKEN>` and
+  never expose manual confirmation, editing, deletion, or profile-media
+  selection/upload.
 - Timestamps are stored as parseable ISO 8601 strings. The display layer formats them in `Asia/Tokyo`.
 - Manual event edits, confirmations, and deletions set a durable lock. Source
   synchronization and OpenAI extraction must not overwrite or resurrect them.
+- `LLM_SECRETS_KEY` is the environment-only master key for API keys stored in
+  `llm_providers`; plaintext keys and ciphertext must never enter API output,
+  logs, or extraction payloads.
 - X posts carry `accountHandle` so the public feed can identify the source
   account without exposing the internal classification used by extraction.
 - The current tables are created by the schema constant in `server/database.js`. When changing the schema, update the documentation, seed data, and verification steps together. Do not silently drop columns or clear snapshots.
@@ -81,9 +92,11 @@ make ci                  # Run the full local CI check
 ```
 
 Synchronization accepts the source, bootstrap, request-budget, media-limit,
-and skip variables documented in `.env.example`. `OPENAI_API_KEY` is the only
-credential used by synchronization: it stays in the process environment and
-must never be written to source code, SQLite, a URL, API output, or a log.
+and skip variables documented in `.env.example`. `OPENAI_API_KEY` is an
+environment-only compatibility credential; provider keys entered in `/admin`
+are encrypted with `LLM_SECRETS_KEY`. `MCP_CONTROL_TOKEN` is a separate
+environment-only integration credential. None may be written to source code,
+SQLite in plaintext, a URL, API output, or a log.
 
 ## Change and Verification Rules
 

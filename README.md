@@ -36,6 +36,15 @@ directly; it is not linked from the dashboard. `APP_MODE=development` bypasses
 login. Before `npm start`, set `APP_MODE=production` and an
 `ADMIN_PASSWORD` of at least 12 characters in the ignored `.env` file.
 `OPENAI_API_KEY` may remain empty until automatic schedule extraction is needed.
+The page uses a classic sidebar console with separate tabs for paginated
+schedules, keyword/vision scanning, multiple OpenAI-compatible providers, and
+profile media.
+
+`/mcp` is a stateless integration endpoint. Public read tools work without a
+key; only revision requests, synchronization, and automatic scans require
+`Authorization: Bearer <MCP_CONTROL_TOKEN>`. The MCP token is separate from
+the admin password and never grants event confirmation, editing, deletion, or
+profile-media selection.
 
 ## Data and API
 
@@ -43,8 +52,8 @@ The SQLite file is `data/database/kano.sqlite`. When the server starts, it creat
 schema and fills missing tables with the initial snapshot in
 `server/seed-data.js`. The main tables are `profiles`, `posts`, `events`,
 `videos`, `focus`, `timeline`, `resources`, `assets`, `media_assets`,
-`media_links`, `sync_runs`, `sync_state`, `event_sources`, `app_settings`, and
-`schedule_extractions`.
+`media_links`, `sync_runs`, `sync_state`, `event_sources`, `app_settings`,
+`schedule_extractions`, `llm_providers`, and `llm_route_providers`.
 
 Dashboard endpoint:
 
@@ -85,16 +94,17 @@ The server-side synchronization script:
 - stores the latest six RSS videos on the first YouTube run, then only newer
   entries, while continuing to recheck active reservations;
 - downloads allowlisted X images and YouTube thumbnails into the runtime cache;
-- sends posts matching the separately configured schedule keywords and cached
-  images to the OpenAI Responses API for strict structured extraction when
-  `OPENAI_API_KEY` is configured.
+- selects candidates with the separately configured keyword stage, then sends
+  their text and cached images to the ordered visual provider route for strict
+  structured extraction when a provider key is configured. Providers can use
+  OpenAI Responses or Chat Completions and fail over in priority order.
 
 Failures do not clear existing data. They are recorded in `sync_runs` together
 with the failure reason. Invalid model output also leaves the previous schedule
-intact. The API key is read only from the process environment; the admin page
-stores only non-secret settings, including the model, schedule keywords, and
-Featured video. You can select a source or adjust the
-timeout with:
+intact. The legacy API key is read only from the process environment. Keys
+entered for additional providers are encrypted with the environment-only
+`LLM_SECRETS_KEY` master key and are never returned by the API. You can select
+a source or adjust the timeout with:
 
 ```bash
 X_HANDLES=kano_2525,_Kanotic YOUTUBE_CHANNEL_ID=UCShXNLMXCfstmWKH_q86B8w npm run sync
@@ -108,6 +118,9 @@ limits, and per-stage skip flags.
 The admin page can create, edit, confirm, and delete events. Any such operation
 marks the event as manually confirmed and locks it against later source or LLM
 updates. The public calendar labels automatic and manually confirmed entries.
+MCP automatic jobs never perform those human operations; they return an
+asynchronous job ID, and completion advances the dashboard revision so an open
+public page can reread its stored snapshot.
 
 Public X and YouTube pages can be rate-limited, require a login, or change
 their structure, so the original platform page remains the source of truth. The

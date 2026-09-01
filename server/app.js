@@ -6,6 +6,7 @@ import { createAdminRouter } from "./admin-api.js"
 import {
   getActiveProfileMedia,
   getDashboard,
+  getDashboardRevision,
   getLatestSync,
   getMediaAsset,
 } from "./database.js"
@@ -17,6 +18,8 @@ import {
   mediaCacheDirectory,
   resolveMediaCachePath,
 } from "./media-cache.js"
+import { createMcpRouter } from "./mcp-api.js"
+import { createSyncJobManager } from "./sync-jobs.js"
 
 function createProfileMediaHandler(database) {
   return (request, response) => {
@@ -174,6 +177,10 @@ export function createApp({
   adminMode = "development",
   adminPassword = "",
   openAiKeyConfigured = Boolean(process.env.OPENAI_API_KEY),
+  mcpEnabled = process.env.MCP_ENABLED !== "0",
+  mcpControlToken = process.env.MCP_CONTROL_TOKEN || "",
+  syncJobs = null,
+  adminFetchImpl = fetch,
 }) {
   if (!database) throw new Error("createApp requires a database")
 
@@ -210,6 +217,33 @@ export function createApp({
     response.json(getDashboard(database, { days }))
   })
 
+  app.get("/api/dashboard/revision", (request, response) => {
+    const revision = getDashboardRevision(database)
+    const since = Number.parseInt(String(request.query.since ?? ""), 10)
+    response.set("Cache-Control", "no-store")
+    response.json({
+      revision,
+      changed: Number.isInteger(since) ? revision !== since : true,
+    })
+  })
+
+  const jobManager =
+    syncJobs ||
+    createSyncJobManager({
+      database,
+    })
+
+  const mcpOptions = {
+    database,
+    jobs: jobManager,
+    enabled: mcpEnabled,
+  }
+  Object.defineProperty(mcpOptions, "controlToken", {
+    value: mcpControlToken,
+    enumerable: true,
+  })
+  app.use("/mcp", createMcpRouter(mcpOptions))
+
   app.use(
     "/api/admin",
     createAdminRouter({
@@ -217,6 +251,8 @@ export function createApp({
       mode: adminMode,
       adminPassword,
       openAiKeyConfigured,
+      jobs: jobManager,
+      fetchImpl: adminFetchImpl,
     }),
   )
 
@@ -226,7 +262,7 @@ export function createApp({
 
   if (staticDirectory && fs.existsSync(staticDirectory)) {
     app.use(express.static(staticDirectory, { index: "index.html" }))
-    app.get(/^(?!\/(?:api|media)(?:\/|$)).*/, (_request, response) => {
+    app.get(/^(?!\/(?:api|media|mcp)(?:\/|$)).*/, (_request, response) => {
       response.sendFile(path.join(staticDirectory, "index.html"))
     })
   }

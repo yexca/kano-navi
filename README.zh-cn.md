@@ -32,10 +32,16 @@ npm start
 `APP_MODE=development` 时免登录；运行 `npm start` 前，应在不会提交的
 `.env` 中设为 `APP_MODE=production`，并配置至少 12 位的
 `ADMIN_PASSWORD`。暂时不使用自动日程识别时，`OPENAI_API_KEY` 可以留空。
+管理页采用经典侧栏后台布局，分为概览、分页日程、关键词/视觉扫描、多个
+OpenAI-compatible 模型提供商，以及头像与横幅标签。
+
+`/mcp` 是独立的无状态集成入口。公开读取工具不需要密钥；推进 revision、
+启动同步和运行自动扫描才需要 `Authorization: Bearer <MCP_CONTROL_TOKEN>`。
+该 token 与管理员密码分离，也不能执行人工确认、编辑、删除或素材选择。
 
 ## 数据与 API
 
-SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings` 和 `schedule_extractions`。
+SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers` 和 `llm_route_providers`。
 
 看板接口：
 
@@ -64,10 +70,11 @@ npm run sync
 - X：每个账号首次最多回溯 7 天，后续只请求未知状态 ID，并按可配置的小额度刷新已知项；两个账号的结果按时间聚合。
 - YouTube：首次保存 RSS 中最近 6 条，后续只保存游标之后的新条目，同时持续复查仍活跃的预约。
 - 媒体：下载白名单内的 X 图片和 YouTube 缩略图，写入内容寻址缓存。
-- 日程：按管理页单独配置的关键词筛选帖子；配置密钥后，通过 OpenAI
-  Responses API 结合帖子文字与缓存图片生成严格结构化结果。
+- 日程：先按管理页单独配置的关键词阶段筛选候选，再把帖子文字与缓存图片
+  交给按优先级排列的视觉 provider。支持 OpenAI Responses 和 Chat
+  Completions；当前 provider 失败会自动尝试下一个。
 
-同步失败时不会清空已有数据，会在 `sync_runs` 中记录失败原因；模型返回非法结构时也会保留旧日程。OpenAI 密钥只从进程环境读取，管理页和 SQLite 只保存非敏感设置。可用环境变量调整来源或跳过某一来源：
+同步失败时不会清空已有数据，会在 `sync_runs` 中记录失败原因；模型返回非法结构时也会保留旧日程。旧版 OpenAI 密钥只从进程环境读取；在管理页输入的 provider 密钥会用环境变量中的 `LLM_SECRETS_KEY` 加密后保存，API 不会回显明文。可用环境变量调整来源或跳过某一来源：
 
 ```bash
 X_HANDLES=kano_2525,_Kanotic YOUTUBE_CHANNEL_ID=UCShXNLMXCfstmWKH_q86B8w npm run sync
@@ -80,6 +87,8 @@ SKIP_YOUTUBE=1 npm run sync
 
 管理页可以新增、编辑、确认和删除日程。任何人工操作都会把该记录标为
 “人工确认”并永久锁定，后续平台同步或 LLM 结果不能覆盖或复活它；主页日历会区分“自动识别”和“人工确认”。
+MCP 只允许读取和启动自动任务，不会执行这些人工操作；任务完成后会递增
+dashboard revision，已打开的主页会重新读取 SQLite 快照。
 
 X / YouTube 的公开页面可能受到限流、登录墙或页面结构变化影响，因此同步结果应以原平台页面为准。页面上的“重新读取”只重新请求 SQLite API，不会触发外部抓取。
 

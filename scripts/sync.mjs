@@ -6,6 +6,7 @@ import { XMLParser } from "fast-xml-parser"
 
 import {
   finishSyncRun,
+  bumpDashboardRevision,
   getScheduleExtractionConfig,
   getKnownPostIds,
   getSyncState,
@@ -933,11 +934,20 @@ export async function syncYoutube(database) {
   }
 }
 
-export async function runSync({ database = null, closeDatabase = null } = {}) {
+export async function runSync({
+  database = null,
+  closeDatabase = null,
+  triggeredBy = "cli",
+  jobId = null,
+  setExitCode = true,
+} = {}) {
   const ownsDatabase = !database
   const activeDatabase = database || initializeDatabase()
   const shouldClose = closeDatabase ?? ownsDatabase
-  const runId = startSyncRun(activeDatabase, "manual")
+  const runId = startSyncRun(activeDatabase, "manual", {
+    triggeredBy,
+    jobId,
+  })
   const results = {}
   let successCount = 0
   let attempted = 0
@@ -1015,7 +1025,8 @@ export async function runSync({ database = null, closeDatabase = null } = {}) {
           : "部分数据源不可用或存在警告，保留已有快照",
       counts: results,
     })
-    if (status === "failed") process.exitCode = 1
+    bumpDashboardRevision(activeDatabase)
+    if (status === "failed" && setExitCode) process.exitCode = 1
     return { status, results }
   } catch (error) {
     finishSyncRun(activeDatabase, runId, {
@@ -1023,6 +1034,7 @@ export async function runSync({ database = null, closeDatabase = null } = {}) {
       message: "同步异常终止，保留已有快照",
       counts: { ...results, fatal: { error: error.message } },
     })
+    bumpDashboardRevision(activeDatabase)
     throw error
   } finally {
     if (shouldClose) activeDatabase.close()

@@ -4,6 +4,9 @@
 
 - The browser trusts only the prepared snapshot returned by the local Express API. X, YouTube, image CDNs, and other public pages are untrusted input.
 - SQLite, runtime directories, and environment variables belong to the local maintainer boundary and must not be exposed verbatim through the API.
+- `/mcp` is a separate integration boundary: public tools expose only prepared
+  read-only facts, while mutation tools require a dedicated bearer token. The
+  token never grants the browser admin session or arbitrary server access.
 - Cached media is runtime state. The only file read route is `/media/:id`; it
   validates an opaque database ID, a ready status, and a resolved path below the
   cache root.
@@ -20,12 +23,17 @@
 - Register a new source host and its purpose in `scripts/privacy-allowlist.json` first. The allowlist is a reviewable source record, not a comment-based way to bypass secret detection.
 - Extract only the fields needed from external HTML/JSON. Filter stack traces, absolute paths, and raw responses before displaying anything.
 
-The OpenAI boundary is opt-in. When `OPENAI_API_KEY` is configured, matching
-public schedule-post text and ready cached post images are sent to
-`api.openai.com` with `store: false`. The key is read from the process
-environment and is never returned by the admin API, stored in SQLite, embedded
-in a URL, or logged. The selected model name is not a secret and may be stored
-in `app_settings`.
+The model boundary is opt-in. Matching public schedule-post text and ready
+cached post images are sent only to the ordered, administrator-configured
+OpenAI-compatible provider route. Responses and Chat Completions protocols are
+supported. Every provider request has a timeout, bounded retries, and redirect
+blocking; a failed provider is skipped in favor of the next configured one.
+`OPENAI_API_KEY` remains an environment-only compatibility fallback for the
+seeded default provider. Keys entered in `/admin` are encrypted with the
+`LLM_SECRETS_KEY` master key before they reach SQLite. Neither plaintext keys
+nor ciphertext are returned by the admin API, written to `raw_json`, or logged.
+The master key itself exists only in the process environment and must be
+rotated together with the stored provider keys when compromised.
 
 ## Admin Authentication
 
@@ -41,6 +49,23 @@ in `app_settings`.
 - Manual event mutations require the authenticated admin API and create durable
   locks/tombstones so untrusted source or model output cannot overwrite them.
 
+## MCP Authentication and Scope
+
+- Public `/mcp` read tools do not require a key. They return a sanitized view of
+  the stored dashboard, schedules, posts, health, and synchronization status;
+  deleted tombstones and operator-only lock/source metadata are omitted.
+- `dashboard_request_reload`, `sync_start`, and `scan_run_automatic` require
+  `Authorization: Bearer <MCP_CONTROL_TOKEN>`. Use a long random token, send it
+  only over HTTPS, and rotate it through the runtime environment. An admin
+  session cookie is deliberately not accepted as an MCP credential.
+- MCP control calls start asynchronous, single-flight jobs. They cannot confirm,
+  edit, delete, or select records, upload media, execute SQL, read files, issue
+  arbitrary proxy requests, or send DOM/browser commands. Human confirmation
+  remains available only to a person in `/admin`.
+- A dashboard revision is a notification hint, not a data write. Page reload or
+  `dashboard_request_reload` reads the existing SQLite snapshot; only the
+  server-side synchronization job performs external source requests.
+
 ## Sensitive-Information Scan
 
 `scripts/check-sensitive.mjs` checks the workspace and CI for:
@@ -51,6 +76,10 @@ in `app_settings`.
 - personal machine paths and non-documentation IPv4 addresses;
 - `.env`, `.npmrc`, private-key, and database files. The committed
   `.env.example` contains only empty credentials and public/local defaults.
+
+`LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, `ADMIN_PASSWORD`, and provider API keys
+must remain in the ignored runtime environment. Example values are intentionally
+empty; never copy a production token into documentation or tests.
 
 Public platform URLs are allowed because they are product data. The scanner
 still checks that their hosts are in the allowlist or a reserved-domain set.

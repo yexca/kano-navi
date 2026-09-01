@@ -1,16 +1,32 @@
 import fs from "node:fs"
+import net from "node:net"
 import path from "node:path"
 import express from "express"
 
 import {
   createManualEvent,
   deleteManualEvent,
+  bumpDashboardRevision,
   getFeaturedVideoId,
   getAppSetting,
+  getDetailedScheduleExtractionConfig,
   getEvent,
   getScheduleExtractionConfig,
   listAdminVideos,
   listAdminEvents,
+  listAdminEventsPage,
+  listLlmProviders,
+  getLlmProvider,
+  getLlmProviderSecret,
+  getLlmRouteProviders,
+  setLlmRouteProviders,
+  upsertLlmProvider,
+  updateLlmProviderStatus,
+  deleteLlmProvider,
+  listSyncRuns,
+  getSyncRun,
+  LLM_PROTOCOLS,
+  SCHEDULE_VISION_ROUTE,
   listProfileMedia,
   getProfileMedia,
   selectProfileMedia,
@@ -21,6 +37,7 @@ import {
 } from "./database.js"
 import { createAdminAuth } from "./admin-auth.js"
 import { defaultScheduleModel } from "./schedule-extractor.js"
+import { decryptSecret, encryptSecret } from "./secret-store.js"
 import {
   avatarMediaDirectory,
   isAllowedMediaMimeType,
@@ -119,8 +136,334 @@ function scheduleKeywords(value) {
   return normalized
 }
 
+function mutationOriginGuard(request, response, next) {
+  const fetchSite = String(
+    request.headers["sec-fetch-site"] || "",
+  ).toLowerCase()
+  if (fetchSite === "cross-site") {
+    response.status(403).json({ error: "csrf_origin_mismatch" })
+    return
+  }
+  const origin = String(request.headers.origin || "").trim()
+  if (origin) {
+    try {
+      const expectedProtocol = String(
+        request.headers["x-forwarded-proto"] || request.protocol,
+      )
+        .split(",", 1)[0]
+        .trim()
+        .toLowerCase()
+      const expected = `${expectedProtocol}://${String(request.get("host"))}`
+      if (new URL(origin).origin !== expected) throw new Error("origin")
+    } catch {
+      response.status(403).json({ error: "csrf_origin_mismatch" })
+      return
+    }
+  }
+  next()
+}
+
+function privateIpv4(hostname) {
+  const parts = hostname.split(".").map((part) => Number(part))
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  )
+    return false
+  const [a, b] = parts
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 0) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51) ||
+    (a === 203 && b === 0) ||
+    a >= 224
+  )
+}
+
+function ipv6BigInt(hostname) {
+  let value = hostname.replace(/^\[|\]$/gu, "").toLowerCase()
+  if (value.includes(".")) {
+    const separator = value.lastIndexOf(":")
+    if (separator < 0) return null
+    const ipv4 = value.slice(separator + 1)
+    if (!net.isIP(ipv4)) return null
+    const parts = ipv4.split(".").map((part) => Number(part))
+    if (
+      parts.length !== 4 ||
+      parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+    )
+      return null
+    const high = ((parts[0] << 8) | parts[1]).toString(16)
+    const low = ((parts[2] << 8) | parts[3]).toString(16)
+    value = `${value.slice(0, separator)}:${high}:${low}`
+  }
+  if (net.isIP(value) !== 6) return null
+  const halves = value.split("::")
+  if (halves.length > 2) return null
+  const left = halves[0] ? halves[0].split(":") : []
+  const right = halves.length === 2 && halves[1] ? halves[1].split(":") : []
+  const missing = 8 - left.length - right.length
+  if (halves.length === 1 && missing !== 0) return null
+  if (missing < 0 || (halves.length === 2 && missing < 1)) return null
+  const groups =
+    halves.length === 2
+      ? [...left, ...Array(missing).fill("0"), ...right]
+      : left
+  if (
+    groups.length !== 8 ||
+    groups.some((group) => !/^[\da-f]{1,4}$/u.test(group))
+  )
+    return null
+  let address = 0n
+  for (const group of groups) address = (address << 16n) + BigInt(`0x${group}`)
+  return address
+}
+
+function privateIpv6(hostname) {
+  const address = ipv6BigInt(hostname)
+  if (address == null) return false
+  if (address === 0n || address === 1n) return true
+  // Unspecified, loopback, unique-local, link-local, and multicast ranges.
+  if (address >> 121n === 0x7en || address >> 121n === 0x7fn) return true // fc00::/7
+  if (address >> 118n === 0x3fan) return true // fe80::/10
+  if (address >> 120n === 0xffn) return true // ff00::/8
+  // IPv4-mapped addresses inherit the IPv4 private/loopback policy.
+  if (address >> 32n === 0xffffn) {
+    const ipv4 = Number(address & 0xffffffffn)
+    return privateIpv4(
+      `${ipv4 >>> 24}.${(ipv4 >>> 16) & 255}.${(ipv4 >>> 8) & 255}.${ipv4 & 255}`,
+    )
+  }
+  return false
+}
+
+function providerBaseUrl(value, { mode = "development" } = {}) {
+  const normalized = text(value, { name: "baseUrl", required: true, max: 500 })
+  let url
+  try {
+    url = new URL(normalized)
+  } catch {
+    throw new AdminInputError("baseUrl is invalid")
+  }
+  if (!["http:", "https:"].includes(url.protocol))
+    throw new AdminInputError("baseUrl must use HTTP or HTTPS")
+  if (url.username || url.password || url.search || url.hash)
+    throw new AdminInputError(
+      "baseUrl must not contain credentials, query, or fragment",
+    )
+  const hostname = url.hostname.toLowerCase().replace(/\.$/u, "")
+  const ipVersion = net.isIP(hostname.replace(/^\[|\]$/gu, ""))
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    (ipVersion === 4 && privateIpv4(hostname)) ||
+    (ipVersion === 6 && privateIpv6(hostname))
+  ) {
+    throw new AdminInputError(
+      "baseUrl must not target a private or loopback address",
+    )
+  }
+  if (mode === "production" && url.protocol !== "https:")
+    throw new AdminInputError("baseUrl must use HTTPS in production")
+  return url.toString().replace(/\/+$/u, "")
+}
+
+function providerEndpoint(baseUrl, protocol) {
+  const base = String(baseUrl).replace(/\/+$/u, "")
+  if (/(?:\/responses|\/chat\/completions)$/u.test(base)) return base
+  return protocol === "openai-chat-completions"
+    ? `${base}/chat/completions`
+    : `${base}/responses`
+}
+
+function providerModel(value) {
+  const model = text(value, { name: "model", required: true, max: 160 })
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u.test(model))
+    throw new AdminInputError("model contains unsupported characters")
+  return model
+}
+
+function ensureVisionRouteProvider(database, id) {
+  const current = getLlmRouteProviders(database, SCHEDULE_VISION_ROUTE)
+  if (!current.includes(id)) {
+    setLlmRouteProviders(database, SCHEDULE_VISION_ROUTE, [...current, id])
+  }
+}
+
+function integerField(value, name, minimum, maximum, fallback) {
+  if (value == null || value === "") return fallback
+  const number = Number(value)
+  if (!Number.isInteger(number) || number < minimum || number > maximum)
+    throw new AdminInputError(
+      `${name} must be an integer between ${minimum} and ${maximum}`,
+    )
+  return number
+}
+
+function providerInput(
+  body = {},
+  existing = null,
+  { mode = "development" } = {},
+) {
+  const id = text(body.id ?? existing?.id, {
+    name: "id",
+    required: true,
+    max: 64,
+  })
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(id))
+    throw new AdminInputError("id contains unsupported characters")
+  const protocol = String(
+    body.protocol ?? existing?.protocol ?? "openai-responses",
+  )
+  if (!LLM_PROTOCOLS.includes(protocol))
+    throw new AdminInputError("protocol is invalid")
+  const baseUrl = providerBaseUrl(body.baseUrl ?? existing?.baseUrl, { mode })
+  const model = providerModel(body.model ?? existing?.model)
+  const name = text(body.name ?? existing?.name ?? id, {
+    name: "name",
+    required: true,
+    max: 120,
+  })
+  const enabled =
+    body.enabled == null
+      ? existing?.enabled !== false
+      : booleanValue(body.enabled, "enabled")
+  const visionCapable =
+    body.visionCapable == null
+      ? existing?.visionCapable !== false
+      : booleanValue(body.visionCapable, "visionCapable")
+  const timeoutMs = integerField(
+    body.timeoutMs,
+    "timeoutMs",
+    1000,
+    120000,
+    existing?.timeoutMs ?? 30000,
+  )
+  const maxRetries = integerField(
+    body.maxRetries,
+    "maxRetries",
+    0,
+    3,
+    existing?.maxRetries ?? 0,
+  )
+  let replaceApiKey = false
+  let apiKeyCiphertext = null
+  if (Object.prototype.hasOwnProperty.call(body, "apiKey")) {
+    const apiKey = body.apiKey == null ? "" : String(body.apiKey).trim()
+    if (apiKey.length > 500) throw new AdminInputError("apiKey is too long")
+    replaceApiKey = true
+    if (apiKey) {
+      try {
+        apiKeyCiphertext = encryptSecret(
+          apiKey,
+          process.env.LLM_SECRETS_KEY || "",
+        )
+      } catch (error) {
+        throw new AdminInputError(error.message)
+      }
+    }
+  }
+  return {
+    id,
+    name,
+    protocol,
+    baseUrl,
+    model,
+    enabled,
+    visionCapable,
+    timeoutMs,
+    maxRetries,
+    replaceApiKey,
+    apiKeyCiphertext,
+  }
+}
+
+function queryBoolean(value) {
+  return ["1", "true", "yes", "on"].includes(
+    String(value ?? "")
+      .trim()
+      .toLowerCase(),
+  )
+}
+
+async function testProviderConnection(
+  database,
+  provider,
+  { fetchImpl = fetch } = {},
+) {
+  const secret = getLlmProviderSecret(database, provider.id)
+  let apiKey = null
+  if (secret?.apiKeyCiphertext) {
+    try {
+      apiKey = decryptSecret(
+        secret.apiKeyCiphertext,
+        process.env.LLM_SECRETS_KEY || "",
+      )
+    } catch {
+      apiKey = null
+    }
+  } else if (provider.id === "openai-default") {
+    apiKey = process.env.OPENAI_API_KEY || null
+  }
+  if (!apiKey) throw new AdminInputError("provider API key is not configured")
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), provider.timeoutMs)
+  try {
+    const endpoint = providerEndpoint(provider.baseUrl, provider.protocol)
+    const body =
+      provider.protocol === "openai-chat-completions"
+        ? {
+            model: provider.model,
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 1,
+          }
+        : {
+            model: provider.model,
+            store: false,
+            input: "ping",
+            max_output_tokens: 1,
+          }
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      redirect: "error",
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    })
+    if (!response.ok)
+      throw new Error(`provider returned HTTP ${response.status}`)
+    updateLlmProviderStatus(database, provider.id, { status: "success" })
+    return { ok: true, provider: getLlmProvider(database, provider.id) }
+  } catch (error) {
+    const message =
+      error?.name === "AbortError"
+        ? "provider request timed out"
+        : "provider request failed"
+    updateLlmProviderStatus(database, provider.id, {
+      status: "failed",
+      error: message,
+    })
+    throw new AdminInputError(message)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 function configPayload(database, openAiKeyConfigured, updatedAt = null) {
-  const schedule = getScheduleExtractionConfig(database)
+  const schedule = getDetailedScheduleExtractionConfig(database)
+  const providers = publicProviders(database, openAiKeyConfigured)
   return {
     llmModel: getAppSetting(
       database,
@@ -129,10 +472,22 @@ function configPayload(database, openAiKeyConfigured, updatedAt = null) {
     ),
     openAiKeyConfigured,
     scheduleExtractionEnabled: schedule.enabled,
+    scheduleKeywordEnabled: schedule.keywordEnabled,
+    scheduleVisionEnabled: schedule.visionEnabled,
     scheduleKeywords: schedule.keywords,
+    providerOrder: schedule.providerOrder,
+    providers,
     featuredVideoId: getFeaturedVideoId(database),
     ...(updatedAt ? { updatedAt } : {}),
   }
+}
+
+function publicProviders(database, openAiKeyConfigured) {
+  return listLlmProviders(database).map((provider) =>
+    provider.id === "openai-default" && openAiKeyConfigured
+      ? { ...provider, apiKeyConfigured: true }
+      : provider,
+  )
 }
 
 function eventInput(body = {}) {
@@ -286,6 +641,8 @@ export function createAdminRouter({
   mode = "development",
   adminPassword = "",
   openAiKeyConfigured = Boolean(process.env.OPENAI_API_KEY),
+  jobs = null,
+  fetchImpl = fetch,
 } = {}) {
   const router = express.Router()
   const auth = createAdminAuth({ mode, adminPassword })
@@ -300,6 +657,7 @@ export function createAdminRouter({
   router.post("/login", auth.login)
   router.post("/logout", auth.logout)
   router.use(auth.requireAuth)
+  router.use(mutationOriginGuard)
 
   router.get("/config", (_request, response) => {
     response.json(configPayload(database, openAiKeyConfigured))
@@ -309,6 +667,7 @@ export function createAdminRouter({
     route((request, response) => {
       const body = request.body || {}
       let updatedAt = null
+      let dashboardChanged = false
       if (Object.prototype.hasOwnProperty.call(body, "llmModel")) {
         const model = text(body.llmModel, {
           name: "llmModel",
@@ -332,6 +691,32 @@ export function createAdminRouter({
           "schedule_extraction_enabled",
           enabled ? "1" : "0",
         ).updatedAt
+        setAppSetting(database, "schedule_keyword_enabled", enabled ? "1" : "0")
+        setAppSetting(database, "schedule_vision_enabled", enabled ? "1" : "0")
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(body, "scheduleKeywordEnabled")
+      ) {
+        const enabled = booleanValue(
+          body.scheduleKeywordEnabled,
+          "scheduleKeywordEnabled",
+        )
+        updatedAt = setAppSetting(
+          database,
+          "schedule_keyword_enabled",
+          enabled ? "1" : "0",
+        ).updatedAt
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "scheduleVisionEnabled")) {
+        const enabled = booleanValue(
+          body.scheduleVisionEnabled,
+          "scheduleVisionEnabled",
+        )
+        updatedAt = setAppSetting(
+          database,
+          "schedule_vision_enabled",
+          enabled ? "1" : "0",
+        ).updatedAt
       }
       if (Object.prototype.hasOwnProperty.call(body, "scheduleKeywords")) {
         const keywords = scheduleKeywords(body.scheduleKeywords)
@@ -347,13 +732,180 @@ export function createAdminRouter({
           max: 64,
         })
         try {
+          const previousFeaturedVideoId = getFeaturedVideoId(database)
           setFeaturedVideoId(database, featuredVideoId)
+          dashboardChanged =
+            previousFeaturedVideoId !== getFeaturedVideoId(database)
           updatedAt = new Date().toISOString()
         } catch (error) {
           throw new AdminInputError(error.message)
         }
       }
+      if (dashboardChanged) bumpDashboardRevision(database)
       response.json(configPayload(database, openAiKeyConfigured, updatedAt))
+    }),
+  )
+
+  router.get("/providers", (_request, response) => {
+    const route = SCHEDULE_VISION_ROUTE
+    response.json({
+      providers: publicProviders(database, openAiKeyConfigured),
+      route,
+      providerOrder: getLlmRouteProviders(database, route),
+    })
+  })
+  router.post(
+    "/providers",
+    route((request, response) => {
+      let input
+      try {
+        input = providerInput(request.body || {}, null, { mode })
+        const provider = upsertLlmProvider(database, input)
+        ensureVisionRouteProvider(database, input.id)
+        response.status(201).json({
+          provider:
+            provider.id === "openai-default" && openAiKeyConfigured
+              ? { ...provider, apiKeyConfigured: true }
+              : provider,
+        })
+      } catch (error) {
+        if (error instanceof AdminInputError) throw error
+        throw new AdminInputError(error.message)
+      }
+    }),
+  )
+  router.put(
+    "/providers/order",
+    route((request, response) => {
+      const ids = request.body?.providerOrder ?? request.body?.ids
+      if (!Array.isArray(ids) || ids.length > 100)
+        throw new AdminInputError("providerOrder must be an array")
+      try {
+        const providerOrder = setLlmRouteProviders(
+          database,
+          SCHEDULE_VISION_ROUTE,
+          ids,
+        )
+        response.json({
+          route: SCHEDULE_VISION_ROUTE,
+          providerOrder,
+          providers: publicProviders(database, openAiKeyConfigured),
+        })
+      } catch (error) {
+        throw new AdminInputError(error.message)
+      }
+    }),
+  )
+  router.put(
+    "/providers/:id",
+    route((request, response) => {
+      const existing = getLlmProvider(database, request.params.id)
+      if (!existing) {
+        response.status(404).json({ error: "llm_provider_not_found" })
+        return
+      }
+      try {
+        const input = providerInput(
+          { ...(request.body || {}), id: request.params.id },
+          existing,
+          { mode },
+        )
+        const provider = upsertLlmProvider(database, input)
+        ensureVisionRouteProvider(database, input.id)
+        response.json({
+          provider:
+            provider.id === "openai-default" && openAiKeyConfigured
+              ? { ...provider, apiKeyConfigured: true }
+              : provider,
+        })
+      } catch (error) {
+        if (error instanceof AdminInputError) throw error
+        throw new AdminInputError(error.message)
+      }
+    }),
+  )
+  router.delete(
+    "/providers/:id",
+    route((request, response) => {
+      if (!deleteLlmProvider(database, request.params.id)) {
+        response.status(404).json({ error: "llm_provider_not_found" })
+        return
+      }
+      response.status(204).end()
+    }),
+  )
+  const providerTestRoute = asyncRoute(async (request, response) => {
+    const provider = getLlmProvider(database, request.params.id)
+    if (!provider) {
+      response.status(404).json({ error: "llm_provider_not_found" })
+      return
+    }
+    const result = await testProviderConnection(database, provider, {
+      fetchImpl,
+    })
+    response.json({
+      ...result,
+      provider:
+        result.provider?.id === "openai-default" && openAiKeyConfigured
+          ? { ...result.provider, apiKeyConfigured: true }
+          : result.provider,
+    })
+  })
+  router.put("/providers/:id/test", providerTestRoute)
+  router.post("/providers/:id/test", providerTestRoute)
+
+  router.get("/sync/runs", (request, response) => {
+    response.json({
+      runs: listSyncRuns(database, {
+        limit: request.query.limit,
+        jobId: request.query.jobId,
+        status: request.query.status,
+      }),
+    })
+  })
+  router.get("/sync/jobs", (request, response) => {
+    response.json({ jobs: jobs?.list(request.query.limit) || [] })
+  })
+  router.get("/sync/jobs/:id", (request, response) => {
+    const job =
+      jobs?.get(request.params.id) || getSyncRun(database, request.params.id)
+    if (!job) {
+      response.status(404).json({ error: "sync_job_not_found" })
+      return
+    }
+    response.json({ job })
+  })
+  router.post(
+    "/sync",
+    route((request, response) => {
+      if (!jobs) {
+        response.status(503).json({ error: "sync_jobs_unavailable" })
+        return
+      }
+      const result = jobs.start("sync", "admin")
+      response.status(result.accepted ? 202 : 409).json(result)
+    }),
+  )
+  router.post(
+    "/sync/start",
+    route((request, response) => {
+      if (!jobs) {
+        response.status(503).json({ error: "sync_jobs_unavailable" })
+        return
+      }
+      const result = jobs.start("sync", "admin")
+      response.status(result.accepted ? 202 : 409).json(result)
+    }),
+  )
+  router.post(
+    "/scan/automatic",
+    route((request, response) => {
+      if (!jobs) {
+        response.status(503).json({ error: "sync_jobs_unavailable" })
+        return
+      }
+      const result = jobs.start("scan", "admin")
+      response.status(result.accepted ? 202 : 409).json(result)
     }),
   )
 
@@ -453,6 +1005,7 @@ export function createAdminRouter({
     "/profile-media/:id/select",
     route((request, response) => {
       const item = selectProfileMedia(database, request.params.id)
+      bumpDashboardRevision(database)
       response.json({ item, ...profileMediaPayload(database) })
     }),
   )
@@ -462,16 +1015,40 @@ export function createAdminRouter({
   })
 
   router.get("/events", (request, response) => {
-    response.json({
-      events: listAdminEvents(database, {
-        includeDeleted: request.query.includeDeleted === "1",
+    const hasPagination =
+      request.query.page != null ||
+      request.query.pageSize != null ||
+      request.query.search != null ||
+      request.query.provenance != null ||
+      request.query.source != null ||
+      request.query.from != null ||
+      request.query.to != null
+    if (!hasPagination) {
+      response.json({
+        events: listAdminEvents(database, {
+          includeDeleted: queryBoolean(request.query.includeDeleted),
+        }),
+      })
+      return
+    }
+    response.json(
+      listAdminEventsPage(database, {
+        page: request.query.page,
+        pageSize: request.query.pageSize,
+        includeDeleted: queryBoolean(request.query.includeDeleted),
+        search: request.query.search,
+        provenance: request.query.provenance,
+        source: request.query.source,
+        from: request.query.from,
+        to: request.query.to,
       }),
-    })
+    )
   })
   router.post(
     "/events",
     route((request, response) => {
       const event = createManualEvent(database, eventInput(request.body))
+      bumpDashboardRevision(database)
       response.status(201).json({ event })
     }),
   )
@@ -487,6 +1064,7 @@ export function createAdminRouter({
         response.status(404).json({ error: "event_not_found" })
         return
       }
+      bumpDashboardRevision(database)
       response.json({ event })
     }),
   )
@@ -503,6 +1081,7 @@ export function createAdminRouter({
         request.params.id,
         eventInput(existing),
       )
+      bumpDashboardRevision(database)
       response.json({ event })
     }),
   )
@@ -511,6 +1090,7 @@ export function createAdminRouter({
       response.status(404).json({ error: "event_not_found" })
       return
     }
+    bumpDashboardRevision(database)
     response.status(204).end()
   })
 
