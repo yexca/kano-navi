@@ -1,7 +1,9 @@
+import { adminMessages } from "./admin-i18n"
+
 export const localeOptions = [
-  { value: "zh-CN", label: "简体中文" },
-  { value: "ja", label: "日本語" },
-  { value: "en", label: "English" },
+  { value: "en", label: "English", htmlLang: "en" },
+  { value: "ja", label: "日本語", htmlLang: "ja" },
+  { value: "zh-CN", label: "简体中文", htmlLang: "zh-CN" },
 ]
 
 const messages = {
@@ -18,6 +20,13 @@ const messages = {
     "header.switchToLight": "切换浅色模式",
     "header.banner": "鹿乃まほろ主题横幅",
     "header.bannerAlt": "鹿乃まほろ的草莓与音乐主题视觉",
+    "panel.feed": "01 / X 动态",
+    "panel.calendar": "02 / 日程",
+    "panel.videos": "03 / 最近视频",
+    "panel.archive": "04 / 档案",
+    "panel.directory": "05 / 资料入口",
+    "hero.role": "VIRTUAL ARTIST",
+    "hero.name": "KANO MAHORO",
     "sync.apiUnavailable": "本地 API 待连接",
     "sync.partial": "同步部分完成",
     "sync.needsReview": "同步需检查",
@@ -30,6 +39,7 @@ const messages = {
     "common.retry": "重试",
     "common.close": "关闭",
     "common.pendingConfirmation": "待确认",
+    "common.timezoneShort": "日本时间",
     "overview.eyebrow": "TODAY / 一眼看懂",
     "overview.title": "近况面板",
     "overview.upcoming": ({ count }) => `${count} 个未来安排已收录`,
@@ -75,8 +85,15 @@ const messages = {
     "media.empty": "暂无 YouTube 快照。",
     "media.dataNote": "YouTube RSS + 预约直播",
     "media.subscribe": "订阅频道",
+    "media.kind.upcoming": "即将直播",
+    "media.kind.video": "视频",
+    "media.kind.gameplay": "游戏视频",
+    "media.kind.talk": "杂谈",
+    "media.kind.liveArchive": "直播存档",
+    "media.kind.music": "音乐",
     "archive.title": "时间轴",
     "archive.listenFromStart": "从最早的歌开始听",
+    "archive.mylist": "NicoNico / mylist",
     "directory.title": "资料入口",
     "directory.note": "官方与公开档案",
     "directory.tags": "常用标签",
@@ -98,6 +115,13 @@ const messages = {
     "header.switchToLight": "ライトモードに切り替える",
     "header.banner": "鹿乃まほろのテーマバナー",
     "header.bannerAlt": "鹿乃まほろの苺と音楽をテーマにしたビジュアル",
+    "panel.feed": "01 / X 投稿",
+    "panel.calendar": "02 / 予定",
+    "panel.videos": "03 / 最近の動画",
+    "panel.archive": "04 / アーカイブ",
+    "panel.directory": "05 / リンク集",
+    "hero.role": "VIRTUAL ARTIST",
+    "hero.name": "KANO MAHORO",
     "sync.apiUnavailable": "ローカル API に未接続",
     "sync.partial": "同期は一部完了",
     "sync.needsReview": "同期の確認が必要",
@@ -111,6 +135,7 @@ const messages = {
     "common.retry": "再試行",
     "common.close": "閉じる",
     "common.pendingConfirmation": "確認待ち",
+    "common.timezoneShort": "日本時間",
     "overview.eyebrow": "TODAY / ひと目で確認",
     "overview.title": "ステータスボード",
     "overview.upcoming": ({ count }) => `今後の予定を${count}件収録`,
@@ -157,8 +182,15 @@ const messages = {
     "media.empty": "YouTube スナップショットはまだありません。",
     "media.dataNote": "YouTube RSS + 配信予約",
     "media.subscribe": "チャンネル登録",
+    "media.kind.upcoming": "配信予定",
+    "media.kind.video": "動画",
+    "media.kind.gameplay": "ゲーム実況",
+    "media.kind.talk": "雑談",
+    "media.kind.liveArchive": "配信アーカイブ",
+    "media.kind.music": "音楽",
     "archive.title": "タイムライン",
     "archive.listenFromStart": "最初の歌から聴く",
+    "archive.mylist": "NicoNico / mylist",
     "directory.title": "リンク集",
     "directory.note": "公式・公開アーカイブ",
     "directory.tags": "よく使うタグ",
@@ -180,6 +212,13 @@ const messages = {
     "header.switchToLight": "Switch to light mode",
     "header.banner": "Kano Mahoro theme banner",
     "header.bannerAlt": "Kano Mahoro strawberry and music themed visual",
+    "panel.feed": "01 / X FEED",
+    "panel.calendar": "02 / CALENDAR",
+    "panel.videos": "03 / RECENT VIDEOS",
+    "panel.archive": "04 / ARCHIVE",
+    "panel.directory": "05 / THE DIRECTORY",
+    "hero.role": "VIRTUAL ARTIST",
+    "hero.name": "KANO MAHORO",
     "sync.apiUnavailable": "Local API unavailable",
     "sync.partial": "Sync partially completed",
     "sync.needsReview": "Sync needs review",
@@ -193,6 +232,7 @@ const messages = {
     "common.retry": "Retry",
     "common.close": "Close",
     "common.pendingConfirmation": "To be confirmed",
+    "common.timezoneShort": "JST",
     "overview.eyebrow": "TODAY / AT A GLANCE",
     "overview.title": "Status board",
     "overview.upcoming": ({ count }) =>
@@ -242,8 +282,15 @@ const messages = {
     "media.empty": "No YouTube snapshot yet.",
     "media.dataNote": "YouTube RSS + scheduled streams",
     "media.subscribe": "Subscribe",
+    "media.kind.upcoming": "UPCOMING LIVE",
+    "media.kind.video": "VIDEO",
+    "media.kind.gameplay": "GAMEPLAY",
+    "media.kind.talk": "TALK",
+    "media.kind.liveArchive": "LIVE ARCHIVE",
+    "media.kind.music": "MUSIC",
     "archive.title": "Timeline",
     "archive.listenFromStart": "Listen from the earliest songs",
+    "archive.mylist": "NicoNico / mylist",
     "directory.title": "Directory",
     "directory.note": "Official and public archives",
     "directory.tags": "Common tags",
@@ -268,10 +315,17 @@ export function detectLocale(languages = []) {
 }
 
 export function createTranslator(locale) {
-  const selectedMessages = messages[locale] || messages.en
+  const selectedMessages = {
+    ...messages[locale],
+    ...(adminMessages[locale] || {}),
+  }
+  const fallbackMessages = {
+    ...messages.en,
+    ...adminMessages.en,
+  }
 
   return (key, values = {}) => {
-    const message = selectedMessages[key] ?? messages.en[key] ?? key
+    const message = selectedMessages[key] ?? fallbackMessages[key] ?? key
     if (typeof message === "function") return message(values)
     if (typeof message !== "string") return message
 

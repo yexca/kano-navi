@@ -6,6 +6,16 @@
   color: hsl(var(--foreground));
 }
 
+.admin-login-shell {
+  position: relative;
+}
+
+.admin-login-toolbar {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+}
+
 .admin-shell {
   padding: 0 28px 48px;
 }
@@ -811,7 +821,10 @@
 /* Modern console layout */
 .admin-console {
   display: flex;
+  width: 100%;
   min-height: 100vh;
+  min-width: 0;
+  overflow-x: clip;
   background: #f5f7fa;
   color: #20242b;
 }
@@ -987,6 +1000,10 @@
   padding: 0 36px;
 }
 
+.admin-console-topbar > :first-child {
+  min-width: 0;
+}
+
 .admin-console-topbar h1 {
   margin: 0;
   font-size: 23px;
@@ -999,7 +1016,19 @@
 }
 
 .admin-console-topbar .admin-topbar-actions {
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 9px;
+}
+
+.admin-console-topbar .admin-preference-controls {
+  gap: 6px;
+}
+
+.admin-console-topbar .admin-preference-controls .icon-button {
+  width: 34px;
+  height: 34px;
 }
 
 .admin-console-topbar .admin-pulse-dot {
@@ -1150,12 +1179,23 @@
 
 .admin-activity-row {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
   margin-top: 22px;
   border-top: 1px solid #edf0f2;
   padding-top: 15px;
+}
+
+.admin-activity-row > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.admin-activity-row > .rounded-full,
+.admin-activity-row > .admin-live-dot {
+  flex: 0 0 auto;
 }
 
 .admin-activity-row strong,
@@ -1873,6 +1913,11 @@
     display: none;
   }
 
+  .admin-login-toolbar {
+    top: 14px;
+    right: 14px;
+  }
+
   .admin-view-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -1935,4 +1980,154 @@
   .admin-provider-form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* The modern console has its own neutral palette, so mirror the shared theme
+   state here instead of relying only on the public dashboard tokens. */
+.dark .admin-console {
+  background: #15191f;
+  color: #f0f2f5;
+}
+
+.dark .admin-console .admin-sidebar,
+.dark .admin-console .admin-console-topbar,
+.dark .admin-console .admin-metric,
+.dark .admin-console .admin-panel,
+.dark .admin-console .admin-schedule-filters,
+.dark .admin-console .admin-schedule-table-wrap,
+.dark .admin-console .admin-provider-table-wrap,
+.dark .admin-console .admin-drawer {
+  border-color: #353d48;
+  background: #1d2229;
+}
+
+.dark .admin-console .admin-sidebar {
+  border-right-color: #353d48;
+}
+
+.dark .admin-console .admin-console-topbar {
+  border-bottom-color: #353d48;
+}
+
+.dark .admin-console .admin-brand small,
+.dark .admin-console .admin-nav-label,
+.dark .admin-console .admin-nav-item,
+.dark .admin-console .admin-sidebar-status,
+.dark .admin-console .admin-back-link,
+.dark .admin-console .admin-view-heading p:not(.admin-kicker),
+.dark .admin-console .admin-metric span,
+.dark .admin-console .admin-metric small,
+.dark .admin-console .admin-activity-row small,
+.dark .admin-console .admin-empty-inline,
+.dark .admin-console .admin-boundary-list,
+.dark .admin-console .admin-panel-copy,
+.dark .admin-console .admin-field > span,
+.dark .admin-console .admin-route-row small,
+.dark .admin-console .admin-stage-footnote,
+.dark .admin-console .admin-table-footnote,
+.dark .admin-console .admin-table-toolbar,
+.dark .admin-console .admin-date-cell small,
+.dark .admin-console .admin-event-table-copy small,
+.dark .admin-console .admin-source-text,
+.dark .admin-console .admin-status-text,
+.dark .admin-console .admin-pagination,
+.dark .admin-console .admin-provider-name small,
+.dark .admin-console .admin-provider-meta small,
+.dark .admin-console .admin-provider-statuses small,
+.dark .admin-console .admin-provider-meta span,
+.dark .admin-console .admin-security-note {
+  color: #aab3bf;
+}
+
+.dark .admin-console .admin-nav-item:hover {
+  background: #262d36;
+  color: #f0f2f5;
+}
+
+.dark .admin-console .admin-nav-item.is-active {
+  background: #3a252b;
+  color: #ff9a9d;
+}
+
+.dark .admin-console .admin-nav-item em {
+  background: #303842;
+  color: #c6ced8;
+}
+
+.dark .admin-console .admin-nav-item.is-active em {
+  background: #593138;
+  color: #ffb4b6;
+}
+
+.dark .admin-console .admin-sidebar-footer,
+.dark .admin-console .admin-activity-row,
+.dark .admin-console .admin-provider-flags,
+.dark .admin-console .admin-provider-form > .admin-form-actions,
+.dark .admin-console .admin-route-row {
+  border-color: #303842;
+}
+
+.dark .admin-console .admin-metric strong,
+.dark .admin-console .admin-table-toolbar strong {
+  color: #f0f2f5;
+}
+
+.dark .admin-console .admin-activity-row-muted {
+  background: #252b33;
+}
+
+.dark .admin-console input:not([type="checkbox"]),
+.dark .admin-console select,
+.dark .admin-console textarea {
+  border-color: #46505d;
+  background: #15191f;
+  color: #f0f2f5;
+}
+
+.dark .admin-console input:disabled,
+.dark .admin-console textarea:disabled,
+.dark .admin-console select:disabled {
+  background: #252b33;
+  color: #7f8996;
+}
+
+.dark .admin-console .admin-schedule-table th,
+.dark .admin-console .admin-provider-table th {
+  border-color: #353d48;
+  background: #252b33;
+  color: #aab3bf;
+}
+
+.dark .admin-console .admin-schedule-table td,
+.dark .admin-console .admin-provider-table td {
+  border-color: #303842;
+}
+
+.dark .admin-console .admin-schedule-table tr:hover td,
+.dark .admin-console .admin-provider-table tr:hover td {
+  background: #252b33;
+}
+
+.dark .admin-console .admin-schedule-table tr.is-deleted td {
+  background: #38252a;
+}
+
+.dark .admin-console .admin-editor {
+  border-left-color: #353d48;
+  background: #1d2229;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.32);
+}
+
+.dark .admin-console .admin-editor::before {
+  background: rgba(0, 0, 0, 0.48);
+}
+
+.dark .admin-login {
+  border-color: #aeb7c2;
+  background: #1d2229;
+  box-shadow: 4px 4px 0 #0b0e12;
+}
+
+.dark .admin-console button[class*="border-ink"] {
+  border-color: #526070;
 }

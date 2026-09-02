@@ -9,34 +9,23 @@ import {
   Clock3,
   ExternalLink,
   Image as ImageIcon,
-  Languages,
   LoaderCircle,
-  Moon,
   Play,
   RefreshCw,
-  Sun,
   WifiOff,
   X,
 } from "lucide-react"
+import { AppSettingsProvider, useAppSettings } from "@/app-settings"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { PreferenceControls } from "@/components/preference-controls"
 import { AdminApp } from "@/admin"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { createTranslator, detectLocale, localeOptions } from "@/i18n"
 import "./index.css"
 
 const JAPAN_TIME_ZONE = "Asia/Tokyo"
@@ -45,7 +34,7 @@ const postWindowDays = 3
 const fallbackProfile = {
   displayName: "鹿乃まほろ",
   romanizedName: "Kano Mahoro",
-  bio: "歌手 / Virtual Artist / みんなの毎日を、まほろばに。",
+  bio: "Singer / Virtual Artist / Making every day a little more mahoroba.",
   avatarUrl: "/assets/kano-avatar.jpg",
   bannerUrl: "/assets/kano-banner.jpg",
   xUrl: "https://x.com/kano_2525",
@@ -211,7 +200,7 @@ function formatEventDate(event, locale, t) {
     }, {})
   return {
     date: `${parts.month}.${parts.day}`,
-    time: `${parts.hour}:${parts.minute} JST`,
+    time: `${parts.hour}:${parts.minute} ${t("common.timezoneShort")}`,
   }
 }
 
@@ -222,6 +211,24 @@ function formatNumber(value, locale) {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(number)
+}
+
+const videoKindKeys = {
+  GAMEPLAY: "media.kind.gameplay",
+  TALK: "media.kind.talk",
+  "LIVE ARCHIVE": "media.kind.liveArchive",
+  "UPCOMING LIVE": "media.kind.upcoming",
+  MUSIC: "media.kind.music",
+}
+
+function videoKindLabel(video, t) {
+  const kind = String(video?.kind || "")
+    .trim()
+    .toUpperCase()
+  const key = videoKindKeys[kind]
+  if (key) return t(key)
+  if (video?.kind && !/[぀-ヿ㐀-鿿]/u.test(video.kind)) return video.kind
+  return t(video?.isUpcoming ? "media.kind.upcoming" : "media.kind.video")
 }
 
 function formatSyncTime(meta, locale, t) {
@@ -241,16 +248,40 @@ function eventDateKey(event) {
   return event.startsOn || dateKey(event.startsAt)
 }
 
-function eventStatusClass(event) {
-  const status = String(event.status || "").toLowerCase()
-  if (/cancel|取消|中止/.test(status)) return "cancelled"
+function eventStatusCode(event) {
+  const explicitStatus = String(event.statusCode || "").toLowerCase()
+  if (["cancelled", "canceled", "cancel"].includes(explicitStatus)) {
+    return "cancelled"
+  }
+  const status = String(event.status || "")
+    .trim()
+    .toLowerCase()
+  if (
+    ["cancelled", "canceled", "cancel", "取消", "中止", "キャンセル"].includes(
+      status,
+    ) ||
+    status.startsWith("cancel")
+  )
+    return "cancelled"
   if (eventIsUpcoming(event)) return "upcoming"
   if (
     event.timePrecision === "unknown" ||
-    /待|確認|确认|pending|tentative|未定|unknown/.test(status)
+    [
+      "pending",
+      "tentative",
+      "unknown",
+      "待确认",
+      "待补充",
+      "確認待ち",
+      "未定",
+    ].includes(status)
   )
     return "pending"
   return "done"
+}
+
+function eventStatusClass(event) {
+  return eventStatusCode(event)
 }
 
 function Calendar({ selectedDate, events, locale, t, onSelect, onWeekChange }) {
@@ -481,7 +512,7 @@ function ImageLightbox({ media, index, onClose, onPrevious, onNext, t }) {
   )
 }
 
-function VideoItem({ video, locale }) {
+function VideoItem({ video, locale, t }) {
   const isUpcoming = Boolean(video.isUpcoming)
   return (
     <a
@@ -507,7 +538,7 @@ function VideoItem({ video, locale }) {
         </span>
       </div>
       <div className="media-meta">
-        <span>{video.kind || (isUpcoming ? "UPCOMING LIVE" : "VIDEO")}</span>
+        <span>{videoKindLabel(video, t)}</span>
         <time>
           {formatDateTime(video.scheduledAt || video.publishedAt, locale)}
         </time>
@@ -551,7 +582,7 @@ function FeaturedVideo({ video, focus = {}, locale, t }) {
       <div className="featured-video-copy">
         <div className="featured-video-kicker">
           <span>{t("media.featured")}</span>
-          <span>{video.kind || (isUpcoming ? "UPCOMING LIVE" : "VIDEO")}</span>
+          <span>{videoKindLabel(video, t)}</span>
         </div>
         <h3>{title}</h3>
         {usesFocusCopy && focus.description ? <p>{focus.description}</p> : null}
@@ -615,37 +646,17 @@ function LoadingPanel({ t }) {
   )
 }
 
-function getInitialLocale() {
-  const savedLocale = window.localStorage.getItem("kano-locale")
-  if (localeOptions.some((option) => option.value === savedLocale)) {
-    return savedLocale
-  }
-
-  const browserLanguages = window.navigator.languages?.length
-    ? window.navigator.languages
-    : [window.navigator.language]
-  return detectLocale(browserLanguages)
-}
-
 function App() {
+  const { locale, t } = useAppSettings()
   const [dashboard, setDashboard] = useState(emptyDashboard)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState(false)
   const [selectedDate, setSelectedDate] = useState(japanToday)
-  const [isDark, setIsDark] = useState(() => {
-    const saved = window.localStorage.getItem("kano-theme")
-    return saved
-      ? saved === "dark"
-      : window.matchMedia("(prefers-color-scheme: dark)").matches
-  })
-  const [locale, setLocale] = useState(getInitialLocale)
   const [toast, setToast] = useState(null)
   const [lightbox, setLightbox] = useState(null)
   const hasLoadedRef = useRef(false)
   const dashboardRevisionRef = useRef(null)
-  const t = useMemo(() => createTranslator(locale), [locale])
-
   const loadDashboard = useCallback(async ({ announce = false } = {}) => {
     setIsRefreshing(true)
     if (!hasLoadedRef.current) setIsLoading(true)
@@ -711,17 +722,10 @@ function App() {
   }, [loadDashboard])
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", isDark)
-    window.localStorage.setItem("kano-theme", isDark ? "dark" : "light")
-  }, [isDark])
-
-  useEffect(() => {
-    document.documentElement.lang = locale
     document.title = t("meta.title")
     document
       .querySelector('meta[name="description"]')
       ?.setAttribute("content", t("meta.description"))
-    window.localStorage.setItem("kano-locale", locale)
   }, [locale, t])
 
   useEffect(() => {
@@ -874,69 +878,7 @@ function App() {
             </span>
           </div>
 
-          <div className="topbar-actions">
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="icon-button language-button"
-                      aria-label={t("header.language")}
-                    >
-                      <Languages className="icon" aria-hidden="true" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>{t("header.language")}</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent
-                align="end"
-                className="language-menu-content"
-              >
-                <DropdownMenuLabel>{t("header.language")}</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuRadioGroup
-                  value={locale}
-                  onValueChange={setLocale}
-                >
-                  {localeOptions.map((option) => (
-                    <DropdownMenuRadioItem
-                      value={option.value}
-                      key={option.value}
-                      className="language-menu-item"
-                    >
-                      <span lang={option.value}>{option.label}</span>
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="icon-button theme-button"
-                  onClick={() => setIsDark((value) => !value)}
-                  aria-label={t(
-                    isDark ? "header.switchToLight" : "header.switchToDark",
-                  )}
-                >
-                  {isDark ? (
-                    <Sun className="icon" />
-                  ) : (
-                    <Moon className="icon" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {t(isDark ? "header.switchToLight" : "header.switchToDark")}
-              </TooltipContent>
-            </Tooltip>
-          </div>
+          <PreferenceControls className="topbar-actions" />
         </header>
 
         <main>
@@ -944,9 +886,9 @@ function App() {
             <div className="hero-visual">
               <img src={profile.bannerUrl} alt={t("header.bannerAlt")} />
               <div className="hero-visual-caption">
-                <span>VIRTUAL ARTIST</span>
+                <span>{t("hero.role")}</span>
                 <span className="caption-line" aria-hidden="true" />
-                <span>KANO MAHORO</span>
+                <span>{t("hero.name")}</span>
               </div>
               <div className="hero-visual-index" aria-hidden="true">
                 01
@@ -996,7 +938,7 @@ function App() {
             <Card className="panel feed-panel" id="feed">
               <div className="panel-header">
                 <div>
-                  <p className="panel-index">01 / X FEED</p>
+                  <p className="panel-index">{t("panel.feed")}</p>
                   <h2>{t("feed.title")}</h2>
                 </div>
                 <span className="header-link-group">
@@ -1058,7 +1000,7 @@ function App() {
             <Card className="panel calendar-panel" id="calendar">
               <div className="panel-header calendar-header">
                 <div>
-                  <p className="panel-index">02 / CALENDAR</p>
+                  <p className="panel-index">{t("panel.calendar")}</p>
                   <h2>{t("calendar.title")}</h2>
                 </div>
                 <span className="calendar-status">
@@ -1177,7 +1119,7 @@ function App() {
             <Card className="panel media-panel" id="media">
               <div className="panel-header">
                 <div>
-                  <p className="panel-index">03 / RECENT VIDEOS</p>
+                  <p className="panel-index">{t("panel.videos")}</p>
                   <h2>{t("media.title")}</h2>
                 </div>
                 <a
@@ -1213,6 +1155,7 @@ function App() {
                             key={video.id}
                             video={video}
                             locale={locale}
+                            t={t}
                           />
                         ))}
                     </div>
@@ -1240,7 +1183,7 @@ function App() {
             <Card className="panel archive-panel">
               <div className="panel-header">
                 <div>
-                  <p className="panel-index">04 / ARCHIVE</p>
+                  <p className="panel-index">{t("panel.archive")}</p>
                   <h2>{t("archive.title")}</h2>
                 </div>
                 <a
@@ -1277,7 +1220,7 @@ function App() {
                 </span>
                 <span>
                   <strong>{t("archive.listenFromStart")}</strong>
-                  <small>NicoNico / mylist</small>
+                  <small>{t("archive.mylist")}</small>
                 </span>
               </a>
             </Card>
@@ -1285,7 +1228,7 @@ function App() {
             <Card className="panel links-panel" id="links">
               <div className="panel-header links-header">
                 <div>
-                  <p className="panel-index">05 / THE DIRECTORY</p>
+                  <p className="panel-index">{t("panel.directory")}</p>
                   <h2>{t("directory.title")}</h2>
                 </div>
                 <span className="links-note">{t("directory.note")}</span>
@@ -1368,7 +1311,11 @@ const reactRoot =
     : createRoot(rootElement)
 globalThis.__kanoReactRoot = reactRoot
 globalThis.__kanoRootElement = rootElement
-reactRoot.render(normalizedPath === "/admin" ? <AdminApp /> : <App />)
+reactRoot.render(
+  <AppSettingsProvider>
+    {normalizedPath === "/admin" ? <AdminApp /> : <App />}
+  </AppSettingsProvider>,
+)
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
