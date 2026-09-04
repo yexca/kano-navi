@@ -35,10 +35,11 @@ YouTube, or any other original source.
 5. Channels and archive: recent YouTube uploads, a timeline, and a resource directory.
 
 A separate, unlinked `/admin` route presents a classic maintainer console with
-paginated schedule management, independent keyword and vision stages, ordered
-OpenAI-compatible providers, Featured-video selection, profile media, and event
-curation. The public calendar labels automatic extraction and manual confirmation
-so visitors can distinguish their provenance. A `/mcp` integration endpoint
+paginated schedule management, independent schedule-board and single-message
+stages, capability-aware OpenAI-compatible provider queues, Featured-video
+selection, profile media, and event curation. The public calendar labels
+automatic extraction and manual confirmation so visitors can distinguish their
+provenance. A `/mcp` integration endpoint
 offers sanitized read tools without a key and narrowly scoped, bearer-protected
 automation; confirmation and other human-only actions remain in `/admin`.
 
@@ -46,8 +47,10 @@ automation; confirmation and other human-only actions remain in `/admin`.
 
 - The page and API run locally, and an initial dataset ships with the code.
 - X profile structure, the public status endpoint, and YouTube page structure may change. The synchronization script records warnings and retains the old snapshot; a failed fetch must not be interpreted as no update.
-- Activity times are displayed in the Japan time zone. Matching schedule posts
-  can be parsed through OpenAI with cached image input, but low-confidence or
+- Activity times are displayed in the Japan time zone. Schedule-board candidates
+  and heuristic single-message candidates can be classified and parsed through
+  compatible LLM providers with cached image input. `uncertain` results are
+  retained as extraction metadata without creating events; low-confidence or
   important entries can still be manually confirmed and locked.
 - The deployment is a single local SQLite instance with one password-protected
   maintainer surface, in-memory sessions, and no multi-user permission model.

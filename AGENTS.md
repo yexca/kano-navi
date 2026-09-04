@@ -40,7 +40,7 @@ Read it first, then use the focused documents in `docs/` for more detail.
 | `server/database.js`           | SQLite schema, seeding, upserts, and queries                    |
 | `server/media-cache.js`        | Runtime media paths, identities, and atomic-write helpers       |
 | `server/media-downloader.js`   | Bounded X/YouTube image downloader                              |
-| `server/schedule-extractor.js` | Keyword-filtered multi-provider schedule extraction             |
+| `server/schedule-extractor.js` | Schedule detection and provider routing                         |
 | `server/admin-api.js`          | Authenticated provider/schedule/video configuration and CRUD    |
 | `server/mcp-api.js`            | Sanitized MCP reads and bearer-scoped automation tools          |
 | `server/sync-jobs.js`          | Single-flight asynchronous sync and scan jobs                   |
@@ -72,9 +72,13 @@ Read it first, then use the focused documents in `docs/` for more detail.
   synchronization and OpenAI extraction must not overwrite or resurrect them.
 - `LLM_SECRETS_KEY` is the environment-only master key for API keys stored in
   `llm_providers`; plaintext keys and ciphertext must never enter API output,
-  logs, or extraction payloads.
+  logs, or extraction payloads. Providers declare `text` and/or `image`
+  capabilities, and the `schedule_board`, `schedule_message`, and legacy
+  `schedule_vision` routes keep independent priority orders.
 - X posts carry `accountHandle` so the public feed can identify the source
   account without exposing the internal classification used by extraction.
+  Image-only posts are retained so the schedule extractor can use their
+  original image modality after the cache is ready.
 - The current tables are created by the schema constant in `server/database.js`. When changing the schema, update the documentation, seed data, and verification steps together. Do not silently drop columns or clear snapshots.
 
 ## Common Commands
@@ -92,7 +96,9 @@ make ci                  # Run the full local CI check
 ```
 
 Synchronization accepts the source, bootstrap, request-budget, media-limit,
-and skip variables documented in `.env.example`. `OPENAI_API_KEY` is an
+schedule-stage, and skip variables documented in `.env.example`.
+`SCHEDULE_MESSAGE_ENABLED` controls the single-message detector independently
+of the keyword/board stages. `OPENAI_API_KEY` is an
 environment-only compatibility credential; provider keys entered in `/admin`
 are encrypted with `LLM_SECRETS_KEY`. `MCP_CONTROL_TOKEN` is a separate
 environment-only integration credential. None may be written to source code,

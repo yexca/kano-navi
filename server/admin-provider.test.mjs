@@ -41,7 +41,7 @@ async function jsonRequest(origin, path, options = {}) {
   return { response, payload }
 }
 
-test("admin provider CRUD keeps keys encrypted and orders the vision route", async () => {
+test("admin provider CRUD keeps keys encrypted and orders provider routes", async () => {
   const previousSecretsKey = process.env.LLM_SECRETS_KEY
   const previousOpenAiKey = process.env.OPENAI_API_KEY
   setRuntimeEnv("LLM_SECRETS_KEY", crypto.randomBytes(32).toString("base64"))
@@ -76,6 +76,8 @@ test("admin provider CRUD keeps keys encrypted and orders the vision route", asy
     })
     assert.equal(created.response.status, 201)
     assert.equal(created.payload.provider.apiKeyConfigured, true)
+    assert.deepEqual(created.payload.provider.capabilities, ["text", "image"])
+    assert.equal(created.payload.provider.visionCapable, true)
     assert.equal("apiKey" in created.payload.provider, false)
     assert.equal("apiKeyCiphertext" in created.payload.provider, false)
     assert.equal(JSON.stringify(created.payload).includes(apiKey), false)
@@ -97,6 +99,7 @@ test("admin provider CRUD keeps keys encrypted and orders the vision route", asy
     )
     assert.equal(edited.response.status, 200)
     assert.equal(edited.payload.provider.model, "vision-model-v2")
+    assert.deepEqual(edited.payload.provider.capabilities, ["text", "image"])
     assert.equal(
       decryptSecret(
         getLlmProviderSecret(database, "fallback-provider").apiKeyCiphertext,
@@ -104,6 +107,34 @@ test("admin provider CRUD keeps keys encrypted and orders the vision route", asy
       ),
       apiKey,
     )
+
+    const legacyCapabilityEdit = await jsonRequest(
+      origin,
+      "/api/admin/providers/fallback-provider",
+      {
+        method: "PUT",
+        body: JSON.stringify({ visionCapable: false }),
+      },
+    )
+    assert.equal(legacyCapabilityEdit.response.status, 200)
+    assert.deepEqual(legacyCapabilityEdit.payload.provider.capabilities, [
+      "text",
+    ])
+    assert.equal(legacyCapabilityEdit.payload.provider.visionCapable, false)
+
+    const restoredCapabilityEdit = await jsonRequest(
+      origin,
+      "/api/admin/providers/fallback-provider",
+      {
+        method: "PUT",
+        body: JSON.stringify({ visionCapable: true }),
+      },
+    )
+    assert.equal(restoredCapabilityEdit.response.status, 200)
+    assert.deepEqual(restoredCapabilityEdit.payload.provider.capabilities, [
+      "text",
+      "image",
+    ])
 
     const cleared = await jsonRequest(
       origin,
@@ -130,6 +161,7 @@ test("admin provider CRUD keeps keys encrypted and orders the vision route", asy
       }),
     })
     assert.equal(second.response.status, 201)
+    assert.deepEqual(second.payload.provider.capabilities, ["text", "image"])
     const ordered = await jsonRequest(origin, "/api/admin/providers/order", {
       method: "PUT",
       body: JSON.stringify({
@@ -150,6 +182,36 @@ test("admin provider CRUD keeps keys encrypted and orders the vision route", asy
       new Set(ordered.payload.providers.map((provider) => provider.id)),
       new Set(["openai-default", "fallback-provider", "second-provider"]),
     )
+
+    const messageOrder = await jsonRequest(
+      origin,
+      "/api/admin/providers/order",
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          route: "schedule_message",
+          providerOrder: ["fallback-provider", "second-provider"],
+        }),
+      },
+    )
+    assert.equal(messageOrder.response.status, 200)
+    assert.deepEqual(messageOrder.payload.providerOrder, [
+      "fallback-provider",
+      "second-provider",
+    ])
+    assert.deepEqual(messageOrder.payload.providerOrders.schedule_board, [
+      "openai-default",
+      "fallback-provider",
+      "second-provider",
+    ])
+    const routeView = await jsonRequest(
+      origin,
+      "/api/admin/providers?route=schedule_message",
+    )
+    assert.deepEqual(routeView.payload.providerOrder, [
+      "fallback-provider",
+      "second-provider",
+    ])
 
     const securePrefix = ["https", "://"].join("")
     const rejectedUrls = [

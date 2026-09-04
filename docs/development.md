@@ -26,9 +26,11 @@ The public dashboard is `/`. The admin interface is available only by entering
 `/admin`; no public navigation links to it. The example environment defaults to
 `APP_MODE=development`, so local admin requests do not require a password.
 The admin page uses a classic sidebar console with separate tabs for overview,
-paginated schedules, keyword/vision scanning, multiple model providers, and
-profile media. It can configure the OpenAI-compatible provider route, Featured
-video, and manual schedule records.
+paginated schedules, independent schedule-board/single-message scanning,
+multiple model providers, and profile media. It can configure each
+OpenAI-compatible provider queue and its Text/Image capabilities, while each
+provider follows the fixed three-request failover policy. It also configures
+Featured video and manual schedule records.
 
 `/mcp` exposes public read-only tools without a key. Set `MCP_CONTROL_TOKEN` to
 enable the protected control tools; send it only as an `Authorization: Bearer`
@@ -60,9 +62,16 @@ CI build. To debug one source, set `SKIP_X=1` or `SKIP_YOUTUBE=1`; never put a
 temporary credential in shell history, source code, or the database.
 
 `OPENAI_API_KEY` is optional. With no key, the schedule-extraction stage reports
-a safe skip. Provider API keys entered in `/admin` require `LLM_SECRETS_KEY` and
-are encrypted before they reach SQLite; they are never returned by the API.
-Once configured, keys are read only by the server-side synchronization process.
+a safe skip. `SCHEDULE_MESSAGE_ENABLED` controls the single-message detector;
+`SCHEDULE_KEYWORD_ENABLED` and `SCHEDULE_VISION_ENABLED` control the board
+path. `SCHEDULE_EXTRACTION_ENABLED` is retained for initial defaults and old
+API compatibility; the stage flags determine what runs after configuration.
+Provider API keys entered in `/admin` require `LLM_SECRETS_KEY` and are
+encrypted before they reach SQLite; they are never returned by the API. Once
+configured, keys are read only by the server-side synchronization process.
+Provider eligibility is based on the original post modality: Text, Image, or
+both for mixed input. A failed provider is retried up to three total calls
+before the next compatible provider is used.
 X synchronization reads both handles in `X_HANDLES` and keeps a separate cursor
 for each account.
 

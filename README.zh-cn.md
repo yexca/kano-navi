@@ -32,8 +32,8 @@ npm start
 `APP_MODE=development` 时免登录；运行 `npm start` 前，应在不会提交的
 `.env` 中设为 `APP_MODE=production`，并配置至少 12 位的
 `ADMIN_PASSWORD`。暂时不使用自动日程识别时，`OPENAI_API_KEY` 可以留空。
-管理页采用经典侧栏后台布局，分为概览、分页日程、关键词/视觉扫描、多个
-OpenAI-compatible 模型提供商，以及头像与横幅标签。
+管理页采用经典侧栏后台布局，分为概览、分页日程、关键词/看板扫描、单条消息
+扫描、多个 OpenAI-compatible 模型提供商，以及头像与横幅标签。
 
 `/mcp` 是独立的无状态集成入口。公开读取工具不需要密钥；推进 revision、
 启动同步和运行自动扫描才需要 `Authorization: Bearer <MCP_CONTROL_TOKEN>`。
@@ -70,9 +70,17 @@ npm run sync
 - X：每个账号首次最多回溯 7 天，后续只请求未知状态 ID，并按可配置的小额度刷新已知项；两个账号的结果按时间聚合。
 - YouTube：首次保存 RSS 中最近 6 条，后续只保存游标之后的新条目，同时持续复查仍活跃的预约。
 - 媒体：下载白名单内的 X 图片和 YouTube 缩略图，写入内容寻址缓存。
-- 日程：先按管理页单独配置的关键词阶段筛选候选，再把帖子文字与缓存图片
-  交给按优先级排列的视觉 provider。支持 OpenAI Responses 和 Chat
-  Completions；当前 provider 失败会自动尝试下一个。
+- 日程看板：先按管理页单独配置的关键词阶段筛选候选，再把帖子文字与缓存图片
+  交给独立的 board provider 队列；
+- 单条消息：用轻量的日期/告知启发式筛选疑似日程消息，再交给独立的 message
+  provider 队列；
+- provider 会按照原始消息模态筛选：纯文字需要 `Text`，纯图片需要 `Image`，
+  文字加图片需要同时具备两种能力。单个 provider 最多尝试三次，失败后按优先级
+  切换到下一个兼容 provider。支持 OpenAI Responses 和 Chat Completions。
+
+看板和单条消息检测共享一次扫描的总数量限制，并共同更新自动日程快照。模型返回
+`uncertain` 时会缓存识别结果供检查，但不会创建日程。`SCHEDULE_MESSAGE_ENABLED`
+独立控制单条消息阶段；原有的关键词和看板开关仍然分别生效。
 
 同步失败时不会清空已有数据，会在 `sync_runs` 中记录失败原因；模型返回非法结构时也会保留旧日程。旧版 OpenAI 密钥只从进程环境读取；在管理页输入的 provider 密钥会用环境变量中的 `LLM_SECRETS_KEY` 加密后保存，API 不会回显明文。可用环境变量调整来源或跳过某一来源：
 

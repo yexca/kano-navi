@@ -5,16 +5,49 @@ import test from "node:test"
 import {
   getEvent,
   initializeDatabase,
+  setLlmRouteProviders,
   setAppSetting,
+  upsertLlmProvider,
   upsertMediaAsset,
   upsertPosts,
 } from "./database.js"
 import { resolveMediaCachePath, writeMediaFileAtomic } from "./media-cache.js"
+import { encryptSecret } from "./secret-store.js"
 import {
   callOpenAiScheduleExtraction,
   extractSchedulePost,
   extractPendingSchedules,
+  inputModeForPost,
+  providerSupportsInput,
 } from "./schedule-extractor.js"
+
+test("input modality maps to the required provider capabilities", () => {
+  assert.equal(inputModeForPost({ text: "hello" }), "text")
+  assert.equal(
+    inputModeForPost({
+      text: "hello",
+      mediaUrls: ["https://example.invalid/a.jpg"],
+    }),
+    "text_image",
+  )
+  assert.equal(
+    inputModeForPost({
+      text: "",
+      mediaUrls: ["https://example.invalid/a.jpg"],
+    }),
+    "image",
+  )
+  assert.equal(inputModeForPost({ text: "" }), null)
+  assert.equal(providerSupportsInput({ capabilities: ["text"] }, "text"), true)
+  assert.equal(
+    providerSupportsInput({ capabilities: ["text"] }, "image"),
+    false,
+  )
+  assert.equal(
+    providerSupportsInput({ capabilities: ["text", "image"] }, "text_image"),
+    true,
+  )
+})
 
 test("OpenAI structured extraction uses cached vision input and caches results", async () => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
@@ -165,6 +198,157 @@ test("schedule extraction skips safely when no API key is configured", async () 
   }
 })
 
+test("declared images remain pending until a ready cache asset exists", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const sourceUrl = "https://pbs.twimg.com/media/pending-schedule.jpg"
+  const post = {
+    id: "pending-image-post",
+    source: "x",
+    text: "",
+    publishedAt: "2026-08-28T01:00:00.000Z",
+    url: "https://x.com/example/status/pending-image-post",
+    media_urls: [sourceUrl],
+  }
+  let calls = 0
+  try {
+    upsertPosts(database, [post])
+    const result = await extractSchedulePost(database, post, {
+      apiKey: "not-a-real-api-key",
+      fetchImpl: async () => {
+        calls += 1
+        throw new Error("should not call a provider")
+      },
+    })
+    assert.deepEqual(result, { status: "skipped", reason: "media_pending" })
+    assert.equal(calls, 0)
+  } finally {
+    database.close()
+  }
+})
+
+test("uncertain classifications are cached without creating events", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const post = {
+    id: "uncertain-post",
+    source: "x",
+    text: "来週なにかあるかも",
+    publishedAt: "2026-08-28T01:00:00.000Z",
+    url: "https://x.com/example/status/uncertain-post",
+  }
+  let calls = 0
+  const fetchImpl = async () => {
+    calls += 1
+    return new Response(
+      JSON.stringify({
+        output_text: JSON.stringify({
+          classification: "uncertain",
+          events: [],
+          confidence: 0.42,
+          evidence: "具体日期なし",
+          action: "none",
+        }),
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )
+  }
+  try {
+    const first = await extractSchedulePost(database, post, {
+      apiKey: "not-a-real-api-key",
+      maxRetries: 0,
+      fetchImpl,
+    })
+    assert.equal(first.status, "uncertain")
+    assert.equal(first.classification, "uncertain")
+    assert.equal(calls, 1)
+    const second = await extractSchedulePost(database, post, {
+      apiKey: "not-a-real-api-key",
+      maxRetries: 0,
+      fetchImpl,
+    })
+    assert.equal(second.status, "cached")
+    assert.equal(second.classification, "uncertain")
+    assert.equal(calls, 1)
+    assert.equal(
+      database.prepare("SELECT COUNT(*) AS count FROM events").get().count,
+      0,
+    )
+  } finally {
+    database.close()
+  }
+})
+
+test("a provider is retried three times before priority failover", async () => {
+  const previousSecretsKey = process.env.LLM_SECRETS_KEY
+  process.env.LLM_SECRETS_KEY = ["test", "schedule", "secret", "key"].join("-")
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const makeProvider = (id, apiKey) =>
+    upsertLlmProvider(database, {
+      id,
+      name: id,
+      baseUrl: `https://${id}.example.invalid/v1`,
+      model: `${id}-model`,
+      capabilities: ["text"],
+      maxRetries: 2,
+      replaceApiKey: true,
+      apiKeyCiphertext: encryptSecret(apiKey, process.env.LLM_SECRETS_KEY),
+    })
+  let calls = []
+  try {
+    makeProvider("first-provider", "first-key")
+    makeProvider("second-provider", "second-key")
+    // Simulate the legacy database default. Runtime extraction must still
+    // honor the three-request policy even before a database reopen migrates it.
+    database
+      .prepare("UPDATE llm_providers SET max_retries = 0 WHERE id = ?")
+      .run("first-provider")
+    setLlmRouteProviders(database, "schedule_message", [
+      "first-provider",
+      "second-provider",
+    ])
+    const post = {
+      id: "failover-post",
+      source: "x",
+      text: "9月6日に配信予定",
+      publishedAt: "2026-08-28T01:00:00.000Z",
+      url: "https://x.com/example/status/failover-post",
+    }
+    const result = await extractSchedulePost(database, post, {
+      detectionType: "message",
+      fetchImpl: async (url) => {
+        calls.push(url)
+        if (calls.length <= 3) return new Response("failure", { status: 502 })
+        return new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              classification: "not_schedule",
+              events: [],
+              confidence: 0.9,
+              evidence: "not a concrete notice",
+              action: "none",
+            }),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      },
+    })
+    assert.equal(result.status, "success")
+    assert.equal(result.classification, "not_schedule")
+    assert.equal(calls.length, 4)
+    assert.equal(
+      calls.filter((url) => url.includes("first-provider")).length,
+      3,
+    )
+    assert.equal(
+      calls.filter((url) => url.includes("second-provider")).length,
+      1,
+    )
+  } finally {
+    database.close()
+    if (previousSecretsKey == null) delete process.env.LLM_SECRETS_KEY
+    else process.env["LLM_SECRETS_KEY"] = previousSecretsKey
+  }
+})
+
 test("schedule extraction honors its independent enable flag and keywords", async () => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
   try {
@@ -191,14 +375,14 @@ test("schedule extraction honors its independent enable flag and keywords", asyn
       JSON.stringify(["WEEKLY_BOARD"]),
     )
     setAppSetting(database, "schedule_extraction_enabled", "0")
-    assert.deepEqual(await extractPendingSchedules(database), {
-      attempted: 0,
-      success: 0,
-      cached: 0,
-      skipped: 0,
-      failed: 0,
-      disabled: true,
-    })
+    setAppSetting(database, "schedule_message_enabled", "1")
+    const legacyDisabledButMessageEnabled = await extractPendingSchedules(
+      database,
+      { apiKey: "" },
+    )
+    assert.equal(legacyDisabledButMessageEnabled.attempted, 1)
+    assert.equal(legacyDisabledButMessageEnabled.skipped, 1)
+    assert.equal(legacyDisabledButMessageEnabled.disabled, undefined)
 
     setAppSetting(database, "schedule_extraction_enabled", "1")
     const result = await extractPendingSchedules(database, { apiKey: "" })

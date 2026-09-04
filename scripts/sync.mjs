@@ -291,7 +291,8 @@ function mapTweet(payload, fallbackId, handle = DEFAULT_X_HANDLES[0]) {
       payload?.date ??
       payload?.created_at,
   )
-  if (!id || !text || !publishedAt) return null
+  const mediaUrls = getMediaUrls(payload)
+  if (!id || (!text && !mediaUrls.length) || !publishedAt) return null
   const inferred = inferPostType(text)
   const quotedText = getTweetText(getQuotedPayload(payload))
   const searchText = [text, quotedText].filter(Boolean).join("\n")
@@ -309,7 +310,6 @@ function mapTweet(payload, fallbackId, handle = DEFAULT_X_HANDLES[0]) {
     author?.profileImageUrl ||
     payload?.user_profile_image_url ||
     null
-  const mediaUrls = getMediaUrls(payload)
   return {
     id,
     source: "x",

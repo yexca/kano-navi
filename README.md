@@ -37,8 +37,8 @@ login. Before `npm start`, set `APP_MODE=production` and an
 `ADMIN_PASSWORD` of at least 12 characters in the ignored `.env` file.
 `OPENAI_API_KEY` may remain empty until automatic schedule extraction is needed.
 The page uses a classic sidebar console with separate tabs for paginated
-schedules, keyword/vision scanning, multiple OpenAI-compatible providers, and
-profile media.
+schedules, keyword/board scanning, single-message scanning, multiple
+OpenAI-compatible providers, and profile media.
 
 `/mcp` is a stateless integration endpoint. Public read tools work without a
 key; only revision requests, synchronization, and automatic scans require
@@ -94,10 +94,22 @@ The server-side synchronization script:
 - stores the latest six RSS videos on the first YouTube run, then only newer
   entries, while continuing to recheck active reservations;
 - downloads allowlisted X images and YouTube thumbnails into the runtime cache;
-- selects candidates with the separately configured keyword stage, then sends
-  their text and cached images to the ordered visual provider route for strict
-  structured extraction when a provider key is configured. Providers can use
-  OpenAI Responses or Chat Completions and fail over in priority order.
+- selects schedule-board candidates with the separately configured keyword
+  stage, then sends their text and cached images to the ordered board provider
+  route for strict structured extraction;
+- also applies a lightweight date/notice heuristic to individual X messages and
+  sends suspected schedule notices to the separate message provider route;
+- filters each route by the original post modality: text requires `Text`, an
+  image requires `Image`, and text plus image requires both capabilities. Each
+  provider is attempted at most three times before the next compatible provider
+  in the priority order is tried. Providers can use OpenAI Responses or Chat
+  Completions.
+
+The board and message detectors share the scan limit and event snapshot. A
+model response classified as `uncertain` is cached for inspection but does not
+create an event. `SCHEDULE_MESSAGE_ENABLED` controls the single-message stage;
+the existing board keyword and board-extraction switches remain independent
+controls.
 
 Failures do not clear existing data. They are recorded in `sync_runs` together
 with the failure reason. Invalid model output also leaves the previous schedule

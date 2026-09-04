@@ -762,11 +762,55 @@ const emptyProvider = {
   baseUrl: "https://api.openai.com/v1",
   model: "gpt-4o-mini",
   enabled: true,
-  visionCapable: true,
+  capabilities: ["text", "image"],
   timeoutMs: 30000,
-  maxRetries: 0,
+  maxRetries: 2,
   apiKey: "",
   clearApiKey: false,
+}
+
+const scheduleRoutes = [
+  { id: "schedule_board", labelKey: "admin.provider.route.board" },
+  { id: "schedule_message", labelKey: "admin.provider.route.message" },
+  { id: "schedule_vision", labelKey: "admin.provider.route.legacy" },
+]
+
+function normalizeProviderCapabilities(provider) {
+  const values = Array.isArray(provider?.capabilities)
+    ? provider.capabilities
+    : provider?.visionCapable === false
+      ? ["text"]
+      : ["text", "image"]
+  return [
+    ...new Set(
+      values
+        .map((value) =>
+          String(value || "")
+            .trim()
+            .toLowerCase(),
+        )
+        .map((value) => (value === "vision" ? "image" : value))
+        .filter((value) => ["text", "image"].includes(value)),
+    ),
+  ]
+}
+
+function normalizeProviderOrders(payload = {}) {
+  const legacy = Array.isArray(payload.providerOrder)
+    ? payload.providerOrder
+    : []
+  const source =
+    payload.providerOrders && typeof payload.providerOrders === "object"
+      ? payload.providerOrders
+      : payload.routes && typeof payload.routes === "object"
+        ? payload.routes
+        : {}
+  return Object.fromEntries(
+    scheduleRoutes.map(({ id }) => [
+      id,
+      Array.isArray(source[id]) ? source[id] : [...legacy],
+    ]),
+  )
 }
 
 function syncStatusLabel(status, t) {
@@ -891,11 +935,7 @@ function OverviewPanel({
         />
         <AdminMetric
           label={t("admin.overview.visionProviders")}
-          value={
-            providers.filter(
-              (provider) => provider.enabled && provider.visionCapable,
-            ).length
-          }
+          value={providers.filter((provider) => provider.enabled).length}
           note={t("admin.overview.configured", { count: providers.length })}
           tone="butter"
         />
@@ -993,13 +1033,15 @@ function OverviewPanel({
 function ScanSettingsPanel({
   keywordEnabled,
   visionEnabled,
+  messageEnabled,
   keywords,
-  providerOrder,
+  providerOrders,
   providers,
   videos,
   featuredVideoId,
   onChangeKeywordEnabled,
   onChangeVisionEnabled,
+  onChangeMessageEnabled,
   onChangeKeywords,
   onChangeFeaturedVideoId,
   onSave,
@@ -1007,6 +1049,37 @@ function ScanSettingsPanel({
   isBusy,
 }) {
   const { t } = useAppSettings()
+  const routeOrder = (route) => {
+    const configured = providerOrders?.[route]
+    if (Array.isArray(configured) && configured.length) return configured
+    const legacy = providerOrders?.schedule_vision
+    return Array.isArray(legacy) ? legacy : []
+  }
+  const renderRoute = (route) => {
+    const order = routeOrder(route)
+    return (
+      <div className="admin-provider-route-summary">
+        {order.length ? (
+          order.map((id, index) => {
+            const provider = providers.find((item) => item.id === id)
+            return (
+              <div className="admin-route-row" key={`${route}-${id}`}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <strong>{provider?.name || id}</strong>
+                <small>
+                  {provider?.model || t("admin.scan.providerMissing")}
+                </small>
+              </div>
+            )
+          })
+        ) : (
+          <p className="admin-empty-inline">
+            {t("admin.scan.noProviderOrder")}
+          </p>
+        )}
+      </div>
+    )
+  }
   return (
     <section className="admin-view" aria-labelledby="admin-scan-title">
       <div className="admin-view-heading">
@@ -1017,7 +1090,9 @@ function ScanSettingsPanel({
         </div>
         <Button
           onClick={onRunScan}
-          disabled={isBusy || !keywordEnabled || !visionEnabled}
+          disabled={
+            isBusy || !(messageEnabled || (keywordEnabled && visionEnabled))
+          }
         >
           {isBusy ? <LoaderCircle className="admin-spin" /> : <ScanSearch />}
           {t("admin.scan.run")}
@@ -1055,41 +1130,42 @@ function ScanSettingsPanel({
           <div className="admin-stage-number">02</div>
           <div className="admin-panel-heading">
             <div>
-              <p className="admin-kicker">{t("admin.scan.visionKicker")}</p>
-              <h3>{t("admin.scan.visionTitle")}</h3>
+              <p className="admin-kicker">{t("admin.scan.boardKicker")}</p>
+              <h3>{t("admin.scan.boardTitle")}</h3>
             </div>
             <input
               className="admin-switch"
               type="checkbox"
               checked={visionEnabled}
               onChange={(event) => onChangeVisionEnabled(event.target.checked)}
-              aria-label={t("admin.scan.visionAria")}
+              aria-label={t("admin.scan.boardAria")}
             />
           </div>
-          <p className="admin-panel-copy">{t("admin.scan.visionCopy")}</p>
-          <div className="admin-provider-route-summary">
-            {providerOrder.length ? (
-              providerOrder.map((id, index) => {
-                const provider = providers.find((item) => item.id === id)
-                return (
-                  <div className="admin-route-row" key={id}>
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                    <strong>{provider?.name || id}</strong>
-                    <small>
-                      {provider?.model || t("admin.scan.providerMissing")}
-                    </small>
-                  </div>
-                )
-              })
-            ) : (
-              <p className="admin-empty-inline">
-                {t("admin.scan.noProviderOrder")}
-              </p>
-            )}
-          </div>
+          <p className="admin-panel-copy">{t("admin.scan.boardCopy")}</p>
+          {renderRoute("schedule_board")}
           <p className="admin-stage-footnote">{t("admin.scan.providerNote")}</p>
         </section>
+        <section className="admin-panel admin-stage-panel">
+          <div className="admin-stage-number">03</div>
+          <div className="admin-panel-heading">
+            <div>
+              <p className="admin-kicker">{t("admin.scan.messageKicker")}</p>
+              <h3>{t("admin.scan.messageTitle")}</h3>
+            </div>
+            <input
+              className="admin-switch"
+              type="checkbox"
+              checked={messageEnabled}
+              onChange={(event) => onChangeMessageEnabled(event.target.checked)}
+              aria-label={t("admin.scan.messageAria")}
+            />
+          </div>
+          <p className="admin-panel-copy">{t("admin.scan.messageCopy")}</p>
+          {renderRoute("schedule_message")}
+          <p className="admin-stage-footnote">{t("admin.scan.messageNote")}</p>
+        </section>
         <section className="admin-panel admin-content-settings-panel">
+          <div className="admin-stage-number">04</div>
           <div className="admin-panel-heading">
             <div>
               <p className="admin-kicker">{t("admin.scan.highlightKicker")}</p>
@@ -1128,6 +1204,7 @@ function ProviderEditor({ provider, onClose, onSaved, onError }) {
   const [form, setForm] = useState(() => ({
     ...emptyProvider,
     ...(provider || {}),
+    capabilities: normalizeProviderCapabilities(provider || emptyProvider),
   }))
   const [saving, setSaving] = useState(false)
   const editing = Boolean(provider)
@@ -1140,13 +1217,29 @@ function ProviderEditor({ provider, onClose, onSaved, onError }) {
           : event.target.value,
     }))
 
+  const setCapability = (capability) => (event) =>
+    setForm((current) => {
+      const capabilities = new Set(normalizeProviderCapabilities(current))
+      if (event.target.checked) capabilities.add(capability)
+      else capabilities.delete(capability)
+      return { ...current, capabilities: [...capabilities] }
+    })
+
   const submit = async (event) => {
     event.preventDefault()
     setSaving(true)
     onError("")
     try {
+      const capabilities = normalizeProviderCapabilities(form)
+      if (!capabilities.length) {
+        onError(adminMessage("admin.provider.capabilityRequired"))
+        setSaving(false)
+        return
+      }
       const body = { ...form }
       delete body.clearApiKey
+      delete body.visionCapable
+      body.capabilities = capabilities
       if (!form.apiKey && !form.clearApiKey) delete body.apiKey
       if (form.clearApiKey) body.apiKey = null
       const result = await request(
@@ -1274,17 +1367,10 @@ function ProviderEditor({ provider, onClose, onSaved, onError }) {
               onChange={setField("timeoutMs")}
             />
           </label>
-          <label className="admin-field">
+          <div className="admin-field">
             <span>{t("admin.provider.retries")}</span>
-            <input
-              type="number"
-              min="0"
-              max="3"
-              step="1"
-              value={form.maxRetries}
-              onChange={setField("maxRetries")}
-            />
-          </label>
+            <output className="admin-static-field">3</output>
+          </div>
         </div>
         <div className="admin-provider-flags">
           <label className="admin-toggle-line">
@@ -1295,15 +1381,27 @@ function ProviderEditor({ provider, onClose, onSaved, onError }) {
             />
             {t("admin.provider.enable")}
           </label>
-          <label className="admin-toggle-line">
-            <input
-              type="checkbox"
-              checked={form.visionCapable}
-              onChange={setField("visionCapable")}
-            />
-            {t("admin.provider.vision")}
-          </label>
         </div>
+        <fieldset className="admin-capability-fieldset">
+          <legend>{t("admin.provider.capabilities")}</legend>
+          <div className="admin-capability-grid">
+            {["text", "image"].map((capability) => (
+              <label className="admin-toggle-line" key={capability}>
+                <input
+                  type="checkbox"
+                  checked={normalizeProviderCapabilities(form).includes(
+                    capability,
+                  )}
+                  onChange={setCapability(capability)}
+                />
+                {t(`admin.provider.capability.${capability}`)}
+              </label>
+            ))}
+          </div>
+          <p className="admin-field-note">
+            {t("admin.provider.capabilityNote")}
+          </p>
+        </fieldset>
         <div className="admin-form-actions">
           <Button type="button" variant="outline" onClick={onClose}>
             {t("admin.action.cancel")}
@@ -1320,7 +1418,8 @@ function ProviderEditor({ provider, onClose, onSaved, onError }) {
 
 function ProviderManager({
   providers,
-  providerOrder,
+  providerOrders,
+  providerOrder = [],
   onReload,
   onNotice,
   onError,
@@ -1328,11 +1427,24 @@ function ProviderManager({
   const { t } = useAppSettings()
   const [editor, setEditor] = useState(null)
   const [busy, setBusy] = useState("")
+  const [activeRoute, setActiveRoute] = useState("schedule_board")
+  const normalizedOrders = providerOrders || {
+    schedule_board: providerOrder,
+    schedule_message: providerOrder,
+    schedule_vision: providerOrder,
+  }
+  const configuredOrder = normalizedOrders[activeRoute]
+  const currentOrder =
+    Array.isArray(configuredOrder) && configuredOrder.length
+      ? configuredOrder
+      : Array.isArray(normalizedOrders.schedule_vision)
+        ? normalizedOrders.schedule_vision
+        : []
   const orderedProviders = [
-    ...providerOrder
+    ...currentOrder
       .map((id) => providers.find((provider) => provider.id === id))
       .filter(Boolean),
-    ...providers.filter((provider) => !providerOrder.includes(provider.id)),
+    ...providers.filter((provider) => !currentOrder.includes(provider.id)),
   ]
 
   const saveProvider = async () => {
@@ -1351,7 +1463,7 @@ function ProviderManager({
     try {
       await request("/providers/order", {
         method: "PUT",
-        body: JSON.stringify({ providerOrder: current }),
+        body: JSON.stringify({ route: activeRoute, providerOrder: current }),
       })
       await onReload()
       onNotice(adminMessage("admin.provider.orderUpdated"))
@@ -1421,7 +1533,19 @@ function ProviderManager({
               <p className="admin-kicker">{t("admin.provider.routeKicker")}</p>
               <h3>{t("admin.provider.orderTitle")}</h3>
             </div>
-            <Badge variant="sky">{t("admin.provider.routeName")}</Badge>
+            <label className="admin-route-selector">
+              <span>{t("admin.provider.routeLabel")}</span>
+              <select
+                value={activeRoute}
+                onChange={(event) => setActiveRoute(event.target.value)}
+              >
+                {scheduleRoutes.map((route) => (
+                  <option value={route.id} key={route.id}>
+                    {t(route.labelKey)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="admin-provider-table-wrap">
             <table className="admin-provider-table">
@@ -1490,11 +1614,13 @@ function ProviderManager({
                             ? t("admin.provider.enabled")
                             : t("admin.provider.disabled")}
                         </Badge>
-                        {provider.visionCapable ? (
-                          <Badge variant="sky">
-                            {t("admin.provider.visionBadge")}
-                          </Badge>
-                        ) : null}
+                        {normalizeProviderCapabilities(provider).map(
+                          (capability) => (
+                            <Badge variant="sky" key={capability}>
+                              {t(`admin.provider.capability.${capability}`)}
+                            </Badge>
+                          ),
+                        )}
                         <small>
                           {provider.apiKeyConfigured
                             ? t("admin.provider.keyConfigured")
@@ -1883,9 +2009,10 @@ function AdminAppModern() {
     active: { avatar: null, banner: null },
   })
   const [providers, setProviders] = useState([])
-  const [providerOrder, setProviderOrder] = useState([])
+  const [providerOrders, setProviderOrders] = useState({})
   const [keywordEnabled, setKeywordEnabled] = useState(true)
   const [visionEnabled, setVisionEnabled] = useState(true)
+  const [messageEnabled, setMessageEnabled] = useState(true)
   const [scheduleKeywords, setScheduleKeywords] = useState("")
   const [featuredVideoId, setFeaturedVideoId] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
@@ -1958,10 +2085,11 @@ function AdminAppModern() {
     setConfig(configPayload)
     setKeywordEnabled(configPayload.scheduleKeywordEnabled !== false)
     setVisionEnabled(configPayload.scheduleVisionEnabled !== false)
+    setMessageEnabled(configPayload.scheduleMessageEnabled !== false)
     setScheduleKeywords((configPayload.scheduleKeywords || []).join("\n"))
     setFeaturedVideoId(configPayload.featuredVideoId || "")
     setProviders(configPayload.providers || [])
-    setProviderOrder(configPayload.providerOrder || [])
+    setProviderOrders(normalizeProviderOrders(configPayload))
     setEventsPage(eventsPayload)
     setEventFilters({
       search: "",
@@ -2029,13 +2157,14 @@ function AdminAppModern() {
         body: JSON.stringify({
           scheduleKeywordEnabled: keywordEnabled,
           scheduleVisionEnabled: visionEnabled,
+          scheduleMessageEnabled: messageEnabled,
           scheduleKeywords,
           featuredVideoId: featuredVideoId || null,
         }),
       })
       setConfig(payload)
       setProviders(payload.providers || [])
-      setProviderOrder(payload.providerOrder || [])
+      setProviderOrders(normalizeProviderOrders(payload))
       setNotice(adminMessage("admin.notice.configSaved"))
     } catch (saveError) {
       setError(formatAdminError(saveError))
@@ -2048,7 +2177,7 @@ function AdminAppModern() {
     const payload = await request("/config")
     setConfig(payload)
     setProviders(payload.providers || [])
-    setProviderOrder(payload.providerOrder || [])
+    setProviderOrders(normalizeProviderOrders(payload))
   }
 
   const startJob = async (kind) => {
@@ -2260,13 +2389,15 @@ function AdminAppModern() {
             <ScanSettingsPanel
               keywordEnabled={keywordEnabled}
               visionEnabled={visionEnabled}
+              messageEnabled={messageEnabled}
               keywords={scheduleKeywords}
-              providerOrder={providerOrder}
+              providerOrders={providerOrders}
               providers={providers}
               videos={videos}
               featuredVideoId={featuredVideoId}
               onChangeKeywordEnabled={setKeywordEnabled}
               onChangeVisionEnabled={setVisionEnabled}
+              onChangeMessageEnabled={setMessageEnabled}
               onChangeKeywords={setScheduleKeywords}
               onChangeFeaturedVideoId={setFeaturedVideoId}
               onSave={saveConfig}
@@ -2277,7 +2408,7 @@ function AdminAppModern() {
           {activeTab === "providers" ? (
             <ProviderManager
               providers={providers}
-              providerOrder={providerOrder}
+              providerOrders={providerOrders}
               onReload={refreshProviderData}
               onNotice={setNotice}
               onError={setError}

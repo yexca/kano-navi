@@ -199,6 +199,23 @@
   padding: 10px 11px;
 }
 
+.admin-static-field {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  border: 1px solid hsl(var(--input));
+  border-radius: 6px;
+  background: hsl(var(--muted) / 0.45);
+  padding: 0 11px;
+  color: hsl(var(--foreground));
+  font-size: 12px;
+}
+
+.dark .admin-console .admin-static-field {
+  border-color: #353d48;
+  background: #252c35;
+}
+
 .admin-model-form input:focus,
 .admin-config-form input:focus,
 .admin-field input:focus,
@@ -1416,6 +1433,20 @@
   justify-content: flex-end;
 }
 
+.admin-route-selector {
+  display: grid;
+  min-width: 170px;
+  gap: 5px;
+  color: #68727d;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.admin-route-selector select {
+  height: 32px !important;
+  min-width: 170px;
+}
+
 .admin-schedule-filters {
   display: grid;
   grid-template-columns:
@@ -1764,6 +1795,33 @@
   gap: 14px;
   border-top: 1px solid #edf0f2;
   padding-top: 14px;
+}
+
+.admin-capability-fieldset {
+  margin: 0;
+  border: 1px solid #edf0f2;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.admin-capability-fieldset legend {
+  padding: 0 5px;
+  color: #68727d;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.admin-capability-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.admin-field-note {
+  margin: 9px 0 0;
+  color: #8a939e;
+  font-size: 9px;
+  line-height: 1.5;
 }
 
 .admin-provider-form > .admin-form-actions {

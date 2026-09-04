@@ -5,25 +5,25 @@
 The database file is `data/database/kano.sqlite`. On startup the server creates the
 directory, schema, and missing seed records. The current tables are:
 
-| Table                  | Purpose                                                                   |
-| ---------------------- | ------------------------------------------------------------------------- |
-| `profiles`             | Name, bio, avatar, banner, and official entry points                      |
-| `posts`                | X posts, account source, publication time, engagement counts, and media   |
-| `events`               | Unified schedules, provenance, confidence, manual locks, and tombstones   |
-| `event_sources`        | Source post/reservation identities attached to each event                 |
-| `videos`               | Published YouTube videos and scheduled streams                            |
-| `focus`                | The page's latest focus item and stable YouTube video ID                  |
-| `timeline`             | Person and activity timeline                                              |
-| `resources`            | X, YouTube, Wikipedia, and other resource links                           |
-| `assets`               | Schedule images and their sources                                         |
-| `media_assets`         | Remote media identities, cache metadata, and fetch status                 |
-| `media_links`          | Links from cached media to posts, videos, profiles, and focus items       |
-| `sync_runs`            | Status, counts, error summaries, trigger, and asynchronous job identity   |
-| `sync_state`           | Durable per-account X and YouTube cursors                                 |
-| `app_settings`         | Non-secret model, schedule-extractor, X-account, and Featured settings    |
-| `schedule_extractions` | Versioned OpenAI inputs, outcomes, and structured result metadata         |
-| `llm_providers`        | OpenAI-compatible endpoints, capability flags, health, and encrypted keys |
-| `llm_route_providers`  | Ordered provider failover routes (including `schedule_vision`)            |
+| Table                  | Purpose                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------- |
+| `profiles`             | Name, bio, avatar, banner, and official entry points                                                    |
+| `posts`                | X posts, account source, publication time, engagement counts, and media                                 |
+| `events`               | Unified schedules, provenance, confidence, manual locks, and tombstones                                 |
+| `event_sources`        | Source post/reservation identities attached to each event                                               |
+| `videos`               | Published YouTube videos and scheduled streams                                                          |
+| `focus`                | The page's latest focus item and stable YouTube video ID                                                |
+| `timeline`             | Person and activity timeline                                                                            |
+| `resources`            | X, YouTube, Wikipedia, and other resource links                                                         |
+| `assets`               | Schedule images and their sources                                                                       |
+| `media_assets`         | Remote media identities, cache metadata, and fetch status                                               |
+| `media_links`          | Links from cached media to posts, videos, profiles, and focus items                                     |
+| `sync_runs`            | Status, counts, error summaries, trigger, and asynchronous job identity                                 |
+| `sync_state`           | Durable per-account X and YouTube cursors                                                               |
+| `app_settings`         | Non-secret model, schedule-extractor, X-account, and Featured settings                                  |
+| `schedule_extractions` | Versioned LLM inputs, outcomes, and structured result metadata                                          |
+| `llm_providers`        | OpenAI-compatible endpoints, Text/Image capabilities, health, and encrypted keys                        |
+| `llm_route_providers`  | Ordered provider failover routes for `schedule_board`, `schedule_message`, and legacy `schedule_vision` |
 
 The API maps snake_case columns to camelCase and removes `raw_json`. The
 frontend must not depend on database fields that are not declared in the API
@@ -60,8 +60,9 @@ default) are skipped. Later runs prioritize unknown IDs and may refresh only a
 small `X_REFRESH_KNOWN` budget. Discovery and detail-request limits cap the
 work per run; `X_MAX_STATUS_REQUESTS` is the total detail-request budget shared
 by all configured accounts. Successful posts are stored with `account_handle`
-and returned as one time-ordered feed. `X_HANDLE` remains a single-account
-compatibility fallback.
+and returned as one time-ordered feed. Image-only posts are retained as
+candidates as long as they have a publication time and a media URL.
+`X_HANDLE` remains a single-account compatibility fallback.
 
 Each discovered image URL is registered and linked to its post. A bounded media
 stage later in the same command downloads pending files from `pbs.twimg.com`.
@@ -91,20 +92,41 @@ hosts (`i1.ytimg.com` through `i4.ytimg.com`).
 
 ### Schedule Extraction Pipeline
 
-Schedule extraction is independent of the public feed's old `notice/daily`
-classification. Stage one uses the admin-configurable keyword list to select X
-post candidates. Stage two sends the public post text and any ready cached
-images to the ordered `schedule_vision` provider route. Each provider can use
-the OpenAI Responses or Chat Completions shape, and a failed request is retried
-according to its bounded setting before the next provider is attempted. A
-second local validator rejects invalid calendar dates, time formats,
-enumerations, or confidence values before any event write.
+Schedule extraction has two independent candidate paths:
 
-Input fingerprints and the extractor version make successful results
-idempotent. Model failures and invalid results are recorded in
-`schedule_extractions` and preserve the prior event snapshot. Date-only events
-store `starts_on`, a null `starts_at`, and `time_precision = unknown`; the model
-must not invent a specific time.
+1. The schedule-board path uses the admin-configurable keyword list to select
+   posts that look like a schedule image or board. It uses the
+   `schedule_board` provider route.
+2. The single-message path applies a cheap local date/time and scheduling-verb
+   heuristic to ordinary X messages, including messages without a configured
+   keyword. Suspected messages are sent to the `schedule_message` provider
+   route, which first classifies the post as `schedule`, `not_schedule`, or
+   `uncertain` before extracting events.
+
+The two candidate lists are merged, de-duplicated by X post ID, sorted by
+publication time, and limited by one shared scan limit. A post selected by the
+board path is not sent a second time through the message path in the same scan.
+The legacy `schedule_vision` route remains available for older API clients and
+is used as the compatibility fallback when a new route has no explicit order.
+
+Provider selection follows the original post modality. Text-only input requires
+`text`; image-only input requires `image`; mixed input requires a provider with
+both capabilities. Only ready cached images are sent to the model. A post that
+declares an image but whose cache is not ready is recorded as `media_pending`
+and is not silently reduced to text-only input. Each provider uses the OpenAI
+Responses or Chat Completions shape, receives at most three total calls (one
+initial request plus two retries), and then yields to the next enabled, keyed,
+capability-compatible provider in that route's priority order. The persisted
+`max_retries` field is retained for old clients and migrated to this fixed
+policy; it is not a cost-control override.
+
+A local validator rejects invalid calendar dates, time formats, enumerations,
+or confidence values before any event write. `schedule` results update automatic
+events; `not_schedule` results retire only the matching automatic source rows;
+`uncertain` results are cached in `schedule_extractions` without creating or
+retiring events. Input fingerprints and the extractor version make all of these
+outcomes idempotent. Date-only events store `starts_on`, a null `starts_at`, and
+`time_precision = unknown`; the model must not invent a specific time.
 
 The legacy model comes from `app_settings.llm_model`, falling back to
 `OPENAI_MODEL` and then `gpt-4o-mini`. The legacy environment key remains a
@@ -112,9 +134,13 @@ compatibility fallback for the seeded `openai-default` provider. Keys entered
 for additional providers are encrypted with `LLM_SECRETS_KEY`; ciphertext is
 never returned by an API response or written to extraction `raw_json`.
 Candidates from either X account use the same idempotent fingerprint and
-manual-lock rules. The two stage flags are stored as
-`schedule_keyword_enabled` and `schedule_vision_enabled` and can be changed
-independently in `/admin`.
+manual-lock rules. The stage flags are stored as `schedule_keyword_enabled`,
+`schedule_vision_enabled`, and `schedule_message_enabled` and can be changed
+independently in `/admin`. The legacy `schedule_extraction_enabled` setting is
+retained for old clients and for seeding the stage defaults; it is no longer a
+runtime master switch, so a newly enabled stage can run even when an older
+database still contains `0` there. The old admin API field updates all three
+stage flags together for compatibility.
 
 The `featured_video_id` setting is maintained through `/admin`. It points to an
 existing local `videos` row (or an empty value for no Featured item), and source
@@ -152,7 +178,8 @@ it. The dashboard hides tombstones and labels visible automatic/manual events.
 | `PORT`                        | `8787`               | Express listening port                                       |
 | `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Enable the automatic schedule stage                          |
 | `SCHEDULE_KEYWORD_ENABLED`    | `1`                  | Enable keyword candidate selection                           |
-| `SCHEDULE_VISION_ENABLED`     | `1`                  | Enable visual LLM extraction                                 |
+| `SCHEDULE_VISION_ENABLED`     | `1`                  | Enable schedule-board LLM extraction                         |
+| `SCHEDULE_MESSAGE_ENABLED`    | `1`                  | Enable single-message schedule detection                     |
 | `SCHEDULE_KEYWORDS`           | `schedule,...`       | Comma-separated schedule candidate keywords                  |
 | `MCP_ENABLED`                 | `1`                  | Expose the stateless `/mcp` endpoint                         |
 | `MCP_CONTROL_TOKEN`           | Empty                | Bearer token for MCP mutation tools                          |
@@ -188,7 +215,7 @@ be reserved for reviewed recovery work.
 The `/mcp` endpoint is intentionally narrower than `/admin`. Its public tools
 read the prepared snapshot and sanitized schedule/status views. Bearer-protected
 tools may request a revision, start a full synchronization, or run the automatic
-keyword/vision scan; all of these return an asynchronous job result. MCP has no
+keyword/board/message scan; all of these return an asynchronous job result. MCP has no
 manual confirmation, edit, delete, profile-media selection/upload, SQL, file, or
 arbitrary URL-proxy operation. A page refresh or revision request never performs
 an external fetch.

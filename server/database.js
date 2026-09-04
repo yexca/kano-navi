@@ -27,6 +27,9 @@ import {
   sanitizeExtension,
 } from "./media-cache.js"
 
+// A provider gets one initial request plus two retries before failover.
+export const LLM_MAX_RETRIES = 2
+
 const moduleDir = path.dirname(fileURLToPath(import.meta.url))
 const projectDir = path.resolve(moduleDir, "..")
 
@@ -294,8 +297,9 @@ const schema = `
     model TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     vision_capable INTEGER NOT NULL DEFAULT 1,
+    capabilities_json TEXT NOT NULL DEFAULT '["text","image"]',
     timeout_ms INTEGER NOT NULL DEFAULT 30000,
-    max_retries INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT ${LLM_MAX_RETRIES},
     api_key_ciphertext TEXT,
     last_status TEXT,
     last_error TEXT,
@@ -329,6 +333,14 @@ export const DEFAULT_SCHEDULE_KEYWORDS = [
   "予定",
 ]
 export const SCHEDULE_VISION_ROUTE = "schedule_vision"
+export const SCHEDULE_MESSAGE_ROUTE = "schedule_message"
+export const SCHEDULE_BOARD_ROUTE = "schedule_board"
+export const SCHEDULE_ROUTES = [
+  SCHEDULE_MESSAGE_ROUTE,
+  SCHEDULE_BOARD_ROUTE,
+  SCHEDULE_VISION_ROUTE,
+]
+export const LLM_CAPABILITIES = ["text", "image"]
 export const LLM_PROTOCOLS = ["openai-responses", "openai-chat-completions"]
 const japanDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: JAPAN_TIME_ZONE,
@@ -412,6 +424,41 @@ function parseListSetting(value, fallback, { fallbackOnEmpty = true } = {}) {
     ...new Set(values.map((item) => String(item).trim()).filter(Boolean)),
   ]
   return normalized.length || !fallbackOnEmpty ? normalized : [...fallback]
+}
+
+/**
+ * Normalize the public LLM input capability vocabulary. The persisted
+ * `vision_capable` flag remains a migration/response compatibility field, but
+ * routing is based on this explicit set.
+ */
+export function normalizeLlmCapabilities(
+  value,
+  legacyVisionCapable = true,
+  { fallback = legacyVisionCapable ? LLM_CAPABILITIES : ["text"] } = {},
+) {
+  let values = value
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value)
+      values = Array.isArray(parsed) ? parsed : value.split(/[,\s]+/u)
+    } catch {
+      values = value.split(/[,\s]+/u)
+    }
+  }
+  if (!Array.isArray(values)) values = []
+  const normalized = [
+    ...new Set(
+      values
+        .map((item) =>
+          String(item || "")
+            .trim()
+            .toLowerCase(),
+        )
+        .map((item) => (item === "vision" ? "image" : item))
+        .filter((item) => LLM_CAPABILITIES.includes(item)),
+    ),
+  ]
+  return normalized.length ? normalized : [...fallback]
 }
 
 function configuredXHandles(database) {
@@ -614,6 +661,56 @@ function migrateSchema(database) {
   database.exec(
     "CREATE INDEX IF NOT EXISTS sync_runs_job_idx ON sync_runs (job_id, id DESC)",
   )
+
+  const providerColumns = tableColumns(database, "llm_providers")
+  if (!providerColumns.has("max_retries")) {
+    database.exec(
+      `ALTER TABLE llm_providers ADD COLUMN max_retries INTEGER NOT NULL DEFAULT ${LLM_MAX_RETRIES}`,
+    )
+  }
+  let addedCapabilitiesColumn = false
+  if (!providerColumns.has("capabilities_json")) {
+    database.exec(
+      'ALTER TABLE llm_providers ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT \'["text","image"]\'',
+    )
+    addedCapabilitiesColumn = true
+  }
+  const providerRows = database
+    .prepare(
+      "SELECT id, vision_capable AS visionCapable, capabilities_json AS capabilitiesJson FROM llm_providers",
+    )
+    .all()
+  const updateCapabilities = database.prepare(
+    "UPDATE llm_providers SET capabilities_json = ? WHERE id = ?",
+  )
+  for (const row of providerRows) {
+    const capabilities = normalizeLlmCapabilities(
+      addedCapabilitiesColumn ? null : row.capabilitiesJson,
+      row.visionCapable !== 0,
+    )
+    updateCapabilities.run(JSON.stringify(capabilities), row.id)
+  }
+
+  // Older databases defaulted this field to zero. Keep the value as a
+  // compatibility field, but make the failover contract deterministic.
+  database
+    .prepare(
+      "UPDATE llm_providers SET max_retries = ? WHERE max_retries IS NULL OR max_retries <> ?",
+    )
+    .run(LLM_MAX_RETRIES, LLM_MAX_RETRIES)
+
+  // The original implementation had one vision route. New installations and
+  // upgrades keep that order for both detectors until an operator separates
+  // them explicitly in the admin API.
+  const legacyOrder = getLlmRouteProviders(database, SCHEDULE_VISION_ROUTE)
+  for (const route of [SCHEDULE_MESSAGE_ROUTE, SCHEDULE_BOARD_ROUTE]) {
+    const current = database
+      .prepare("SELECT 1 FROM llm_route_providers WHERE route = ? LIMIT 1")
+      .get(route)
+    if (!current && legacyOrder.length) {
+      setLlmRouteProviders(database, route, legacyOrder)
+    }
+  }
 }
 
 function json(value) {
@@ -1780,6 +1877,14 @@ export function seedDatabase(
     )
     setAppSetting(database, "schedule_vision_enabled", enabled ? "1" : "0")
   }
+  if (getAppSetting(database, "schedule_message_enabled", null) == null) {
+    const enabled = settingBoolean(
+      process.env.SCHEDULE_MESSAGE_ENABLED ??
+        getAppSetting(database, "schedule_extraction_enabled", "1"),
+      true,
+    )
+    setAppSetting(database, "schedule_message_enabled", enabled ? "1" : "0")
+  }
   if (getAppSetting(database, "dashboard_revision", null) == null) {
     setAppSetting(database, "dashboard_revision", "0")
   }
@@ -1797,12 +1902,15 @@ export function seedDatabase(
       model: legacyModel,
       enabled: true,
       visionCapable: true,
+      capabilities: LLM_CAPABILITIES,
       timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
-      maxRetries: 0,
+      maxRetries: 2,
       replaceApiKey: false,
       apiKeyCiphertext: null,
     })
     setLlmRouteProviders(database, SCHEDULE_VISION_ROUTE, ["openai-default"])
+    setLlmRouteProviders(database, SCHEDULE_MESSAGE_ROUTE, ["openai-default"])
+    setLlmRouteProviders(database, SCHEDULE_BOARD_ROUTE, ["openai-default"])
   }
   if (getAppSetting(database, "featured_video_id", null) == null) {
     const seedFeatured =
@@ -2103,7 +2211,7 @@ export function replaceAutomaticEventsForSource(
     )
     const hideEvent = database.prepare(
       `UPDATE events SET deleted_at=?, updated_at=?
-       WHERE id=? AND manual_locked=0`,
+       WHERE id=? AND provenance='automatic' AND manual_locked=0`,
     )
     let retired = 0
     for (const row of previous) {
@@ -2142,14 +2250,16 @@ export function setAppSetting(database, key, value) {
 
 const llmProviderColumns = `
   id, name, protocol, base_url AS baseUrl, model,
-  enabled, vision_capable AS visionCapable, timeout_ms AS timeoutMs,
+  enabled, vision_capable AS visionCapable,
+  capabilities_json AS capabilitiesJson, timeout_ms AS timeoutMs,
   max_retries AS maxRetries, api_key_ciphertext AS apiKeyCiphertext,
   last_status AS lastStatus, last_error AS lastError,
   last_checked_at AS lastCheckedAt, created_at AS createdAt, updated_at AS updatedAt
 `
 const llmProviderColumnsWithAlias = `
   p.id, p.name, p.protocol, p.base_url AS baseUrl, p.model,
-  p.enabled, p.vision_capable AS visionCapable, p.timeout_ms AS timeoutMs,
+  p.enabled, p.vision_capable AS visionCapable,
+  p.capabilities_json AS capabilitiesJson, p.timeout_ms AS timeoutMs,
   p.max_retries AS maxRetries, p.api_key_ciphertext AS apiKeyCiphertext,
   p.last_status AS lastStatus, p.last_error AS lastError,
   p.last_checked_at AS lastCheckedAt, p.created_at AS createdAt, p.updated_at AS updatedAt
@@ -2159,13 +2269,22 @@ function mapLlmProvider(row) {
   if (!row) return null
   const {
     apiKeyCiphertext,
+    capabilitiesJson,
     routePriority: _routePriority,
     ...publicFields
   } = row
   return {
     ...publicFields,
     enabled: Boolean(row.enabled),
-    visionCapable: Boolean(row.visionCapable),
+    capabilities: normalizeLlmCapabilities(
+      capabilitiesJson,
+      Boolean(row.visionCapable),
+    ),
+    // Kept as a derived compatibility field for older admin clients.
+    visionCapable: normalizeLlmCapabilities(
+      capabilitiesJson,
+      Boolean(row.visionCapable),
+    ).includes("image"),
     apiKeyConfigured: Boolean(apiKeyCiphertext),
   }
 }
@@ -2231,10 +2350,14 @@ export function upsertLlmProvider(database, provider = {}) {
       Number(provider.timeoutMs ?? provider.timeout_ms ?? 30000) || 30000,
     ),
   )
-  const maxRetries = Math.min(
-    3,
-    Math.max(0, Number(provider.maxRetries ?? provider.max_retries ?? 0) || 0),
+  // Keep accepting the legacy input field, but enforce the three-request
+  // provider contract for every persisted configuration.
+  const maxRetries = LLM_MAX_RETRIES
+  const capabilities = normalizeLlmCapabilities(
+    provider.capabilities ?? provider.capabilitiesJson,
+    provider.visionCapable !== false,
   )
+  const visionCapable = capabilities.includes("image")
   const replaceApiKey = Boolean(provider.replaceApiKey)
   const encryptedCredential = replaceApiKey
     ? nullable(provider.apiKeyCiphertext)
@@ -2243,13 +2366,16 @@ export function upsertLlmProvider(database, provider = {}) {
     .prepare(
       `INSERT INTO llm_providers (
          id, name, protocol, base_url, model, enabled, vision_capable,
-         timeout_ms, max_retries, api_key_ciphertext, last_status, last_error,
+         capabilities_json, timeout_ms, max_retries, api_key_ciphertext,
+         last_status, last_error,
          last_checked_at, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name=excluded.name, protocol=excluded.protocol, base_url=excluded.base_url,
          model=excluded.model, enabled=excluded.enabled,
-         vision_capable=excluded.vision_capable, timeout_ms=excluded.timeout_ms,
+         vision_capable=excluded.vision_capable,
+         capabilities_json=excluded.capabilities_json,
+         timeout_ms=excluded.timeout_ms,
          max_retries=excluded.max_retries,
          api_key_ciphertext=CASE WHEN ? = 1 THEN excluded.api_key_ciphertext
            ELSE llm_providers.api_key_ciphertext END,
@@ -2264,7 +2390,8 @@ export function upsertLlmProvider(database, provider = {}) {
       baseUrl,
       model,
       provider.enabled === false ? 0 : 1,
-      provider.visionCapable === false ? 0 : 1,
+      visionCapable ? 1 : 0,
+      JSON.stringify(capabilities),
       timeoutMs,
       maxRetries,
       encryptedCredential,
@@ -2312,6 +2439,17 @@ export function getLlmRouteProviders(database, route = SCHEDULE_VISION_ROUTE) {
     )
     .all(String(route))
     .map((row) => String(row.id))
+}
+
+export function getScheduleProviderOrders(database) {
+  const legacy = getLlmRouteProviders(database, SCHEDULE_VISION_ROUTE)
+  const orders = {}
+  for (const route of [SCHEDULE_MESSAGE_ROUTE, SCHEDULE_BOARD_ROUTE]) {
+    const configured = getLlmRouteProviders(database, route)
+    orders[route] = configured.length ? configured : [...legacy]
+  }
+  orders[SCHEDULE_VISION_ROUTE] = legacy
+  return orders
 }
 
 export function setLlmRouteProviders(
@@ -2393,8 +2531,19 @@ export function getScheduleExtractionConfig(database) {
     ),
     legacyEnabled,
   )
+  const messageEnabled = settingBoolean(
+    getAppSetting(
+      database,
+      "schedule_message_enabled",
+      process.env.SCHEDULE_MESSAGE_ENABLED ?? enabledSetting,
+    ),
+    legacyEnabled,
+  )
   const config = {
-    enabled: keywordEnabled && visionEnabled,
+    // The legacy setting only seeds the stage defaults and remains writable
+    // through the old API. New callers must be able to enable the message
+    // detector independently when an older database left this value off.
+    enabled: messageEnabled || (keywordEnabled && visionEnabled),
     keywords: normalizedScheduleKeywords(keywordsSetting),
   }
   // Keep the original enumerable response shape for existing integrations;
@@ -2403,8 +2552,13 @@ export function getScheduleExtractionConfig(database) {
   Object.defineProperties(config, {
     keywordEnabled: { value: keywordEnabled, enumerable: false },
     visionEnabled: { value: visionEnabled, enumerable: false },
+    messageEnabled: { value: messageEnabled, enumerable: false },
     providerOrder: {
-      value: getLlmRouteProviders(database, SCHEDULE_VISION_ROUTE),
+      value: getScheduleProviderOrders(database)[SCHEDULE_VISION_ROUTE],
+      enumerable: false,
+    },
+    providerOrders: {
+      value: getScheduleProviderOrders(database),
       enumerable: false,
     },
   })
@@ -2423,8 +2577,15 @@ export function getDetailedScheduleExtractionConfig(database) {
     enabled: config.enabled,
     keywordEnabled: config.keywordEnabled,
     visionEnabled: config.visionEnabled,
+    messageEnabled: config.messageEnabled,
     keywords: [...config.keywords],
     providerOrder: [...config.providerOrder],
+    providerOrders: Object.fromEntries(
+      Object.entries(config.providerOrders).map(([route, ids]) => [
+        route,
+        [...ids],
+      ]),
+    ),
   }
 }
 
@@ -2609,7 +2770,12 @@ export function getKnownPostIds(database, ids = []) {
 
 export function listScheduleCandidatePosts(
   database,
-  { limit = 20, keywords = null } = {},
+  {
+    limit = 20,
+    keywords = null,
+    detectionType = "board",
+    includeAll = false,
+  } = {},
 ) {
   const boundedLimit = Math.min(100, Math.max(1, Number(limit) || 20))
   const configuredKeywords = normalizedScheduleKeywords(
@@ -2620,9 +2786,9 @@ export function listScheduleCandidatePosts(
   const loweredKeywords = configuredKeywords.map((keyword) =>
     keyword.toLowerCase(),
   )
-  return database
+  const posts = database
     .prepare(
-      `SELECT id, source, label, text, published_at AS publishedAt, url,
+      `SELECT id, source, type, label, text, published_at AS publishedAt, url,
        account_handle AS accountHandle,
        media_url AS mediaUrl, media_alt AS mediaAlt, raw_json AS rawJson
        FROM posts
@@ -2630,14 +2796,44 @@ export function listScheduleCandidatePosts(
        ORDER BY published_at DESC`,
     )
     .all()
-    .map(({ rawJson, ...post }) => ({
-      ...post,
-      raw: parseJson(rawJson),
-    }))
+    .map(({ rawJson, ...post }) => {
+      const raw = parseJson(rawJson)
+      const mediaUrls = Array.isArray(raw?.media_urls)
+        ? raw.media_urls
+        : Array.isArray(raw?.mediaUrls)
+          ? raw.mediaUrls
+          : post.mediaUrl
+            ? [post.mediaUrl]
+            : []
+      return { ...post, mediaUrls, raw }
+    })
+  const matchesKeyword = (post) => {
+    const haystack =
+      `${String(post.label || "")} ${String(post.text || "")}`.toLocaleLowerCase()
+    return loweredKeywords.some((keyword) => haystack.includes(keyword))
+  }
+  const looksLikeScheduleMessage = (post) => {
+    const text = String(post.text || "")
+    if (!text.trim()) {
+      return (
+        post.mediaUrls.length > 0 &&
+        /(?:notice|schedule|日程|告知|お知らせ|公告)/iu.test(
+          `${String(post.type || "")} ${String(post.label || "")}`,
+        )
+      )
+    }
+    if (matchesKeyword(post)) return true
+    // Keep the message detector inexpensive: only send posts that contain a
+    // date/time or a scheduling verb likely to describe a concrete notice.
+    return /(?:今日|明日|明後日|今週|来週|(?:\d{1,2})\s*[/:月日]\s*(?:\d{1,2})?|(?:\d{1,2})\s*時)|(?:配信|放送|出演|イベント|ライブ|開始|開催|予定|告知)/iu.test(
+      text,
+    )
+  }
+  return posts
     .filter((post) => {
-      const haystack =
-        `${String(post.label || "")} ${String(post.text || "")}`.toLocaleLowerCase()
-      return loweredKeywords.some((keyword) => haystack.includes(keyword))
+      if (includeAll) return true
+      if (detectionType === "message") return looksLikeScheduleMessage(post)
+      return matchesKeyword(post)
     })
     .slice(0, boundedLimit)
 }

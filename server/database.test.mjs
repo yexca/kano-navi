@@ -14,12 +14,14 @@ import {
   getDashboard,
   getScheduleExtractionConfig,
   initializeDatabase,
+  openDatabase,
   listAdminEvents,
   listAdminEventsPage,
   replaceAutomaticEventsForSource,
   seedDatabase,
   setFeaturedVideoId,
   updateManualEvent,
+  upsertLlmProvider,
   upsertMediaAsset,
   upsertEvents,
   upsertPosts,
@@ -30,6 +32,39 @@ import {
   resolveMediaCachePath,
   writeMediaFileAtomic,
 } from "./media-cache.js"
+
+test("legacy provider retry values migrate to the three-request policy", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kano-retry-"))
+  const filename = path.join(directory, "kano.sqlite")
+  let database
+  try {
+    database = initializeDatabase({ seed: false, filename })
+    upsertLlmProvider(database, {
+      id: "legacy-retry-provider",
+      name: "Legacy retry provider",
+      baseUrl: "https://provider.example.invalid/v1",
+      model: "model",
+      maxRetries: 2,
+    })
+    database
+      .prepare("UPDATE llm_providers SET max_retries = 0 WHERE id = ?")
+      .run("legacy-retry-provider")
+    database.close()
+    database = null
+    database = openDatabase({ filename })
+    assert.equal(
+      database
+        .prepare(
+          "SELECT max_retries AS maxRetries FROM llm_providers WHERE id = ?",
+        )
+        .get("legacy-retry-provider").maxRetries,
+      2,
+    )
+  } finally {
+    database?.close()
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 test("dashboard never exposes an unready remote URL", () => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
@@ -333,14 +368,17 @@ test("dashboard aggregates X account sources and keeps Featured selection separa
 test("schedule environment settings seed only the initial database defaults", () => {
   const originalEnabled = process.env.SCHEDULE_EXTRACTION_ENABLED
   const originalKeywords = process.env.SCHEDULE_KEYWORDS
+  const originalMessageEnabled = process.env.SCHEDULE_MESSAGE_ENABLED
   process.env.SCHEDULE_EXTRACTION_ENABLED = "0"
   process.env.SCHEDULE_KEYWORDS = "WEEKLY_BOARD,配信予定"
+  process.env.SCHEDULE_MESSAGE_ENABLED = "1"
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
   try {
     seedDatabase(database)
     assert.equal(getAppSetting(database, "schedule_extraction_enabled"), "0")
+    assert.equal(getAppSetting(database, "schedule_message_enabled"), "1")
     assert.deepEqual(getScheduleExtractionConfig(database), {
-      enabled: false,
+      enabled: true,
       keywords: ["WEEKLY_BOARD", "配信予定"],
     })
   } finally {
@@ -349,6 +387,9 @@ test("schedule environment settings seed only the initial database defaults", ()
     else process.env.SCHEDULE_EXTRACTION_ENABLED = originalEnabled
     if (originalKeywords == null) delete process.env.SCHEDULE_KEYWORDS
     else process.env.SCHEDULE_KEYWORDS = originalKeywords
+    if (originalMessageEnabled == null)
+      delete process.env.SCHEDULE_MESSAGE_ENABLED
+    else process.env.SCHEDULE_MESSAGE_ENABLED = originalMessageEnabled
   }
 })
 

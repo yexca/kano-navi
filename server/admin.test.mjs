@@ -153,6 +153,7 @@ test("production admin login guards model settings and manual schedule CRUD", as
       body: JSON.stringify({
         llmModel: "gpt-4.1-mini",
         scheduleExtractionEnabled: false,
+        scheduleMessageEnabled: true,
         scheduleKeywords: ["周表", "配信予定"],
         featuredVideoId: "video-admin-2",
       }),
@@ -160,7 +161,11 @@ test("production admin login guards model settings and manual schedule CRUD", as
     assert.equal(savedConfig.status, 200)
     const savedConfigPayload = await savedConfig.json()
     assert.equal(savedConfigPayload.llmModel, "gpt-4.1-mini")
-    assert.equal(savedConfigPayload.scheduleExtractionEnabled, false)
+    assert.equal(savedConfigPayload.scheduleExtractionEnabled, true)
+    assert.equal(savedConfigPayload.scheduleKeywordEnabled, false)
+    assert.equal(savedConfigPayload.scheduleVisionEnabled, false)
+    assert.equal(savedConfigPayload.scheduleMessageEnabled, true)
+    assert.ok(Array.isArray(savedConfigPayload.providerOrders.schedule_message))
     assert.deepEqual(savedConfigPayload.scheduleKeywords, ["周表", "配信予定"])
     assert.equal(savedConfigPayload.featuredVideoId, "video-admin-2")
     assert.deepEqual(

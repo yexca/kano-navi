@@ -36,8 +36,9 @@ code, maintaining data, and reviewing security.
 - `server/media-cache.js` defines the ignored runtime media store, safe path
   helpers, source identities, and atomic-write primitive.
 - `/admin` is an unlinked maintainer route with a classic sidebar console for
-  paginated schedule maintenance, keyword/vision stages, multiple model
-  providers, and profile media; production access requires the
+  paginated schedule maintenance, independent schedule-board/single-message
+  stages, capability-aware provider queues, multiple model providers, and
+  profile media; production access requires the
   environment-provided admin password.
 - `/mcp` is a stateless integration endpoint. Public read tools need no key;
   synchronization, automatic scanning, and revision controls require a

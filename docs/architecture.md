@@ -3,7 +3,7 @@
 ## System Shape
 
 ```text
-Public X / YouTube pages          OpenAI Responses API
+Public X / YouTube pages          OpenAI-compatible LLM APIs
           |                                ^
           v                                |
 scripts/sync.mjs ---- media download / schedule extraction
@@ -35,8 +35,9 @@ successful snapshot while a source is unavailable.
 
 `src/main.jsx` maps dashboard JSON to component state, calendar navigation, theme
 switching, account-source labels, and accessible links. `src/admin.jsx` owns the
-hidden `/admin` interface for schedule-extractor settings, Featured-video
-selection, and schedule CRUD. `src/components/ui/` contains
+hidden `/admin` interface for independent schedule-board and single-message
+detection settings, capability-aware provider queues, Featured-video selection,
+and schedule CRUD. `src/components/ui/` contains
 basic UI primitives, while the CSS files contain layout and design tokens. The
 presentation layer must not import `better-sqlite3` or call X, YouTube, OpenAI,
 or a third-party proxy directly.
@@ -72,6 +73,11 @@ Automatic event writes have lower precedence than `manual_locked` records.
 Manual edits and confirmations lock the row; manual deletion keeps a hidden
 tombstone so a later extraction cannot recreate the same event.
 
+LLM providers store an explicit `text`/`image` capability array in
+`capabilities_json`; `vision_capable` remains a derived migration field for old
+clients. The provider routes `schedule_board`, `schedule_message`, and legacy
+`schedule_vision` each have their own priority order.
+
 `server/media-cache.js` owns cache-root path validation, source URL identities,
 content hashes, and atomic file writes. `server/media-downloader.js` performs
 bounded downloads from the X and YouTube image hosts and promotes verified
@@ -87,11 +93,15 @@ The synchronization layer handles timeouts, parsing, field normalization, and
   successful account snapshots are merged by publication time.
 - YouTube: keep six RSS entries on the first run, then follow a durable cursor;
   active reservations are rechecked even when no new upload appears.
-- Schedule: retain YouTube reservations as unified `events`, first select X
-  candidates with the keyword stage, then pass matching posts plus ready cached
-  images to `server/schedule-extractor.js`. The visual stage supports multiple
-  OpenAI-compatible Responses or Chat Completions providers in an ordered
-  failover route. API keys are encrypted at rest with `LLM_SECRETS_KEY`.
+- Schedule: retain YouTube reservations as unified `events`, select board
+  candidates with the keyword stage, and separately use a cheap heuristic to
+  identify ordinary X messages that may contain a schedule. Merge and de-duplicate
+  both candidate paths under one limit, then pass each post plus ready cached
+  images to `server/schedule-extractor.js`. The extractor chooses the
+  `schedule_board` or `schedule_message` route, filters providers by the
+  original text/image modality, makes at most three total calls per provider,
+  and then fails over by priority. API keys are encrypted at rest with
+  `LLM_SECRETS_KEY`.
 - Media: register discovered URLs as `media_assets`/`media_links`, then download
   a bounded pending batch during the same synchronization command.
 - If one source fails, record the error; only successfully obtained data is upserted and old data remains.
@@ -108,10 +118,10 @@ The synchronization layer handles timeouts, parsing, field normalization, and
 5. Completion increments `dashboard_revision`. The public page polls the small
    revision endpoint and reloads its stored snapshot; page refresh never starts
    an external fetch.
-6. A maintainer who opens `/admin` can change the model, provider route,
-   schedule-candidate
-   settings, Featured video, or curate events. Those changes go through the
-   local API and lock affected events against automatic replacement.
+6. A maintainer who opens `/admin` can change the model, the independent board
+   and message stages, each provider route's priority order, capability flags,
+   Featured video, or curate events. Those changes go through the local API and
+   lock affected events against automatic replacement.
 
 ### MCP boundary: `/mcp`
 

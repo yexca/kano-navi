@@ -19,6 +19,7 @@ import {
   getLlmProvider,
   getLlmProviderSecret,
   getLlmRouteProviders,
+  getScheduleProviderOrders,
   setLlmRouteProviders,
   upsertLlmProvider,
   updateLlmProviderStatus,
@@ -26,6 +27,12 @@ import {
   listSyncRuns,
   getSyncRun,
   LLM_PROTOCOLS,
+  LLM_CAPABILITIES,
+  LLM_MAX_RETRIES,
+  normalizeLlmCapabilities,
+  SCHEDULE_MESSAGE_ROUTE,
+  SCHEDULE_BOARD_ROUTE,
+  SCHEDULE_ROUTES,
   SCHEDULE_VISION_ROUTE,
   listProfileMedia,
   getProfileMedia,
@@ -292,10 +299,61 @@ function providerModel(value) {
   return model
 }
 
-function ensureVisionRouteProvider(database, id) {
-  const current = getLlmRouteProviders(database, SCHEDULE_VISION_ROUTE)
-  if (!current.includes(id)) {
-    setLlmRouteProviders(database, SCHEDULE_VISION_ROUTE, [...current, id])
+function providerCapabilities(value, existing = null) {
+  if (value == null) {
+    if (Array.isArray(existing?.capabilities)) return [...existing.capabilities]
+    return existing?.visionCapable === false ? ["text"] : [...LLM_CAPABILITIES]
+  }
+  let values = value
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value)
+      values = Array.isArray(parsed) ? parsed : value.split(/[,\s]+/u)
+    } catch {
+      values = value.split(/[,\s]+/u)
+    }
+  }
+  if (!Array.isArray(values)) values = []
+  const capabilities = normalizeLlmCapabilities(values, false, { fallback: [] })
+  if (!capabilities.length)
+    throw new AdminInputError(
+      "capabilities must include at least one of text or image",
+    )
+  if (capabilities.length !== values.length) {
+    const normalizedValues = values.map((item) =>
+      String(item || "")
+        .trim()
+        .toLowerCase() === "vision"
+        ? "image"
+        : String(item || "")
+            .trim()
+            .toLowerCase(),
+    )
+    if (
+      normalizedValues.some((item) => item && !LLM_CAPABILITIES.includes(item))
+    )
+      throw new AdminInputError("capabilities contains an unsupported value")
+  }
+  return capabilities
+}
+
+function validProviderRoute(value, fallback = SCHEDULE_VISION_ROUTE) {
+  const route = String(value || fallback)
+  if (!SCHEDULE_ROUTES.includes(route))
+    throw new AdminInputError("route is invalid")
+  return route
+}
+
+function ensureProviderRoutes(database, id) {
+  for (const route of [
+    SCHEDULE_VISION_ROUTE,
+    SCHEDULE_MESSAGE_ROUTE,
+    SCHEDULE_BOARD_ROUTE,
+  ]) {
+    const current = getLlmRouteProviders(database, route)
+    if (!current.includes(id)) {
+      setLlmRouteProviders(database, route, [...current, id])
+    }
   }
 }
 
@@ -337,10 +395,26 @@ function providerInput(
     body.enabled == null
       ? existing?.enabled !== false
       : booleanValue(body.enabled, "enabled")
-  const visionCapable =
-    body.visionCapable == null
-      ? existing?.visionCapable !== false
-      : booleanValue(body.visionCapable, "visionCapable")
+  const hasCapabilities = Object.prototype.hasOwnProperty.call(
+    body,
+    "capabilities",
+  )
+  const hasLegacyVision = Object.prototype.hasOwnProperty.call(
+    body,
+    "visionCapable",
+  )
+  const legacyVisionCapable = hasLegacyVision
+    ? booleanValue(body.visionCapable, "visionCapable")
+    : existing?.visionCapable !== false
+  const capabilities = hasCapabilities
+    ? providerCapabilities(body.capabilities, existing)
+    : hasLegacyVision
+      ? providerCapabilities(
+          legacyVisionCapable ? ["text", "image"] : ["text"],
+          existing,
+        )
+      : providerCapabilities(undefined, existing || { visionCapable: true })
+  const visionCapable = capabilities.includes("image")
   const timeoutMs = integerField(
     body.timeoutMs,
     "timeoutMs",
@@ -352,8 +426,8 @@ function providerInput(
     body.maxRetries,
     "maxRetries",
     0,
-    3,
-    existing?.maxRetries ?? 0,
+    LLM_MAX_RETRIES,
+    existing?.maxRetries ?? LLM_MAX_RETRIES,
   )
   let replaceApiKey = false
   let apiKeyCiphertext = null
@@ -380,6 +454,7 @@ function providerInput(
     model,
     enabled,
     visionCapable,
+    capabilities,
     timeoutMs,
     maxRetries,
     replaceApiKey,
@@ -463,6 +538,8 @@ async function testProviderConnection(
 
 function configPayload(database, openAiKeyConfigured, updatedAt = null) {
   const schedule = getDetailedScheduleExtractionConfig(database)
+  const providerOrders =
+    schedule.providerOrders || getScheduleProviderOrders(database)
   const providers = publicProviders(database, openAiKeyConfigured)
   return {
     llmModel: getAppSetting(
@@ -474,8 +551,11 @@ function configPayload(database, openAiKeyConfigured, updatedAt = null) {
     scheduleExtractionEnabled: schedule.enabled,
     scheduleKeywordEnabled: schedule.keywordEnabled,
     scheduleVisionEnabled: schedule.visionEnabled,
+    scheduleMessageEnabled: schedule.messageEnabled,
     scheduleKeywords: schedule.keywords,
     providerOrder: schedule.providerOrder,
+    providerOrders,
+    routes: providerOrders,
     providers,
     featuredVideoId: getFeaturedVideoId(database),
     ...(updatedAt ? { updatedAt } : {}),
@@ -693,6 +773,7 @@ export function createAdminRouter({
         ).updatedAt
         setAppSetting(database, "schedule_keyword_enabled", enabled ? "1" : "0")
         setAppSetting(database, "schedule_vision_enabled", enabled ? "1" : "0")
+        setAppSetting(database, "schedule_message_enabled", enabled ? "1" : "0")
       }
       if (
         Object.prototype.hasOwnProperty.call(body, "scheduleKeywordEnabled")
@@ -715,6 +796,19 @@ export function createAdminRouter({
         updatedAt = setAppSetting(
           database,
           "schedule_vision_enabled",
+          enabled ? "1" : "0",
+        ).updatedAt
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(body, "scheduleMessageEnabled")
+      ) {
+        const enabled = booleanValue(
+          body.scheduleMessageEnabled,
+          "scheduleMessageEnabled",
+        )
+        updatedAt = setAppSetting(
+          database,
+          "schedule_message_enabled",
           enabled ? "1" : "0",
         ).updatedAt
       }
@@ -746,12 +840,15 @@ export function createAdminRouter({
     }),
   )
 
-  router.get("/providers", (_request, response) => {
-    const route = SCHEDULE_VISION_ROUTE
+  router.get("/providers", (request, response) => {
+    const route = validProviderRoute(request.query?.route)
+    const providerOrders = getScheduleProviderOrders(database)
     response.json({
       providers: publicProviders(database, openAiKeyConfigured),
       route,
-      providerOrder: getLlmRouteProviders(database, route),
+      providerOrder: providerOrders[route],
+      providerOrders,
+      routes: providerOrders,
     })
   })
   router.post(
@@ -761,7 +858,7 @@ export function createAdminRouter({
       try {
         input = providerInput(request.body || {}, null, { mode })
         const provider = upsertLlmProvider(database, input)
-        ensureVisionRouteProvider(database, input.id)
+        ensureProviderRoutes(database, input.id)
         response.status(201).json({
           provider:
             provider.id === "openai-default" && openAiKeyConfigured
@@ -777,18 +874,17 @@ export function createAdminRouter({
   router.put(
     "/providers/order",
     route((request, response) => {
+      const route = validProviderRoute(request.body?.route)
       const ids = request.body?.providerOrder ?? request.body?.ids
       if (!Array.isArray(ids) || ids.length > 100)
         throw new AdminInputError("providerOrder must be an array")
       try {
-        const providerOrder = setLlmRouteProviders(
-          database,
-          SCHEDULE_VISION_ROUTE,
-          ids,
-        )
+        const providerOrder = setLlmRouteProviders(database, route, ids)
         response.json({
-          route: SCHEDULE_VISION_ROUTE,
+          route,
           providerOrder,
+          providerOrders: getScheduleProviderOrders(database),
+          routes: getScheduleProviderOrders(database),
           providers: publicProviders(database, openAiKeyConfigured),
         })
       } catch (error) {
@@ -811,7 +907,7 @@ export function createAdminRouter({
           { mode },
         )
         const provider = upsertLlmProvider(database, input)
-        ensureVisionRouteProvider(database, input.id)
+        ensureProviderRoutes(database, input.id)
         response.json({
           provider:
             provider.id === "openai-default" && openAiKeyConfigured

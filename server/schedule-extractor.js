@@ -9,25 +9,38 @@ import {
   getLlmProvider,
   getLlmProviderSecret,
   getLlmRouteProviders,
+  getScheduleProviderOrders,
+  LLM_MAX_RETRIES,
   listMediaLinks,
   listScheduleCandidatePosts,
+  normalizeLlmCapabilities,
   replaceAutomaticEventsForSource,
+  SCHEDULE_BOARD_ROUTE,
+  SCHEDULE_MESSAGE_ROUTE,
+  SCHEDULE_VISION_ROUTE,
   updateLlmProviderStatus,
   upsertScheduleExtraction,
 } from "./database.js"
 import { resolveMediaCachePath } from "./media-cache.js"
 import { decryptSecret } from "./secret-store.js"
 
-export const scheduleExtractorVersion = "openai-schedule-v1"
+export const scheduleExtractorVersion = "openai-schedule-v2"
 export const defaultScheduleModel = "gpt-4o-mini"
 const defaultOpenAiBaseUrl = "https://api.openai.com/v1"
+const INPUT_MODES = new Set(["text", "image", "text_image"])
+const DETECTION_TYPES = new Set(["board", "message"])
+const CLASSIFICATIONS = new Set(["schedule", "not_schedule", "uncertain"])
 const scheduleInstructions =
-  "Extract only schedule entries explicitly supported by the Japanese post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Return an empty events array when there is no concrete schedule."
+  "First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Return an empty events array for not_schedule."
 
 const scheduleSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    classification: {
+      type: "string",
+      enum: ["schedule", "not_schedule", "uncertain"],
+    },
     events: {
       type: "array",
       items: {
@@ -67,12 +80,88 @@ const scheduleSchema = {
         ],
       },
     },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    evidence: { type: "string" },
+    action: {
+      type: "string",
+      enum: ["add", "update", "cancel", "none"],
+    },
   },
-  required: ["events"],
+  required: ["classification", "events", "confidence", "evidence", "action"],
 }
 
 function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex")
+}
+
+function declaredPostMediaUrls(post) {
+  const raw = post?.raw && typeof post.raw === "object" ? post.raw : null
+  const values = [
+    post?.mediaUrls,
+    post?.media_urls,
+    post?.mediaUrl,
+    post?.media_url,
+    raw?.mediaUrls,
+    raw?.media_urls,
+    raw?.mediaURLs,
+  ]
+  return [
+    ...new Set(
+      values
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .filter((value) => typeof value === "string" && value.trim())
+        .map((value) => value.trim()),
+    ),
+  ]
+}
+
+/**
+ * Return the modality represented by the original post. Passing an images
+ * array explicitly means that the caller wants to describe the supplied
+ * payload; omitting it uses the post's declared media URLs instead.
+ */
+export function inputModeForPost(post, images) {
+  const hasText = Boolean(String(post?.text || "").trim())
+  const hasImages = Array.isArray(images)
+    ? images.length > 0
+    : declaredPostMediaUrls(post).length > 0
+  if (hasText && hasImages) return "text_image"
+  if (hasText) return "text"
+  if (hasImages) return "image"
+  return null
+}
+
+export function providerSupportsInput(provider, inputMode) {
+  if (!INPUT_MODES.has(inputMode)) return false
+  const capabilities = normalizeLlmCapabilities(
+    provider?.capabilities,
+    provider?.visionCapable !== false,
+  )
+  if (inputMode === "text_image") {
+    return capabilities.includes("text") && capabilities.includes("image")
+  }
+  return capabilities.includes(inputMode)
+}
+
+function normalizeDetectionType(value) {
+  const normalized = String(value || "board")
+    .trim()
+    .toLowerCase()
+  return DETECTION_TYPES.has(normalized) ? normalized : "board"
+}
+
+function routeForDetectionType(detectionType) {
+  return normalizeDetectionType(detectionType) === "message"
+    ? SCHEDULE_MESSAGE_ROUTE
+    : SCHEDULE_BOARD_ROUTE
+}
+
+function eventScopeForDetectionType(detectionType) {
+  // Both detectors describe the same X source item. Keeping one source scope
+  // lets a later not_schedule result retire an earlier automatic extraction
+  // regardless of which route handled the post.
+  normalizeDetectionType(detectionType)
+  return "x"
 }
 
 function youtubeIdFromUrl(value) {
@@ -151,19 +240,21 @@ function extractResponseText(payload) {
   throw new Error("OpenAI response did not contain structured output")
 }
 
-function readyPostImages(database, postId) {
+function postImageState(database, post) {
   const supportedMimeTypes = new Set([
+    "image/avif",
     "image/gif",
     "image/jpeg",
     "image/png",
     "image/webp",
   ])
-  return listMediaLinks(database, {
+  const links = listMediaLinks(database, {
     ownerType: "post",
-    ownerId: String(postId),
+    ownerId: String(post.id),
   })
     .filter((link) => link.role === "post-image")
     .sort((a, b) => a.position - b.position)
+  const images = links
     .map((link) => {
       const asset = getMediaAsset(database, link.mediaId)
       const filePath = asset?.cachePath
@@ -181,6 +272,10 @@ function readyPostImages(database, postId) {
       return { ...asset, filePath, position: link.position }
     })
     .filter(Boolean)
+  return {
+    hasImages: declaredPostMediaUrls(post).length > 0 || links.length > 0,
+    images,
+  }
 }
 
 function normalizeExtractedEvents(result, post) {
@@ -253,6 +348,62 @@ function normalizeExtractedEvents(result, post) {
       raw: { evidence: String(event.evidence || "").slice(0, 1000) },
     }
   })
+}
+
+function inferredClassification(result) {
+  if (typeof result?.classification === "string") {
+    const normalized = result.classification.trim().toLowerCase()
+    if (CLASSIFICATIONS.has(normalized)) return normalized
+    throw new Error("schedule extraction returned an invalid classification")
+  }
+  return Array.isArray(result?.events) && result.events.length
+    ? "schedule"
+    : "not_schedule"
+}
+
+function normalizeExtractionResult(result, post) {
+  const classification = inferredClassification(result)
+  const events = normalizeExtractedEvents(
+    { events: Array.isArray(result?.events) ? result.events : [] },
+    post,
+  )
+  if (classification === "not_schedule" && events.length) {
+    throw new Error("not_schedule extraction contained events")
+  }
+  if (classification === "uncertain" && events.length) {
+    throw new Error("uncertain extraction contained events")
+  }
+  const confidenceValue =
+    result?.confidence == null
+      ? events.reduce(
+          (maximum, event) => Math.max(maximum, event.confidence),
+          0,
+        )
+      : Number(result.confidence)
+  if (
+    !Number.isFinite(confidenceValue) ||
+    confidenceValue < 0 ||
+    confidenceValue > 1
+  ) {
+    throw new Error("schedule extraction returned an invalid confidence")
+  }
+  const action = String(
+    result?.action || (classification === "schedule" ? "add" : "none"),
+  )
+    .trim()
+    .toLowerCase()
+  if (!["add", "update", "cancel", "none"].includes(action)) {
+    throw new Error("schedule extraction returned an invalid action")
+  }
+  return {
+    classification,
+    events,
+    confidence: confidenceValue,
+    evidence: String(result?.evidence || "")
+      .trim()
+      .slice(0, 1000),
+    action,
+  }
 }
 
 function providerEndpoint(provider) {
@@ -344,34 +495,47 @@ async function callOpenAiScheduleExtraction(
     endpoint,
     baseUrl,
     timeoutMs = 30_000,
+    inputMode,
   },
 ) {
+  const normalizedImages = Array.isArray(images) ? images : []
+  const resolvedInputMode =
+    inputMode || inputModeForPost(post, normalizedImages)
+  if (!INPUT_MODES.has(resolvedInputMode)) {
+    throw new Error("schedule extraction requires text or image input")
+  }
+  const includeText = resolvedInputMode !== "image"
+  const includeImages = resolvedInputMode !== "text"
   const provider = { protocol, baseUrl: baseUrl || defaultOpenAiBaseUrl }
   const resolvedEndpoint = endpoint || providerEndpoint(provider)
-  const content = [
-    {
-      type: "input_text",
-      text: `Source post published at ${post.publishedAt}. Source URL: ${post.url}\n\n${post.text}`,
-    },
-  ]
-  for (const image of images) {
+  const sourceText = `Source post published at ${post.publishedAt}. Source URL: ${post.url || ""}\n\n${post.text || ""}`
+  const content = []
+  if (includeText) {
     content.push({
-      type: "input_image",
-      image_url: imageDataUrl(image),
-      detail: "high",
+      type: "input_text",
+      text: sourceText,
     })
   }
+  if (includeImages) {
+    for (const image of normalizedImages) {
+      content.push({
+        type: "input_image",
+        image_url: imageDataUrl(image),
+        detail: "high",
+      })
+    }
+  }
   if (protocol === "openai-chat-completions") {
-    const chatContent = [
-      {
-        type: "text",
-        text: `Source post published at ${post.publishedAt}. Source URL: ${post.url}\n\n${post.text}`,
-      },
-      ...images.map((image) => ({
-        type: "image_url",
-        image_url: { url: imageDataUrl(image), detail: "high" },
-      })),
-    ]
+    const chatContent = []
+    if (includeText) chatContent.push({ type: "text", text: sourceText })
+    if (includeImages) {
+      chatContent.push(
+        ...normalizedImages.map((image) => ({
+          type: "image_url",
+          image_url: { url: imageDataUrl(image), detail: "high" },
+        })),
+      )
+    }
     const payload = await requestLlm(
       resolvedEndpoint,
       {
@@ -419,6 +583,10 @@ async function callOpenAiScheduleExtraction(
 function legacyProvider(database, options) {
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY ?? ""
   if (!apiKey) return null
+  const capabilities = normalizeLlmCapabilities(
+    options.capabilities,
+    options.visionCapable !== false,
+  )
   return {
     id: "legacy-openai",
     name: "Legacy OpenAI",
@@ -435,31 +603,47 @@ function legacyProvider(database, options) {
       ),
     timeoutMs:
       options.timeoutMs ?? Number(process.env.OPENAI_TIMEOUT_MS || 30_000),
-    maxRetries: 0,
+    maxRetries: options.maxRetries ?? 2,
+    capabilities,
+    visionCapable: capabilities.includes("image"),
     apiKey,
     persisted: false,
   }
 }
 
-function configuredProviders(database, options) {
+function configuredProviders(database, options, inputMode, detectionType) {
   const hasExplicitProvider =
     options.apiKey != null ||
     options.endpoint != null ||
     options.model != null ||
     options.baseUrl != null ||
-    options.protocol != null
+    options.protocol != null ||
+    options.capabilities != null
   if (hasExplicitProvider) {
     const provider = legacyProvider(database, options)
-    return provider ? [provider] : []
+    if (!provider) return { providers: [], reason: "missing_api_key" }
+    if (!providerSupportsInput(provider, inputMode)) {
+      return { providers: [], reason: "no_compatible_provider" }
+    }
+    return { providers: [provider], reason: null }
   }
   const config = getScheduleExtractionConfig(database)
-  const ids = config.providerOrder.length
-    ? config.providerOrder
-    : getLlmRouteProviders(database, "schedule_vision")
+  const route = routeForDetectionType(detectionType)
+  const providerOrders =
+    config.providerOrders || getScheduleProviderOrders(database)
+  const ids =
+    providerOrders[route]?.length > 0
+      ? providerOrders[route]
+      : providerOrders[SCHEDULE_VISION_ROUTE] ||
+        config.providerOrder ||
+        getLlmRouteProviders(database, SCHEDULE_VISION_ROUTE)
   const providers = []
+  let enabledProviderCount = 0
+  let keyedProviderCount = 0
   for (const id of ids) {
     const row = getLlmProvider(database, id)
-    if (!row || !row.enabled || !row.visionCapable) continue
+    if (!row || !row.enabled) continue
+    enabledProviderCount += 1
     const secret = getLlmProviderSecret(database, id)
     let apiKey = null
     if (secret?.apiKeyCiphertext) {
@@ -475,17 +659,26 @@ function configuredProviders(database, options) {
       apiKey = process.env.OPENAI_API_KEY || null
     }
     if (!apiKey) continue
+    keyedProviderCount += 1
+    if (!providerSupportsInput(row, inputMode)) continue
     providers.push({ ...row, apiKey, persisted: true })
   }
-  if (!providers.length) {
+  if (!providers.length && !enabledProviderCount) {
     const fallback = legacyProvider(database, options)
-    if (fallback) providers.push(fallback)
+    if (fallback && providerSupportsInput(fallback, inputMode)) {
+      return { providers: [fallback], reason: null }
+    }
   }
-  return providers
+  if (providers.length) return { providers, reason: null }
+  return {
+    providers: [],
+    reason:
+      keyedProviderCount > 0 ? "no_compatible_provider" : "missing_api_key",
+  }
 }
 
-function providerExtractorVersion(provider) {
-  return `${scheduleExtractorVersion}:${provider.id}:${provider.protocol}`
+function providerExtractorVersion(provider, { detectionType, inputMode } = {}) {
+  return `${scheduleExtractorVersion}:${normalizeDetectionType(detectionType)}:${inputMode}:${provider.id}:${provider.protocol}`
 }
 
 async function extractWithProvider(
@@ -494,9 +687,15 @@ async function extractWithProvider(
   images,
   contentFingerprint,
   provider,
-  { fetchImpl = fetch } = {},
+  { fetchImpl = fetch, detectionType = "board", inputMode, eventScope } = {},
 ) {
-  const extractorVersion = providerExtractorVersion(provider)
+  const normalizedDetectionType = normalizeDetectionType(detectionType)
+  const normalizedEventScope =
+    eventScope || eventScopeForDetectionType(normalizedDetectionType)
+  const extractorVersion = providerExtractorVersion(provider, {
+    detectionType: normalizedDetectionType,
+    inputMode,
+  })
   const existing = getScheduleExtraction(database, {
     source: "x",
     sourceItemId: post.id,
@@ -504,13 +703,21 @@ async function extractWithProvider(
     extractorVersion,
   })
   if (
-    existing?.status === "success" &&
+    ["success", "uncertain"].includes(existing?.status) &&
     String(existing.model || "") === String(provider.model || "")
   ) {
     return {
       status: "cached",
       extractionId: existing.id,
       providerId: provider.id,
+      classification: (() => {
+        try {
+          const cached = JSON.parse(existing.resultJson || "null")
+          return inferredClassification(cached)
+        } catch {
+          return "schedule"
+        }
+      })(),
     }
   }
   const running = upsertScheduleExtraction(database, {
@@ -522,8 +729,11 @@ async function extractWithProvider(
     status: "running",
   })
   let lastError = null
-  const maxRetries = Math.min(3, Math.max(0, Number(provider.maxRetries) || 0))
-  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+  // `maxRetries` is retained for compatibility, but every provider gets one
+  // initial request plus two retries before priority failover.
+  const maxRetries = LLM_MAX_RETRIES
+  const maxAttempts = maxRetries + 1
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       const result = await callOpenAiScheduleExtraction(post, images, {
         apiKey: provider.apiKey,
@@ -533,13 +743,34 @@ async function extractWithProvider(
         endpoint: provider.endpoint,
         fetchImpl,
         timeoutMs: provider.timeoutMs,
+        inputMode,
       })
-      const events = normalizeExtractedEvents(result, post)
+      const normalized = normalizeExtractionResult(result, post)
+      if (normalized.classification === "uncertain") {
+        upsertScheduleExtraction(database, {
+          source: "x",
+          sourceItemId: post.id,
+          contentFingerprint,
+          extractorVersion,
+          model: provider.model,
+          status: "uncertain",
+          result,
+        })
+        if (provider.persisted)
+          updateLlmProviderStatus(database, provider.id, { status: "success" })
+        return {
+          status: "uncertain",
+          extractionId: running.id,
+          providerId: provider.id,
+          classification: normalized.classification,
+          attempts: attempt + 1,
+        }
+      }
       const replacement = replaceAutomaticEventsForSource(database, {
-        source: "x",
+        source: normalizedEventScope,
         sourceItemId: post.id,
         extractionId: running.id,
-        events,
+        events: normalized.events,
       })
       upsertScheduleExtraction(database, {
         source: "x",
@@ -556,12 +787,13 @@ async function extractWithProvider(
         status: "success",
         extractionId: running.id,
         providerId: provider.id,
+        classification: normalized.classification,
         attempts: attempt + 1,
         ...replacement,
       }
     } catch (error) {
       lastError = error
-      if (attempt < maxRetries) await wait(retryDelay(attempt))
+      if (attempt < maxAttempts - 1) await wait(retryDelay(attempt))
     }
   }
   {
@@ -585,33 +817,68 @@ async function extractWithProvider(
       extractionId: running.id,
       providerId: provider.id,
       error: error.message,
-      attempts: maxRetries + 1,
+      attempts: maxAttempts,
     }
   }
 }
 
 export async function extractSchedulePost(database, post, options = {}) {
-  const providers = configuredProviders(database, options)
-  if (!providers.length) return { status: "skipped", reason: "missing_api_key" }
-  const images = readyPostImages(database, post.id)
+  const detectionType = normalizeDetectionType(options.detectionType)
+  const media = postImageState(database, post)
+  const modalityPost = {
+    ...post,
+    // Preserve the source declaration even while the corresponding cache
+    // asset is pending. This prevents image posts from bypassing media_pending.
+    mediaUrls: media.hasImages ? ["linked-image"] : [],
+  }
+  const inputMode = options.inputMode || inputModeForPost(modalityPost)
+  if (!inputMode) return { status: "skipped", reason: "no_content" }
+  if (inputMode !== "text" && !media.images.length) {
+    return { status: "skipped", reason: "media_pending" }
+  }
+  const configured = configuredProviders(
+    database,
+    options,
+    inputMode,
+    detectionType,
+  )
+  if (!configured.providers.length) {
+    return { status: "skipped", reason: configured.reason }
+  }
+  const modelPost = {
+    ...post,
+    publishedAt: post.publishedAt || post.published_at,
+    text: post.text || "",
+  }
   const contentFingerprint = sha256(
     JSON.stringify({
-      text: post.text,
-      images: images.map((image) => image.sha256),
+      detectionType,
+      inputMode,
+      text: modelPost.text,
+      images: media.images.map((image) => image.sha256),
     }),
   )
   const attempts = []
-  for (const provider of providers) {
+  for (const provider of configured.providers) {
     const result = await extractWithProvider(
       database,
-      post,
-      images,
+      modelPost,
+      media.images,
       contentFingerprint,
       provider,
-      options,
+      {
+        ...options,
+        detectionType,
+        inputMode,
+        eventScope: eventScopeForDetectionType(detectionType),
+      },
     )
     attempts.push(result)
-    if (result.status === "success" || result.status === "cached")
+    if (
+      result.status === "success" ||
+      result.status === "cached" ||
+      result.status === "uncertain"
+    )
       return { ...result, attempts }
   }
   const last = attempts.at(-1)
@@ -624,44 +891,72 @@ export async function extractSchedulePost(database, post, options = {}) {
 
 export async function extractPendingSchedules(database, options = {}) {
   const scheduleConfig = getScheduleExtractionConfig(database)
-  if (!scheduleConfig.keywordEnabled) {
-    return {
-      attempted: 0,
-      success: 0,
-      cached: 0,
-      skipped: 0,
-      failed: 0,
-      disabled: true,
+  const disabled = {
+    attempted: 0,
+    success: 0,
+    cached: 0,
+    skipped: 0,
+    failed: 0,
+    disabled: true,
+  }
+  const boardEnabled =
+    scheduleConfig.keywordEnabled && scheduleConfig.visionEnabled
+  const messageEnabled = scheduleConfig.messageEnabled
+  if (!boardEnabled && !messageEnabled) return disabled
+  const limit = Math.min(100, Math.max(1, Number(options.limit) || 20))
+  const candidates = []
+  if (boardEnabled) {
+    for (const post of listScheduleCandidatePosts(database, {
+      limit,
+      keywords: options.keywords || scheduleConfig.keywords,
+      detectionType: "board",
+    })) {
+      candidates.push({ post, detectionType: "board" })
     }
   }
-  if (!scheduleConfig.visionEnabled) {
-    return {
-      attempted: 0,
-      success: 0,
-      cached: 0,
-      skipped: 0,
-      failed: 0,
-      disabled: true,
+  if (messageEnabled) {
+    for (const post of listScheduleCandidatePosts(database, {
+      limit,
+      keywords: options.keywords || scheduleConfig.keywords,
+      detectionType: "message",
+    })) {
+      candidates.push({ post, detectionType: "message" })
     }
   }
-  const posts = listScheduleCandidatePosts(database, {
-    limit: options.limit || 20,
-    keywords: options.keywords || scheduleConfig.keywords,
-  })
+  const seen = new Set()
+  const uniqueCandidates = candidates
+    .filter(({ post }) => {
+      const id = String(post.id)
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+    .sort(
+      (left, right) =>
+        Date.parse(right.post.publishedAt || right.post.published_at || 0) -
+        Date.parse(left.post.publishedAt || left.post.published_at || 0),
+    )
   const summary = {
     attempted: 0,
     success: 0,
     cached: 0,
     skipped: 0,
     failed: 0,
+    uncertain: 0,
+    boardAttempted: 0,
+    messageAttempted: 0,
     keywords: scheduleConfig.keywords,
     providers: scheduleConfig.providerOrder,
+    providerOrders: scheduleConfig.providerOrders,
   }
-  for (const post of posts) {
-    const result = await extractSchedulePost(database, post, options)
+  for (const { post, detectionType } of uniqueCandidates.slice(0, limit)) {
+    const result = await extractSchedulePost(database, post, {
+      ...options,
+      detectionType,
+    })
     summary.attempted += 1
+    summary[`${detectionType}Attempted`] += 1
     summary[result.status] = (summary[result.status] || 0) + 1
-    if (result.reason === "missing_api_key") break
   }
   return summary
 }
@@ -669,5 +964,6 @@ export async function extractPendingSchedules(database, options = {}) {
 export {
   callOpenAiScheduleExtraction,
   normalizeExtractedEvents,
+  normalizeExtractionResult,
   scheduleSchema,
 }
