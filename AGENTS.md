@@ -98,9 +98,10 @@ make ci                  # Run the full local CI check
 Synchronization accepts the source, bootstrap, request-budget, media-limit,
 schedule-stage, and skip variables documented in `.env.example`.
 `SCHEDULE_MESSAGE_ENABLED` controls the single-message detector independently
-of the keyword/board stages. `OPENAI_API_KEY` is an
-environment-only compatibility credential; provider keys entered in `/admin`
-are encrypted with `LLM_SECRETS_KEY`. `MCP_CONTROL_TOKEN` is a separate
+of the keyword/board stages. Provider keys entered in `/admin` are encrypted
+in SQLite with the environment-only `LLM_SECRETS_KEY`. A legacy
+`OPENAI_API_KEY` is accepted only by the explicit `npm run migrate:llm`
+command. `MCP_CONTROL_TOKEN` is a separate
 environment-only integration credential. None may be written to source code,
 SQLite in plaintext, a URL, API output, or a log.
 

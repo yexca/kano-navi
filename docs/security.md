@@ -28,10 +28,11 @@ cached post images are sent only to the ordered, administrator-configured
 OpenAI-compatible provider route. Responses and Chat Completions protocols are
 supported. Every provider request has a timeout, bounded retries, and redirect
 blocking; a failed provider is skipped in favor of the next configured one.
-`OPENAI_API_KEY` remains an environment-only compatibility fallback for the
-seeded default provider. Keys entered in `/admin` are encrypted with the
-`LLM_SECRETS_KEY` master key before they reach SQLite. Neither plaintext keys
-nor ciphertext are returned by the admin API, written to `raw_json`, or logged.
+Provider keys are encrypted with the `LLM_SECRETS_KEY` master key before they
+reach SQLite. `OPENAI_API_KEY` is accepted only by the explicit one-time
+`npm run migrate:llm` command and is never read by synchronization or the API.
+Neither plaintext keys nor ciphertext are returned by the admin API, written to
+`raw_json`, or logged.
 The master key itself exists only in the process environment and must be
 rotated together with the stored provider keys when compromised.
 

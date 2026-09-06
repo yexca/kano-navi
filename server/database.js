@@ -1889,11 +1889,7 @@ export function seedDatabase(
     setAppSetting(database, "dashboard_revision", "0")
   }
   if (!database.prepare("SELECT 1 FROM llm_providers LIMIT 1").get()) {
-    const legacyModel = getAppSetting(
-      database,
-      "llm_model",
-      process.env.OPENAI_MODEL || "gpt-4o-mini",
-    )
+    const legacyModel = getAppSetting(database, "llm_model", "gpt-4o-mini")
     upsertLlmProvider(database, {
       id: "openai-default",
       name: "OpenAI 默认",
@@ -1903,7 +1899,7 @@ export function seedDatabase(
       enabled: true,
       visionCapable: true,
       capabilities: LLM_CAPABILITIES,
-      timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS || 30000),
+      timeoutMs: 30000,
       maxRetries: 2,
       replaceApiKey: false,
       apiKeyCiphertext: null,

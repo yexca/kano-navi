@@ -486,8 +486,6 @@ async function testProviderConnection(
     } catch {
       apiKey = null
     }
-  } else if (provider.id === "openai-default") {
-    apiKey = process.env.OPENAI_API_KEY || null
   }
   if (!apiKey) throw new AdminInputError("provider API key is not configured")
   const controller = new AbortController()
@@ -536,17 +534,17 @@ async function testProviderConnection(
   }
 }
 
-function configPayload(database, openAiKeyConfigured, updatedAt = null) {
+function configPayload(database, updatedAt = null) {
   const schedule = getDetailedScheduleExtractionConfig(database)
   const providerOrders =
     schedule.providerOrders || getScheduleProviderOrders(database)
-  const providers = publicProviders(database, openAiKeyConfigured)
+  const providers = publicProviders(database)
+  const openAiKeyConfigured = Boolean(
+    providers.find((provider) => provider.id === "openai-default")
+      ?.apiKeyConfigured,
+  )
   return {
-    llmModel: getAppSetting(
-      database,
-      "llm_model",
-      process.env.OPENAI_MODEL || defaultScheduleModel,
-    ),
+    llmModel: getAppSetting(database, "llm_model", defaultScheduleModel),
     openAiKeyConfigured,
     scheduleExtractionEnabled: schedule.enabled,
     scheduleKeywordEnabled: schedule.keywordEnabled,
@@ -562,12 +560,8 @@ function configPayload(database, openAiKeyConfigured, updatedAt = null) {
   }
 }
 
-function publicProviders(database, openAiKeyConfigured) {
-  return listLlmProviders(database).map((provider) =>
-    provider.id === "openai-default" && openAiKeyConfigured
-      ? { ...provider, apiKeyConfigured: true }
-      : provider,
-  )
+function publicProviders(database) {
+  return listLlmProviders(database)
 }
 
 function eventInput(body = {}) {
@@ -720,7 +714,6 @@ export function createAdminRouter({
   database,
   mode = "development",
   adminPassword = "",
-  openAiKeyConfigured = Boolean(process.env.OPENAI_API_KEY),
   jobs = null,
   fetchImpl = fetch,
 } = {}) {
@@ -740,7 +733,7 @@ export function createAdminRouter({
   router.use(mutationOriginGuard)
 
   router.get("/config", (_request, response) => {
-    response.json(configPayload(database, openAiKeyConfigured))
+    response.json(configPayload(database))
   })
   router.put(
     "/config",
@@ -836,7 +829,7 @@ export function createAdminRouter({
         }
       }
       if (dashboardChanged) bumpDashboardRevision(database)
-      response.json(configPayload(database, openAiKeyConfigured, updatedAt))
+      response.json(configPayload(database, updatedAt))
     }),
   )
 
@@ -844,7 +837,7 @@ export function createAdminRouter({
     const route = validProviderRoute(request.query?.route)
     const providerOrders = getScheduleProviderOrders(database)
     response.json({
-      providers: publicProviders(database, openAiKeyConfigured),
+      providers: publicProviders(database),
       route,
       providerOrder: providerOrders[route],
       providerOrders,
@@ -860,10 +853,7 @@ export function createAdminRouter({
         const provider = upsertLlmProvider(database, input)
         ensureProviderRoutes(database, input.id)
         response.status(201).json({
-          provider:
-            provider.id === "openai-default" && openAiKeyConfigured
-              ? { ...provider, apiKeyConfigured: true }
-              : provider,
+          provider,
         })
       } catch (error) {
         if (error instanceof AdminInputError) throw error
@@ -885,7 +875,7 @@ export function createAdminRouter({
           providerOrder,
           providerOrders: getScheduleProviderOrders(database),
           routes: getScheduleProviderOrders(database),
-          providers: publicProviders(database, openAiKeyConfigured),
+          providers: publicProviders(database),
         })
       } catch (error) {
         throw new AdminInputError(error.message)
@@ -909,10 +899,7 @@ export function createAdminRouter({
         const provider = upsertLlmProvider(database, input)
         ensureProviderRoutes(database, input.id)
         response.json({
-          provider:
-            provider.id === "openai-default" && openAiKeyConfigured
-              ? { ...provider, apiKeyConfigured: true }
-              : provider,
+          provider,
         })
       } catch (error) {
         if (error instanceof AdminInputError) throw error
@@ -941,10 +928,7 @@ export function createAdminRouter({
     })
     response.json({
       ...result,
-      provider:
-        result.provider?.id === "openai-default" && openAiKeyConfigured
-          ? { ...result.provider, apiKeyConfigured: true }
-          : result.provider,
+      provider: result.provider,
     })
   })
   router.put("/providers/:id/test", providerTestRoute)

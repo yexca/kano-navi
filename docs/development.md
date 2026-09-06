@@ -61,8 +61,11 @@ Synchronization accesses the network and is therefore not part of the default
 CI build. To debug one source, set `SKIP_X=1` or `SKIP_YOUTUBE=1`; never put a
 temporary credential in shell history, source code, or the database.
 
-`OPENAI_API_KEY` is optional. With no key, the schedule-extraction stage reports
-a safe skip. `SCHEDULE_MESSAGE_ENABLED` controls the single-message detector;
+Provider keys are managed in `/admin` and encrypted in SQLite with the
+environment-only `LLM_SECRETS_KEY`. With no configured provider key, the
+schedule-extraction stage reports a safe skip. To import a legacy
+`OPENAI_API_KEY` once, set both environment variables and run
+`npm run migrate:llm`; remove the legacy variable afterwards. `SCHEDULE_MESSAGE_ENABLED` controls the single-message detector;
 `SCHEDULE_KEYWORD_ENABLED` and `SCHEDULE_VISION_ENABLED` control the board
 path. `SCHEDULE_EXTRACTION_ENABLED` is retained for initial defaults and old
 API compatibility; the stage flags determine what runs after configuration.

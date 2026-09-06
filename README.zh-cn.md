@@ -31,7 +31,8 @@ npm start
 管理页只允许手动输入 `/admin` 访问，主页不会显示入口。
 `APP_MODE=development` 时免登录；运行 `npm start` 前，应在不会提交的
 `.env` 中设为 `APP_MODE=production`，并配置至少 12 位的
-`ADMIN_PASSWORD`。暂时不使用自动日程识别时，`OPENAI_API_KEY` 可以留空。
+`ADMIN_PASSWORD`。provider 密钥由管理页配置并加密保存到 SQLite；环境中只需
+配置 `LLM_SECRETS_KEY`。
 管理页采用经典侧栏后台布局，分为概览、分页日程、关键词/看板扫描、单条消息
 扫描、多个 OpenAI-compatible 模型提供商，以及头像与横幅标签。
 
@@ -82,7 +83,7 @@ npm run sync
 `uncertain` 时会缓存识别结果供检查，但不会创建日程。`SCHEDULE_MESSAGE_ENABLED`
 独立控制单条消息阶段；原有的关键词和看板开关仍然分别生效。
 
-同步失败时不会清空已有数据，会在 `sync_runs` 中记录失败原因；模型返回非法结构时也会保留旧日程。旧版 OpenAI 密钥只从进程环境读取；在管理页输入的 provider 密钥会用环境变量中的 `LLM_SECRETS_KEY` 加密后保存，API 不会回显明文。可用环境变量调整来源或跳过某一来源：
+同步失败时不会清空已有数据，会在 `sync_runs` 中记录失败原因；模型返回非法结构时也会保留旧日程。provider 密钥在管理页输入后会使用环境变量中的 `LLM_SECRETS_KEY` 加密保存到 SQLite，运行时不再读取 `OPENAI_API_KEY`。旧版密钥可通过一次性命令 `npm run migrate:llm` 导入，验证后应从环境中移除。API 不会回显明文。可用环境变量调整来源或跳过某一来源：
 
 ```bash
 X_HANDLES=kano_2525,_Kanotic YOUTUBE_CHANNEL_ID=UCShXNLMXCfstmWKH_q86B8w npm run sync

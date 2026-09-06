@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "start": "NODE_ENV=production node server/index.js",
     "seed": "node scripts/seed.mjs",
+    "migrate:llm": "node scripts/migrate-llm-secret.mjs",
     "sync": "node scripts/sync.mjs",
     "format": "prettier . --write",
     "format:check": "prettier . --check",

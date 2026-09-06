@@ -128,11 +128,11 @@ retiring events. Input fingerprints and the extractor version make all of these
 outcomes idempotent. Date-only events store `starts_on`, a null `starts_at`, and
 `time_precision = unknown`; the model must not invent a specific time.
 
-The legacy model comes from `app_settings.llm_model`, falling back to
-`OPENAI_MODEL` and then `gpt-4o-mini`. The legacy environment key remains a
-compatibility fallback for the seeded `openai-default` provider. Keys entered
-for additional providers are encrypted with `LLM_SECRETS_KEY`; ciphertext is
-never returned by an API response or written to extraction `raw_json`.
+The default model comes from the database (`app_settings.llm_model` and the
+seeded `openai-default` provider). Provider API keys are encrypted with
+`LLM_SECRETS_KEY`; ciphertext is never returned by an API response or written
+to extraction `raw_json`. A legacy `OPENAI_API_KEY` can be imported once with
+`npm run migrate:llm`; synchronization never reads that environment variable.
 Candidates from either X account use the same idempotent fingerprint and
 manual-lock rules. The stage flags are stored as `schedule_keyword_enabled`,
 `schedule_vision_enabled`, and `schedule_message_enabled` and can be changed
@@ -171,9 +171,6 @@ it. The dashboard hides tombstones and labels visible automatic/manual events.
 | ----------------------------- | -------------------- | ------------------------------------------------------------ |
 | `APP_MODE`                    | Development          | `development` bypasses admin login; `production` requires it |
 | `ADMIN_PASSWORD`              | Empty                | Production admin password, minimum 12 characters             |
-| `OPENAI_API_KEY`              | Empty                | Optional Responses API credential, environment only          |
-| `OPENAI_MODEL`                | `gpt-4o-mini`        | Initial/fallback schedule extraction model                   |
-| `OPENAI_TIMEOUT_MS`           | `30000`              | Timeout for one Responses API request                        |
 | `LLM_SECRETS_KEY`             | Empty                | Environment-only master key for encrypted provider API keys  |
 | `PORT`                        | `8787`               | Express listening port                                       |
 | `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Enable the automatic schedule stage                          |
@@ -202,8 +199,9 @@ it. The dashboard hides tombstones and labels visible automatic/manual events.
 | `SKIP_MEDIA`, `SKIP_LLM`      | `0`                  | Set a post-processing stage flag to `1` to skip it           |
 
 `.env.example` is the complete non-secret inventory. `ADMIN_PASSWORD` and
-`OPENAI_API_KEY`, `LLM_SECRETS_KEY`, and `MCP_CONTROL_TOKEN` are credentials;
-never place real values in source code, SQLite, URLs, API responses, or logs.
+`LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, and provider API keys are credentials;
+never place real values in source code, SQLite plaintext, URLs, API responses,
+or logs. `OPENAI_API_KEY` is accepted only by the one-time migration command.
 
 ## Manual Maintenance
 

@@ -581,7 +581,9 @@ async function callOpenAiScheduleExtraction(
 }
 
 function legacyProvider(database, options) {
-  const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY ?? ""
+  // Explicit options are kept for isolated callers and tests. Normal sync
+  // uses persisted providers and never reads a model credential from env.
+  const apiKey = options.apiKey ?? ""
   if (!apiKey) return null
   const capabilities = normalizeLlmCapabilities(
     options.capabilities,
@@ -591,18 +593,12 @@ function legacyProvider(database, options) {
     id: "legacy-openai",
     name: "Legacy OpenAI",
     protocol: options.protocol || "openai-responses",
-    baseUrl:
-      options.baseUrl || process.env.OPENAI_BASE_URL || defaultOpenAiBaseUrl,
+    baseUrl: options.baseUrl || defaultOpenAiBaseUrl,
     endpoint: options.endpoint,
     model:
       options.model ||
-      getAppSetting(
-        database,
-        "llm_model",
-        process.env.OPENAI_MODEL || defaultScheduleModel,
-      ),
-    timeoutMs:
-      options.timeoutMs ?? Number(process.env.OPENAI_TIMEOUT_MS || 30_000),
+      getAppSetting(database, "llm_model", defaultScheduleModel),
+    timeoutMs: options.timeoutMs ?? 30_000,
     maxRetries: options.maxRetries ?? 2,
     capabilities,
     visionCapable: capabilities.includes("image"),
@@ -655,8 +651,6 @@ function configuredProviders(database, options, inputMode, detectionType) {
       } catch {
         apiKey = null
       }
-    } else if (id === "openai-default") {
-      apiKey = process.env.OPENAI_API_KEY || null
     }
     if (!apiKey) continue
     keyedProviderCount += 1

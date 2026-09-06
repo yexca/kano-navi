@@ -35,7 +35,9 @@ The hidden administration page is available only by entering `/admin`
 directly; it is not linked from the dashboard. `APP_MODE=development` bypasses
 login. Before `npm start`, set `APP_MODE=production` and an
 `ADMIN_PASSWORD` of at least 12 characters in the ignored `.env` file.
-`OPENAI_API_KEY` may remain empty until automatic schedule extraction is needed.
+Provider API keys are managed in `/admin` and encrypted in SQLite. Set the
+environment-only `LLM_SECRETS_KEY` before saving or using a provider. A legacy
+`OPENAI_API_KEY` can be imported once with `npm run migrate:llm`, then removed.
 The page uses a classic sidebar console with separate tabs for paginated
 schedules, keyword/board scanning, single-message scanning, multiple
 OpenAI-compatible providers, and profile media.

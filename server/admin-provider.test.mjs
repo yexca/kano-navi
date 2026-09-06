@@ -136,6 +136,28 @@ test("admin provider CRUD keeps keys encrypted and orders provider routes", asyn
       "image",
     ])
 
+    const disabled = await jsonRequest(
+      origin,
+      "/api/admin/providers/fallback-provider",
+      {
+        method: "PUT",
+        body: JSON.stringify({ enabled: false }),
+      },
+    )
+    assert.equal(disabled.response.status, 200)
+    assert.equal(disabled.payload.provider.enabled, false)
+
+    const reenabled = await jsonRequest(
+      origin,
+      "/api/admin/providers/fallback-provider",
+      {
+        method: "PUT",
+        body: JSON.stringify({ enabled: true }),
+      },
+    )
+    assert.equal(reenabled.response.status, 200)
+    assert.equal(reenabled.payload.provider.enabled, true)
+
     const cleared = await jsonRequest(
       origin,
       "/api/admin/providers/fallback-provider",

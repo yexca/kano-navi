@@ -1,14 +1,18 @@
 import assert from "node:assert/strict"
+import crypto from "node:crypto"
 import test from "node:test"
 
 import {
   getSyncState,
   getVideoRecord,
   initializeDatabase,
+  setLlmRouteProviders,
   setAppSetting,
+  upsertLlmProvider,
   upsertAssets,
   upsertPosts,
 } from "./database.js"
+import { encryptSecret } from "./secret-store.js"
 
 process.env.SYNC_REQUEST_DELAY_MS = "0"
 const { mapTweet, runSync, snowflakeDate, syncX, syncYoutube } =
@@ -467,7 +471,7 @@ test("a failed OpenAI stage marks an otherwise skipped sync as partial", async (
     "SKIP_YOUTUBE",
     "SKIP_MEDIA",
     "SKIP_LLM",
-    "OPENAI_API_KEY",
+    "LLM_SECRETS_KEY",
   ]
   const originalEnvironment = Object.fromEntries(
     names.map((name) => [name, process.env[name]]),
@@ -477,7 +481,20 @@ test("a failed OpenAI stage marks an otherwise skipped sync as partial", async (
     process.env.SKIP_YOUTUBE = "1"
     process.env.SKIP_MEDIA = "1"
     delete process.env.SKIP_LLM
-    process.env.OPENAI_API_KEY = "not-a-real-api-key"
+    process.env.LLM_SECRETS_KEY = crypto.randomBytes(32).toString("base64")
+    upsertLlmProvider(database, {
+      id: "sync-test-provider",
+      name: "Sync test provider",
+      baseUrl: "https://sync-test.example.invalid/v1",
+      model: "sync-test-model",
+      capabilities: ["text", "image"],
+      replaceApiKey: true,
+      apiKeyCiphertext: encryptSecret(
+        "not-a-real-api-key",
+        process.env.LLM_SECRETS_KEY,
+      ),
+    })
+    setLlmRouteProviders(database, "schedule_board", ["sync-test-provider"])
     upsertPosts(database, [
       {
         id: "schedule-sync-failure",

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   CalendarClock,
   Check,
   CheckCircle2,
+  Circle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -23,12 +24,19 @@ import {
   Settings2,
   Search,
   Trash2,
+  TriangleAlert,
   Upload,
   X,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useAppSettings } from "@/app-settings"
 import { PreferenceControls } from "@/components/preference-controls"
 import "./admin.css"
@@ -1201,6 +1209,7 @@ function ScanSettingsPanel({
 
 function ProviderEditor({ provider, onClose, onSaved, onError }) {
   const { t } = useAppSettings()
+  const dialogRef = useRef(null)
   const [form, setForm] = useState(() => ({
     ...emptyProvider,
     ...(provider || {}),
@@ -1208,6 +1217,41 @@ function ProviderEditor({ provider, onClose, onSaved, onError }) {
   }))
   const [saving, setSaving] = useState(false)
   const editing = Boolean(provider)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const previousFocus = document.activeElement
+    if (!dialog) return undefined
+    const focusable = () =>
+      [...dialog.querySelectorAll("button, input, select, textarea")].filter(
+        (element) => !element.disabled && element.offsetParent !== null,
+      )
+    focusable()[0]?.focus()
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        onClose()
+        return
+      }
+      if (event.key !== "Tab") return
+      const elements = focusable()
+      if (!elements.length) return
+      const first = elements[0]
+      const last = elements[elements.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown)
+      if (previousFocus instanceof HTMLElement) previousFocus.focus()
+    }
+  }, [onClose])
   const setField = (name) => (event) =>
     setForm((current) => ({
       ...current,
@@ -1260,159 +1304,175 @@ function ProviderEditor({ provider, onClose, onSaved, onError }) {
   }
 
   return (
-    <aside className="admin-drawer" aria-labelledby="provider-editor-title">
-      <div className="admin-drawer-heading">
-        <div>
-          <p className="admin-kicker">{t("admin.provider.kicker")}</p>
-          <h3 id="provider-editor-title">
-            {t(
-              editing ? "admin.provider.editTitle" : "admin.provider.newTitle",
-            )}
-          </h3>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          aria-label={t("admin.provider.closeEditor")}
-        >
-          <X />
-        </Button>
-      </div>
-      <form className="admin-provider-form" onSubmit={submit}>
-        <div className="admin-provider-form-grid">
-          <label className="admin-field">
-            <span>{t("admin.provider.id")}</span>
-            <input
-              value={form.id}
-              onChange={setField("id")}
-              required
-              disabled={editing}
-              placeholder="provider-id"
-            />
-          </label>
-          <label className="admin-field">
-            <span>{t("admin.provider.name")}</span>
-            <input
-              value={form.name}
-              onChange={setField("name")}
-              required
-              placeholder={t("admin.provider.name")}
-            />
-          </label>
-          <label className="admin-field">
-            <span>{t("admin.provider.protocol")}</span>
-            <select value={form.protocol} onChange={setField("protocol")}>
-              <option value="openai-responses">
-                {t("admin.provider.protocol.responsesOption")}
-              </option>
-              <option value="openai-chat-completions">
-                {t("admin.provider.protocol.chatCompletionsOption")}
-              </option>
-            </select>
-          </label>
-          <label className="admin-field">
-            <span>{t("admin.provider.model")}</span>
-            <input
-              value={form.model}
-              onChange={setField("model")}
-              required
-              placeholder="gpt-4o-mini"
-            />
-          </label>
-        </div>
-        <label className="admin-field">
-          <span>{t("admin.provider.baseUrl")}</span>
-          <input
-            type="url"
-            value={form.baseUrl}
-            onChange={setField("baseUrl")}
-            required
-            placeholder="https://api.example.invalid/v1"
-          />
-        </label>
-        <label className="admin-field">
-          <span>{t("admin.provider.apiKey")}</span>
-          <input
-            type="password"
-            value={form.apiKey}
-            onChange={setField("apiKey")}
-            autoComplete="new-password"
-            placeholder={t(
-              editing
-                ? "admin.provider.apiKeyKeep"
-                : "admin.provider.apiKeySave",
-            )}
-          />
-        </label>
-        {editing && form.apiKeyConfigured ? (
-          <label className="admin-toggle-line">
-            <input
-              type="checkbox"
-              checked={form.clearApiKey}
-              onChange={setField("clearApiKey")}
-            />
-            {t("admin.provider.clearApiKey")}
-          </label>
-        ) : null}
-        <div className="admin-provider-form-grid admin-provider-number-grid">
-          <label className="admin-field">
-            <span>{t("admin.provider.timeout")}</span>
-            <input
-              type="number"
-              min="1000"
-              max="120000"
-              step="1000"
-              value={form.timeoutMs}
-              onChange={setField("timeoutMs")}
-            />
-          </label>
-          <div className="admin-field">
-            <span>{t("admin.provider.retries")}</span>
-            <output className="admin-static-field">3</output>
+    <div
+      className="admin-provider-modal"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section
+        ref={dialogRef}
+        className="admin-provider-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="provider-editor-title"
+      >
+        <div className="admin-provider-dialog-heading">
+          <div>
+            <p className="admin-kicker">{t("admin.provider.kicker")}</p>
+            <h3 id="provider-editor-title">
+              {t(
+                editing
+                  ? "admin.provider.editTitle"
+                  : "admin.provider.newTitle",
+              )}
+            </h3>
           </div>
-        </div>
-        <div className="admin-provider-flags">
-          <label className="admin-toggle-line">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={setField("enabled")}
-            />
-            {t("admin.provider.enable")}
-          </label>
-        </div>
-        <fieldset className="admin-capability-fieldset">
-          <legend>{t("admin.provider.capabilities")}</legend>
-          <div className="admin-capability-grid">
-            {["text", "image"].map((capability) => (
-              <label className="admin-toggle-line" key={capability}>
-                <input
-                  type="checkbox"
-                  checked={normalizeProviderCapabilities(form).includes(
-                    capability,
-                  )}
-                  onChange={setCapability(capability)}
-                />
-                {t(`admin.provider.capability.${capability}`)}
-              </label>
-            ))}
-          </div>
-          <p className="admin-field-note">
-            {t("admin.provider.capabilityNote")}
-          </p>
-        </fieldset>
-        <div className="admin-form-actions">
-          <Button type="button" variant="outline" onClick={onClose}>
-            {t("admin.action.cancel")}
-          </Button>
-          <Button type="submit" disabled={saving}>
-            {saving ? <LoaderCircle className="admin-spin" /> : <Save />}
-            {t("admin.action.save")}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label={t("admin.provider.closeEditor")}
+          >
+            <X />
           </Button>
         </div>
-      </form>
-    </aside>
+        <form className="admin-provider-form" onSubmit={submit}>
+          <div className="admin-provider-form-grid">
+            <label className="admin-field">
+              <span>{t("admin.provider.id")}</span>
+              <input
+                value={form.id}
+                onChange={setField("id")}
+                required
+                disabled={editing}
+                placeholder="provider-id"
+              />
+            </label>
+            <label className="admin-field">
+              <span>{t("admin.provider.name")}</span>
+              <input
+                value={form.name}
+                onChange={setField("name")}
+                required
+                placeholder={t("admin.provider.name")}
+              />
+            </label>
+            <label className="admin-field">
+              <span>{t("admin.provider.protocol")}</span>
+              <select value={form.protocol} onChange={setField("protocol")}>
+                <option value="openai-responses">
+                  {t("admin.provider.protocol.responsesOption")}
+                </option>
+                <option value="openai-chat-completions">
+                  {t("admin.provider.protocol.chatCompletionsOption")}
+                </option>
+              </select>
+            </label>
+            <label className="admin-field">
+              <span>{t("admin.provider.model")}</span>
+              <input
+                value={form.model}
+                onChange={setField("model")}
+                required
+                placeholder="gpt-4o-mini"
+              />
+            </label>
+          </div>
+          <label className="admin-field">
+            <span>{t("admin.provider.baseUrl")}</span>
+            <input
+              type="url"
+              value={form.baseUrl}
+              onChange={setField("baseUrl")}
+              required
+              placeholder="https://api.example.invalid/v1"
+            />
+          </label>
+          <label className="admin-field">
+            <span>{t("admin.provider.apiKey")}</span>
+            <input
+              type="password"
+              value={form.apiKey}
+              onChange={setField("apiKey")}
+              autoComplete="new-password"
+              placeholder={t(
+                editing
+                  ? "admin.provider.apiKeyKeep"
+                  : "admin.provider.apiKeySave",
+              )}
+            />
+          </label>
+          {editing && form.apiKeyConfigured ? (
+            <label className="admin-toggle-line">
+              <input
+                type="checkbox"
+                checked={form.clearApiKey}
+                onChange={setField("clearApiKey")}
+              />
+              {t("admin.provider.clearApiKey")}
+            </label>
+          ) : null}
+          <div className="admin-provider-form-grid admin-provider-number-grid">
+            <label className="admin-field">
+              <span>{t("admin.provider.timeout")}</span>
+              <input
+                type="number"
+                min="1000"
+                max="120000"
+                step="1000"
+                value={form.timeoutMs}
+                onChange={setField("timeoutMs")}
+              />
+            </label>
+            <div className="admin-field">
+              <span>{t("admin.provider.retries")}</span>
+              <output className="admin-static-field">3</output>
+            </div>
+          </div>
+          <div className="admin-provider-flags">
+            <label className="admin-toggle-line">
+              <input
+                type="checkbox"
+                checked={form.enabled}
+                onChange={setField("enabled")}
+              />
+              {t("admin.provider.enable")}
+            </label>
+          </div>
+          <fieldset className="admin-capability-fieldset">
+            <legend>{t("admin.provider.capabilities")}</legend>
+            <div className="admin-capability-grid">
+              {["text", "image"].map((capability) => (
+                <label className="admin-toggle-line" key={capability}>
+                  <input
+                    type="checkbox"
+                    checked={normalizeProviderCapabilities(form).includes(
+                      capability,
+                    )}
+                    onChange={setCapability(capability)}
+                  />
+                  {t(`admin.provider.capability.${capability}`)}
+                </label>
+              ))}
+            </div>
+            <p className="admin-field-note">
+              {t("admin.provider.capabilityNote")}
+            </p>
+          </fieldset>
+          <div className="admin-form-actions">
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t("admin.action.cancel")}
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? <LoaderCircle className="admin-spin" /> : <Save />}
+              {t("admin.action.save")}
+            </Button>
+          </div>
+        </form>
+      </section>
+    </div>
   )
 }
 
@@ -1492,6 +1552,23 @@ function ProviderManager({
     }
   }
 
+  const toggleProvider = async (provider) => {
+    setBusy(`toggle-${provider.id}`)
+    onError("")
+    try {
+      await request(`/providers/${encodeURIComponent(provider.id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: !provider.enabled }),
+      })
+      await onReload()
+      onNotice(adminMessage("admin.provider.saved"))
+    } catch (toggleError) {
+      onError(formatAdminError(toggleError))
+    } finally {
+      setBusy("")
+    }
+  }
+
   const remove = async (provider) => {
     if (
       !window.confirm(
@@ -1515,182 +1592,192 @@ function ProviderManager({
   }
 
   return (
-    <section className="admin-view" aria-labelledby="admin-provider-title">
-      <div className="admin-view-heading">
-        <div>
-          <p className="admin-kicker">{t("admin.provider.routingKicker")}</p>
-          <h2 id="admin-provider-title">{t("admin.provider.title")}</h2>
-          <p>{t("admin.provider.description")}</p>
-        </div>
-        <Button onClick={() => setEditor({ ...emptyProvider })}>
-          <Plus /> {t("admin.provider.new")}
-        </Button>
-      </div>
-      <div className="admin-provider-layout">
-        <section className="admin-panel admin-provider-table-panel">
-          <div className="admin-panel-heading">
-            <div>
-              <p className="admin-kicker">{t("admin.provider.routeKicker")}</p>
-              <h3>{t("admin.provider.orderTitle")}</h3>
-            </div>
-            <label className="admin-route-selector">
-              <span>{t("admin.provider.routeLabel")}</span>
-              <select
-                value={activeRoute}
-                onChange={(event) => setActiveRoute(event.target.value)}
-              >
-                {scheduleRoutes.map((route) => (
-                  <option value={route.id} key={route.id}>
-                    {t(route.labelKey)}
-                  </option>
-                ))}
-              </select>
-            </label>
+    <TooltipProvider delayDuration={220}>
+      <section className="admin-view" aria-labelledby="admin-provider-title">
+        <div className="admin-view-heading">
+          <div>
+            <p className="admin-kicker">{t("admin.provider.routingKicker")}</p>
+            <h2 id="admin-provider-title">{t("admin.provider.title")}</h2>
+            <p>{t("admin.provider.description")}</p>
           </div>
-          <div className="admin-provider-table-wrap">
-            <table className="admin-provider-table">
-              <thead>
-                <tr>
-                  <th>{t("admin.provider.order")}</th>
-                  <th>{t("admin.provider.provider")}</th>
-                  <th>{t("admin.provider.protocolModel")}</th>
-                  <th>{t("admin.provider.state")}</th>
-                  <th aria-label={t("admin.provider.actions")} />
-                </tr>
-              </thead>
-              <tbody>
-                {orderedProviders.map((provider, index) => (
-                  <tr key={provider.id}>
-                    <td>
-                      <div className="admin-order-cell">
-                        <strong>{String(index + 1).padStart(2, "0")}</strong>
-                        <div>
+          <Button onClick={() => setEditor({ ...emptyProvider })}>
+            <Plus /> {t("admin.provider.new")}
+          </Button>
+        </div>
+        <div className="admin-provider-layout">
+          <section className="admin-panel admin-provider-table-panel">
+            <div className="admin-panel-heading">
+              <div>
+                <p className="admin-kicker">
+                  {t("admin.provider.routeKicker")}
+                </p>
+                <h3>{t("admin.provider.orderTitle")}</h3>
+              </div>
+              <label className="admin-route-selector">
+                <span>{t("admin.provider.routeLabel")}</span>
+                <select
+                  value={activeRoute}
+                  onChange={(event) => setActiveRoute(event.target.value)}
+                >
+                  {scheduleRoutes.map((route) => (
+                    <option value={route.id} key={route.id}>
+                      {t(route.labelKey)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="admin-provider-table-wrap">
+              <table className="admin-provider-table">
+                <thead>
+                  <tr>
+                    <th>{t("admin.provider.order")}</th>
+                    <th>{t("admin.provider.provider")}</th>
+                    <th>{t("admin.provider.protocolModel")}</th>
+                    <th>{t("admin.provider.capabilities")}</th>
+                    <th>{t("admin.provider.enableColumn")}</th>
+                    <th>{t("admin.provider.health")}</th>
+                    <th aria-label={t("admin.provider.actions")} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {orderedProviders.map((provider, index) => (
+                    <tr key={provider.id}>
+                      <td>
+                        <div className="admin-order-cell">
+                          <strong>{String(index + 1).padStart(2, "0")}</strong>
+                          <div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => move(index, -1)}
+                              disabled={busy !== "" || index === 0}
+                              aria-label={t("admin.action.moveUp")}
+                              title={t("admin.action.moveUp")}
+                            >
+                              <ChevronUp />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => move(index, 1)}
+                              disabled={
+                                busy !== "" ||
+                                index === orderedProviders.length - 1
+                              }
+                              aria-label={t("admin.action.moveDown")}
+                              title={t("admin.action.moveDown")}
+                            >
+                              <ChevronDown />
+                            </Button>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="admin-provider-name">
+                          <strong>{provider.name}</strong>
+                          <small>{provider.id}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="admin-provider-meta">
+                          <span>
+                            {provider.protocol === "openai-chat-completions"
+                              ? t("admin.provider.chatCompletions")
+                              : t("admin.provider.responses")}
+                          </span>
+                          <small>{provider.model}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="admin-provider-capabilities">
+                          {normalizeProviderCapabilities(provider).map(
+                            (capability) => (
+                              <Badge variant="sky" key={capability}>
+                                {t(`admin.provider.capability.${capability}`)}
+                              </Badge>
+                            ),
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={provider.enabled}
+                          aria-label={`${provider.enabled ? t("admin.provider.disable") : t("admin.provider.enable")} ${provider.name}`}
+                          className="admin-provider-switch"
+                          onClick={() => toggleProvider(provider)}
+                          disabled={busy !== ""}
+                          title={
+                            provider.enabled
+                              ? t("admin.provider.disable")
+                              : t("admin.provider.enable")
+                          }
+                        >
+                          <span aria-hidden="true" />
+                        </button>
+                      </td>
+                      <td>
+                        <ProviderHealth provider={provider} t={t} />
+                      </td>
+                      <td>
+                        <div className="admin-table-actions">
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => move(index, -1)}
-                            disabled={busy !== "" || index === 0}
-                            aria-label={t("admin.action.moveUp")}
-                            title={t("admin.action.moveUp")}
+                            onClick={() =>
+                              setEditor({
+                                ...provider,
+                                apiKey: "",
+                                clearApiKey: false,
+                              })
+                            }
+                            aria-label={t("admin.schedule.editLabel", {
+                              title: provider.name,
+                            })}
+                            title={t("admin.action.edit")}
                           >
-                            <ChevronUp />
+                            <Pencil />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => move(index, 1)}
-                            disabled={
-                              busy !== "" ||
-                              index === orderedProviders.length - 1
-                            }
-                            aria-label={t("admin.action.moveDown")}
-                            title={t("admin.action.moveDown")}
+                            onClick={() => test(provider)}
+                            disabled={busy !== "" || !provider.apiKeyConfigured}
+                            aria-label={`${t("admin.action.test")} ${provider.name}`}
+                            title={t("admin.action.test")}
                           >
-                            <ChevronDown />
+                            {busy === `test-${provider.id}` ? (
+                              <LoaderCircle className="admin-spin" />
+                            ) : (
+                              <RefreshCw />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => remove(provider)}
+                            disabled={busy !== ""}
+                            aria-label={t("admin.schedule.deleteLabel", {
+                              title: provider.name,
+                            })}
+                            title={t("admin.action.delete")}
+                          >
+                            <Trash2 />
                           </Button>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="admin-provider-name">
-                        <strong>{provider.name}</strong>
-                        <small>{provider.id}</small>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="admin-provider-meta">
-                        <span>
-                          {provider.protocol === "openai-chat-completions"
-                            ? t("admin.provider.chatCompletions")
-                            : t("admin.provider.responses")}
-                        </span>
-                        <small>{provider.model}</small>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="admin-provider-statuses">
-                        <Badge variant={provider.enabled ? "mint" : "neutral"}>
-                          {provider.enabled
-                            ? t("admin.provider.enabled")
-                            : t("admin.provider.disabled")}
-                        </Badge>
-                        {normalizeProviderCapabilities(provider).map(
-                          (capability) => (
-                            <Badge variant="sky" key={capability}>
-                              {t(`admin.provider.capability.${capability}`)}
-                            </Badge>
-                          ),
-                        )}
-                        <small>
-                          {provider.apiKeyConfigured
-                            ? t("admin.provider.keyConfigured")
-                            : t("admin.provider.keyMissing")}
-                        </small>
-                        {provider.lastStatus ? (
-                          <small>
-                            {provider.lastStatus === "success"
-                              ? t("admin.provider.lastSuccess")
-                              : t("admin.provider.lastFailure")}
-                          </small>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="admin-table-actions">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() =>
-                            setEditor({
-                              ...provider,
-                              apiKey: "",
-                              clearApiKey: false,
-                            })
-                          }
-                          aria-label={t("admin.schedule.editLabel", {
-                            title: provider.name,
-                          })}
-                          title={t("admin.action.edit")}
-                        >
-                          <Pencil />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => test(provider)}
-                          disabled={busy !== "" || !provider.apiKeyConfigured}
-                          aria-label={`${t("admin.action.test")} ${provider.name}`}
-                          title={t("admin.action.test")}
-                        >
-                          {busy === `test-${provider.id}` ? (
-                            <LoaderCircle className="admin-spin" />
-                          ) : (
-                            <RefreshCw />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => remove(provider)}
-                          disabled={busy !== ""}
-                          aria-label={t("admin.schedule.deleteLabel", {
-                            title: provider.name,
-                          })}
-                          title={t("admin.action.delete")}
-                        >
-                          <Trash2 />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!orderedProviders.length ? (
-              <div className="admin-empty">{t("admin.provider.empty")}</div>
-            ) : null}
-          </div>
-        </section>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!orderedProviders.length ? (
+                <div className="admin-empty">{t("admin.provider.empty")}</div>
+              ) : null}
+            </div>
+          </section>
+        </div>
         {editor ? (
           <ProviderEditor
             provider={editor.id ? editor : null}
@@ -1699,11 +1786,40 @@ function ProviderManager({
             onError={onError}
           />
         ) : null}
-      </div>
-      <p className="admin-security-note">
-        <KeyRound /> {t("admin.provider.securityNote")}
-      </p>
-    </section>
+        <p className="admin-security-note">
+          <KeyRound /> {t("admin.provider.securityNote")}
+        </p>
+      </section>
+    </TooltipProvider>
+  )
+}
+
+function ProviderHealth({ provider, t }) {
+  let Icon = Circle
+  let label = t("admin.provider.neverChecked")
+  if (!provider.apiKeyConfigured) {
+    Icon = KeyRound
+    label = t("admin.provider.keyMissing")
+  } else if (provider.lastStatus === "success") {
+    Icon = CheckCircle2
+    label = t("admin.provider.lastSuccess")
+  } else if (provider.lastStatus === "failed") {
+    Icon = TriangleAlert
+    label = t("admin.provider.lastFailure")
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={`admin-provider-health is-${provider.lastStatus || "unknown"}`}
+          aria-label={label}
+          title={label}
+        >
+          <Icon aria-hidden="true" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   )
 }
 
