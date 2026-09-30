@@ -365,6 +365,84 @@ test("dashboard aggregates X account sources and keeps Featured selection separa
   }
 })
 
+test("dashboard summary points at the next event, stream, and last post", () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  try {
+    upsertPosts(database, [
+      {
+        id: "post-old",
+        source: "x",
+        account_handle: "kano_2525",
+        text: "older than the window",
+        published_at: "2026-08-01T12:00:00.000Z",
+        url: "https://x.com/kano_2525/status/post-old",
+      },
+    ])
+    upsertEvents(database, [
+      {
+        id: "event-past",
+        source: "manual",
+        title: "Past stream",
+        starts_on: "2026-08-27",
+        starts_at: "2026-08-27T11:00:00.000Z",
+        status: "done",
+      },
+      {
+        id: "event-cancelled",
+        source: "manual",
+        title: "Cancelled stream",
+        starts_on: "2026-08-29",
+        starts_at: "2026-08-29T11:00:00.000Z",
+        status: "cancelled",
+      },
+      {
+        id: "event-next",
+        source: "manual",
+        title: "Next stream",
+        starts_on: "2026-08-30",
+        starts_at: "2026-08-30T11:00:00.000Z",
+        status: "scheduled",
+      },
+    ])
+    upsertVideos(database, [
+      {
+        id: "video-archive",
+        source: "youtube",
+        title: "Archive",
+        published_at: "2026-08-27T12:00:00.000Z",
+        url: "https://www.youtube.com/watch?v=video-archive",
+      },
+      {
+        id: "video-reserved",
+        source: "youtube",
+        title: "Reserved",
+        scheduled_at: "2026-08-31T12:00:00.000Z",
+        url: "https://www.youtube.com/watch?v=video-reserved",
+      },
+    ])
+
+    const { posts, summary } = getDashboard(database, {
+      days: 3,
+      now: new Date("2026-08-29T00:00:00.000Z"),
+    })
+    assert.equal(posts.length, 0)
+    assert.equal(summary.latestPost.id, "post-old")
+    assert.equal(summary.latestPost.accountHandle, "kano_2525")
+    assert.equal(summary.nextEvent.id, "event-next")
+    assert.equal(summary.nextStream.id, "video-reserved")
+    assert.equal(summary.latestVideo.id, "video-archive")
+    assert.deepEqual(summary.counts, {
+      posts: 0,
+      events: 3,
+      upcomingEvents: 1,
+      videos: 2,
+      resources: 0,
+    })
+  } finally {
+    database.close()
+  }
+})
+
 test("schedule environment settings seed only the initial database defaults", () => {
   const originalEnabled = process.env.SCHEDULE_EXTRACTION_ENABLED
   const originalKeywords = process.env.SCHEDULE_KEYWORDS

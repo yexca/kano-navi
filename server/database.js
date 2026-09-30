@@ -3017,6 +3017,23 @@ export function bumpDashboardRevision(database) {
   return getDashboardRevision(database)
 }
 
+const cancelledEventStatuses = new Set([
+  "cancelled",
+  "canceled",
+  "cancel",
+  "取消",
+  "已取消",
+  "中止",
+  "キャンセル",
+])
+
+export function isCancelledEventStatus(status) {
+  const value = String(status || "")
+    .trim()
+    .toLowerCase()
+  return cancelledEventStatuses.has(value) || value.startsWith("cancel")
+}
+
 export function getDashboard(database, { days = 3, now = new Date() } = {}) {
   const windowStart = now.getTime() - days * 24 * 60 * 60 * 1000
   const mediaRows = listMediaAssets(database)
@@ -3033,7 +3050,7 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
       postMediaByOwner.set(link.ownerId, [])
     postMediaByOwner.get(link.ownerId).push(link)
   }
-  const posts = database
+  const postRows = database
     .prepare(
       `SELECT id, source, account_handle AS accountHandle, type, label, text,
        published_at AS publishedAt, url, likes, reposts, replies,
@@ -3041,67 +3058,69 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
     FROM posts ORDER BY published_at DESC`,
     )
     .all()
+  const mapPost = (post) => {
+    const accountHandle =
+      post.accountHandle ||
+      (post.source === "x" ? xHandleFromUrl(post.url) : null)
+    const fallbackMedia = resolveMediaReference(
+      database,
+      post.mediaUrl,
+      mediaBySourceUrl,
+    )
+    const linkedMedia = (postMediaByOwner.get(String(post.id)) || [])
+      .sort((a, b) => a.position - b.position)
+      .map((link) => {
+        const media = mediaReferenceForAsset(mediaById.get(link.mediaId))
+        if (!media) return null
+        return {
+          id: media.id,
+          url: media.publicUrl,
+          status: media.status,
+          sourceUrl: media.sourceUrl,
+          alt: link.alt || post.mediaAlt || null,
+          position: link.position,
+          width: media.width,
+          height: media.height,
+        }
+      })
+      .filter(Boolean)
+    const media = linkedMedia.length
+      ? linkedMedia
+      : post.mediaUrl
+        ? [
+            {
+              id: fallbackMedia.id,
+              url: fallbackMedia.publicUrl,
+              status: fallbackMedia.status,
+              sourceUrl: fallbackMedia.sourceUrl,
+              alt: post.mediaAlt || null,
+              position: 0,
+              width: fallbackMedia.width ?? null,
+              height: fallbackMedia.height ?? null,
+            },
+          ]
+        : []
+    const primaryMedia = media[0] || fallbackMedia
+    return {
+      ...post,
+      accountHandle,
+      accountUrl:
+        accountHandle && post.source === "x"
+          ? `https://x.com/${accountHandle}`
+          : null,
+      media,
+      mediaUrl: primaryMedia.url ?? primaryMedia.publicUrl ?? null,
+      mediaId: primaryMedia.id,
+      mediaStatus: primaryMedia.status,
+      mediaSourceUrl: primaryMedia.sourceUrl,
+    }
+  }
+  const posts = postRows
     .filter((post) => {
       const timestamp = Date.parse(post.publishedAt)
       return Number.isNaN(timestamp) || timestamp >= windowStart
     })
-    .map((post) => {
-      const accountHandle =
-        post.accountHandle ||
-        (post.source === "x" ? xHandleFromUrl(post.url) : null)
-      const fallbackMedia = resolveMediaReference(
-        database,
-        post.mediaUrl,
-        mediaBySourceUrl,
-      )
-      const linkedMedia = (postMediaByOwner.get(String(post.id)) || [])
-        .sort((a, b) => a.position - b.position)
-        .map((link) => {
-          const media = mediaReferenceForAsset(mediaById.get(link.mediaId))
-          if (!media) return null
-          return {
-            id: media.id,
-            url: media.publicUrl,
-            status: media.status,
-            sourceUrl: media.sourceUrl,
-            alt: link.alt || post.mediaAlt || null,
-            position: link.position,
-            width: media.width,
-            height: media.height,
-          }
-        })
-        .filter(Boolean)
-      const media = linkedMedia.length
-        ? linkedMedia
-        : post.mediaUrl
-          ? [
-              {
-                id: fallbackMedia.id,
-                url: fallbackMedia.publicUrl,
-                status: fallbackMedia.status,
-                sourceUrl: fallbackMedia.sourceUrl,
-                alt: post.mediaAlt || null,
-                position: 0,
-                width: fallbackMedia.width ?? null,
-                height: fallbackMedia.height ?? null,
-              },
-            ]
-          : []
-      const primaryMedia = media[0] || fallbackMedia
-      return {
-        ...post,
-        accountHandle,
-        accountUrl:
-          accountHandle && post.source === "x"
-            ? `https://x.com/${accountHandle}`
-            : null,
-        media,
-        mediaUrl: primaryMedia.url ?? primaryMedia.publicUrl ?? null,
-        mediaId: primaryMedia.id,
-        mediaStatus: primaryMedia.status,
-        mediaSourceUrl: primaryMedia.sourceUrl,
-      }
-    })
+    .map(mapPost)
 
   const todayKey = dateKeyInJapan(now)
   const events = database
@@ -3285,8 +3304,34 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
       ? new Date(Math.max(...dateCandidates)).toISOString()
       : null)
 
+  // The summary answers "what should a visitor look at first" without making
+  // every client re-derive it. It only references rows already in the payload,
+  // except latestPost, which survives an empty post window.
+  const upcomingEvents = events.filter(
+    (event) => event.isUpcoming && !isCancelledEventStatus(event.status),
+  )
+  const upcomingVideos = mappedVideos
+    .filter((video) => video.isUpcoming)
+    .sort((a, b) =>
+      String(a.scheduledAt || "").localeCompare(String(b.scheduledAt || "")),
+    )
+  const summary = {
+    nextEvent: upcomingEvents[0] || null,
+    nextStream: upcomingVideos[0] || null,
+    latestVideo: mappedVideos.find((video) => !video.isUpcoming) || null,
+    latestPost: posts[0] || (postRows[0] ? mapPost(postRows[0]) : null),
+    counts: {
+      posts: posts.length,
+      events: events.length,
+      upcomingEvents: upcomingEvents.length,
+      videos: mappedVideos.length,
+      resources: resources.length,
+    },
+  }
+
   return {
     profile,
+    summary,
     posts,
     events,
     videos: mappedVideos,

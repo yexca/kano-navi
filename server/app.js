@@ -19,6 +19,7 @@ import {
   resolveMediaCachePath,
 } from "./media-cache.js"
 import { createMcpRouter } from "./mcp-api.js"
+import { publicEvent, publicSyncRun } from "./public-view.js"
 import { createSyncJobManager } from "./sync-jobs.js"
 
 function createProfileMediaHandler(database) {
@@ -212,8 +213,24 @@ export function createApp({
     const days = Number.isFinite(requestedDays)
       ? Math.min(30, Math.max(1, requestedDays))
       : 3
+    const dashboard = getDashboard(database, { days })
+    const visitorEvent = (event) =>
+      publicEvent(event, ["manualLocked", "isUpcoming"])
     response.set("Cache-Control", "no-store")
-    response.json(getDashboard(database, { days }))
+    response.json({
+      ...dashboard,
+      events: dashboard.events.map(visitorEvent),
+      summary: {
+        ...dashboard.summary,
+        nextEvent: dashboard.summary.nextEvent
+          ? visitorEvent(dashboard.summary.nextEvent)
+          : null,
+      },
+      meta: {
+        ...dashboard.meta,
+        lastSync: publicSyncRun(dashboard.meta.lastSync),
+      },
+    })
   })
 
   app.get("/api/dashboard/revision", (request, response) => {

@@ -3,7 +3,13 @@ import fs from "node:fs"
 import test from "node:test"
 
 import { createApp } from "./app.js"
-import { initializeDatabase, upsertMediaAsset } from "./database.js"
+import {
+  finishSyncRun,
+  initializeDatabase,
+  startSyncRun,
+  upsertEvents,
+  upsertMediaAsset,
+} from "./database.js"
 import {
   mediaIdForSourceUrl,
   resolveMediaCachePath,
@@ -63,5 +69,53 @@ test("media route serves only ready opaque-ID assets", async () => {
       )
     database.close()
     if (cachedFile) fs.rmSync(cachedFile, { force: true })
+  }
+})
+
+test("public dashboard omits operator sync counters and event identities", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  let server
+  try {
+    upsertEvents(database, [
+      {
+        id: "event-public",
+        source: "x",
+        source_item_id: "status-private-detail",
+        title: "Public stream",
+        starts_on: "2099-01-01",
+        starts_at: "2099-01-01T11:00:00.000Z",
+        status: "scheduled",
+      },
+    ])
+    const runId = startSyncRun(database, "manual")
+    finishSyncRun(database, runId, {
+      status: "partial",
+      message: "kept snapshot",
+      counts: { youtube: { error: "raw upstream detail" } },
+    })
+    const app = createApp({ database, databaseLabel: ":memory:" })
+    server = await new Promise((resolve) => {
+      const listeningServer = app.listen(0, "127.0.0.1", () =>
+        resolve(listeningServer),
+      )
+    })
+    const origin = `http://127.0.0.1:${server.address().port}`
+    const response = await fetch(`${origin}/api/dashboard?days=3`)
+    assert.equal(response.status, 200)
+    const payload = await response.json()
+    assert.equal(payload.meta.lastSync.status, "partial")
+    assert.equal(payload.meta.lastSync.counts, undefined)
+    assert.equal(payload.meta.lastSync.jobId, undefined)
+    assert.equal(payload.events[0].sourceItemId, undefined)
+    assert.equal(payload.events[0].isUpcoming, true)
+    assert.equal(payload.summary.nextEvent.id, "event-public")
+    assert.equal(payload.summary.nextEvent.sourceItemId, undefined)
+    assert.doesNotMatch(JSON.stringify(payload), /raw upstream detail/u)
+  } finally {
+    if (server)
+      await new Promise((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      )
+    database.close()
   }
 })

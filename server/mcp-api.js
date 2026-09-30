@@ -13,28 +13,13 @@ import {
   listAdminEventsPage,
   listSyncRuns,
 } from "./database.js"
+import { publicEvent, publicSyncRun } from "./public-view.js"
 
 const CONTROL_TOOLS = new Set([
   "dashboard_request_reload",
   "sync_start",
   "scan_run_automatic",
 ])
-
-const publicEventFields = [
-  "id",
-  "source",
-  "title",
-  "detail",
-  "startsOn",
-  "startsAt",
-  "endsAt",
-  "timezone",
-  "timePrecision",
-  "status",
-  "eventType",
-  "url",
-  "provenance",
-]
 
 function constantTimeTokenMatch(actual, expected) {
   const actualBuffer = Buffer.from(String(actual || ""))
@@ -82,28 +67,6 @@ function jsonToolResult(value) {
   }
 }
 
-function publicEvent(event) {
-  return Object.fromEntries(
-    publicEventFields
-      .filter((field) =>
-        Object.prototype.hasOwnProperty.call(event || {}, field),
-      )
-      .map((field) => [field, event[field]]),
-  )
-}
-
-function publicSyncRun(run) {
-  if (!run) return null
-  return {
-    id: run.id,
-    source: run.source,
-    startedAt: run.startedAt,
-    finishedAt: run.finishedAt,
-    status: run.status,
-    message: run.message || null,
-  }
-}
-
 function publicJob(job) {
   if (!job) return null
   const source = String(job.source || "")
@@ -126,7 +89,7 @@ function publicSchedulePage(database, options = {}) {
     ...options,
     includeDeleted: false,
   })
-  const items = page.items.map(publicEvent)
+  const items = page.items.map((event) => publicEvent(event))
   return { ...page, items, events: items }
 }
 
@@ -135,7 +98,13 @@ function publicDashboard(database, days) {
   const dashboard = getDashboard(database, { days: boundedDays })
   return {
     ...dashboard,
-    events: (dashboard.events || []).map(publicEvent),
+    events: (dashboard.events || []).map((event) => publicEvent(event)),
+    summary: dashboard.summary && {
+      ...dashboard.summary,
+      nextEvent: dashboard.summary.nextEvent
+        ? publicEvent(dashboard.summary.nextEvent)
+        : null,
+    },
     meta: {
       ...(dashboard.meta || {}),
       lastSync: publicSyncRun(dashboard.meta?.lastSync),
