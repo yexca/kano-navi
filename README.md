@@ -63,8 +63,9 @@ Dashboard endpoint:
 GET /api/dashboard?days=3
 ```
 
-The response contains the profile, recent posts aggregated from both configured
-X accounts, all events, YouTube videos and scheduled streams, the manually
+The response contains the profile, a `summary` block (next event, next
+scheduled stream, latest video, latest post even outside the window, and
+counts), recent posts aggregated from both configured X accounts, all events, YouTube videos and scheduled streams, the manually
 selected Featured item, timeline, resource links, schedule images, and
 synchronization metadata. `days` can be set from 1 to 30.
 

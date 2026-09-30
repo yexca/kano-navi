@@ -27,12 +27,26 @@ YouTube, or any other original source.
 
 ## Page Information Architecture
 
-1. Identity header: banner, avatar, name, bio, and the latest snapshot time.
-2. Recent activity: roughly three days of aggregated X posts from both public
-   accounts, with the account handle shown as the source.
-3. Schedule: a navigable calendar and future-first event list containing X schedules and YouTube reservations.
-4. Latest focus: one highlight traceable to a video or official reference.
-5. Channels and archive: recent YouTube uploads, a timeline, and a resource directory.
+1. Sticky header: avatar, name, section navigation, snapshot time and health,
+   language and theme controls.
+2. Now: the gingham banner, identity (avatar, name, catchphrase, main links),
+   a spotlight card for the next stream or event with a Japan-time countdown
+   (falling back to the latest video), and a strip of counts plus a reload
+   button.
+3. Weekly schedule: a Monday-first week strip with per-day event dots, a week
+   agenda that can be narrowed to one day, a shortcut to the nearest week with
+   events, and the week's schedule image from X.
+4. Posts on X: roughly three days of posts from both accounts with an account
+   filter, image lightbox, and engagement counts. When the window is empty the
+   most recent stored post is still shown.
+5. YouTube: the manually selected Featured video with its focus copy, plus
+   recent uploads and reservations.
+6. Archive: a milestone timeline, the resource directory, and common hashtags.
+
+The visual language borrows from the artist's public motifs: strawberry red
+and cream gingham from the banner, the outfit's sky blue as a secondary hue,
+rounded cards, and a rounded Japanese display face where the system has one.
+Light and dark themes share the same tokens in `src/index.css`.
 
 A separate, unlinked `/admin` route presents a classic maintainer console with
 paginated schedule management, independent schedule-board and single-message

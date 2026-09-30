@@ -18,7 +18,7 @@ data/database/kano.sqlite  -- snapshot, cursors, settings, and media metadata
           v
 server/index.js   -- dashboard, admin API, health, /media/<id>, and /mcp
           |
-          +--> src/main.jsx  -- public dashboard
+          +--> src/dashboard/ -- public dashboard
           +--> src/admin.jsx -- hidden schedule administration
           |
           +--> server/sync-jobs.js -- single-flight asynchronous jobs
@@ -33,8 +33,12 @@ successful snapshot while a source is unavailable.
 
 ### Presentation: `src/`
 
-`src/main.jsx` maps dashboard JSON to component state, calendar navigation, theme
-switching, account-source labels, and accessible links. `src/admin.jsx` owns the
+`src/main.jsx` only routes between the public board and `/admin`. The board
+lives in `src/dashboard/`: `use-dashboard.js` owns the snapshot request and
+revision polling, `format.js` owns Japan-time and event-status helpers,
+`content.js` holds static public links, and `components/` renders the header,
+hero and spotlight, weekly schedule, X feed, videos, and archive. Its styles are
+in `src/dashboard/dashboard.css` on top of the shared tokens in `src/index.css`. `src/admin.jsx` owns the
 hidden `/admin` interface for independent schedule-board and single-message
 detection settings, capability-aware provider queues, Featured-video selection,
 and schedule CRUD. `src/components/ui/` contains
@@ -110,7 +114,8 @@ The synchronization layer handles timeouts, parsing, field normalization, and
 
 1. The browser requests `/api/dashboard?days=3` after loading.
 2. The API reads SQLite, calculates each event's `isUpcoming`, resolves ready
-   media to `/media/<id>`, and returns the snapshot plus synchronization metadata.
+   media to `/media/<id>`, derives the `summary` block, and returns the snapshot
+   plus public synchronization metadata (`server/public-view.js`).
 3. The page shows the snapshot time. If the API is unavailable after a load, it keeps the known state and shows a retry affordance.
 4. A maintainer or an authorized MCP client starts an asynchronous job. The
    single-flight job manager writes a `sync_runs` row with `job_id` and

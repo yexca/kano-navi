@@ -50,7 +50,7 @@ SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建
 GET /api/dashboard?days=3
 ```
 
-返回 profile、最近窗口内聚合的两个 X 账号动态、全部日程、YouTube 视频与预约、手动选择的 Featured 视频、时间轴、资料入口、schedule 图片和同步元数据。`days` 可设为 1–30。
+返回 profile、`summary` 摘要（下一项日程、下一场预约直播、最新视频、即使超出时间窗口也保留的最新动态，以及计数）、最近窗口内聚合的两个 X 账号动态、全部日程、YouTube 视频与预约、手动选择的 Featured 视频、时间轴、资料入口、schedule 图片和同步元数据。`days` 可设为 1–30。
 
 远程图片会登记到 `media_assets`，并通过 `media_links` 关联推文、视频和其他内容。缓存完成的文件由带内容版本的 `GET /media/<opaque-id>?v=<content-sha256>` 提供；尚未缓存或缓存失败时，API 会返回 `null` 媒体地址，浏览器不会改为直连平台 CDN。运行时文件统一保存在已被 Git 忽略的 `data/`：数据库在 `data/database/`，X 图片在 `data/x/`，YouTube 图片在 `data/youtube/`，管理员选中的头像和横幅在 `data/avatar/`。
 
