@@ -26,6 +26,12 @@ import {
 } from "../server/database.js"
 import { downloadPendingMedia } from "../server/media-downloader.js"
 import { extractPendingSchedules } from "../server/schedule-extractor.js"
+import {
+  WORKFLOW_STEPS,
+  WORKFLOW_STEP_IDS,
+  environmentSkippedSteps,
+  normalizeWorkflowSteps,
+} from "../server/workflow-catalog.js"
 
 const DEFAULT_X_HANDLES = ["kano_2525", "_Kanotic"]
 const DEFAULT_YOUTUBE_CHANNEL = "UCShXNLMXCfstmWKH_q86B8w"
@@ -934,55 +940,33 @@ export async function syncYoutube(database) {
   }
 }
 
-export async function runSync({
-  database = null,
-  closeDatabase = null,
-  triggeredBy = "cli",
-  jobId = null,
-  setExitCode = true,
-} = {}) {
-  const ownsDatabase = !database
-  const activeDatabase = database || initializeDatabase()
-  const shouldClose = closeDatabase ?? ownsDatabase
-  const runId = startSyncRun(activeDatabase, "manual", {
-    triggeredBy,
-    jobId,
-  })
-  const results = {}
-  let successCount = 0
-  let attempted = 0
-
-  try {
-    if (process.env.SKIP_X !== "1") {
-      attempted += 1
-      try {
-        results.x = await syncX(activeDatabase)
-        successCount += 1
-        console.log(
-          `X: ${results.x.count} 条更新，${results.x.requested} 次状态请求`,
-        )
-      } catch (error) {
-        results.x = { error: error.message }
-        console.error(`X 同步失败: ${error.message}`)
-      }
-    }
-
-    if (process.env.SKIP_YOUTUBE !== "1") {
-      attempted += 1
-      try {
-        results.youtube = await syncYoutube(activeDatabase)
-        successCount += 1
-        console.log(
-          `YouTube: RSS ${results.youtube.count} 条，检查 ${results.youtube.inspected} 条预约`,
-        )
-      } catch (error) {
-        results.youtube = { error: error.message }
-        console.error(`YouTube 同步失败: ${error.message}`)
-      }
-    }
-
-    if (process.env.SKIP_MEDIA !== "1") {
-      results.media = await downloadPendingMedia(activeDatabase, {
+// Runners for the modular steps declared in server/workflow-catalog.js. Each
+// runner receives the open database and returns a JSON-serializable summary.
+// Source runners throw on failure so the run can be marked partial; the old
+// snapshot is retained because nothing is written before a successful parse.
+const stepRunners = {
+  x: {
+    resultKey: "x",
+    run: async (database) => {
+      const result = await syncX(database)
+      console.log(`X: ${result.count} 条更新，${result.requested} 次状态请求`)
+      return result
+    },
+  },
+  youtube: {
+    resultKey: "youtube",
+    run: async (database) => {
+      const result = await syncYoutube(database)
+      console.log(
+        `YouTube: RSS ${result.count} 条，检查 ${result.inspected} 条预约`,
+      )
+      return result
+    },
+  },
+  media: {
+    resultKey: "media",
+    run: (database) =>
+      downloadPendingMedia(database, {
         limit: boundedInteger(process.env.MEDIA_DOWNLOAD_LIMIT, 20, 0, 100),
         timeoutMs: boundedInteger(
           process.env.MEDIA_DOWNLOAD_TIMEOUT_MS,
@@ -996,11 +980,90 @@ export async function runSync({
           1024,
           25 * 1024 * 1024,
         ),
-      })
-    }
+      }),
+  },
+  schedule: {
+    resultKey: "schedules",
+    run: (database) => extractPendingSchedules(database),
+  },
+}
 
-    if (process.env.SKIP_LLM !== "1") {
-      results.schedules = await extractPendingSchedules(activeDatabase)
+/**
+ * Run the selected synchronization steps. Without `steps`, every catalog step
+ * runs except those disabled through SKIP_* flags (the historical CLI
+ * behavior). Explicit steps still honor SKIP_* as a process-wide kill switch
+ * and record the skipped step instead of silently dropping it.
+ */
+export async function runSync({
+  database = null,
+  closeDatabase = null,
+  triggeredBy = "cli",
+  jobId = null,
+  setExitCode = true,
+  steps = null,
+  runSource = "manual",
+  onStep = null,
+} = {}) {
+  const ownsDatabase = !database
+  const activeDatabase = database || initializeDatabase()
+  const shouldClose = closeDatabase ?? ownsDatabase
+  const runId = startSyncRun(activeDatabase, runSource, {
+    triggeredBy,
+    jobId,
+  })
+  const results = {}
+  let successCount = 0
+  let attempted = 0
+  const explicitSteps = steps != null
+  const requested = explicitSteps
+    ? normalizeWorkflowSteps(steps)
+    : [...WORKFLOW_STEP_IDS]
+  const skippedByEnvironment = new Set(environmentSkippedSteps())
+  const report = (stepId, status) => {
+    try {
+      onStep?.(stepId, status)
+    } catch {
+      // Progress reporting is best-effort and must not abort a sync.
+    }
+  }
+
+  try {
+    for (const step of WORKFLOW_STEPS) {
+      if (!requested.includes(step.id)) continue
+      const runner = stepRunners[step.id]
+      if (skippedByEnvironment.has(step.id)) {
+        if (explicitSteps) {
+          results[runner.resultKey] = { skipped: true, reason: "environment" }
+        }
+        report(step.id, "skipped")
+        continue
+      }
+      report(step.id, "running")
+      if (step.group === "source") {
+        attempted += 1
+        try {
+          results[runner.resultKey] = await runner.run(activeDatabase)
+          successCount += 1
+          report(step.id, "completed")
+        } catch (error) {
+          results[runner.resultKey] = { error: error.message }
+          console.error(`${step.id} 同步失败: ${error.message}`)
+          report(step.id, "failed")
+        }
+      } else {
+        try {
+          results[runner.resultKey] = await runner.run(activeDatabase)
+        } catch (error) {
+          report(step.id, "failed")
+          throw error
+        }
+        report(
+          step.id,
+          Number(results[runner.resultKey]?.failed || 0) > 0
+            ? "partial"
+            : "completed",
+        )
+      }
     }
 
     const hasWarnings =

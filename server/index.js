@@ -23,6 +23,8 @@ export const app = createApp({
   staticDirectory: distDirectory,
   adminMode,
   adminPassword: process.env.ADMIN_PASSWORD || "",
+  // Saved workflows with a schedule are started by this process only.
+  startWorkflowScheduler: process.env.WORKFLOW_SCHEDULER_ENABLED !== "0",
 })
 
 if (

@@ -33,8 +33,10 @@ npm start
 `.env` 中设为 `APP_MODE=production`，并配置至少 12 位的
 `ADMIN_PASSWORD`。provider 密钥由管理页配置并加密保存到 SQLite；环境中只需
 配置 `LLM_SECRETS_KEY`。
-管理页采用经典侧栏后台布局，分为概览、分页日程、关键词/看板扫描、单条消息
-扫描、多个 OpenAI-compatible 模型提供商，以及头像与横幅标签。
+后台首页是一键工作流：选择要更新的模块（X、YouTube、媒体缓存、AI 日程识别），
+立即运行或交给服务端定时执行。其他分区包括分页日程、按路由排序模型的识别规则、
+集中的模型服务页（填写 API 地址和 Key 后获取模型列表并打标签），以及内容与头像
+媒体。
 
 `/mcp` 是独立的无状态集成入口。公开读取工具不需要密钥；推进 revision、
 启动同步和运行自动扫描才需要 `Authorization: Bearer <MCP_CONTROL_TOKEN>`。
@@ -42,7 +44,7 @@ npm start
 
 ## 数据与 API
 
-SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers` 和 `llm_route_providers`。
+SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers`、`llm_models`、`llm_route_targets`（以及已迁移的旧表 `llm_route_providers`）和 `workflows`。
 
 看板接口：
 

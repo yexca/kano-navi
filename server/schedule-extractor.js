@@ -6,10 +6,10 @@ import {
   getMediaAsset,
   getScheduleExtractionConfig,
   getScheduleExtraction,
+  getLlmModel,
   getLlmProvider,
   getLlmProviderSecret,
-  getLlmRouteProviders,
-  getScheduleProviderOrders,
+  getScheduleRouteTargets,
   LLM_MAX_RETRIES,
   listMediaLinks,
   listScheduleCandidatePosts,
@@ -623,39 +623,59 @@ function configuredProviders(database, options, inputMode, detectionType) {
     }
     return { providers: [provider], reason: null }
   }
-  const config = getScheduleExtractionConfig(database)
   const route = routeForDetectionType(detectionType)
-  const providerOrders =
-    config.providerOrders || getScheduleProviderOrders(database)
-  const ids =
-    providerOrders[route]?.length > 0
-      ? providerOrders[route]
-      : providerOrders[SCHEDULE_VISION_ROUTE] ||
-        config.providerOrder ||
-        getLlmRouteProviders(database, SCHEDULE_VISION_ROUTE)
+  const routeTargets = getScheduleRouteTargets(database)
+  const targets =
+    routeTargets[route]?.length > 0
+      ? routeTargets[route]
+      : routeTargets[SCHEDULE_VISION_ROUTE] || []
   const providers = []
+  const apiKeys = new Map()
   let enabledProviderCount = 0
   let keyedProviderCount = 0
-  for (const id of ids) {
-    const row = getLlmProvider(database, id)
+  for (const target of targets) {
+    const row = getLlmProvider(database, target.providerId)
     if (!row || !row.enabled) continue
-    enabledProviderCount += 1
-    const secret = getLlmProviderSecret(database, id)
-    let apiKey = null
-    if (secret?.apiKeyCiphertext) {
-      try {
-        apiKey = decryptSecret(
-          secret.apiKeyCiphertext,
-          process.env.LLM_SECRETS_KEY || "",
-        )
-      } catch {
-        apiKey = null
-      }
+    // A target names a catalog model; an empty model follows the provider's
+    // default model and its provider-level capabilities.
+    let model = row.model
+    let capabilities = row.capabilities
+    if (target.modelId) {
+      const catalogModel = getLlmModel(database, row.id, target.modelId)
+      if (!catalogModel || !catalogModel.enabled) continue
+      model = catalogModel.id
+      capabilities = catalogModel.capabilities
     }
+    if (!model) continue
+    enabledProviderCount += 1
+    if (!apiKeys.has(row.id)) {
+      const secret = getLlmProviderSecret(database, row.id)
+      let apiKey = null
+      if (secret?.apiKeyCiphertext) {
+        try {
+          apiKey = decryptSecret(
+            secret.apiKeyCiphertext,
+            process.env.LLM_SECRETS_KEY || "",
+          )
+        } catch {
+          apiKey = null
+        }
+      }
+      apiKeys.set(row.id, apiKey)
+    }
+    const apiKey = apiKeys.get(row.id)
     if (!apiKey) continue
     keyedProviderCount += 1
-    if (!providerSupportsInput(row, inputMode)) continue
-    providers.push({ ...row, apiKey, persisted: true })
+    const candidate = {
+      ...row,
+      model,
+      capabilities,
+      visionCapable: capabilities.includes("image"),
+      apiKey,
+      persisted: true,
+    }
+    if (!providerSupportsInput(candidate, inputMode)) continue
+    providers.push(candidate)
   }
   if (!providers.length && !enabledProviderCount) {
     const fallback = legacyProvider(database, options)

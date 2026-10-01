@@ -19,9 +19,10 @@ data/database/kano.sqlite  -- snapshot, cursors, settings, and media metadata
 server/index.js   -- dashboard, admin API, health, /media/<id>, and /mcp
           |
           +--> src/dashboard/ -- public dashboard
-          +--> src/admin.jsx -- hidden schedule administration
+          +--> src/admin/ -- hidden operator console
           |
           +--> server/sync-jobs.js -- single-flight asynchronous jobs
+          +--> server/workflow-scheduler.js -- timed saved workflows
 ```
 
 Synchronization and page reads are separate paths. The browser reads the local
@@ -38,10 +39,12 @@ lives in `src/dashboard/`: `use-dashboard.js` owns the snapshot request and
 revision polling, `format.js` owns Japan-time and event-status helpers,
 `content.js` holds static public links, and `components/` renders the header,
 hero and spotlight, weekly schedule, X feed, videos, and archive. Its styles are
-in `src/dashboard/dashboard.css` on top of the shared tokens in `src/index.css`. `src/admin.jsx` owns the
-hidden `/admin` interface for independent schedule-board and single-message
-detection settings, capability-aware provider queues, Featured-video selection,
-and schedule CRUD. `src/components/ui/` contains
+in `src/dashboard/dashboard.css` on top of the shared tokens in `src/index.css`. The hidden `/admin` console
+lives in `src/admin/`: `index.jsx` registers the views and renders the shell,
+`use-admin-data.js` owns every admin request and job polling, `views/` holds
+the workflow, schedule, detection-rule, LLM-provider, and content views, and
+`admin.css` styles them with `adm-` prefixed selectors because it ships in the
+same bundle as the board. `src/components/ui/` contains
 basic UI primitives, while the CSS files contain layout and design tokens. The
 presentation layer must not import `better-sqlite3` or call X, YouTube, OpenAI,
 or a third-party proxy directly.
@@ -56,8 +59,10 @@ Responses should remain stable and sanitized; do not expose
 Ready runtime media is served only through the opaque-ID `/media/:id` route.
 
 `server/admin-api.js` exposes session, model/schedule/video settings, provider
-management, paginated event queries, asynchronous job status, video listing,
-and event CRUD endpoints. Mutating requests with a browser `Origin` are checked
+management, the model catalog (`/providers/:id/models`, `/models/discover`,
+`/models/remove`), route targets (`/routes/:route`), saved workflows
+(`/workflows`, `/workflows/:id/run`), paginated event queries, asynchronous
+job status, video listing, and event CRUD endpoints. Mutating requests with a browser `Origin` are checked
 against the local origin; production still relies on the HttpOnly admin session
 and SameSite cookie.
 `APP_MODE=development` bypasses authentication for local work. Production
@@ -108,6 +113,14 @@ The synchronization layer handles timeouts, parsing, field normalization, and
   `LLM_SECRETS_KEY`.
 - Media: register discovered URLs as `media_assets`/`media_links`, then download
   a bounded pending batch during the same synchronization command.
+- Workflows: `server/workflow-catalog.js` declares the modular steps (`x`,
+  `youtube`, `media`, `schedule`) in execution order and `scripts/sync.mjs`
+  maps each to a runner. `runSync({ steps })` runs a subset and reports
+  per-step progress; `SKIP_*` flags remain a process-wide kill switch. A new
+  step needs one catalog entry and one runner, and the console renders it
+  automatically. `server/workflow-scheduler.js` checks saved workflows every
+  30 seconds and starts a due one through the single-flight job manager; a
+  workflow that finds the queue busy stays due for the next tick.
 - If one source fails, record the error; only successfully obtained data is upserted and old data remains.
 
 ## Request and Failure Flow

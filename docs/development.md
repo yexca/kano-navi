@@ -25,12 +25,16 @@ and production.
 The public dashboard is `/`. The admin interface is available only by entering
 `/admin`; no public navigation links to it. The example environment defaults to
 `APP_MODE=development`, so local admin requests do not require a password.
-The admin page uses a classic sidebar console with separate tabs for overview,
-paginated schedules, independent schedule-board/single-message scanning,
-multiple model providers, and profile media. It can configure each
-OpenAI-compatible provider queue and its Text/Image capabilities, while each
-provider follows the fixed three-request failover policy. It also configures
-Featured video and manual schedule records.
+The console opens on Workflows: pick modules, run them now, or enable a timer
+for a saved workflow. LLM providers are configured once (API host, format, and
+key), their model list is fetched from `<baseUrl>/models`, and each model is
+tagged (`text`/`image` drive routing; `reasoning`/`tools`/`embedding` are
+labels). Detection rules then order provider + model targets per route; each
+target follows the fixed three-request failover policy. Content & media covers
+the Featured video and profile media. Provider URLs that resolve to loopback or
+private ranges are rejected, so local mock endpoints cannot be configured.
+Set `WORKFLOW_SCHEDULER_ENABLED=0` to keep timed workflows from firing while
+developing.
 
 `/mcp` exposes public read-only tools without a key. Set `MCP_CONTROL_TOKEN` to
 enable the protected control tools; send it only as an `Authorization: Bearer`

@@ -8,6 +8,10 @@ import {
 } from "./database.js"
 import { extractPendingSchedules } from "./schedule-extractor.js"
 import { runSync } from "../scripts/sync.mjs"
+import {
+  normalizeWorkflowSteps,
+  WORKFLOW_STEP_IDS,
+} from "./workflow-catalog.js"
 
 const DEFAULT_MAX_JOBS = 100
 
@@ -25,10 +29,18 @@ function publicJob(state, database) {
     startedAt: state.startedAt,
     finishedAt: state.finishedAt,
     triggeredBy: state.triggeredBy,
+    workflowId: state.workflowId || null,
+    workflowName: state.workflowName || null,
+    steps: state.steps ? [...state.steps] : null,
+    progress: state.progress ? { ...state.progress } : null,
     error: state.error || null,
     result: state.result || null,
     run: run || null,
   }
+}
+
+function initialProgress(steps) {
+  return Object.fromEntries(steps.map((step) => [step, "pending"]))
 }
 
 /**
@@ -94,6 +106,16 @@ export function createSyncJobManager({
           triggeredBy: state.triggeredBy,
           jobId: state.id,
           setExitCode: false,
+          ...(state.kind === "workflow"
+            ? {
+                steps: state.steps,
+                runSource: "workflow",
+                onStep: (step, status) => {
+                  if (state.progress && step in state.progress)
+                    state.progress[step] = status
+                },
+              }
+            : {}),
         })
         state.result = result || {}
       }
@@ -103,14 +125,39 @@ export function createSyncJobManager({
       state.error = String(error?.message || error)
     } finally {
       state.finishedAt = now()
+      if (state.progress) {
+        for (const [step, status] of Object.entries(state.progress)) {
+          if (status === "pending" || status === "running")
+            state.progress[step] =
+              state.status === "failed" ? "cancelled" : "skipped"
+        }
+      }
       if (activeJobId === state.id) activeJobId = null
       remember(state)
     }
-    return publicJob(state, database)
+    const job = publicJob(state, database)
+    try {
+      state.onSettled?.(job)
+    } catch {
+      // Settlement hooks only record metadata and must not fail the job.
+    }
+    return job
   }
 
-  function start(kind = "sync", triggeredBy = "admin") {
-    const normalizedKind = kind === "scan" ? "scan" : "sync"
+  /**
+   * Start one operator job. `sync` runs every step, `scan` runs only the
+   * schedule extractor, and `workflow` runs the selected catalog steps with
+   * per-step progress for the admin console.
+   */
+  function start(kind = "sync", triggeredBy = "admin", options = {}) {
+    const normalizedKind = ["scan", "workflow"].includes(kind) ? kind : "sync"
+    const steps =
+      normalizedKind === "workflow"
+        ? normalizeWorkflowSteps(options.steps ?? WORKFLOW_STEP_IDS)
+        : null
+    if (normalizedKind === "workflow" && !steps.length) {
+      return { accepted: false, reason: "no_steps", job: null }
+    }
     if (activeJobId) {
       const existing = jobs.get(activeJobId)
       return {
@@ -128,6 +175,14 @@ export function createSyncJobManager({
       finishedAt: null,
       triggeredBy: String(triggeredBy || "admin").slice(0, 64),
       runId: null,
+      workflowId: options.workflowId ? String(options.workflowId) : null,
+      workflowName: options.workflowName
+        ? String(options.workflowName).slice(0, 120)
+        : null,
+      steps,
+      progress: steps ? initialProgress(steps) : null,
+      onSettled:
+        typeof options.onSettled === "function" ? options.onSettled : null,
       result: null,
       error: null,
     }
@@ -150,5 +205,10 @@ export function createSyncJobManager({
       .map((state) => publicJob(state, database))
   }
 
-  return { get, list, start }
+  function active() {
+    const state = activeJobId ? jobs.get(activeJobId) : null
+    return state ? publicJob(state, database) : null
+  }
+
+  return { active, get, list, start }
 }

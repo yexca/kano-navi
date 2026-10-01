@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import fs from "node:fs"
 import net from "node:net"
 import path from "node:path"
@@ -18,10 +19,24 @@ import {
   listLlmProviders,
   getLlmProvider,
   getLlmProviderSecret,
-  getLlmRouteProviders,
+  appendLlmRouteProvider,
+  deleteLlmModels,
+  deleteWorkflow,
+  getLlmModel,
   getScheduleProviderOrders,
+  getLlmRouteTargets,
+  getScheduleRouteTargets,
+  getWorkflow,
+  listLlmModels,
+  listWorkflows,
+  LLM_MODEL_ID_PATTERN,
+  LLM_MODEL_TAGS,
+  normalizeLlmModelTags,
   setLlmRouteProviders,
+  setLlmRouteTargets,
+  upsertLlmModels,
   upsertLlmProvider,
+  upsertWorkflow,
   updateLlmProviderStatus,
   deleteLlmProvider,
   listSyncRuns,
@@ -45,6 +60,14 @@ import {
 import { createAdminAuth } from "./admin-auth.js"
 import { defaultScheduleModel } from "./schedule-extractor.js"
 import { decryptSecret, encryptSecret } from "./secret-store.js"
+import { fetchRemoteModels, inferModelTags } from "./llm-catalog.js"
+import {
+  WORKFLOW_MAX_INTERVAL_MINUTES,
+  WORKFLOW_MIN_INTERVAL_MINUTES,
+  WORKFLOW_STEPS,
+  environmentSkippedSteps,
+  normalizeWorkflowSteps,
+} from "./workflow-catalog.js"
 import {
   avatarMediaDirectory,
   isAllowedMediaMimeType,
@@ -292,11 +315,18 @@ function providerEndpoint(baseUrl, protocol) {
     : `${base}/responses`
 }
 
-function providerModel(value) {
-  const model = text(value, { name: "model", required: true, max: 160 })
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u.test(model))
-    throw new AdminInputError("model contains unsupported characters")
+function modelId(value, { name = "model", required = true } = {}) {
+  const model = text(value, { name, required, max: 200 })
+  if (!model) return ""
+  if (!LLM_MODEL_ID_PATTERN.test(model))
+    throw new AdminInputError(`${name} contains unsupported characters`)
   return model
+}
+
+// The provider model is now an optional default (connection test and legacy
+// routes); catalog models live in llm_models.
+function providerModel(value) {
+  return modelId(value, { name: "model", required: false })
 }
 
 function providerCapabilities(value, existing = null) {
@@ -344,16 +374,17 @@ function validProviderRoute(value, fallback = SCHEDULE_VISION_ROUTE) {
   return route
 }
 
-function ensureProviderRoutes(database, id) {
+// Legacy clients create a provider with one model and expect it to join
+// every route. Catalog-managed providers without a default model are routed
+// explicitly from the detection settings instead.
+function ensureProviderRoutes(database, provider) {
+  if (!provider?.model) return
   for (const route of [
     SCHEDULE_VISION_ROUTE,
     SCHEDULE_MESSAGE_ROUTE,
     SCHEDULE_BOARD_ROUTE,
   ]) {
-    const current = getLlmRouteProviders(database, route)
-    if (!current.includes(id)) {
-      setLlmRouteProviders(database, route, [...current, id])
-    }
+    appendLlmRouteProvider(database, route, provider.id)
   }
 }
 
@@ -470,24 +501,62 @@ function queryBoolean(value) {
   )
 }
 
-async function testProviderConnection(
+function providerApiKey(database, provider) {
+  const secret = getLlmProviderSecret(database, provider.id)
+  if (!secret?.apiKeyCiphertext) return null
+  try {
+    return decryptSecret(
+      secret.apiKeyCiphertext,
+      process.env.LLM_SECRETS_KEY || "",
+    )
+  } catch {
+    return null
+  }
+}
+
+async function discoverProviderModels(
   database,
   provider,
   { fetchImpl = fetch } = {},
 ) {
-  const secret = getLlmProviderSecret(database, provider.id)
-  let apiKey = null
-  if (secret?.apiKeyCiphertext) {
-    try {
-      apiKey = decryptSecret(
-        secret.apiKeyCiphertext,
-        process.env.LLM_SECRETS_KEY || "",
-      )
-    } catch {
-      apiKey = null
+  const apiKey = providerApiKey(database, provider)
+  if (!apiKey) throw new AdminInputError("provider API key is not configured")
+  try {
+    const remote = await fetchRemoteModels(
+      { baseUrl: provider.baseUrl, apiKey, timeoutMs: provider.timeoutMs },
+      { fetchImpl },
+    )
+    updateLlmProviderStatus(database, provider.id, { status: "success" })
+    return remote
+  } catch (error) {
+    updateLlmProviderStatus(database, provider.id, {
+      status: "failed",
+      error: error.message,
+    })
+    throw new AdminInputError(error.message)
+  }
+}
+
+async function testProviderConnection(
+  database,
+  provider,
+  { fetchImpl = fetch, model = "" } = {},
+) {
+  const apiKey = providerApiKey(database, provider)
+  if (!apiKey) throw new AdminInputError("provider API key is not configured")
+  const testModel = model || provider.model
+  // Without any model, listing models is the cheapest authenticated check.
+  if (!testModel) {
+    const remote = await discoverProviderModels(database, provider, {
+      fetchImpl,
+    })
+    return {
+      ok: true,
+      method: "models",
+      remoteModelCount: remote.length,
+      provider: getLlmProvider(database, provider.id),
     }
   }
-  if (!apiKey) throw new AdminInputError("provider API key is not configured")
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), provider.timeoutMs)
   try {
@@ -495,12 +564,12 @@ async function testProviderConnection(
     const body =
       provider.protocol === "openai-chat-completions"
         ? {
-            model: provider.model,
+            model: testModel,
             messages: [{ role: "user", content: "ping" }],
             max_tokens: 1,
           }
         : {
-            model: provider.model,
+            model: testModel,
             store: false,
             input: "ping",
             max_output_tokens: 1,
@@ -518,7 +587,12 @@ async function testProviderConnection(
     if (!response.ok)
       throw new Error(`provider returned HTTP ${response.status}`)
     updateLlmProviderStatus(database, provider.id, { status: "success" })
-    return { ok: true, provider: getLlmProvider(database, provider.id) }
+    return {
+      ok: true,
+      method: "inference",
+      model: testModel,
+      provider: getLlmProvider(database, provider.id),
+    }
   } catch (error) {
     const message =
       error?.name === "AbortError"
@@ -555,8 +629,116 @@ function configPayload(database, updatedAt = null) {
     providerOrders,
     routes: providerOrders,
     providers,
+    models: listLlmModels(database),
+    modelTags: LLM_MODEL_TAGS,
+    routeTargets: getScheduleRouteTargets(database),
+    configuredRouteTargets: Object.fromEntries(
+      SCHEDULE_ROUTES.map((route) => [
+        route,
+        getLlmRouteTargets(database, route),
+      ]),
+    ),
     featuredVideoId: getFeaturedVideoId(database),
     ...(updatedAt ? { updatedAt } : {}),
+  }
+}
+
+function modelInput(value) {
+  const id = modelId(value?.id, { name: "model id" })
+  const hasTags = value && Object.prototype.hasOwnProperty.call(value, "tags")
+  return {
+    id,
+    ...(value && Object.prototype.hasOwnProperty.call(value, "name")
+      ? { name: text(value.name, { name: "model name", max: 120 }) }
+      : {}),
+    ...(hasTags ? { tags: modelTags(value.tags) } : {}),
+    ...(value && Object.prototype.hasOwnProperty.call(value, "enabled")
+      ? { enabled: booleanValue(value.enabled, "enabled") }
+      : {}),
+    ...(value && Object.prototype.hasOwnProperty.call(value, "ownedBy")
+      ? { ownedBy: text(value.ownedBy, { name: "ownedBy", max: 120 }) }
+      : {}),
+  }
+}
+
+function modelTags(value) {
+  const values = Array.isArray(value) ? value : String(value ?? "").split(",")
+  const tags = normalizeLlmModelTags(values)
+  const unknown = values
+    .map((item) =>
+      String(item || "")
+        .trim()
+        .toLowerCase(),
+    )
+    .filter(Boolean)
+    .map((item) => (item === "vision" ? "image" : item))
+    .filter((item) => !LLM_MODEL_TAGS.includes(item))
+  if (unknown.length)
+    throw new AdminInputError("tags contains an unsupported value")
+  return tags
+}
+
+function routeTargetsInput(value) {
+  if (!Array.isArray(value) || value.length > 100)
+    throw new AdminInputError("targets must be an array")
+  return value.map((target) => ({
+    providerId: text(target?.providerId, {
+      name: "providerId",
+      required: true,
+      max: 64,
+    }),
+    modelId: modelId(target?.modelId, { name: "modelId", required: false }),
+  }))
+}
+
+function workflowInput(body = {}, existing = null) {
+  const name = text(body.name ?? existing?.name, {
+    name: "name",
+    required: true,
+    max: 80,
+  })
+  const rawSteps = body.steps ?? existing?.steps
+  if (!Array.isArray(rawSteps))
+    throw new AdminInputError("steps must be an array")
+  const steps = normalizeWorkflowSteps(rawSteps)
+  if (steps.length !== new Set(rawSteps.map(String)).size)
+    throw new AdminInputError("steps contains an unsupported value")
+  if (!steps.length) throw new AdminInputError("steps must not be empty")
+  const scheduleEnabled =
+    body.scheduleEnabled == null
+      ? Boolean(existing?.scheduleEnabled)
+      : booleanValue(body.scheduleEnabled, "scheduleEnabled")
+  const intervalMinutes = integerField(
+    body.intervalMinutes,
+    "intervalMinutes",
+    WORKFLOW_MIN_INTERVAL_MINUTES,
+    WORKFLOW_MAX_INTERVAL_MINUTES,
+    existing?.intervalMinutes ?? 60,
+  )
+  return { name, steps, scheduleEnabled, intervalMinutes }
+}
+
+function workflowId(name) {
+  const slug = String(name || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 40)
+  return `${slug || "workflow"}-${crypto.randomBytes(3).toString("hex")}`
+}
+
+function workflowsPayload(database, workflows = null, jobs = null) {
+  return {
+    workflows: listWorkflows(database),
+    steps: WORKFLOW_STEPS.map(({ id, group }) => ({ id, group })),
+    skippedByEnvironment: environmentSkippedSteps(),
+    limits: {
+      minIntervalMinutes: WORKFLOW_MIN_INTERVAL_MINUTES,
+      maxIntervalMinutes: WORKFLOW_MAX_INTERVAL_MINUTES,
+    },
+    scheduler: workflows?.status?.() || { running: false, tickSeconds: null },
+    activeJob: jobs?.active?.() || null,
   }
 }
 
@@ -715,6 +897,7 @@ export function createAdminRouter({
   mode = "development",
   adminPassword = "",
   jobs = null,
+  workflows = null,
   fetchImpl = fetch,
 } = {}) {
   const router = express.Router()
@@ -851,7 +1034,7 @@ export function createAdminRouter({
       try {
         input = providerInput(request.body || {}, null, { mode })
         const provider = upsertLlmProvider(database, input)
-        ensureProviderRoutes(database, input.id)
+        ensureProviderRoutes(database, provider)
         response.status(201).json({
           provider,
         })
@@ -896,8 +1079,8 @@ export function createAdminRouter({
           existing,
           { mode },
         )
+        // Edits never re-add a provider that an operator removed from a route.
         const provider = upsertLlmProvider(database, input)
-        ensureProviderRoutes(database, input.id)
         response.json({
           provider,
         })
@@ -923,8 +1106,15 @@ export function createAdminRouter({
       response.status(404).json({ error: "llm_provider_not_found" })
       return
     }
+    const model = modelId(request.body?.model, {
+      name: "model",
+      required: false,
+    })
+    if (model && !getLlmModel(database, provider.id, model))
+      throw new AdminInputError("model is not in the provider catalog")
     const result = await testProviderConnection(database, provider, {
       fetchImpl,
+      model,
     })
     response.json({
       ...result,
@@ -933,6 +1123,223 @@ export function createAdminRouter({
   })
   router.put("/providers/:id/test", providerTestRoute)
   router.post("/providers/:id/test", providerTestRoute)
+
+  router.get("/models", (request, response) => {
+    response.json({
+      models: listLlmModels(database, {
+        providerId: request.query.providerId || null,
+      }),
+      modelTags: LLM_MODEL_TAGS,
+    })
+  })
+  router.post(
+    "/providers/:id/models/discover",
+    asyncRoute(async (request, response) => {
+      const provider = getLlmProvider(database, request.params.id)
+      if (!provider) {
+        response.status(404).json({ error: "llm_provider_not_found" })
+        return
+      }
+      const remote = await discoverProviderModels(database, provider, {
+        fetchImpl,
+      })
+      const added = new Map(
+        listLlmModels(database, { providerId: provider.id }).map((model) => [
+          model.id,
+          model,
+        ]),
+      )
+      response.json({
+        provider: getLlmProvider(database, provider.id),
+        models: remote.map((model) => ({
+          ...model,
+          suggestedTags: inferModelTags(model.id),
+          added: added.has(model.id),
+          tags: added.get(model.id)?.tags || null,
+        })),
+      })
+    }),
+  )
+  router.post(
+    "/providers/:id/models",
+    route((request, response) => {
+      const provider = getLlmProvider(database, request.params.id)
+      if (!provider) {
+        response.status(404).json({ error: "llm_provider_not_found" })
+        return
+      }
+      const values = request.body?.models
+      if (!Array.isArray(values) || !values.length || values.length > 500)
+        throw new AdminInputError("models must be a non-empty array")
+      const inputs = values.map((value) => {
+        const input = modelInput(value)
+        const existing = getLlmModel(database, provider.id, input.id)
+        return {
+          ...input,
+          ...(input.tags || existing ? {} : { tags: inferModelTags(input.id) }),
+          origin:
+            existing?.origin ||
+            (request.body?.origin === "remote" ? "remote" : "manual"),
+        }
+      })
+      try {
+        const models = upsertLlmModels(database, provider.id, inputs)
+        if (!provider.model) {
+          // The first catalog model becomes the default test model.
+          upsertLlmProvider(database, {
+            ...provider,
+            model: inputs[0].id,
+            capabilities: models.find((model) => model.id === inputs[0].id)
+              ?.capabilities?.length
+              ? models.find((model) => model.id === inputs[0].id).capabilities
+              : provider.capabilities,
+            replaceApiKey: false,
+          })
+        }
+        response.status(201).json({
+          provider: getLlmProvider(database, provider.id),
+          models: listLlmModels(database, { providerId: provider.id }),
+        })
+      } catch (error) {
+        throw new AdminInputError(error.message)
+      }
+    }),
+  )
+  router.put(
+    "/providers/:id/models",
+    route((request, response) => {
+      const provider = getLlmProvider(database, request.params.id)
+      if (!provider) {
+        response.status(404).json({ error: "llm_provider_not_found" })
+        return
+      }
+      const input = modelInput(request.body || {})
+      if (!getLlmModel(database, provider.id, input.id)) {
+        response.status(404).json({ error: "llm_model_not_found" })
+        return
+      }
+      try {
+        upsertLlmModels(database, provider.id, [input])
+      } catch (error) {
+        throw new AdminInputError(error.message)
+      }
+      response.json({
+        provider: getLlmProvider(database, provider.id),
+        model: getLlmModel(database, provider.id, input.id),
+        models: listLlmModels(database, { providerId: provider.id }),
+      })
+    }),
+  )
+  router.post(
+    "/providers/:id/models/remove",
+    route((request, response) => {
+      const provider = getLlmProvider(database, request.params.id)
+      if (!provider) {
+        response.status(404).json({ error: "llm_provider_not_found" })
+        return
+      }
+      const ids = request.body?.ids
+      if (!Array.isArray(ids) || !ids.length || ids.length > 500)
+        throw new AdminInputError("ids must be a non-empty array")
+      const removed = deleteLlmModels(
+        database,
+        provider.id,
+        ids.map((id) => modelId(id, { name: "model id" })),
+      )
+      response.json({
+        removed,
+        provider: getLlmProvider(database, provider.id),
+        models: listLlmModels(database, { providerId: provider.id }),
+      })
+    }),
+  )
+
+  router.get("/routes", (_request, response) => {
+    response.json({
+      routes: getScheduleRouteTargets(database),
+      configured: Object.fromEntries(
+        SCHEDULE_ROUTES.map((name) => [
+          name,
+          getLlmRouteTargets(database, name),
+        ]),
+      ),
+    })
+  })
+  router.put(
+    "/routes/:route",
+    route((request, response) => {
+      const routeName = validProviderRoute(request.params.route)
+      const targets = routeTargetsInput(request.body?.targets)
+      try {
+        setLlmRouteTargets(database, routeName, targets)
+      } catch (error) {
+        throw new AdminInputError(error.message)
+      }
+      response.json(configPayload(database, new Date().toISOString()))
+    }),
+  )
+
+  router.get("/workflows", (_request, response) => {
+    response.json(workflowsPayload(database, workflows, jobs))
+  })
+  router.post(
+    "/workflows",
+    route((request, response) => {
+      const input = workflowInput(request.body || {})
+      let id = workflowId(input.name)
+      while (getWorkflow(database, id)) id = workflowId(input.name)
+      const workflow = upsertWorkflow(database, { ...input, id })
+      response
+        .status(201)
+        .json({ workflow, ...workflowsPayload(database, workflows, jobs) })
+    }),
+  )
+  router.put(
+    "/workflows/:id",
+    route((request, response) => {
+      const existing = getWorkflow(database, request.params.id)
+      if (!existing) {
+        response.status(404).json({ error: "workflow_not_found" })
+        return
+      }
+      const workflow = upsertWorkflow(database, {
+        ...workflowInput(request.body || {}, existing),
+        id: existing.id,
+      })
+      response.json({
+        workflow,
+        ...workflowsPayload(database, workflows, jobs),
+      })
+    }),
+  )
+  router.delete(
+    "/workflows/:id",
+    route((request, response) => {
+      if (!deleteWorkflow(database, request.params.id)) {
+        response.status(404).json({ error: "workflow_not_found" })
+        return
+      }
+      response.json(workflowsPayload(database, workflows, jobs))
+    }),
+  )
+  router.post(
+    "/workflows/:id/run",
+    route((request, response) => {
+      if (!workflows) {
+        response.status(503).json({ error: "sync_jobs_unavailable" })
+        return
+      }
+      const result = workflows.run(request.params.id, "admin")
+      if (result.reason === "workflow_not_found") {
+        response.status(404).json({ error: "workflow_not_found" })
+        return
+      }
+      response.status(result.accepted ? 202 : 409).json({
+        ...result,
+        ...workflowsPayload(database, workflows, jobs),
+      })
+    }),
+  )
 
   router.get("/sync/runs", (request, response) => {
     response.json({

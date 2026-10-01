@@ -34,9 +34,9 @@ Read it first, then use the focused documents in `docs/` for more detail.
 | ------------------------------ | --------------------------------------------------------------- |
 | `src/main.jsx`                 | Entry point that routes `/` and `/admin`                        |
 | `src/dashboard/`               | Public board: data hook, formatting, sections, and styles       |
-| `src/admin.jsx`                | Hidden `/admin` console, provider settings, and schedule editor |
+| `src/admin/`                   | Hidden `/admin` console: shell, data hook, views, and styles    |
+| `src/admin/views/`             | Workflow, schedules, detection, LLM provider, and content views |
 | `src/index.css`                | Global design tokens shared by the board and admin              |
-| `src/admin.css`                | Admin-specific responsive layout                                |
 | `src/components/ui/`           | Reusable shadcn/ui-style primitives                             |
 | `server/database.js`           | SQLite schema, seeding, upserts, and queries                    |
 | `server/media-cache.js`        | Runtime media paths, identities, and atomic-write helpers       |
@@ -45,13 +45,16 @@ Read it first, then use the focused documents in `docs/` for more detail.
 | `server/admin-api.js`          | Authenticated provider/schedule/video configuration and CRUD    |
 | `server/mcp-api.js`            | Sanitized MCP reads and bearer-scoped automation tools          |
 | `server/public-view.js`        | Public event and sync-run projections shared by HTTP and MCP    |
-| `server/sync-jobs.js`          | Single-flight asynchronous sync and scan jobs                   |
+| `server/sync-jobs.js`          | Single-flight asynchronous sync, scan, and workflow jobs        |
+| `server/workflow-catalog.js`   | Modular sync step catalog shared by sync, API, and scheduler    |
+| `server/workflow-scheduler.js` | In-process timer that starts due saved workflows                |
+| `server/llm-catalog.js`        | Provider model-list discovery and model tag suggestions         |
 | `server/secret-store.js`       | Environment-keyed encryption for provider API keys              |
 | `server/admin-auth.js`         | Development bypass and production session authentication        |
 | `server/app.js`                | Testable Express application, APIs, and guarded media route     |
 | `server/index.js`              | Runtime database and HTTP listener assembly                     |
 | `server/seed-data.js`          | Initial public snapshot and resource directory                  |
-| `scripts/sync.mjs`             | Server-side X and YouTube synchronization adapters              |
+| `scripts/sync.mjs`             | Server-side source adapters and the step runners for workflows  |
 | `scripts/seed.mjs`             | Idempotent initial snapshot seeding                             |
 | `public/assets/`               | Tracked fixed branding fallbacks                                |
 | `data/`                        | Ignored runtime database, source media, and profile media       |
@@ -76,7 +79,17 @@ Read it first, then use the focused documents in `docs/` for more detail.
   `llm_providers`; plaintext keys and ciphertext must never enter API output,
   logs, or extraction payloads. Providers declare `text` and/or `image`
   capabilities, and the `schedule_board`, `schedule_message`, and legacy
-  `schedule_vision` routes keep independent priority orders.
+  `schedule_vision` routes keep independent priority orders. Each provider
+  owns a model catalog (`llm_models`) whose `text`/`image` tags are routing
+  capabilities and whose `reasoning`/`tools`/`embedding` tags are labels;
+  routes (`llm_route_targets`) order provider + model pairs, where an empty
+  model ID follows the provider's default model. Model lists are fetched
+  server-side from `<baseUrl>/models` only on an operator action.
+- Workflows (`workflows`) are saved selections of the modular steps in
+  `server/workflow-catalog.js` (`x`, `youtube`, `media`, `schedule`) with an
+  optional timer of 15 minutes to 7 days. Seeded workflows start unscheduled.
+  Timers fire only inside the server process (`WORKFLOW_SCHEDULER_ENABLED`),
+  never from a page view, and share the single-flight job queue.
 - X posts carry `accountHandle` so the public feed can identify the source
   account without exposing the internal classification used by extraction.
   Image-only posts are retained so the schedule extractor can use their
@@ -100,7 +113,8 @@ make ci                  # Run the full local CI check
 Synchronization accepts the source, bootstrap, request-budget, media-limit,
 schedule-stage, and skip variables documented in `.env.example`.
 `SCHEDULE_MESSAGE_ENABLED` controls the single-message detector independently
-of the keyword/board stages. Provider keys entered in `/admin` are encrypted
+of the keyword/board stages. `WORKFLOW_SCHEDULER_ENABLED=0` disables timed
+workflows without affecting manual runs. Provider keys entered in `/admin` are encrypted
 in SQLite with the environment-only `LLM_SECRETS_KEY`. A legacy
 `OPENAI_API_KEY` is accepted only by the explicit `npm run migrate:llm`
 command. `MCP_CONTROL_TOKEN` is a separate
