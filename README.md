@@ -38,9 +38,12 @@ login. Before `npm start`, set `APP_MODE=production` and an
 Provider API keys are managed in `/admin` and encrypted in SQLite. Set the
 environment-only `LLM_SECRETS_KEY` before saving or using a provider. A legacy
 `OPENAI_API_KEY` can be imported once with `npm run migrate:llm`, then removed.
-The page uses a classic sidebar console with separate tabs for paginated
-schedules, keyword/board scanning, single-message scanning, multiple
-OpenAI-compatible providers, and profile media.
+The console opens on a one-click workflow page: choose which modules to update
+(X, YouTube, media cache, AI schedule scan), run them now, or let the server run
+a saved workflow on a timer. Other sections cover paginated schedules,
+detection rules with per-route model order, a central LLM provider page (enter
+an API host and key, fetch the model list, and tag models), and content/profile
+media.
 
 `/mcp` is a stateless integration endpoint. Public read tools work without a
 key; only revision requests, synchronization, and automatic scans require
@@ -55,7 +58,8 @@ schema and fills missing tables with the initial snapshot in
 `server/seed-data.js`. The main tables are `profiles`, `posts`, `events`,
 `videos`, `focus`, `timeline`, `resources`, `assets`, `media_assets`,
 `media_links`, `sync_runs`, `sync_state`, `event_sources`, `app_settings`,
-`schedule_extractions`, `llm_providers`, and `llm_route_providers`.
+`schedule_extractions`, `llm_providers`, `llm_models`, `llm_route_targets`
+(with the migrated legacy `llm_route_providers`), and `workflows`.
 
 Dashboard endpoint:
 

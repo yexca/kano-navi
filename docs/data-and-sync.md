@@ -5,25 +5,28 @@
 The database file is `data/database/kano.sqlite`. On startup the server creates the
 directory, schema, and missing seed records. The current tables are:
 
-| Table                  | Purpose                                                                                                 |
-| ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| `profiles`             | Name, bio, avatar, banner, and official entry points                                                    |
-| `posts`                | X posts, account source, publication time, engagement counts, and media                                 |
-| `events`               | Unified schedules, provenance, confidence, manual locks, and tombstones                                 |
-| `event_sources`        | Source post/reservation identities attached to each event                                               |
-| `videos`               | Published YouTube videos and scheduled streams                                                          |
-| `focus`                | The page's latest focus item and stable YouTube video ID                                                |
-| `timeline`             | Person and activity timeline                                                                            |
-| `resources`            | X, YouTube, Wikipedia, and other resource links                                                         |
-| `assets`               | Schedule images and their sources                                                                       |
-| `media_assets`         | Remote media identities, cache metadata, and fetch status                                               |
-| `media_links`          | Links from cached media to posts, videos, profiles, and focus items                                     |
-| `sync_runs`            | Status, counts, error summaries, trigger, and asynchronous job identity                                 |
-| `sync_state`           | Durable per-account X and YouTube cursors                                                               |
-| `app_settings`         | Non-secret model, schedule-extractor, X-account, and Featured settings                                  |
-| `schedule_extractions` | Versioned LLM inputs, outcomes, and structured result metadata                                          |
-| `llm_providers`        | OpenAI-compatible endpoints, Text/Image capabilities, health, and encrypted keys                        |
-| `llm_route_providers`  | Ordered provider failover routes for `schedule_board`, `schedule_message`, and legacy `schedule_vision` |
+| Table                  | Purpose                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------- |
+| `profiles`             | Name, bio, avatar, banner, and official entry points                                                      |
+| `posts`                | X posts, account source, publication time, engagement counts, and media                                   |
+| `events`               | Unified schedules, provenance, confidence, manual locks, and tombstones                                   |
+| `event_sources`        | Source post/reservation identities attached to each event                                                 |
+| `videos`               | Published YouTube videos and scheduled streams                                                            |
+| `focus`                | The page's latest focus item and stable YouTube video ID                                                  |
+| `timeline`             | Person and activity timeline                                                                              |
+| `resources`            | X, YouTube, Wikipedia, and other resource links                                                           |
+| `assets`               | Schedule images and their sources                                                                         |
+| `media_assets`         | Remote media identities, cache metadata, and fetch status                                                 |
+| `media_links`          | Links from cached media to posts, videos, profiles, and focus items                                       |
+| `sync_runs`            | Status, counts, error summaries, trigger, and asynchronous job identity                                   |
+| `sync_state`           | Durable per-account X and YouTube cursors                                                                 |
+| `app_settings`         | Non-secret model, schedule-extractor, X-account, and Featured settings                                    |
+| `schedule_extractions` | Versioned LLM inputs, outcomes, and structured result metadata                                            |
+| `llm_providers`        | OpenAI-compatible endpoints, Text/Image capabilities, health, and encrypted keys                          |
+| `llm_models`           | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)     |
+| `llm_route_targets`    | Ordered provider + model failover targets for `schedule_board`, `schedule_message`, and `schedule_vision` |
+| `llm_route_providers`  | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                   |
+| `workflows`            | Saved step selections, timer settings, and last/next run metadata                                         |
 
 The API maps snake_case columns to camelCase and removes `raw_json`. The
 frontend must not depend on database fields that are not declared in the API
@@ -109,9 +112,14 @@ board path is not sent a second time through the message path in the same scan.
 The legacy `schedule_vision` route remains available for older API clients and
 is used as the compatibility fallback when a new route has no explicit order.
 
-Provider selection follows the original post modality. Text-only input requires
-`text`; image-only input requires `image`; mixed input requires a provider with
-both capabilities. Only ready cached images are sent to the model. A post that
+Each route is an ordered list of targets: a provider plus one of its catalog
+models. An empty model ID means "the provider's default model" (`llm_providers.model`)
+and uses the provider-level capabilities; this is how legacy provider-only
+routes were migrated and how the old `PUT /api/admin/providers/order` endpoint
+still writes. The default model's catalog tags and the provider capability
+columns are kept identical whichever side is edited. Target selection follows
+the original post modality. Text-only input requires `text`; image-only input
+requires `image`; mixed input requires a model with both tags. Only ready cached images are sent to the model. A post that
 declares an image but whose cache is not ready is recorded as `media_pending`
 and is not silently reduced to text-only input. Each provider uses the OpenAI
 Responses or Chat Completions shape, receives at most three total calls (one
@@ -119,6 +127,18 @@ initial request plus two retries), and then yields to the next enabled, keyed,
 capability-compatible provider in that route's priority order. The persisted
 `max_retries` field is retained for old clients and migrated to this fixed
 policy; it is not a cost-control override.
+
+### LLM Provider Catalog
+
+`/admin` manages providers centrally. A provider stores the API host, format
+(Responses or Chat Completions), timeout, and encrypted key. On an operator
+action the server requests `GET <baseUrl>/models` with the stored key, a
+timeout, `redirect: "error"`, and a 4 MB response limit; it accepts OpenAI-style
+`{ data: [{ id }] }`, `{ models: [...] }`, or bare arrays. Upstream bodies and
+errors are reduced to fixed messages. Tags for newly added models are suggested
+from the model ID and stay editable. Removing a model removes its route
+targets; removing the default model clears `llm_providers.model`. The private
+and loopback address guard for provider URLs applies to model discovery too.
 
 A local validator rejects invalid calendar dates, time formats, enumerations,
 or confidence values before any event write. `schedule` results update automatic
@@ -146,6 +166,25 @@ The `featured_video_id` setting is maintained through `/admin`. It points to an
 existing local `videos` row (or an empty value for no Featured item), and source
 synchronization never changes it. The dashboard includes the selected video
 even when it falls outside the most recent 30 rows.
+
+## Workflows and Scheduling
+
+Synchronization is split into modular steps declared in
+`server/workflow-catalog.js`, executed in this order: `x`, `youtube`, `media`,
+`schedule`. `npm run sync` still runs every step not disabled by `SKIP_*`.
+A saved workflow chooses a subset; its run records `sync_runs.source =
+workflow` and exposes per-step progress (`pending`, `running`, `completed`,
+`partial`, `failed`, `skipped`) through `/api/admin/sync/jobs`. When a selected
+step is disabled by `SKIP_*`, its result records `{ skipped: true, reason:
+"environment" }` instead of silently disappearing.
+
+A workflow timer is 15 minutes to 7 days. Enabling a timer (or changing its
+interval) plans the next run one interval later; it never fires immediately.
+The server process checks due workflows every 30 seconds and starts one
+through the same single-flight queue as manual and MCP jobs; a due workflow
+that finds the queue busy is retried on the next tick. Two workflows are seeded
+once (`full-refresh` and `sources-only`) without timers; deleting them does not
+recreate them. Set `WORKFLOW_SCHEDULER_ENABLED=0` to disable timers.
 
 ## Event Precedence
 
@@ -178,6 +217,7 @@ it. The dashboard hides tombstones and labels visible automatic/manual events.
 | `SCHEDULE_VISION_ENABLED`     | `1`                  | Enable schedule-board LLM extraction                         |
 | `SCHEDULE_MESSAGE_ENABLED`    | `1`                  | Enable single-message schedule detection                     |
 | `SCHEDULE_KEYWORDS`           | `schedule,...`       | Comma-separated schedule candidate keywords                  |
+| `WORKFLOW_SCHEDULER_ENABLED`  | `1`                  | Start timed saved workflows inside the server process        |
 | `MCP_ENABLED`                 | `1`                  | Expose the stateless `/mcp` endpoint                         |
 | `MCP_CONTROL_TOKEN`           | Empty                | Bearer token for MCP mutation tools                          |
 | `X_HANDLES`                   | `kano_2525,_Kanotic` | Comma-separated public X account names                       |

@@ -35,11 +35,12 @@ code, maintaining data, and reviewing security.
   media and optionally extracts structured schedules through OpenAI.
 - `server/media-cache.js` defines the ignored runtime media store, safe path
   helpers, source identities, and atomic-write primitive.
-- `/admin` is an unlinked maintainer route with a classic sidebar console for
-  paginated schedule maintenance, independent schedule-board/single-message
-  stages, capability-aware provider queues, multiple model providers, and
-  profile media; production access requires the
-  environment-provided admin password.
+- `/admin` is an unlinked maintainer console. It opens on one-click workflows
+  (selectable X/YouTube/media/schedule modules with optional timers and live
+  per-module progress), then offers paginated schedules, detection rules with
+  per-route model order, a central LLM provider page (API host + key, fetched
+  model list, capability tags), and content/profile media. Production access
+  requires the environment-provided admin password.
 - `/mcp` is a stateless integration endpoint. Public read tools need no key;
   synchronization, automatic scanning, and revision controls require a
   dedicated bearer token. Human confirmation and other admin mutations are
