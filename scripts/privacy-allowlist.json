@@ -29,16 +29,46 @@
       "host": "youtube.com",
       "reason": "Public YouTube channel, video, RSS, and stream links."
     },
-    { "host": "i.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
-    { "host": "i1.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
-    { "host": "i2.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
-    { "host": "i3.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
-    { "host": "i4.ytimg.com", "reason": "Public YouTube thumbnail CDN URLs." },
-    { "host": "wikipedia.org", "reason": "Public Wikipedia biography link." },
-    { "host": "nicovideo.jp", "reason": "Public early-song archive link." },
-    { "host": "bilibili.com", "reason": "Public Bilibili profile link." },
-    { "host": "twitcasting.tv", "reason": "Public livestream archive link." },
-    { "host": "milpr.com", "reason": "Public agency/news reference link." },
+    {
+      "host": "i.ytimg.com",
+      "reason": "Public YouTube thumbnail CDN URLs."
+    },
+    {
+      "host": "i1.ytimg.com",
+      "reason": "Public YouTube thumbnail CDN URLs."
+    },
+    {
+      "host": "i2.ytimg.com",
+      "reason": "Public YouTube thumbnail CDN URLs."
+    },
+    {
+      "host": "i3.ytimg.com",
+      "reason": "Public YouTube thumbnail CDN URLs."
+    },
+    {
+      "host": "i4.ytimg.com",
+      "reason": "Public YouTube thumbnail CDN URLs."
+    },
+    {
+      "host": "wikipedia.org",
+      "reason": "Public Wikipedia biography link."
+    },
+    {
+      "host": "nicovideo.jp",
+      "reason": "Public early-song archive link."
+    },
+    {
+      "host": "bilibili.com",
+      "reason": "Public Bilibili profile link."
+    },
+    {
+      "host": "twitcasting.tv",
+      "reason": "Public livestream archive link."
+    },
+    {
+      "host": "milpr.com",
+      "reason": "Public agency/news reference link."
+    },
     {
       "host": "amebaownd.com",
       "reason": "Public archived official-site link."
@@ -70,6 +100,30 @@
     {
       "host": "patreon.com",
       "reason": "Public dependency funding metadata in package-lock.json."
+    },
+    {
+      "host": "api.deepseek.com",
+      "reason": "Optional OpenAI-compatible provider preset in /admin; the server contacts it only after an operator saves a key."
+    },
+    {
+      "host": "openrouter.ai",
+      "reason": "Optional OpenAI-compatible provider preset in /admin; the server contacts it only after an operator saves a key."
+    },
+    {
+      "host": "generativelanguage.googleapis.com",
+      "reason": "Optional OpenAI-compatible provider preset in /admin; the server contacts it only after an operator saves a key."
+    },
+    {
+      "host": "api.siliconflow.cn",
+      "reason": "Optional OpenAI-compatible provider preset in /admin; the server contacts it only after an operator saves a key."
+    },
+    {
+      "host": "dashscope.aliyuncs.com",
+      "reason": "Optional OpenAI-compatible provider preset in /admin; the server contacts it only after an operator saves a key."
+    },
+    {
+      "host": "api.moonshot.cn",
+      "reason": "Optional OpenAI-compatible provider preset in /admin; the server contacts it only after an operator saves a key."
     }
   ]
 }

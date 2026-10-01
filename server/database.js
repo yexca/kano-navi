@@ -5,6 +5,11 @@ import Database from "better-sqlite3"
 import { fileURLToPath } from "node:url"
 import { seedData } from "./seed-data.js"
 import {
+  WORKFLOW_STEP_IDS,
+  clampWorkflowInterval,
+  normalizeWorkflowSteps,
+} from "./workflow-catalog.js"
+import {
   avatarMediaDirectory,
   legacyMediaCacheDirectory,
   MEDIA_STATUS,
@@ -320,6 +325,44 @@ const schema = `
 
   CREATE INDEX IF NOT EXISTS llm_route_providers_order_idx
     ON llm_route_providers (route, priority);
+
+  CREATE TABLE IF NOT EXISTS llm_models (
+    provider_id TEXT NOT NULL REFERENCES llm_providers (id) ON DELETE CASCADE,
+    model_id TEXT NOT NULL,
+    name TEXT,
+    tags_json TEXT NOT NULL DEFAULT '["text"]',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    origin TEXT NOT NULL DEFAULT 'manual',
+    owned_by TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (provider_id, model_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS llm_route_targets (
+    route TEXT NOT NULL,
+    provider_id TEXT NOT NULL REFERENCES llm_providers (id) ON DELETE CASCADE,
+    model_id TEXT NOT NULL DEFAULT '',
+    priority INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (route, provider_id, model_id),
+    UNIQUE (route, priority)
+  );
+
+  CREATE TABLE IF NOT EXISTS workflows (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    steps_json TEXT NOT NULL,
+    schedule_enabled INTEGER NOT NULL DEFAULT 0,
+    interval_minutes INTEGER NOT NULL DEFAULT 60,
+    last_run_at TEXT,
+    last_job_id TEXT,
+    last_status TEXT,
+    next_run_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `
 
 const JAPAN_TIME_ZONE = "Asia/Tokyo"
@@ -341,6 +384,16 @@ export const SCHEDULE_ROUTES = [
   SCHEDULE_VISION_ROUTE,
 ]
 export const LLM_CAPABILITIES = ["text", "image"]
+// Model tags shown in the provider center. `text` and `image` are routing
+// capabilities; the rest are descriptive labels for operators.
+export const LLM_MODEL_TAGS = [
+  "text",
+  "image",
+  "reasoning",
+  "tools",
+  "embedding",
+]
+export const LLM_MODEL_ID_PATTERN = /^[A-Za-z0-9@][A-Za-z0-9._:/@+-]{0,199}$/u
 export const LLM_PROTOCOLS = ["openai-responses", "openai-chat-completions"]
 const japanDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: JAPAN_TIME_ZONE,
@@ -699,16 +752,65 @@ function migrateSchema(database) {
     )
     .run(LLM_MAX_RETRIES, LLM_MAX_RETRIES)
 
+  // Routes now target a provider plus a catalog model. Copy the older
+  // provider-only order once; an empty model ID means "the provider's
+  // default model" so legacy clients keep their semantics.
+  if (getAppSetting(database, "llm_route_targets_migrated", null) == null) {
+    const migrateTargets = database.transaction(() => {
+      const legacyRows = database
+        .prepare(
+          `SELECT route, provider_id AS providerId, priority, created_at AS createdAt
+           FROM llm_route_providers ORDER BY route, priority`,
+        )
+        .all()
+      const insertTarget = database.prepare(
+        `INSERT OR IGNORE INTO llm_route_targets
+         (route, provider_id, model_id, priority, created_at, updated_at)
+         VALUES (?, ?, '', ?, ?, ?)`,
+      )
+      for (const row of legacyRows) {
+        insertTarget.run(
+          row.route,
+          row.providerId,
+          row.priority,
+          row.createdAt,
+          row.createdAt,
+        )
+      }
+      setAppSetting(database, "llm_route_targets_migrated", "1")
+    })
+    migrateTargets()
+  }
+  // Every provider default model also appears in the model catalog.
+  const insertDefaultModel = database.prepare(
+    `INSERT OR IGNORE INTO llm_models
+     (provider_id, model_id, name, tags_json, enabled, origin, owned_by, created_at, updated_at)
+     VALUES (?, ?, NULL, ?, 1, 'legacy', NULL, ?, ?)`,
+  )
+  for (const row of database
+    .prepare(
+      "SELECT id, model, capabilities_json AS capabilitiesJson, created_at AS createdAt FROM llm_providers WHERE model <> ''",
+    )
+    .all()) {
+    insertDefaultModel.run(
+      row.id,
+      row.model,
+      JSON.stringify(normalizeLlmCapabilities(row.capabilitiesJson)),
+      row.createdAt,
+      row.createdAt,
+    )
+  }
+
   // The original implementation had one vision route. New installations and
   // upgrades keep that order for both detectors until an operator separates
   // them explicitly in the admin API.
-  const legacyOrder = getLlmRouteProviders(database, SCHEDULE_VISION_ROUTE)
+  const legacyTargets = getLlmRouteTargets(database, SCHEDULE_VISION_ROUTE)
   for (const route of [SCHEDULE_MESSAGE_ROUTE, SCHEDULE_BOARD_ROUTE]) {
     const current = database
-      .prepare("SELECT 1 FROM llm_route_providers WHERE route = ? LIMIT 1")
+      .prepare("SELECT 1 FROM llm_route_targets WHERE route = ? LIMIT 1")
       .get(route)
-    if (!current && legacyOrder.length) {
-      setLlmRouteProviders(database, route, legacyOrder)
+    if (!current && legacyTargets.length) {
+      setLlmRouteTargets(database, route, legacyTargets)
     }
   }
 }
@@ -1908,6 +2010,27 @@ export function seedDatabase(
     setLlmRouteProviders(database, SCHEDULE_MESSAGE_ROUTE, ["openai-default"])
     setLlmRouteProviders(database, SCHEDULE_BOARD_ROUTE, ["openai-default"])
   }
+  if (getAppSetting(database, "workflows_seeded", null) == null) {
+    // Seeded workflows start unscheduled: timed polling of public platforms
+    // is an explicit operator decision.
+    if (!database.prepare("SELECT 1 FROM workflows LIMIT 1").get()) {
+      upsertWorkflow(database, {
+        id: "full-refresh",
+        name: "完整更新",
+        steps: WORKFLOW_STEP_IDS,
+        scheduleEnabled: false,
+        intervalMinutes: 60,
+      })
+      upsertWorkflow(database, {
+        id: "sources-only",
+        name: "仅抓取来源",
+        steps: ["x", "youtube"],
+        scheduleEnabled: false,
+        intervalMinutes: 30,
+      })
+    }
+    setAppSetting(database, "workflows_seeded", "1")
+  }
   if (getAppSetting(database, "featured_video_id", null) == null) {
     const seedFeatured =
       data?.focus?.video_id ??
@@ -2336,9 +2459,12 @@ export function upsertLlmProvider(database, provider = {}) {
     ? String(provider.protocol)
     : "openai-responses"
   const baseUrl = String(provider.baseUrl || provider.base_url || "").trim()
+  // The model is the provider's default model (connection test and legacy
+  // routes). Providers managed through the model catalog may leave it empty.
   const model = String(provider.model || "").trim()
-  if (!baseUrl || !model)
-    throw new Error("LLM provider requires baseUrl and model")
+  if (!baseUrl) throw new Error("LLM provider requires baseUrl")
+  if (model && !LLM_MODEL_ID_PATTERN.test(model))
+    throw new Error("LLM provider model is invalid")
   const timeoutMs = Math.min(
     120000,
     Math.max(
@@ -2395,7 +2521,39 @@ export function upsertLlmProvider(database, provider = {}) {
       timestamp,
       replaceApiKey ? 1 : 0,
     )
+  if (model) syncDefaultModelCapabilities(database, id, model, capabilities)
   return getLlmProvider(database, id)
+}
+
+// Keep the default model's routing tags and the provider capability columns
+// identical, whichever side an operator edits.
+function syncDefaultModelCapabilities(
+  database,
+  providerId,
+  model,
+  capabilities,
+) {
+  const timestamp = nowIso()
+  const existing = getLlmModel(database, providerId, model)
+  const descriptive = (existing?.tags || []).filter(
+    (tag) => !LLM_CAPABILITIES.includes(tag),
+  )
+  const tags = normalizeLlmModelTags([...capabilities, ...descriptive])
+  if (existing) {
+    database
+      .prepare(
+        "UPDATE llm_models SET tags_json = ?, updated_at = ? WHERE provider_id = ? AND model_id = ?",
+      )
+      .run(JSON.stringify(tags), timestamp, providerId, model)
+  } else {
+    database
+      .prepare(
+        `INSERT INTO llm_models
+         (provider_id, model_id, name, tags_json, enabled, origin, owned_by, created_at, updated_at)
+         VALUES (?, ?, NULL, ?, 1, 'legacy', NULL, ?, ?)`,
+      )
+      .run(providerId, model, JSON.stringify(tags), timestamp, timestamp)
+  }
 }
 
 export function updateLlmProviderStatus(
@@ -2426,15 +2584,286 @@ export function deleteLlmProvider(database, id) {
   return result.changes > 0
 }
 
-export function getLlmRouteProviders(database, route = SCHEDULE_VISION_ROUTE) {
+export function normalizeLlmModelTags(value, { fallback = [] } = {}) {
+  let values = value
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value)
+      values = Array.isArray(parsed) ? parsed : value.split(/[,\s]+/u)
+    } catch {
+      values = value.split(/[,\s]+/u)
+    }
+  }
+  if (!Array.isArray(values)) return [...fallback]
+  const selected = new Set(
+    values
+      .map((item) =>
+        String(item || "")
+          .trim()
+          .toLowerCase(),
+      )
+      .map((item) => (item === "vision" ? "image" : item)),
+  )
+  const normalized = LLM_MODEL_TAGS.filter((tag) => selected.has(tag))
+  return normalized.length ? normalized : [...fallback]
+}
+
+const llmModelColumns = `
+  provider_id AS providerId, model_id AS modelId, name, tags_json AS tagsJson,
+  enabled, origin, owned_by AS ownedBy, created_at AS createdAt, updated_at AS updatedAt
+`
+
+function mapLlmModel(row) {
+  if (!row) return null
+  const tags = normalizeLlmModelTags(row.tagsJson)
+  return {
+    providerId: row.providerId,
+    id: row.modelId,
+    name: row.name || null,
+    tags,
+    capabilities: tags.filter((tag) => LLM_CAPABILITIES.includes(tag)),
+    enabled: Boolean(row.enabled),
+    origin: row.origin,
+    ownedBy: row.ownedBy || null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+export function getLlmModel(database, providerId, modelId) {
+  return mapLlmModel(
+    database
+      .prepare(
+        `SELECT ${llmModelColumns} FROM llm_models WHERE provider_id = ? AND model_id = ?`,
+      )
+      .get(String(providerId), String(modelId)),
+  )
+}
+
+export function listLlmModels(database, { providerId = null } = {}) {
+  const rows = providerId
+    ? database
+        .prepare(
+          `SELECT ${llmModelColumns} FROM llm_models WHERE provider_id = ?
+           ORDER BY model_id COLLATE NOCASE ASC`,
+        )
+        .all(String(providerId))
+    : database
+        .prepare(
+          `SELECT ${llmModelColumns} FROM llm_models
+           ORDER BY provider_id ASC, model_id COLLATE NOCASE ASC`,
+        )
+        .all()
+  return rows.map(mapLlmModel)
+}
+
+/**
+ * Add catalog models to a provider. Existing rows keep their operator tags
+ * and enabled flag unless the caller passes them explicitly.
+ */
+export function upsertLlmModels(database, providerId, models = []) {
+  const provider = getLlmProvider(database, providerId)
+  if (!provider) throw new Error(`LLM provider does not exist: ${providerId}`)
+  const timestamp = nowIso()
+  const write = database.transaction(() => {
+    for (const model of models) {
+      const id = String(model?.id || "").trim()
+      if (!LLM_MODEL_ID_PATTERN.test(id))
+        throw new Error(`LLM model ID is invalid: ${id.slice(0, 80)}`)
+      const existing = getLlmModel(database, provider.id, id)
+      const name =
+        model.name === undefined
+          ? (existing?.name ?? null)
+          : String(model.name || "")
+              .trim()
+              .slice(0, 120) || null
+      const ownedBy =
+        model.ownedBy === undefined
+          ? (existing?.ownedBy ?? null)
+          : String(model.ownedBy || "")
+              .trim()
+              .slice(0, 120) || null
+      const tags =
+        model.tags === undefined
+          ? (existing?.tags ?? ["text"])
+          : normalizeLlmModelTags(model.tags)
+      const enabled =
+        model.enabled === undefined
+          ? (existing?.enabled ?? true)
+          : Boolean(model.enabled)
+      const origin = ["remote", "manual", "legacy"].includes(model.origin)
+        ? model.origin
+        : (existing?.origin ?? "manual")
+      database
+        .prepare(
+          `INSERT INTO llm_models
+           (provider_id, model_id, name, tags_json, enabled, origin, owned_by, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(provider_id, model_id) DO UPDATE SET
+             name=excluded.name, tags_json=excluded.tags_json,
+             enabled=excluded.enabled, origin=excluded.origin,
+             owned_by=excluded.owned_by, updated_at=excluded.updated_at`,
+        )
+        .run(
+          provider.id,
+          id,
+          name,
+          JSON.stringify(tags),
+          enabled ? 1 : 0,
+          origin,
+          ownedBy,
+          timestamp,
+          timestamp,
+        )
+      const capabilities = tags.filter((tag) => LLM_CAPABILITIES.includes(tag))
+      if (id === provider.model && capabilities.length) {
+        database
+          .prepare(
+            `UPDATE llm_providers SET capabilities_json = ?, vision_capable = ?, updated_at = ?
+             WHERE id = ?`,
+          )
+          .run(
+            JSON.stringify(capabilities),
+            capabilities.includes("image") ? 1 : 0,
+            timestamp,
+            provider.id,
+          )
+      }
+    }
+  })
+  write()
+  return listLlmModels(database, { providerId: provider.id })
+}
+
+export function deleteLlmModels(database, providerId, modelIds = []) {
+  const provider = getLlmProvider(database, providerId)
+  if (!provider) return 0
+  const ids = [
+    ...new Set(modelIds.map((id) => String(id || "").trim())),
+  ].filter(Boolean)
+  let removed = 0
+  const remove = database.transaction(() => {
+    for (const id of ids) {
+      removed += database
+        .prepare(
+          "DELETE FROM llm_models WHERE provider_id = ? AND model_id = ?",
+        )
+        .run(provider.id, id).changes
+      database
+        .prepare(
+          "DELETE FROM llm_route_targets WHERE provider_id = ? AND model_id = ?",
+        )
+        .run(provider.id, id)
+      if (id === provider.model) {
+        database
+          .prepare(
+            "UPDATE llm_providers SET model = '', updated_at = ? WHERE id = ?",
+          )
+          .run(nowIso(), provider.id)
+      }
+    }
+    for (const route of SCHEDULE_ROUTES) compactRoutePriorities(database, route)
+  })
+  remove()
+  return removed
+}
+
+function compactRoutePriorities(database, route) {
+  const targets = getLlmRouteTargets(database, route)
+  writeRouteTargets(database, route, targets)
+}
+
+function routeTargetKey(target) {
+  return `${target.providerId}\u0000${target.modelId}`
+}
+
+export function getLlmRouteTargets(database, route = SCHEDULE_VISION_ROUTE) {
   return database
     .prepare(
-      `SELECT p.id FROM llm_route_providers r
+      `SELECT r.provider_id AS providerId, r.model_id AS modelId
+       FROM llm_route_targets r
        JOIN llm_providers p ON p.id = r.provider_id
-       WHERE r.route = ? ORDER BY r.priority ASC, p.id ASC`,
+       WHERE r.route = ? ORDER BY r.priority ASC, r.provider_id ASC, r.model_id ASC`,
     )
     .all(String(route))
-    .map((row) => String(row.id))
+    .map((row) => ({
+      providerId: String(row.providerId),
+      modelId: String(row.modelId || ""),
+    }))
+}
+
+function writeRouteTargets(database, route, targets) {
+  const timestamp = nowIso()
+  database
+    .prepare("DELETE FROM llm_route_targets WHERE route = ?")
+    .run(String(route))
+  const insert = database.prepare(
+    `INSERT INTO llm_route_targets (route, provider_id, model_id, priority, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  )
+  targets.forEach((target, priority) =>
+    insert.run(
+      String(route),
+      target.providerId,
+      target.modelId,
+      priority,
+      timestamp,
+      timestamp,
+    ),
+  )
+}
+
+/**
+ * Replace a route's ordered model targets. A target with an empty model ID
+ * follows the provider's default model; any other model must exist in the
+ * provider's catalog.
+ */
+export function setLlmRouteTargets(
+  database,
+  route = SCHEDULE_VISION_ROUTE,
+  targets = [],
+) {
+  if (!SCHEDULE_ROUTES.includes(String(route)))
+    throw new Error(`LLM route is invalid: ${route}`)
+  const seen = new Set()
+  const normalized = []
+  for (const target of targets) {
+    const providerId = String(target?.providerId || "").trim()
+    const modelId = String(target?.modelId || "").trim()
+    if (!providerId) continue
+    if (!getLlmProvider(database, providerId))
+      throw new Error(`LLM provider does not exist: ${providerId}`)
+    if (modelId && !getLlmModel(database, providerId, modelId))
+      throw new Error(`LLM model does not exist: ${providerId}/${modelId}`)
+    const key = routeTargetKey({ providerId, modelId })
+    if (seen.has(key)) continue
+    seen.add(key)
+    normalized.push({ providerId, modelId })
+  }
+  const update = database.transaction(() =>
+    writeRouteTargets(database, route, normalized),
+  )
+  update()
+  return getLlmRouteTargets(database, route)
+}
+
+/** Append a provider-default target unless the provider is already routed. */
+export function appendLlmRouteProvider(database, route, providerId) {
+  const current = getLlmRouteTargets(database, route)
+  if (current.some((target) => target.providerId === providerId)) return current
+  return setLlmRouteTargets(database, route, [
+    ...current,
+    { providerId, modelId: "" },
+  ])
+}
+
+/** Distinct provider IDs in route order, kept for the legacy admin API. */
+export function getLlmRouteProviders(database, route = SCHEDULE_VISION_ROUTE) {
+  return [
+    ...new Set(
+      getLlmRouteTargets(database, route).map((target) => target.providerId),
+    ),
+  ]
 }
 
 export function getScheduleProviderOrders(database) {
@@ -2448,6 +2877,21 @@ export function getScheduleProviderOrders(database) {
   return orders
 }
 
+/** Effective model targets per route, with the legacy route as fallback. */
+export function getScheduleRouteTargets(database) {
+  const legacy = getLlmRouteTargets(database, SCHEDULE_VISION_ROUTE)
+  const targets = {}
+  for (const route of [SCHEDULE_MESSAGE_ROUTE, SCHEDULE_BOARD_ROUTE]) {
+    const configured = getLlmRouteTargets(database, route)
+    targets[route] = configured.length
+      ? configured
+      : legacy.map((t) => ({ ...t }))
+  }
+  targets[SCHEDULE_VISION_ROUTE] = legacy
+  return targets
+}
+
+/** Legacy provider-only writer: every provider follows its default model. */
 export function setLlmRouteProviders(
   database,
   route = SCHEDULE_VISION_ROUTE,
@@ -2456,24 +2900,11 @@ export function setLlmRouteProviders(
   const ids = [
     ...new Set(providerIds.map((id) => String(id).trim()).filter(Boolean)),
   ]
-  for (const id of ids) {
-    if (!getLlmProvider(database, id))
-      throw new Error(`LLM provider does not exist: ${id}`)
-  }
-  const timestamp = nowIso()
-  const update = database.transaction(() => {
-    database
-      .prepare("DELETE FROM llm_route_providers WHERE route = ?")
-      .run(String(route))
-    const insert = database.prepare(
-      `INSERT INTO llm_route_providers (route, provider_id, priority, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
-    ids.forEach((id, priority) =>
-      insert.run(String(route), id, priority, timestamp, timestamp),
-    )
-  })
-  update()
+  setLlmRouteTargets(
+    database,
+    route,
+    ids.map((providerId) => ({ providerId, modelId: "" })),
+  )
   return getLlmRouteProviders(database, route)
 }
 
@@ -2995,6 +3426,166 @@ export function listSyncRuns(
       const { countsJson, ...summary } = row
       return { ...summary, counts: parseJson(countsJson) || {} }
     })
+}
+
+const workflowColumns = `
+  id, name, steps_json AS stepsJson, schedule_enabled AS scheduleEnabled,
+  interval_minutes AS intervalMinutes, last_run_at AS lastRunAt,
+  last_job_id AS lastJobId, last_status AS lastStatus,
+  next_run_at AS nextRunAt, created_at AS createdAt, updated_at AS updatedAt
+`
+
+function mapWorkflow(row) {
+  if (!row) return null
+  const { stepsJson, ...workflow } = row
+  return {
+    ...workflow,
+    steps: normalizeWorkflowSteps(stepsJson),
+    scheduleEnabled: Boolean(row.scheduleEnabled),
+    intervalMinutes: clampWorkflowInterval(row.intervalMinutes),
+  }
+}
+
+function nextWorkflowRun(fromIso, intervalMinutes) {
+  return new Date(
+    Date.parse(fromIso) + clampWorkflowInterval(intervalMinutes) * 60_000,
+  ).toISOString()
+}
+
+export function listWorkflows(database) {
+  return database
+    .prepare(
+      `SELECT ${workflowColumns} FROM workflows ORDER BY created_at ASC, id ASC`,
+    )
+    .all()
+    .map(mapWorkflow)
+}
+
+export function getWorkflow(database, id) {
+  return mapWorkflow(
+    database
+      .prepare(`SELECT ${workflowColumns} FROM workflows WHERE id = ?`)
+      .get(String(id || "")),
+  )
+}
+
+/**
+ * Create or update a workflow definition. Enabling a schedule (or changing
+ * its interval) plans the next run one interval from now instead of firing
+ * immediately.
+ */
+export function upsertWorkflow(
+  database,
+  workflow = {},
+  { now = new Date() } = {},
+) {
+  const id = String(workflow.id || "").trim()
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/u.test(id))
+    throw new Error("workflow id is invalid")
+  const existing = getWorkflow(database, id)
+  const steps = normalizeWorkflowSteps(workflow.steps ?? existing?.steps ?? [])
+  if (!steps.length) throw new Error("workflow requires at least one step")
+  const name =
+    String(workflow.name ?? existing?.name ?? id)
+      .trim()
+      .slice(0, 80) || id
+  const scheduleEnabled =
+    workflow.scheduleEnabled == null
+      ? Boolean(existing?.scheduleEnabled)
+      : Boolean(workflow.scheduleEnabled)
+  const intervalMinutes = clampWorkflowInterval(
+    workflow.intervalMinutes ?? existing?.intervalMinutes ?? 60,
+  )
+  const timestamp = now.toISOString()
+  let nextRunAt = null
+  if (scheduleEnabled) {
+    const keepPlan =
+      existing?.scheduleEnabled &&
+      existing.nextRunAt &&
+      existing.intervalMinutes === intervalMinutes
+    nextRunAt = keepPlan
+      ? existing.nextRunAt
+      : nextWorkflowRun(timestamp, intervalMinutes)
+  }
+  database
+    .prepare(
+      `INSERT INTO workflows
+       (id, name, steps_json, schedule_enabled, interval_minutes, next_run_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name=excluded.name, steps_json=excluded.steps_json,
+         schedule_enabled=excluded.schedule_enabled,
+         interval_minutes=excluded.interval_minutes,
+         next_run_at=excluded.next_run_at, updated_at=excluded.updated_at`,
+    )
+    .run(
+      id,
+      name,
+      JSON.stringify(steps),
+      scheduleEnabled ? 1 : 0,
+      intervalMinutes,
+      nextRunAt,
+      timestamp,
+      timestamp,
+    )
+  return getWorkflow(database, id)
+}
+
+export function deleteWorkflow(database, id) {
+  return (
+    database.prepare("DELETE FROM workflows WHERE id = ?").run(String(id || ""))
+      .changes > 0
+  )
+}
+
+export function recordWorkflowStart(
+  database,
+  id,
+  { jobId, startedAt = new Date().toISOString() } = {},
+) {
+  const workflow = getWorkflow(database, id)
+  if (!workflow) return null
+  database
+    .prepare(
+      `UPDATE workflows SET last_run_at = ?, last_job_id = ?, last_status = 'running',
+       next_run_at = ?, updated_at = ? WHERE id = ?`,
+    )
+    .run(
+      startedAt,
+      nullable(jobId),
+      workflow.scheduleEnabled
+        ? nextWorkflowRun(startedAt, workflow.intervalMinutes)
+        : null,
+      startedAt,
+      workflow.id,
+    )
+  return getWorkflow(database, workflow.id)
+}
+
+export function recordWorkflowResult(database, id, { jobId, status } = {}) {
+  database
+    .prepare(
+      `UPDATE workflows SET last_status = ?, updated_at = ?
+       WHERE id = ? AND (last_job_id = ? OR last_job_id IS NULL)`,
+    )
+    .run(
+      String(status || "unknown").slice(0, 32),
+      nowIso(),
+      String(id || ""),
+      String(jobId || ""),
+    )
+  return getWorkflow(database, id)
+}
+
+export function listDueWorkflows(database, { now = new Date() } = {}) {
+  return database
+    .prepare(
+      `SELECT ${workflowColumns} FROM workflows
+       WHERE schedule_enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?
+       ORDER BY next_run_at ASC, id ASC`,
+    )
+    .all(now.toISOString())
+    .map(mapWorkflow)
 }
 
 export function getDashboardRevision(database) {

@@ -21,6 +21,7 @@ import {
 import { createMcpRouter } from "./mcp-api.js"
 import { publicEvent, publicSyncRun } from "./public-view.js"
 import { createSyncJobManager } from "./sync-jobs.js"
+import { createWorkflowScheduler } from "./workflow-scheduler.js"
 
 function createProfileMediaHandler(database) {
   return (request, response) => {
@@ -181,6 +182,7 @@ export function createApp({
   mcpControlToken = process.env.MCP_CONTROL_TOKEN || "",
   syncJobs = null,
   adminFetchImpl = fetch,
+  startWorkflowScheduler = false,
 }) {
   if (!database) throw new Error("createApp requires a database")
 
@@ -249,6 +251,12 @@ export function createApp({
       database,
     })
 
+  const workflowScheduler = createWorkflowScheduler({
+    database,
+    jobs: jobManager,
+  })
+  if (startWorkflowScheduler) workflowScheduler.start()
+
   const mcpOptions = {
     database,
     jobs: jobManager,
@@ -267,6 +275,7 @@ export function createApp({
       mode: adminMode,
       adminPassword,
       jobs: jobManager,
+      workflows: workflowScheduler,
       fetchImpl: adminFetchImpl,
     }),
   )
