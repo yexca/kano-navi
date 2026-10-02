@@ -26,6 +26,7 @@ import {
 } from "../server/database.js"
 import { downloadPendingMedia } from "../server/media-downloader.js"
 import { extractPendingSchedules } from "../server/schedule-extractor.js"
+import { isLikelyScheduleBoardPost } from "../server/schedule-asset.js"
 import {
   WORKFLOW_STEPS,
   WORKFLOW_STEP_IDS,
@@ -535,11 +536,7 @@ async function syncXAccount(
 
   if (posts.length) upsertPosts(database, posts)
   const schedulePost = posts
-    .filter(
-      (post) =>
-        matchesAnyKeyword(post.search_text || post.text, scheduleKeywords) &&
-        post.media_url,
-    )
+    .filter((post) => post.media_url && isLikelyScheduleBoardPost(post))
     .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))[0]
   const scheduleAsset = schedulePost
     ? {

@@ -26,6 +26,7 @@ import {
   getScheduleProviderOrders,
   getLlmRouteTargets,
   getScheduleRouteTargets,
+  listScheduleAssetReviews,
   getWorkflow,
   listLlmModels,
   listWorkflows,
@@ -55,7 +56,9 @@ import {
   upsertProfileMediaCandidate,
   setAppSetting,
   setFeaturedVideoId,
+  updateScheduleAssetManualReview,
   updateManualEvent,
+  resolveMediaReference,
 } from "./database.js"
 import { createAdminAuth } from "./admin-auth.js"
 import { defaultScheduleModel } from "./schedule-extractor.js"
@@ -848,6 +851,17 @@ function profileMediaPayload(database) {
   }
 }
 
+function scheduleAssetPayload(database, item) {
+  const media = resolveMediaReference(database, item.url)
+  return {
+    ...item,
+    previewUrl: media.publicUrl,
+    mediaId: media.id,
+    mediaStatus: media.status,
+    mediaSourceUrl: media.sourceUrl,
+  }
+}
+
 function profileMediaPreview(database, request, response) {
   const item = getProfileMedia(database, request.params.id)
   if (!item || item.status !== "ready" || !item.cachePath) {
@@ -1500,6 +1514,46 @@ export function createAdminRouter({
   router.get("/videos", (_request, response) => {
     response.json({ videos: listAdminVideos(database) })
   })
+
+  router.get("/schedule-assets", (request, response) => {
+    response.json({
+      assets: listScheduleAssetReviews(database, {
+        limit: request.query.limit,
+      }).map((item) => scheduleAssetPayload(database, item)),
+    })
+  })
+  router.post(
+    "/schedule-assets/:id/manual-review",
+    route((request, response) => {
+      const status = text(request.body?.status, {
+        name: "status",
+        required: true,
+        max: 24,
+      })
+      if (!["unreviewed", "schedule", "not_schedule"].includes(status)) {
+        throw new AdminInputError("status is invalid")
+      }
+      const reason =
+        status === "unreviewed"
+          ? null
+          : text(request.body?.reason, {
+              name: "reason",
+              required: true,
+              max: 500,
+            })
+      const item = updateScheduleAssetManualReview(
+        database,
+        request.params.id,
+        { status, reason },
+      )
+      if (!item) {
+        response.status(404).json({ error: "schedule_asset_not_found" })
+        return
+      }
+      bumpDashboardRevision(database)
+      response.json({ asset: scheduleAssetPayload(database, item) })
+    }),
+  )
 
   router.get("/events", (request, response) => {
     const hasPagination =

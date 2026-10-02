@@ -3,10 +3,13 @@ import fs from "node:fs"
 import test from "node:test"
 
 import {
+  getDashboard,
   getEvent,
+  getScheduleAssetReview,
   initializeDatabase,
   setLlmRouteProviders,
   setAppSetting,
+  upsertAssets,
   upsertLlmProvider,
   upsertMediaAsset,
   upsertPosts,
@@ -19,6 +22,7 @@ import {
   extractPendingSchedules,
   inputModeForPost,
   providerSupportsInput,
+  verifyPendingScheduleAssets,
 } from "./schedule-extractor.js"
 
 test("input modality maps to the required provider capabilities", () => {
@@ -274,6 +278,142 @@ test("uncertain classifications are cached without creating events", async () =>
     )
   } finally {
     database.close()
+  }
+})
+
+test("schedule images need an image verdict and a board-like source post", async () => {
+  const previousSecretsKey = process.env.LLM_SECRETS_KEY
+  process.env.LLM_SECRETS_KEY = ["test", "asset", "secret", "key"].join("-")
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const boardUrl = "https://pbs.twimg.com/media/asset-verify-board.png"
+  const streamUrl = "https://pbs.twimg.com/media/asset-verify-stream.png"
+  const cachedFiles = []
+  const requests = []
+  const fetchImpl = async (url, options) => {
+    requests.push({ url, body: JSON.parse(options.body) })
+    return new Response(
+      JSON.stringify({
+        output_text: JSON.stringify({
+          classification: "schedule",
+          confidence: 0.97,
+          evidence: "seven dated rows with stream titles",
+          reason: "visible weekly schedule table",
+        }),
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )
+  }
+  try {
+    upsertLlmProvider(database, {
+      id: "vision-provider",
+      name: "vision-provider",
+      baseUrl: "https://vision-provider.example.invalid/v1",
+      model: "vision-model",
+      capabilities: ["image"],
+      replaceApiKey: true,
+      apiKeyCiphertext: encryptSecret(
+        "vision-key",
+        process.env.LLM_SECRETS_KEY,
+      ),
+    })
+    setLlmRouteProviders(database, "schedule_board", ["vision-provider"])
+    upsertPosts(database, [
+      {
+        id: "asset-board-post",
+        source: "x",
+        text: "今週のスケジュール",
+        published_at: "2026-08-24T01:00:00.000Z",
+        url: "https://x.com/example/status/asset-board-post",
+        media_url: boardUrl,
+      },
+      {
+        // Written by an older sync: the derived label alone must not count.
+        id: "asset-stream-post",
+        source: "x",
+        type: "notice",
+        label: "SCHEDULE / 日程",
+        text: "今日は22時から配信予定です",
+        published_at: "2026-08-25T01:00:00.000Z",
+        url: "https://x.com/example/status/asset-stream-post",
+        media_url: streamUrl,
+      },
+    ])
+    for (const [index, sourceUrl] of [boardUrl, streamUrl].entries()) {
+      const written = await writeMediaFileAtomic({
+        content: Buffer.from([
+          0x89,
+          0x50,
+          0x4e,
+          0x47,
+          0x0d,
+          0x0a,
+          0x1a,
+          0x0a,
+          0x10 + index,
+        ]),
+        extension: "png",
+      })
+      cachedFiles.push(resolveMediaCachePath(written.relativePath))
+      upsertMediaAsset(database, {
+        source: "x",
+        sourceUrl,
+        status: "ready",
+        cachePath: written.relativePath,
+        mimeType: "image/png",
+        sha256: written.sha256,
+        byteSize: written.byteSize,
+      })
+    }
+    upsertAssets(database, [
+      {
+        id: "schedule-2026-08-24",
+        kind: "schedule",
+        url: boardUrl,
+        source_url: "https://x.com/example/status/asset-board-post",
+        week_start: "2026-08-24",
+      },
+      {
+        id: "schedule-2026-08-17",
+        kind: "schedule",
+        url: streamUrl,
+        source_url: "https://x.com/example/status/asset-stream-post",
+        week_start: "2026-08-17",
+      },
+    ])
+
+    const summary = await verifyPendingScheduleAssets(database, { fetchImpl })
+    assert.equal(summary.schedule, 1)
+    assert.equal(summary.skipped, 1)
+    assert.equal(requests.length, 1)
+    assert.match(requests[0].url, /vision-provider/u)
+    const content = requests[0].body.input[0].content
+    assert.equal(content[1].type, "input_image")
+    assert.match(content[1].image_url, /^data:image\/png;base64,/u)
+
+    const board = getScheduleAssetReview(database, "schedule-2026-08-24")
+    assert.equal(board.llmStatus, "schedule")
+    assert.equal(board.llmModel, "vision-model")
+    assert.equal(board.approved, true)
+    const stream = getScheduleAssetReview(database, "schedule-2026-08-17")
+    assert.equal(stream.sourceMatchesBoard, false)
+    assert.equal(stream.llmStatus, "skipped")
+    assert.equal(stream.llmReason, "source_not_board")
+    assert.equal(stream.approved, false)
+    assert.deepEqual(
+      getDashboard(database, {
+        now: new Date("2026-08-26T00:00:00Z"),
+      }).scheduleImages.map((asset) => asset.id),
+      ["schedule-2026-08-24"],
+    )
+
+    const rerun = await verifyPendingScheduleAssets(database, { fetchImpl })
+    assert.equal(rerun.attempted, 1)
+    assert.equal(requests.length, 1)
+  } finally {
+    database.close()
+    for (const file of cachedFiles) fs.rmSync(file, { force: true })
+    if (previousSecretsKey == null) delete process.env.LLM_SECRETS_KEY
+    else process.env["LLM_SECRETS_KEY"] = previousSecretsKey
   }
 })
 

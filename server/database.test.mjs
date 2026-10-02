@@ -23,6 +23,10 @@ import {
   updateManualEvent,
   upsertLlmProvider,
   upsertMediaAsset,
+  upsertAssets,
+  upsertScheduleAssetReview,
+  updateScheduleAssetManualReview,
+  getScheduleAssetReview,
   upsertEvents,
   upsertPosts,
   upsertVideos,
@@ -79,6 +83,134 @@ test("dashboard never exposes an unready remote URL", () => {
     assert.equal(post.mediaUrl, null)
     assert.equal(post.mediaStatus, "pending")
     assert.equal(post.mediaSourceUrl, "https://cdn.example.invalid/post.jpg")
+  } finally {
+    database.close()
+  }
+})
+
+test("dashboard hides stale schedule assets sourced from ordinary stream posts", () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  try {
+    upsertPosts(database, [
+      {
+        id: "post-stream-preview",
+        source: "x",
+        type: "daily",
+        label: "DAILY / 近况",
+        text: "今日は22時からゲームをする予定だよ！",
+        published_at: "2026-08-28T00:00:00Z",
+        url: "https://x.com/example/status/stream-preview",
+      },
+      {
+        id: "post-weekly-board",
+        source: "x",
+        type: "notice",
+        label: "SCHEDULE / 日程",
+        text: "今週のスケジュール",
+        published_at: "2026-08-27T00:00:00Z",
+        url: "https://x.com/example/status/weekly-board",
+      },
+    ])
+    upsertAssets(database, [
+      {
+        id: "stale-schedule",
+        kind: "schedule",
+        url: "https://cdn.example.invalid/stream-preview.jpg",
+        source_url: "https://x.com/example/status/stream-preview",
+        week_start: "2026-08-24",
+      },
+      {
+        id: "valid-schedule",
+        kind: "schedule",
+        url: "https://cdn.example.invalid/weekly-board.jpg",
+        source_url: "https://x.com/example/status/weekly-board",
+        week_start: "2026-08-24",
+      },
+    ])
+    upsertScheduleAssetReview(database, {
+      assetId: "valid-schedule",
+      llmStatus: "schedule",
+      llmConfidence: 0.99,
+      llmReason: "visible weekly board",
+    })
+    const dashboard = getDashboard(database, {
+      now: new Date("2026-08-28T01:00:00Z"),
+    })
+    assert.deepEqual(
+      dashboard.assets.map((asset) => asset.id),
+      ["valid-schedule"],
+    )
+    assert.deepEqual(
+      dashboard.scheduleImages.map((asset) => asset.id),
+      [],
+    )
+
+    // An image-only verdict cannot publish an asset whose source post is an
+    // ordinary stream announcement; an operator's label can.
+    upsertScheduleAssetReview(database, {
+      assetId: "stale-schedule",
+      llmStatus: "schedule",
+      llmConfidence: 0.9,
+    })
+    const stale = getScheduleAssetReview(database, "stale-schedule")
+    assert.equal(stale.sourceMatchesBoard, false)
+    assert.equal(stale.approved, false)
+    updateScheduleAssetManualReview(database, "stale-schedule", {
+      status: "schedule",
+      reason: "operator checked the image",
+    })
+    assert.deepEqual(
+      getDashboard(database, { now: new Date("2026-08-28T01:00:00Z") })
+        .assets.map((asset) => asset.id)
+        .sort(),
+      ["stale-schedule", "valid-schedule"],
+    )
+  } finally {
+    database.close()
+  }
+})
+
+test("a schedule asset ID reused for a new image loses its earlier review", () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const asset = {
+    id: "schedule-2026-08-24",
+    kind: "schedule",
+    url: "https://cdn.example.invalid/board-a.jpg",
+    source_url: "https://x.com/example/status/board-a",
+    week_start: "2026-08-24",
+  }
+  try {
+    upsertAssets(database, [asset])
+    upsertScheduleAssetReview(database, {
+      assetId: asset.id,
+      llmStatus: "schedule",
+      llmConfidence: 0.98,
+      llmModel: "vision-model",
+    })
+    updateScheduleAssetManualReview(database, asset.id, {
+      status: "schedule",
+      reason: "operator checked board-a",
+    })
+
+    upsertAssets(database, [{ ...asset, alt: "same image, new alt text" }])
+    const unchanged = getScheduleAssetReview(database, asset.id)
+    assert.equal(unchanged.llmStatus, "schedule")
+    assert.equal(unchanged.manualStatus, "schedule")
+    assert.equal(unchanged.approved, true)
+
+    upsertAssets(database, [
+      {
+        ...asset,
+        url: "https://cdn.example.invalid/stream-thumbnail.jpg",
+        source_url: "https://x.com/example/status/stream-thumbnail",
+      },
+    ])
+    const replaced = getScheduleAssetReview(database, asset.id)
+    assert.equal(replaced.llmStatus, "pending")
+    assert.equal(replaced.llmModel, null)
+    assert.equal(replaced.manualStatus, "unreviewed")
+    assert.equal(replaced.manualReason, null)
+    assert.equal(replaced.approved, false)
   } finally {
     database.close()
   }

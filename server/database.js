@@ -2,6 +2,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import Database from "better-sqlite3"
+import { isLikelyScheduleBoardText } from "./schedule-asset.js"
 import { fileURLToPath } from "node:url"
 import { seedData } from "./seed-data.js"
 import {
@@ -180,6 +181,23 @@ const schema = `
     updated_at TEXT,
     raw_json TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS schedule_asset_reviews (
+    asset_id TEXT PRIMARY KEY REFERENCES assets (id) ON DELETE CASCADE,
+    llm_status TEXT NOT NULL DEFAULT 'pending',
+    llm_confidence REAL,
+    llm_reason TEXT,
+    llm_evidence TEXT,
+    llm_model TEXT,
+    llm_checked_at TEXT,
+    manual_status TEXT NOT NULL DEFAULT 'unreviewed',
+    manual_reason TEXT,
+    manual_checked_at TEXT,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS schedule_asset_reviews_status_idx
+    ON schedule_asset_reviews (llm_status, manual_status, updated_at DESC);
 
   CREATE TABLE IF NOT EXISTS profile_media (
     id TEXT PRIMARY KEY,
@@ -654,6 +672,23 @@ function migrateLegacyEvents(database) {
 
 function migrateSchema(database) {
   migrateLegacyEvents(database)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS schedule_asset_reviews (
+      asset_id TEXT PRIMARY KEY REFERENCES assets (id) ON DELETE CASCADE,
+      llm_status TEXT NOT NULL DEFAULT 'pending',
+      llm_confidence REAL,
+      llm_reason TEXT,
+      llm_evidence TEXT,
+      llm_model TEXT,
+      llm_checked_at TEXT,
+      manual_status TEXT NOT NULL DEFAULT 'unreviewed',
+      manual_reason TEXT,
+      manual_checked_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS schedule_asset_reviews_status_idx
+      ON schedule_asset_reviews (llm_status, manual_status, updated_at DESC);
+  `)
   database.exec(`
     CREATE INDEX IF NOT EXISTS events_starts_at_idx
       ON events (starts_on, starts_at);
@@ -1267,6 +1302,208 @@ function insertAsset(database, asset, overwrite) {
     updated_at: nullable(asset.updated_at),
     raw_json: json(asset),
   })
+}
+
+const SCHEDULE_ASSET_LLM_STATUSES = new Set([
+  "pending",
+  "running",
+  "schedule",
+  "not_schedule",
+  "uncertain",
+  "failed",
+  "skipped",
+])
+const SCHEDULE_ASSET_MANUAL_STATUSES = new Set([
+  "unreviewed",
+  "schedule",
+  "not_schedule",
+])
+
+function normalizedScheduleAssetLlmStatus(value) {
+  const normalized = String(value || "pending")
+    .trim()
+    .toLowerCase()
+  return SCHEDULE_ASSET_LLM_STATUSES.has(normalized) ? normalized : "pending"
+}
+
+function normalizedScheduleAssetManualStatus(value) {
+  const normalized = String(value || "unreviewed")
+    .trim()
+    .toLowerCase()
+  return SCHEDULE_ASSET_MANUAL_STATUSES.has(normalized)
+    ? normalized
+    : "unreviewed"
+}
+
+/**
+ * A schedule image is public only when an operator marked it as a schedule
+ * board, or, without a manual label, when its source post still reads as a
+ * board notice and the image-only LLM check returned `schedule`. A missing
+ * source post leaves the decision to the image check alone.
+ */
+function scheduleAssetReviewRow(row) {
+  if (!row) return null
+  const { sourceText, ...review } = row
+  const manualStatus = normalizedScheduleAssetManualStatus(row.manualStatus)
+  const llmStatus = normalizedScheduleAssetLlmStatus(row.llmStatus)
+  const effectiveStatus =
+    manualStatus === "unreviewed" ? llmStatus : manualStatus
+  const sourceMatchesBoard =
+    sourceText == null || isLikelyScheduleBoardText(sourceText)
+  return {
+    ...review,
+    llmStatus,
+    llmConfidence: row.llmConfidence == null ? null : Number(row.llmConfidence),
+    manualStatus,
+    effectiveStatus,
+    sourceMatchesBoard,
+    approved:
+      manualStatus === "schedule" ||
+      (manualStatus === "unreviewed" &&
+        llmStatus === "schedule" &&
+        sourceMatchesBoard),
+  }
+}
+
+// The source post text is read from raw_json so a quoted post counts the same
+// way it did when sync promoted the image (see scheduleBoardSourceText).
+const scheduleAssetReviewColumns = `
+  a.id, a.kind, a.url, a.source_url AS sourceUrl,
+  a.alt, a.week_start AS weekStart, a.source_account AS sourceAccount,
+  a.updated_at AS assetUpdatedAt,
+  (SELECT COALESCE(json_extract(p.raw_json, '$.search_text'), p.text)
+     FROM posts p WHERE p.url = a.source_url
+     ORDER BY p.published_at DESC LIMIT 1) AS sourceText,
+  r.llm_status AS llmStatus, r.llm_confidence AS llmConfidence,
+  r.llm_reason AS llmReason, r.llm_evidence AS llmEvidence,
+  r.llm_model AS llmModel, r.llm_checked_at AS llmCheckedAt,
+  COALESCE(r.manual_status, 'unreviewed') AS manualStatus,
+  r.manual_reason AS manualReason, r.manual_checked_at AS manualCheckedAt,
+  r.updated_at AS reviewUpdatedAt
+`
+
+export function getScheduleAssetReview(database, assetId) {
+  const row = database
+    .prepare(
+      `SELECT ${scheduleAssetReviewColumns}
+       FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id = a.id
+       WHERE a.id = ? AND a.kind = 'schedule'`,
+    )
+    .get(String(assetId))
+  return scheduleAssetReviewRow(row)
+}
+
+export function listScheduleAssetReviews(database, { limit = 100 } = {}) {
+  const boundedLimit = Math.min(200, Math.max(1, Number(limit) || 100))
+  return database
+    .prepare(
+      `SELECT ${scheduleAssetReviewColumns}
+       FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id = a.id
+       WHERE a.kind = 'schedule'
+       ORDER BY COALESCE(a.week_start, a.updated_at) DESC, a.id ASC
+       LIMIT ?`,
+    )
+    .all(boundedLimit)
+    .map(scheduleAssetReviewRow)
+}
+
+export function upsertScheduleAssetReview(database, review = {}) {
+  const assetId = String(review.assetId || review.asset_id || "").trim()
+  if (!assetId || !getScheduleAssetReview(database, assetId)) return null
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `INSERT INTO schedule_asset_reviews (
+         asset_id, llm_status, llm_confidence, llm_reason, llm_evidence,
+         llm_model, llm_checked_at, manual_status, manual_reason,
+         manual_checked_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(asset_id) DO UPDATE SET
+         llm_status=excluded.llm_status,
+         llm_confidence=excluded.llm_confidence,
+         llm_reason=excluded.llm_reason,
+         llm_evidence=excluded.llm_evidence,
+         llm_model=excluded.llm_model,
+         llm_checked_at=excluded.llm_checked_at,
+         manual_status=excluded.manual_status,
+         manual_reason=excluded.manual_reason,
+         manual_checked_at=excluded.manual_checked_at,
+         updated_at=excluded.updated_at`,
+    )
+    .run(
+      assetId,
+      normalizedScheduleAssetLlmStatus(review.llmStatus),
+      review.llmConfidence == null ||
+        !Number.isFinite(Number(review.llmConfidence))
+        ? null
+        : Math.min(1, Math.max(0, Number(review.llmConfidence))),
+      nullable(review.llmReason),
+      nullable(review.llmEvidence),
+      nullable(review.llmModel),
+      nullable(review.llmCheckedAt),
+      normalizedScheduleAssetManualStatus(review.manualStatus),
+      nullable(review.manualReason),
+      nullable(review.manualCheckedAt),
+      timestamp,
+    )
+  return getScheduleAssetReview(database, assetId)
+}
+
+export function updateScheduleAssetManualReview(
+  database,
+  assetId,
+  { status = "unreviewed", reason = null } = {},
+) {
+  const existing = getScheduleAssetReview(database, assetId)
+  if (!existing) return null
+  const manualStatus = normalizedScheduleAssetManualStatus(status)
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `INSERT INTO schedule_asset_reviews (
+         asset_id, llm_status, llm_confidence, llm_reason, llm_evidence,
+         llm_model, llm_checked_at, manual_status, manual_reason,
+         manual_checked_at, updated_at
+       ) VALUES (?, 'pending', NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?)
+       ON CONFLICT(asset_id) DO UPDATE SET
+         manual_status=excluded.manual_status,
+         manual_reason=excluded.manual_reason,
+         manual_checked_at=excluded.manual_checked_at,
+         updated_at=excluded.updated_at`,
+    )
+    .run(
+      String(assetId),
+      manualStatus,
+      manualStatus === "unreviewed" ? null : nullable(reason),
+      manualStatus === "unreviewed" ? null : timestamp,
+      timestamp,
+    )
+  return getScheduleAssetReview(database, assetId)
+}
+
+function ensureScheduleAssetReview(database, assetId) {
+  database
+    .prepare(
+      `INSERT OR IGNORE INTO schedule_asset_reviews (
+         asset_id, llm_status, manual_status, updated_at
+       ) VALUES (?, 'pending', 'unreviewed', ?)`,
+    )
+    .run(String(assetId), nowIso())
+}
+
+function resetScheduleAssetReview(database, assetId) {
+  database
+    .prepare(
+      `INSERT INTO schedule_asset_reviews (
+         asset_id, llm_status, manual_status, updated_at
+       ) VALUES (?, 'pending', 'unreviewed', ?)
+       ON CONFLICT(asset_id) DO UPDATE SET
+         llm_status='pending', llm_confidence=NULL, llm_reason=NULL,
+         llm_evidence=NULL, llm_model=NULL, llm_checked_at=NULL,
+         manual_status='unreviewed', manual_reason=NULL,
+         manual_checked_at=NULL, updated_at=excluded.updated_at`,
+    )
+    .run(String(assetId), nowIso())
 }
 
 function mediaCandidatesFromProfile(profile) {
@@ -2092,9 +2329,22 @@ export function upsertVideos(database, videos = []) {
 }
 
 export function upsertAssets(database, assets = []) {
-  const run = database.transaction((rows) =>
-    rows.forEach((asset) => insertAsset(database, asset, true)),
-  )
+  const previousUrl = database.prepare("SELECT url FROM assets WHERE id = ?")
+  const run = database.transaction((rows) => {
+    for (const asset of rows) {
+      const isSchedule = asset?.kind === "schedule" && asset?.id
+      const before = isSchedule ? previousUrl.get(String(asset.id)) : null
+      insertAsset(database, asset, true)
+      if (!isSchedule) continue
+      // Sync reuses `schedule-<week>` and the `weekly-schedule` alias, so a
+      // review belongs to the image URL it judged, not just to the asset ID.
+      if (before && String(before.url || "") !== String(asset.url || "")) {
+        resetScheduleAssetReview(database, asset.id)
+      } else {
+        ensureScheduleAssetReview(database, asset.id)
+      }
+    }
+  })
   run(assets)
   registerMediaCandidates(database, assets.flatMap(mediaCandidatesFromAsset))
 }
@@ -3833,7 +4083,18 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
         mediaSourceUrl: media.sourceUrl,
       }
     })
-  const scheduleImages = assets
+  const scheduleReviewsById = new Map(
+    listScheduleAssetReviews(database, { limit: 200 }).map((review) => [
+      review.id,
+      review,
+    ]),
+  )
+  const validAssets = assets.filter(
+    (asset) =>
+      asset.kind !== "schedule" ||
+      Boolean(scheduleReviewsById.get(asset.id)?.approved),
+  )
+  const scheduleImages = validAssets
     .filter((asset) => asset.kind === "schedule" && asset.url)
     .sort((a, b) => {
       const weekDelta = String(b.weekStart || "").localeCompare(
@@ -3941,7 +4202,7 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
     focus,
     timeline,
     resources,
-    assets,
+    assets: validAssets,
     scheduleImages,
     profileMedia: profileMediaSlots(database),
     meta: {

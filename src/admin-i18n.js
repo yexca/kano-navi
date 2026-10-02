@@ -16,6 +16,7 @@ export const adminMessages = {
     "admin.nav.workflow": "Workflows",
     "admin.nav.schedules": "Schedules",
     "admin.nav.detection": "Detection rules",
+    "admin.nav.schedule-images": "Schedule images",
     "admin.nav.providers": "LLM providers",
     "admin.nav.content": "Content & media",
     "admin.sidebar.schedulerOn": ({ count }) => `Scheduler on · ${count} timed`,
@@ -317,6 +318,50 @@ export const adminMessages = {
       "Text posts need a Text model, image posts an Image model, and mixed posts both.",
     "admin.detection.manageModels": "Manage models",
 
+    "admin.scheduleImages.title": "Schedule images",
+    "admin.scheduleImages.description":
+      "Only images that pass LLM verification are shown publicly. Manual labels can override the LLM result.",
+    "admin.scheduleImages.runVerification": "Run image verification",
+    "admin.scheduleImages.total": ({ count }) => `${count} candidates`,
+    "admin.scheduleImages.approvalHint":
+      "LLM verification is required; manual review is optional and can override it.",
+    "admin.scheduleImages.previewAlt": "Schedule image candidate",
+    "admin.scheduleImages.effective": ({ status }) => `Effective: ${status}`,
+    "admin.scheduleImages.llmLabel": ({ status, confidence }) =>
+      `LLM: ${status} · confidence ${confidence}`,
+    "admin.scheduleImages.manualLabel": ({ status }) => `Manual: ${status}`,
+    "admin.scheduleImages.status.pending": "Pending",
+    "admin.scheduleImages.status.running": "Checking",
+    "admin.scheduleImages.status.schedule": "Schedule board",
+    "admin.scheduleImages.status.not_schedule": "Not a schedule board",
+    "admin.scheduleImages.status.uncertain": "Uncertain",
+    "admin.scheduleImages.status.failed": "Verification failed",
+    "admin.scheduleImages.status.skipped": "Skipped",
+    "admin.scheduleImages.status.unreviewed": "Unreviewed",
+    "admin.scheduleImages.manual.unreviewed": "Unreviewed",
+    "admin.scheduleImages.manual.schedule": "Marked schedule",
+    "admin.scheduleImages.manual.not_schedule": "Marked not schedule",
+    "admin.scheduleImages.openSource": "Open source post",
+    "admin.scheduleImages.manualReason": "Manual reason",
+    "admin.scheduleImages.manualReasonPlaceholder":
+      "Explain why this is or is not a schedule board",
+    "admin.scheduleImages.markSchedule": "Mark as schedule",
+    "admin.scheduleImages.markNotSchedule": "Mark as not schedule",
+    "admin.scheduleImages.clearManual": "Clear manual label",
+    "admin.scheduleImages.empty": "No schedule image candidates",
+    "admin.scheduleImages.public": "Public",
+    "admin.scheduleImages.hidden": "Hidden",
+    "admin.scheduleImages.sourceNotBoard":
+      "The source post does not read as a schedule board notice; only a manual label can publish this image.",
+    "admin.scheduleImages.reason.source_not_board":
+      "Skipped: the source post is not a schedule board notice",
+    "admin.scheduleImages.reason.media_pending":
+      "Skipped: the image is not cached yet",
+    "admin.scheduleImages.reason.missing_api_key":
+      "Skipped: no keyed image provider",
+    "admin.scheduleImages.reason.no_compatible_provider":
+      "Skipped: no provider with Image capability",
+
     "admin.route.board": "Schedule board",
     "admin.route.boardHint": "Image-heavy weekly schedules",
     "admin.route.message": "Single message",
@@ -475,6 +520,7 @@ export const adminMessages = {
     "admin.nav.workflow": "工作流",
     "admin.nav.schedules": "日程",
     "admin.nav.detection": "识别规则",
+    "admin.nav.schedule-images": "日程图片",
     "admin.nav.providers": "模型服务",
     "admin.nav.content": "内容与媒体",
     "admin.sidebar.schedulerOn": ({ count }) =>
@@ -751,6 +797,48 @@ export const adminMessages = {
     "admin.detection.modalityNote":
       "纯文本动态需要 Text 模型，纯图片需要 Image 模型，图文混合需要两者兼具。",
     "admin.detection.manageModels": "管理模型",
+
+    "admin.scheduleImages.title": "日程图片",
+    "admin.scheduleImages.description":
+      "只有通过 LLM 核验的图片才会展示在公开页面；人工标注可以覆盖 LLM 结果。",
+    "admin.scheduleImages.runVerification": "核验日程图片",
+    "admin.scheduleImages.total": ({ count }) => `共 ${count} 个候选`,
+    "admin.scheduleImages.approvalHint":
+      "必须先通过 LLM 核验；人工复核可选，也可以覆盖 LLM 判断。",
+    "admin.scheduleImages.previewAlt": "日程图片候选",
+    "admin.scheduleImages.effective": ({ status }) => `最终状态：${status}`,
+    "admin.scheduleImages.llmLabel": ({ status, confidence }) =>
+      `LLM：${status} · 置信度 ${confidence}`,
+    "admin.scheduleImages.manualLabel": ({ status }) => `人工：${status}`,
+    "admin.scheduleImages.status.pending": "待核验",
+    "admin.scheduleImages.status.running": "核验中",
+    "admin.scheduleImages.status.schedule": "日程表",
+    "admin.scheduleImages.status.not_schedule": "不是日程表",
+    "admin.scheduleImages.status.uncertain": "不确定",
+    "admin.scheduleImages.status.failed": "核验失败",
+    "admin.scheduleImages.status.skipped": "已跳过",
+    "admin.scheduleImages.status.unreviewed": "未人工复核",
+    "admin.scheduleImages.manual.unreviewed": "未人工复核",
+    "admin.scheduleImages.manual.schedule": "人工标记为日程表",
+    "admin.scheduleImages.manual.not_schedule": "人工标记为非日程表",
+    "admin.scheduleImages.openSource": "打开原贴文",
+    "admin.scheduleImages.manualReason": "人工理由",
+    "admin.scheduleImages.manualReasonPlaceholder": "说明为什么是或不是日程表",
+    "admin.scheduleImages.markSchedule": "标记为日程表",
+    "admin.scheduleImages.markNotSchedule": "标记为非日程表",
+    "admin.scheduleImages.clearManual": "清除人工标注",
+    "admin.scheduleImages.empty": "暂无日程图片候选",
+    "admin.scheduleImages.public": "已公开",
+    "admin.scheduleImages.hidden": "未公开",
+    "admin.scheduleImages.sourceNotBoard":
+      "原贴文不像日程表公告，只有人工标注才能公开这张图片。",
+    "admin.scheduleImages.reason.source_not_board":
+      "已跳过：原贴文不是日程表公告",
+    "admin.scheduleImages.reason.media_pending": "已跳过：图片尚未缓存",
+    "admin.scheduleImages.reason.missing_api_key":
+      "已跳过：没有配置密钥的图片模型服务",
+    "admin.scheduleImages.reason.no_compatible_provider":
+      "已跳过：没有具备 Image 能力的模型服务",
 
     "admin.route.board": "日程表",
     "admin.route.boardHint": "以图片为主的周日程",

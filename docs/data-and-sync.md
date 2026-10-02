@@ -5,28 +5,29 @@
 The database file is `data/database/kano.sqlite`. On startup the server creates the
 directory, schema, and missing seed records. The current tables are:
 
-| Table                  | Purpose                                                                                                   |
-| ---------------------- | --------------------------------------------------------------------------------------------------------- |
-| `profiles`             | Name, bio, avatar, banner, and official entry points                                                      |
-| `posts`                | X posts, account source, publication time, engagement counts, and media                                   |
-| `events`               | Unified schedules, provenance, confidence, manual locks, and tombstones                                   |
-| `event_sources`        | Source post/reservation identities attached to each event                                                 |
-| `videos`               | Published YouTube videos and scheduled streams                                                            |
-| `focus`                | The page's latest focus item and stable YouTube video ID                                                  |
-| `timeline`             | Person and activity timeline                                                                              |
-| `resources`            | X, YouTube, Wikipedia, and other resource links                                                           |
-| `assets`               | Schedule images and their sources                                                                         |
-| `media_assets`         | Remote media identities, cache metadata, and fetch status                                                 |
-| `media_links`          | Links from cached media to posts, videos, profiles, and focus items                                       |
-| `sync_runs`            | Status, counts, error summaries, trigger, and asynchronous job identity                                   |
-| `sync_state`           | Durable per-account X and YouTube cursors                                                                 |
-| `app_settings`         | Non-secret model, schedule-extractor, X-account, and Featured settings                                    |
-| `schedule_extractions` | Versioned LLM inputs, outcomes, and structured result metadata                                            |
-| `llm_providers`        | OpenAI-compatible endpoints, Text/Image capabilities, health, and encrypted keys                          |
-| `llm_models`           | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)     |
-| `llm_route_targets`    | Ordered provider + model failover targets for `schedule_board`, `schedule_message`, and `schedule_vision` |
-| `llm_route_providers`  | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                   |
-| `workflows`            | Saved step selections, timer settings, and last/next run metadata                                         |
+| Table                    | Purpose                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `profiles`               | Name, bio, avatar, banner, and official entry points                                                      |
+| `posts`                  | X posts, account source, publication time, engagement counts, and media                                   |
+| `events`                 | Unified schedules, provenance, confidence, manual locks, and tombstones                                   |
+| `event_sources`          | Source post/reservation identities attached to each event                                                 |
+| `videos`                 | Published YouTube videos and scheduled streams                                                            |
+| `focus`                  | The page's latest focus item and stable YouTube video ID                                                  |
+| `timeline`               | Person and activity timeline                                                                              |
+| `resources`              | X, YouTube, Wikipedia, and other resource links                                                           |
+| `assets`                 | Schedule images and their sources                                                                         |
+| `media_assets`           | Remote media identities, cache metadata, and fetch status                                                 |
+| `media_links`            | Links from cached media to posts, videos, profiles, and focus items                                       |
+| `sync_runs`              | Status, counts, error summaries, trigger, and asynchronous job identity                                   |
+| `sync_state`             | Durable per-account X and YouTube cursors                                                                 |
+| `app_settings`           | Non-secret model, schedule-extractor, X-account, and Featured settings                                    |
+| `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                            |
+| `schedule_asset_reviews` | Per-schedule-image LLM verdict, skip reason, and optional manual label with its reason                    |
+| `llm_providers`          | OpenAI-compatible endpoints, Text/Image capabilities, health, and encrypted keys                          |
+| `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)     |
+| `llm_route_targets`      | Ordered provider + model failover targets for `schedule_board`, `schedule_message`, and `schedule_vision` |
+| `llm_route_providers`    | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                   |
+| `workflows`              | Saved step selections, timer settings, and last/next run metadata                                         |
 
 The API maps snake_case columns to camelCase and removes `raw_json`. The
 frontend must not depend on database fields that are not declared in the API
@@ -167,6 +168,30 @@ The `featured_video_id` setting is maintained through `/admin`. It points to an
 existing local `videos` row (or an empty value for no Featured item), and source
 synchronization never changes it. The dashboard includes the selected video
 even when it falls outside the most recent 30 rows.
+
+### Schedule Images
+
+A schedule image (`assets.kind = schedule`) is public only after two gates:
+
+1. Sync promotes a post's image only when the author's own wording, including
+   quoted text, explicitly reads as a weekly or multi-day board notice
+   (`server/schedule-asset.js`). The stored post `label` is not part of that
+   input, because the looser post classifier labels any `配信予定` post as
+   `SCHEDULE / 日程`. The configurable extraction keywords do not promote images.
+2. The automatic scan sends each unreviewed candidate's ready cached image,
+   without the post text, to the `schedule_board` route and records
+   `schedule`, `not_schedule`, or `uncertain` in `schedule_asset_reviews`. A
+   candidate whose source post no longer passes gate 1 (written by an older
+   sync) is recorded as `skipped` / `source_not_board` without a model call. A
+   pending cache, or no keyed Image provider, is also `skipped` and retried.
+
+`/api/dashboard` returns a schedule asset only when an operator labelled it
+`schedule`, or when it has no manual label, still passes gate 1, and the model
+returned `schedule`. A manual `not_schedule` always hides it. Labels require a
+reason and are set in the `/admin` schedule-images view. Sync reuses the
+`schedule-<week>` IDs and the `weekly-schedule` alias, so a review belongs to
+the image URL it judged: when an asset ID receives a different URL, its model
+verdict and manual label reset to `pending` / `unreviewed`.
 
 ## Workflows and Scheduling
 

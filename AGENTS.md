@@ -35,13 +35,14 @@ Read it first, then use the focused documents in `docs/` for more detail.
 | `src/main.jsx`                 | Entry point that routes `/` and `/admin`                        |
 | `src/dashboard/`               | Public board: data hook, formatting, sections, and styles       |
 | `src/admin/`                   | Hidden `/admin` console: shell, data hook, views, and styles    |
-| `src/admin/views/`             | Workflow, schedules, detection, LLM provider, and content views |
+| `src/admin/views/`             | Workflow, schedule, detection, post, image, LLM, content views  |
 | `src/index.css`                | Global design tokens shared by the board and admin              |
 | `src/components/ui/`           | Reusable shadcn/ui-style primitives                             |
 | `server/database.js`           | SQLite schema, seeding, upserts, and queries                    |
 | `server/media-cache.js`        | Runtime media paths, identities, and atomic-write helpers       |
 | `server/media-downloader.js`   | Bounded X/YouTube image downloader                              |
-| `server/schedule-extractor.js` | Schedule detection and provider routing                         |
+| `server/schedule-extractor.js` | Schedule detection, schedule-image checks, and provider routing |
+| `server/schedule-asset.js`     | Source-text gate for promoting a post image to a schedule       |
 | `server/admin-api.js`          | Authenticated provider/schedule/video configuration and CRUD    |
 | `server/mcp-api.js`            | Sanitized MCP reads and bearer-scoped automation tools          |
 | `server/public-view.js`        | Public event and sync-run projections shared by HTTP and MCP    |
@@ -63,7 +64,7 @@ Read it first, then use the focused documents in `docs/` for more detail.
 ## Data Contract
 
 - `GET /api/health` returns service status, the database path relative to the project, and the latest synchronization summary.
-- `GET /api/dashboard?days=3` returns the profile, a `summary` block (`nextEvent`, `nextStream`, `latestVideo`, `latestPost`, and `counts`), aggregated posts in the requested window, all events, videos, the manually selected focus item, the timeline, resource links, image assets, media-cache status, and synchronization metadata (including configured X accounts and the Featured video ID). The server clamps `days` to 1 through 30. `latestPost` survives an empty window. Events and `meta.lastSync` are public projections from `server/public-view.js`: per-source counters, raw fetch errors, job IDs, and source item IDs stay in `/api/admin/*`.
+- `GET /api/dashboard?days=3` returns the profile, a `summary` block (`nextEvent`, `nextStream`, `latestVideo`, `latestPost`, and `counts`), aggregated posts in the requested window, all events, videos, the manually selected focus item, the timeline, resource links, image assets, media-cache status, and synchronization metadata (including configured X accounts and the Featured video ID). Schedule images appear only after the source-text gate and an image-model or manual approval described in [Data and synchronization](docs/data-and-sync.md#schedule-images). The server clamps `days` to 1 through 30. `latestPost` survives an empty window. Events and `meta.lastSync` are public projections from `server/public-view.js`: per-source counters, raw fetch errors, job IDs, and source item IDs stay in `/api/admin/*`.
 - `GET /media/<opaque-id>` serves a cached file only when its database row is `ready` and its resolved path remains below the ignored `data/x/`, `data/youtube/`, or legacy cache roots; invalid or unready IDs return `404`. Selected profile media is exposed through `/media/profile/avatar` and `/media/profile/banner`.
 - `/api/admin/*` is password-free only when `APP_MODE=development`. Production
   requires `ADMIN_PASSWORD` with at least 12 characters and uses an HttpOnly

@@ -4,6 +4,7 @@ import fs from "node:fs"
 import {
   getAppSetting,
   getMediaAsset,
+  getScheduleAssetReview,
   getScheduleExtractionConfig,
   getScheduleExtraction,
   getLlmModel,
@@ -19,9 +20,11 @@ import {
   SCHEDULE_MESSAGE_ROUTE,
   SCHEDULE_VISION_ROUTE,
   updateLlmProviderStatus,
+  listScheduleAssetReviews,
+  upsertScheduleAssetReview,
   upsertScheduleExtraction,
 } from "./database.js"
-import { resolveMediaCachePath } from "./media-cache.js"
+import { mediaIdForSourceUrl, resolveMediaCachePath } from "./media-cache.js"
 import { decryptSecret } from "./secret-store.js"
 
 export const scheduleExtractorVersion = "openai-schedule-v2"
@@ -32,6 +35,23 @@ const DETECTION_TYPES = new Set(["board", "message"])
 const CLASSIFICATIONS = new Set(["schedule", "not_schedule", "uncertain"])
 const scheduleInstructions =
   "First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Return an empty events array for not_schedule."
+const scheduleAssetVerificationInstructions =
+  "Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the image is unreadable or the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly."
+
+const scheduleAssetVerificationSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    classification: {
+      type: "string",
+      enum: ["schedule", "not_schedule", "uncertain"],
+    },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    evidence: { type: "string" },
+    reason: { type: "string" },
+  },
+  required: ["classification", "confidence", "evidence", "reason"],
+}
 
 const scheduleSchema = {
   type: "object",
@@ -580,6 +600,329 @@ async function callOpenAiScheduleExtraction(
   return JSON.parse(extractResponseText(payload))
 }
 
+function normalizeScheduleAssetVerification(result) {
+  const classification = String(result?.classification || "")
+    .trim()
+    .toLowerCase()
+  if (!CLASSIFICATIONS.has(classification)) {
+    throw new Error(
+      "schedule image verification returned an invalid classification",
+    )
+  }
+  const confidence = Number(result?.confidence)
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+    throw new Error(
+      "schedule image verification returned an invalid confidence",
+    )
+  }
+  return {
+    classification,
+    confidence,
+    evidence: String(result?.evidence || "")
+      .trim()
+      .slice(0, 1000),
+    reason: String(result?.reason || "")
+      .trim()
+      .slice(0, 500),
+  }
+}
+
+async function callOpenAiScheduleAssetVerification(
+  asset,
+  image,
+  {
+    apiKey,
+    model,
+    protocol = "openai-responses",
+    fetchImpl = fetch,
+    endpoint,
+    baseUrl,
+    timeoutMs = 30_000,
+  },
+) {
+  const provider = { protocol, baseUrl: baseUrl || defaultOpenAiBaseUrl }
+  const resolvedEndpoint = endpoint || providerEndpoint(provider)
+  const sourceText = `Candidate schedule image. Source URL: ${asset.sourceUrl || ""}`
+  if (protocol === "openai-chat-completions") {
+    const payload = await requestLlm(
+      resolvedEndpoint,
+      {
+        model,
+        messages: [
+          { role: "system", content: scheduleAssetVerificationInstructions },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: sourceText },
+              {
+                type: "image_url",
+                image_url: { url: imageDataUrl(image), detail: "high" },
+              },
+            ],
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "kano_schedule_asset_verification",
+            strict: true,
+            schema: scheduleAssetVerificationSchema,
+          },
+        },
+        max_output_tokens: 800,
+      },
+      { apiKey, fetchImpl, timeoutMs },
+    )
+    return JSON.parse(responseTextFromChat(payload))
+  }
+  const payload = await requestLlm(
+    resolvedEndpoint,
+    {
+      model,
+      store: false,
+      instructions: scheduleAssetVerificationInstructions,
+      input: [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: sourceText },
+            {
+              type: "input_image",
+              image_url: imageDataUrl(image),
+              detail: "high",
+            },
+          ],
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "kano_schedule_asset_verification",
+          strict: true,
+          schema: scheduleAssetVerificationSchema,
+        },
+      },
+      max_output_tokens: 800,
+    },
+    { apiKey, fetchImpl, timeoutMs },
+  )
+  return JSON.parse(extractResponseText(payload))
+}
+
+function scheduleAssetImage(database, asset) {
+  const mediaId = mediaIdForSourceUrl(asset?.url)
+  const media = mediaId ? getMediaAsset(database, mediaId) : null
+  const filePath = media?.cachePath
+    ? resolveMediaCachePath(media.cachePath)
+    : null
+  if (
+    media?.status !== "ready" ||
+    !media.sha256 ||
+    !media.mimeType?.startsWith("image/") ||
+    !filePath ||
+    !fs.existsSync(filePath)
+  ) {
+    return null
+  }
+  return { ...media, filePath }
+}
+
+export async function verifyScheduleAsset(
+  database,
+  assetId,
+  { fetchImpl = fetch, force = false } = {},
+) {
+  const review = getScheduleAssetReview(database, assetId)
+  if (!review) return { status: "missing", assetId: String(assetId) }
+  if (
+    !force &&
+    ["schedule", "not_schedule", "uncertain"].includes(review.llmStatus)
+  ) {
+    return {
+      status: "cached",
+      assetId: review.id,
+      classification: review.llmStatus,
+      confidence: review.llmConfidence,
+    }
+  }
+  if (!review.sourceMatchesBoard) {
+    // Older snapshots promoted any keyword post; such an image can only be
+    // published by a manual label, so it is not worth an image-model call.
+    upsertScheduleAssetReview(database, {
+      assetId: review.id,
+      llmStatus: "skipped",
+      llmReason: "source_not_board",
+      llmEvidence: null,
+      llmModel: null,
+      llmCheckedAt: null,
+      manualStatus: review.manualStatus,
+      manualReason: review.manualReason,
+      manualCheckedAt: review.manualCheckedAt,
+    })
+    return { status: "skipped", assetId: review.id, reason: "source_not_board" }
+  }
+  const image = scheduleAssetImage(database, review)
+  if (!image) {
+    upsertScheduleAssetReview(database, {
+      assetId: review.id,
+      llmStatus: "skipped",
+      llmReason: "media_pending",
+      llmEvidence: null,
+      llmModel: null,
+      llmCheckedAt: null,
+      manualStatus: review.manualStatus,
+      manualReason: review.manualReason,
+      manualCheckedAt: review.manualCheckedAt,
+    })
+    return { status: "skipped", assetId: review.id, reason: "media_pending" }
+  }
+  const configured = configuredProviders(database, {}, "image", "board")
+  if (!configured.providers.length) {
+    upsertScheduleAssetReview(database, {
+      assetId: review.id,
+      llmStatus: "skipped",
+      llmReason: configured.reason,
+      llmEvidence: null,
+      llmModel: null,
+      llmCheckedAt: null,
+      manualStatus: review.manualStatus,
+      manualReason: review.manualReason,
+      manualCheckedAt: review.manualCheckedAt,
+    })
+    return { status: "skipped", assetId: review.id, reason: configured.reason }
+  }
+  upsertScheduleAssetReview(database, {
+    assetId: review.id,
+    llmStatus: "running",
+    llmReason: null,
+    llmEvidence: null,
+    llmModel: null,
+    llmCheckedAt: null,
+    manualStatus: review.manualStatus,
+    manualReason: review.manualReason,
+    manualCheckedAt: review.manualCheckedAt,
+  })
+  let lastError = null
+  for (const provider of configured.providers) {
+    for (let attempt = 0; attempt <= LLM_MAX_RETRIES; attempt += 1) {
+      try {
+        const result = normalizeScheduleAssetVerification(
+          await callOpenAiScheduleAssetVerification(review, image, {
+            apiKey: provider.apiKey,
+            model: provider.model,
+            protocol: provider.protocol,
+            baseUrl: provider.baseUrl,
+            endpoint: provider.endpoint,
+            fetchImpl,
+            timeoutMs: provider.timeoutMs,
+          }),
+        )
+        upsertScheduleAssetReview(database, {
+          assetId: review.id,
+          llmStatus: result.classification,
+          llmConfidence: result.confidence,
+          llmReason: result.reason,
+          llmEvidence: result.evidence,
+          llmModel: provider.model,
+          llmCheckedAt: new Date().toISOString(),
+          manualStatus: review.manualStatus,
+          manualReason: review.manualReason,
+          manualCheckedAt: review.manualCheckedAt,
+        })
+        if (provider.persisted)
+          updateLlmProviderStatus(database, provider.id, { status: "success" })
+        return {
+          status: "success",
+          assetId: review.id,
+          classification: result.classification,
+          confidence: result.confidence,
+          providerId: provider.id,
+        }
+      } catch (error) {
+        lastError = error
+        if (attempt < LLM_MAX_RETRIES) await wait(retryDelay(attempt))
+      }
+    }
+  }
+  const message = lastError?.message || "all configured LLM providers failed"
+  upsertScheduleAssetReview(database, {
+    assetId: review.id,
+    llmStatus: "failed",
+    llmReason: message,
+    llmEvidence: null,
+    llmModel: null,
+    llmCheckedAt: new Date().toISOString(),
+    manualStatus: review.manualStatus,
+    manualReason: review.manualReason,
+    manualCheckedAt: review.manualCheckedAt,
+  })
+  return { status: "failed", assetId: review.id, error: message }
+}
+
+export async function verifyPendingScheduleAssets(
+  database,
+  { limit = 20, force = false, fetchImpl = fetch } = {},
+) {
+  const candidates = listScheduleAssetReviews(database, {
+    limit: Math.min(200, Math.max(1, Number(limit) || 20)),
+  }).filter(
+    (asset) =>
+      asset.manualStatus === "unreviewed" &&
+      (force ||
+        !["schedule", "not_schedule", "uncertain"].includes(asset.llmStatus)),
+  )
+  const unique = [
+    ...new Map(
+      candidates.map((asset) => [asset.url || asset.id, asset]),
+    ).values(),
+  ]
+  const summary = {
+    attempted: 0,
+    success: 0,
+    cached: 0,
+    skipped: 0,
+    failed: 0,
+    uncertain: 0,
+    schedule: 0,
+    notSchedule: 0,
+  }
+  for (const asset of unique) {
+    const result = await verifyScheduleAsset(database, asset.id, {
+      fetchImpl,
+      force,
+    })
+    summary.attempted += 1
+    summary[result.status] = (summary[result.status] || 0) + 1
+    if (result.classification === "uncertain") summary.uncertain += 1
+    if (result.classification === "schedule") summary.schedule += 1
+    if (result.classification === "not_schedule") summary.notSchedule += 1
+    if (result.status === "success" || result.status === "cached") {
+      const verified = getScheduleAssetReview(database, asset.id)
+      for (const duplicate of candidates.filter(
+        (candidate) =>
+          candidate.id !== asset.id &&
+          candidate.url &&
+          candidate.url === asset.url,
+      )) {
+        const current = getScheduleAssetReview(database, duplicate.id)
+        upsertScheduleAssetReview(database, {
+          assetId: duplicate.id,
+          llmStatus: result.classification,
+          llmConfidence: result.confidence,
+          llmReason: verified?.llmReason,
+          llmEvidence: verified?.llmEvidence,
+          llmModel: verified?.llmModel,
+          llmCheckedAt: verified?.llmCheckedAt || new Date().toISOString(),
+          manualStatus: current?.manualStatus,
+          manualReason: current?.manualReason,
+          manualCheckedAt: current?.manualCheckedAt,
+        })
+      }
+    }
+  }
+  return summary
+}
+
 function legacyProvider(database, options) {
   // Explicit options are kept for isolated callers and tests. Normal sync
   // uses persisted providers and never reads a model credential from env.
@@ -972,12 +1315,24 @@ export async function extractPendingSchedules(database, options = {}) {
     summary[`${detectionType}Attempted`] += 1
     summary[result.status] = (summary[result.status] || 0) + 1
   }
-  return summary
+  const assetSummary = boardEnabled
+    ? await verifyPendingScheduleAssets(database, {
+        limit: options.assetLimit || limit,
+        force: Boolean(options.forceAssetVerification),
+        fetchImpl: options.fetchImpl || fetch,
+      })
+    : null
+  return assetSummary
+    ? { ...summary, assetVerification: assetSummary }
+    : summary
 }
 
 export {
   callOpenAiScheduleExtraction,
+  callOpenAiScheduleAssetVerification,
   normalizeExtractedEvents,
   normalizeExtractionResult,
+  normalizeScheduleAssetVerification,
   scheduleSchema,
+  scheduleAssetVerificationSchema,
 }

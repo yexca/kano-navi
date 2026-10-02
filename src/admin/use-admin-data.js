@@ -41,6 +41,7 @@ export function useAdminData() {
   const [eventsPage, setEventsPage] = useState(null)
   const [eventFilters, setEventFilters] = useState(emptyFilters)
   const [videos, setVideos] = useState([])
+  const [scheduleAssets, setScheduleAssets] = useState([])
   const [profileMedia, setProfileMedia] = useState({
     items: [],
     active: { avatar: null, banner: null },
@@ -118,6 +119,12 @@ export function useAdminData() {
     setVideos(payload.videos || [])
   }, [])
 
+  const loadScheduleAssets = useCallback(async () => {
+    const payload = await request("/schedule-assets?limit=100")
+    setScheduleAssets(payload.assets || [])
+    return payload.assets || []
+  }, [])
+
   const loadProfileMedia = useCallback(async () => {
     setProfileMedia(await request("/profile-media"))
   }, [])
@@ -128,9 +135,17 @@ export function useAdminData() {
       loadActivity(),
       loadEventsPage({ page: 1 }),
       loadVideos(),
+      loadScheduleAssets(),
       loadProfileMedia(),
     ])
-  }, [loadActivity, loadConfig, loadEventsPage, loadProfileMedia, loadVideos])
+  }, [
+    loadActivity,
+    loadConfig,
+    loadEventsPage,
+    loadScheduleAssets,
+    loadProfileMedia,
+    loadVideos,
+  ])
 
   useEffect(() => {
     let active = true
@@ -163,6 +178,7 @@ export function useAdminData() {
             loadEventsPage({ page: pageRef.current }),
             loadConfig(),
             loadVideos(),
+            loadScheduleAssets(),
           ])
         }
         wasActiveRef.current = stillActive
@@ -181,6 +197,7 @@ export function useAdminData() {
     loadConfig,
     loadEventsPage,
     loadVideos,
+    loadScheduleAssets,
   ])
 
   const login = useCallback(
@@ -240,6 +257,21 @@ export function useAdminData() {
     [fail, loadActivity, notify],
   )
 
+  const reviewScheduleAsset = useCallback(
+    async (assetId, status, reason) => {
+      const payload = await request(
+        `/schedule-assets/${encodeURIComponent(assetId)}/manual-review`,
+        {
+          method: "POST",
+          body: jsonBody({ status, reason }),
+        },
+      )
+      await loadScheduleAssets()
+      return payload.asset
+    },
+    [loadScheduleAssets],
+  )
+
   return {
     session,
     isLoading,
@@ -253,6 +285,7 @@ export function useAdminData() {
     eventsPage,
     eventFilters,
     videos,
+    scheduleAssets,
     profileMedia,
     setProfileMedia,
     toasts,
@@ -269,5 +302,7 @@ export function useAdminData() {
     updateFilters,
     resetFilters,
     startJob,
+    loadScheduleAssets,
+    reviewScheduleAsset,
   }
 }

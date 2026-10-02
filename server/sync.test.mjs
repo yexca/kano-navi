@@ -197,6 +197,65 @@ test("X bootstrap refreshes a recent schedule source outside profile discovery",
   }
 })
 
+for (const [name, text] of [
+  ["a generic future plan", "今日は22時からゲームをする予定だよ！"],
+  // inferPostType labels this `SCHEDULE / 日程`; the label must not count.
+  ["a stream announcement", "今日は22時から配信予定です！"],
+])
+  test(`X does not promote ${name} image to a schedule asset`, async () => {
+    const database = initializeDatabase({ seed: false, filename: ":memory:" })
+    const originalFetch = globalThis.fetch
+    const originalEnvironment = {
+      X_BOOTSTRAP_DAYS: process.env.X_BOOTSTRAP_DAYS,
+      X_HANDLES: process.env.X_HANDLES,
+      X_MAX_STATUS_REQUESTS: process.env.X_MAX_STATUS_REQUESTS,
+      X_REFRESH_KNOWN: process.env.X_REFRESH_KNOWN,
+    }
+    const postId = snowflakeFor(new Date(Date.now() - 60 * 60 * 1000))
+    try {
+      process.env.X_BOOTSTRAP_DAYS = "7"
+      process.env.X_HANDLES = "kano_2525"
+      process.env.X_MAX_STATUS_REQUESTS = "1"
+      process.env.X_REFRESH_KNOWN = "0"
+      globalThis.fetch = async (url) => {
+        const value = String(url)
+        if (value === "https://x.com/kano_2525") {
+          return response(`<a href="/kano_2525/status/${postId}">post</a>`)
+        }
+        assert.equal(
+          value,
+          `https://api.vxtwitter.com/kano_2525/status/${postId}`,
+        )
+        return response(
+          JSON.stringify({
+            tweetID: postId,
+            text,
+            date: snowflakeDate(postId).toISOString(),
+            author: { screenName: "kano_2525" },
+            mediaURLs: ["https://pbs.twimg.com/media/stream-preview.png"],
+          }),
+          { headers: { "content-type": "application/json" } },
+        )
+      }
+
+      const result = await syncX(database)
+      assert.equal(result.scheduleAssets, 0)
+      assert.equal(
+        database
+          .prepare("SELECT COUNT(*) AS count FROM assets WHERE kind='schedule'")
+          .get().count,
+        0,
+      )
+    } finally {
+      globalThis.fetch = originalFetch
+      for (const [key, value] of Object.entries(originalEnvironment)) {
+        if (value == null) delete process.env[key]
+        else process.env[key] = value
+      }
+      database.close()
+    }
+  })
+
 test("X includes quoted tweet text and media when mapping a post", () => {
   const post = mapTweet(
     {

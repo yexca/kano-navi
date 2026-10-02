@@ -993,6 +993,127 @@ button.adm-tag.is-inactive:not(:disabled):hover {
   color: var(--sky);
 }
 
+.adm-schedule-assets-card {
+  min-width: 0;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.adm-schedule-assets-list {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-schedule-asset-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-schedule-asset-preview {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--adm-line);
+  border-radius: 14px;
+  background: var(--adm-panel-muted);
+  color: var(--adm-muted);
+}
+
+.adm-schedule-asset-preview img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+}
+
+.adm-schedule-asset-copy {
+  min-width: 0;
+}
+
+.adm-schedule-asset-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.adm-schedule-asset-heading strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-schedule-asset-copy > p {
+  margin: 6px 0 0;
+  color: var(--adm-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.adm-schedule-asset-reason,
+.adm-schedule-asset-evidence {
+  max-width: 70ch;
+}
+
+.adm-schedule-asset-evidence {
+  color: var(--adm-text) !important;
+}
+
+.adm-schedule-asset-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 9px;
+  font-size: 12px;
+}
+
+.adm-schedule-asset-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--sky);
+}
+
+.adm-schedule-asset-links svg {
+  width: 13px;
+  height: 13px;
+}
+
+.adm-schedule-asset-reason-field {
+  display: grid;
+  gap: 5px;
+  max-width: 680px;
+  margin-top: 13px;
+}
+
+.adm-schedule-asset-reason-field span {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-schedule-asset-reason-field input {
+  min-width: 0;
+  width: 100%;
+}
+
+.adm-schedule-asset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .adm-inline-error {
   margin: 0;
   color: var(--danger);
@@ -2999,6 +3120,14 @@ body.adm-dialog-open {
 
   .adm-event-actions {
     grid-column: 1 / -1;
+  }
+
+  .adm-schedule-asset-row {
+    grid-template-columns: 1fr;
+  }
+
+  .adm-schedule-asset-preview {
+    max-width: 360px;
   }
 
   .adm-preset-grid {
