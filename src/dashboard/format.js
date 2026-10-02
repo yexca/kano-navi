@@ -231,8 +231,10 @@ const pendingStatuses = [
   "未定",
 ]
 
-/** upcoming | done | pending | cancelled */
+/** upcoming | done | pending | cancelled | cancellation_review */
 export function eventStatus(event, now = Date.now()) {
+  if (event.cancellationStatus === "manual_confirmed") return "cancelled"
+  if (event.cancellationStatus === "llm_suspected") return "cancellation_review"
   const explicit = String(event.statusCode || "").toLowerCase()
   const status = String(event.status || "")
     .trim()

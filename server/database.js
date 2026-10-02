@@ -99,6 +99,13 @@ const schema = `
     manual_locked INTEGER NOT NULL DEFAULT 0,
     confidence REAL,
     extraction_id INTEGER,
+    cancellation_status TEXT NOT NULL DEFAULT 'none',
+    cancellation_source TEXT,
+    cancellation_reason TEXT,
+    cancellation_evidence TEXT,
+    cancellation_source_item_id TEXT,
+    cancellation_confidence REAL,
+    cancellation_at TEXT,
     deleted_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -584,6 +591,13 @@ function migrateLegacyEvents(database) {
       manual_locked INTEGER NOT NULL DEFAULT 0,
       confidence REAL,
       extraction_id INTEGER,
+      cancellation_status TEXT NOT NULL DEFAULT 'none',
+      cancellation_source TEXT,
+      cancellation_reason TEXT,
+      cancellation_evidence TEXT,
+      cancellation_source_item_id TEXT,
+      cancellation_confidence REAL,
+      cancellation_at TEXT,
       deleted_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -595,12 +609,18 @@ function migrateLegacyEvents(database) {
       id, source, source_item_id, source_key, title, detail, starts_on,
       starts_at, ends_at, timezone, time_precision, status, event_type, url,
       is_upcoming, provenance, manual_locked, confidence, extraction_id,
+      cancellation_status, cancellation_source, cancellation_reason,
+      cancellation_evidence, cancellation_source_item_id,
+      cancellation_confidence, cancellation_at,
       deleted_at, created_at, updated_at, raw_json
     ) VALUES (
       @id, @source, @source_item_id, @source_key, @title, @detail, @starts_on,
       @starts_at, @ends_at, @timezone, @time_precision, @status, @event_type,
       @url, @is_upcoming, @provenance, @manual_locked, @confidence,
-      @extraction_id, @deleted_at, @created_at, @updated_at, @raw_json
+      @extraction_id, @cancellation_status, @cancellation_source,
+      @cancellation_reason, @cancellation_evidence,
+      @cancellation_source_item_id, @cancellation_confidence,
+      @cancellation_at, @deleted_at, @created_at, @updated_at, @raw_json
     )
   `)
   const migrate = database.transaction(() => {
@@ -618,6 +638,13 @@ function migrateLegacyEvents(database) {
         manual_locked: manuallyCurated ? 1 : 0,
         confidence: null,
         extraction_id: null,
+        cancellation_status: "none",
+        cancellation_source: null,
+        cancellation_reason: null,
+        cancellation_evidence: null,
+        cancellation_source_item_id: null,
+        cancellation_confidence: null,
+        cancellation_at: null,
         deleted_at: null,
         created_at: timestamp,
         updated_at: timestamp,
@@ -672,6 +699,37 @@ function migrateLegacyEvents(database) {
 
 function migrateSchema(database) {
   migrateLegacyEvents(database)
+  const eventColumns = tableColumns(database, "events")
+  const eventAdditions = [
+    [
+      "cancellation_status",
+      "ALTER TABLE events ADD COLUMN cancellation_status TEXT NOT NULL DEFAULT 'none'",
+    ],
+    [
+      "cancellation_source",
+      "ALTER TABLE events ADD COLUMN cancellation_source TEXT",
+    ],
+    [
+      "cancellation_reason",
+      "ALTER TABLE events ADD COLUMN cancellation_reason TEXT",
+    ],
+    [
+      "cancellation_evidence",
+      "ALTER TABLE events ADD COLUMN cancellation_evidence TEXT",
+    ],
+    [
+      "cancellation_source_item_id",
+      "ALTER TABLE events ADD COLUMN cancellation_source_item_id TEXT",
+    ],
+    [
+      "cancellation_confidence",
+      "ALTER TABLE events ADD COLUMN cancellation_confidence REAL",
+    ],
+    ["cancellation_at", "ALTER TABLE events ADD COLUMN cancellation_at TEXT"],
+  ]
+  for (const [column, statement] of eventAdditions) {
+    if (!eventColumns.has(column)) database.exec(statement)
+  }
   database.exec(`
     CREATE TABLE IF NOT EXISTS schedule_asset_reviews (
       asset_id TEXT PRIMARY KEY REFERENCES assets (id) ON DELETE CASCADE,
@@ -1085,13 +1143,19 @@ function insertEvent(database, event, overwrite) {
     ? `INSERT INTO events (
          id, source, source_item_id, source_key, title, detail, starts_on, starts_at,
          ends_at, timezone, time_precision, status, event_type, url, is_upcoming,
-         provenance, manual_locked, confidence, extraction_id, deleted_at,
+         provenance, manual_locked, confidence, extraction_id,
+         cancellation_status, cancellation_source, cancellation_reason,
+         cancellation_evidence, cancellation_source_item_id,
+         cancellation_confidence, cancellation_at, deleted_at,
          created_at, updated_at, raw_json
        ) VALUES (
          @id, @source, @source_item_id, @source_key, @title, @detail, @starts_on,
          @starts_at, @ends_at, @timezone, @time_precision, @status, @event_type,
          @url, @is_upcoming, @provenance, @manual_locked, @confidence,
-         @extraction_id, @deleted_at, @created_at, @updated_at, @raw_json
+         @extraction_id, @cancellation_status, @cancellation_source,
+         @cancellation_reason, @cancellation_evidence,
+         @cancellation_source_item_id, @cancellation_confidence,
+         @cancellation_at, @deleted_at, @created_at, @updated_at, @raw_json
        )
        ON CONFLICT(id) DO UPDATE SET
          source=excluded.source, source_item_id=excluded.source_item_id,
@@ -1103,18 +1167,38 @@ function insertEvent(database, event, overwrite) {
          is_upcoming=excluded.is_upcoming, provenance=excluded.provenance,
          manual_locked=excluded.manual_locked, confidence=excluded.confidence,
          extraction_id=excluded.extraction_id, deleted_at=excluded.deleted_at,
+         cancellation_status=CASE WHEN events.cancellation_status='llm_suspected'
+           THEN events.cancellation_status ELSE excluded.cancellation_status END,
+         cancellation_source=CASE WHEN events.cancellation_status='llm_suspected'
+           THEN events.cancellation_source ELSE excluded.cancellation_source END,
+         cancellation_reason=CASE WHEN events.cancellation_status='llm_suspected'
+           THEN events.cancellation_reason ELSE excluded.cancellation_reason END,
+         cancellation_evidence=CASE WHEN events.cancellation_status='llm_suspected'
+           THEN events.cancellation_evidence ELSE excluded.cancellation_evidence END,
+         cancellation_source_item_id=CASE WHEN events.cancellation_status='llm_suspected'
+           THEN events.cancellation_source_item_id ELSE excluded.cancellation_source_item_id END,
+         cancellation_confidence=CASE WHEN events.cancellation_status='llm_suspected'
+           THEN events.cancellation_confidence ELSE excluded.cancellation_confidence END,
+         cancellation_at=CASE WHEN events.cancellation_status='llm_suspected'
+           THEN events.cancellation_at ELSE excluded.cancellation_at END,
          updated_at=excluded.updated_at, raw_json=excluded.raw_json
        WHERE events.manual_locked = 0`
     : `INSERT OR IGNORE INTO events (
          id, source, source_item_id, source_key, title, detail, starts_on, starts_at,
          ends_at, timezone, time_precision, status, event_type, url, is_upcoming,
-         provenance, manual_locked, confidence, extraction_id, deleted_at,
+         provenance, manual_locked, confidence, extraction_id,
+         cancellation_status, cancellation_source, cancellation_reason,
+         cancellation_evidence, cancellation_source_item_id,
+         cancellation_confidence, cancellation_at, deleted_at,
          created_at, updated_at, raw_json
        ) VALUES (
          @id, @source, @source_item_id, @source_key, @title, @detail, @starts_on,
          @starts_at, @ends_at, @timezone, @time_precision, @status, @event_type,
          @url, @is_upcoming, @provenance, @manual_locked, @confidence,
-         @extraction_id, @deleted_at, @created_at, @updated_at, @raw_json
+         @extraction_id, @cancellation_status, @cancellation_source,
+         @cancellation_reason, @cancellation_evidence,
+         @cancellation_source_item_id, @cancellation_confidence,
+         @cancellation_at, @deleted_at, @created_at, @updated_at, @raw_json
        )`
   const values = {
     id: String(event.id),
@@ -1144,6 +1228,34 @@ function insertEvent(database, event, overwrite) {
         ? null
         : Number(event.confidence),
     extraction_id: asIntegerOrNull(event.extraction_id ?? event.extractionId),
+    cancellation_status:
+      nullable(event.cancellation_status ?? event.cancellationStatus) || "none",
+    cancellation_source: nullable(
+      event.cancellation_source ?? event.cancellationSource,
+    ),
+    cancellation_reason: nullable(
+      event.cancellation_reason ?? event.cancellationReason,
+    ),
+    cancellation_evidence: nullable(
+      event.cancellation_evidence ?? event.cancellationEvidence,
+    ),
+    cancellation_source_item_id: nullable(
+      event.cancellation_source_item_id ?? event.cancellationSourceItemId,
+    ),
+    cancellation_confidence:
+      event.cancellation_confidence != null ||
+      event.cancellationConfidence != null
+        ? Number.isFinite(
+            Number(
+              event.cancellation_confidence ?? event.cancellationConfidence,
+            ),
+          )
+          ? Number(
+              event.cancellation_confidence ?? event.cancellationConfidence,
+            )
+          : null
+        : null,
+    cancellation_at: nullable(event.cancellation_at ?? event.cancellationAt),
     deleted_at: nullable(event.deleted_at ?? event.deletedAt),
     created_at: nullable(event.created_at ?? event.createdAt) || timestamp,
     updated_at: nullable(event.updated_at ?? event.updatedAt) || timestamp,
@@ -2355,6 +2467,13 @@ const eventAdminColumns = `
   ends_at AS endsAt, timezone, time_precision AS timePrecision,
   status, event_type AS eventType, url, provenance,
   manual_locked AS manualLocked, confidence, extraction_id AS extractionId,
+  cancellation_status AS cancellationStatus,
+  cancellation_source AS cancellationSource,
+  cancellation_reason AS cancellationReason,
+  cancellation_evidence AS cancellationEvidence,
+  cancellation_source_item_id AS cancellationSourceItemId,
+  cancellation_confidence AS cancellationConfidence,
+  cancellation_at AS cancellationAt,
   deleted_at AS deletedAt, created_at AS createdAt, updated_at AS updatedAt
 `
 
@@ -2364,6 +2483,135 @@ export function getEvent(database, id) {
       .prepare(`SELECT ${eventAdminColumns} FROM events WHERE id = ?`)
       .get(String(id)) || null
   )
+}
+
+export function applyLlmCancellationJudgements(
+  database,
+  { sourceItemId, reason, evidence, confidence, targets = [] } = {},
+) {
+  const timestamp = nowIso()
+  const uniqueTargets = new Map()
+  for (const target of targets) {
+    const eventId = String(target.eventId || target.id || "").trim()
+    if (!eventId || uniqueTargets.has(eventId)) continue
+    uniqueTargets.set(eventId, target)
+  }
+  const update = database.prepare(
+    `UPDATE events SET
+       cancellation_status='llm_suspected', cancellation_source='llm',
+       cancellation_reason=?, cancellation_evidence=?,
+       cancellation_source_item_id=?, cancellation_confidence=?,
+       cancellation_at=?, updated_at=?
+       WHERE id=? AND deleted_at IS NULL
+         AND COALESCE(cancellation_status, 'none') != 'manual_confirmed'`,
+  )
+  const apply = database.transaction(() => {
+    let applied = 0
+    for (const [eventId, target] of uniqueTargets) {
+      const result = update.run(
+        String(reason || target.reason || "LLM 判断该日程可能已取消").slice(
+          0,
+          500,
+        ),
+        String(evidence || target.evidence || "").slice(0, 1000) || null,
+        nullable(sourceItemId),
+        Number.isFinite(Number(confidence)) ? Number(confidence) : null,
+        timestamp,
+        timestamp,
+        eventId,
+      )
+      applied += result.changes
+    }
+    return applied
+  })
+  return { applied: apply(), candidates: uniqueTargets.size }
+}
+
+function normalizedCancellationTitle(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\s「」『』【】()（）［］[\]・:：,.，。!?！？]/gu, "")
+}
+
+export function findCancellationTargets(database, events = []) {
+  const active = database
+    .prepare(
+      `SELECT id, title, starts_on AS startsOn, starts_at AS startsAt,
+       provenance, manual_locked AS manualLocked
+       FROM events WHERE deleted_at IS NULL`,
+    )
+    .all()
+  const targets = []
+  for (const candidate of events) {
+    const date = String(
+      candidate?.starts_on ?? candidate?.startsOn ?? candidate?.date ?? "",
+    )
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) continue
+    const title = normalizedCancellationTitle(candidate?.title)
+    // Stored times mix `Z` and `+09:00` offsets, so compare instants.
+    const instant = Date.parse(candidate?.starts_at ?? candidate?.startsAt)
+    const sameDate = active.filter((event) => {
+      if (event.startsOn !== date) return false
+      const eventInstant = Date.parse(event.startsAt)
+      if (!Number.isFinite(instant) || !Number.isFinite(eventInstant))
+        return true
+      return eventInstant === instant
+    })
+    if (!sameDate.length) continue
+    const exact = title
+      ? sameDate.filter(
+          (event) => normalizedCancellationTitle(event.title) === title,
+        )
+      : []
+    const narrowed =
+      exact.length === 1 ? exact : sameDate.length === 1 ? sameDate : []
+    if (narrowed.length === 1) {
+      targets.push({
+        eventId: narrowed[0].id,
+        reason: candidate.reason,
+        evidence: candidate.evidence,
+      })
+    }
+  }
+  return targets
+}
+
+export function updateManualCancellation(
+  database,
+  id,
+  { status = "none", reason = null, evidence = null } = {},
+) {
+  const existing = getEvent(database, id)
+  if (!existing) return null
+  const normalized = String(status || "none")
+    .trim()
+    .toLowerCase()
+  if (!["none", "manual_confirmed"].includes(normalized)) {
+    throw new Error("invalid manual cancellation status")
+  }
+  const timestamp = nowIso()
+  database
+    .prepare(
+      `UPDATE events SET
+       cancellation_status=?, cancellation_source=?, cancellation_reason=?,
+       cancellation_evidence=?, cancellation_source_item_id=NULL,
+       cancellation_confidence=NULL, cancellation_at=?, updated_at=?
+       WHERE id=?`,
+    )
+    .run(
+      normalized,
+      normalized === "manual_confirmed" ? "manual" : null,
+      normalized === "manual_confirmed"
+        ? String(reason || "").trim() || null
+        : null,
+      normalized === "manual_confirmed"
+        ? String(evidence || "").trim() || null
+        : null,
+      normalized === "manual_confirmed" ? timestamp : null,
+      timestamp,
+      String(id),
+    )
+  return getEvent(database, id)
 }
 
 export function listAdminEvents(database, { includeDeleted = false } = {}) {
@@ -2471,14 +2719,78 @@ export function createManualEvent(database, event) {
     source_key: id,
     provenance: "manual",
     manual_locked: 1,
+    ...noCancellation,
     deleted_at: null,
   }
   const create = database.transaction(() => {
     insertEvent(database, value, false)
     insertEventSource(database, value, id)
+    if (
+      String(
+        event.cancellation_status ?? event.cancellationStatus ?? "none",
+      ) === "manual_confirmed"
+    ) {
+      updateManualCancellation(database, id, {
+        status: "manual_confirmed",
+        reason: event.cancellation_reason ?? event.cancellationReason,
+      })
+    }
   })
   create()
   return getEvent(database, id)
+}
+
+const noCancellation = {
+  cancellation_status: "none",
+  cancellation_source: null,
+  cancellation_reason: null,
+  cancellation_evidence: null,
+  cancellation_source_item_id: null,
+  cancellation_confidence: null,
+  cancellation_at: null,
+}
+
+/**
+ * A manual save decides the cancellation explicitly: `llm_suspected` keeps an
+ * unresolved LLM overlay as-is, `none` dismisses it, and `manual_confirmed`
+ * replaces it with the operator's reason. Saving an already confirmed
+ * cancellation keeps its original decision time.
+ */
+function manualCancellationFields(existing, event, timestamp) {
+  const requested = String(
+    event.cancellation_status ?? event.cancellationStatus ?? "none",
+  )
+    .trim()
+    .toLowerCase()
+  if (requested === "manual_confirmed") {
+    return {
+      ...noCancellation,
+      cancellation_status: "manual_confirmed",
+      cancellation_source: "manual",
+      cancellation_reason: nullable(
+        event.cancellation_reason ?? event.cancellationReason,
+      ),
+      cancellation_at:
+        existing?.cancellationStatus === "manual_confirmed"
+          ? existing.cancellationAt || timestamp
+          : timestamp,
+    }
+  }
+  if (
+    requested === "llm_suspected" &&
+    existing?.cancellationStatus === "llm_suspected"
+  ) {
+    return {
+      cancellation_status: "llm_suspected",
+      cancellation_source: existing.cancellationSource,
+      cancellation_reason: existing.cancellationReason,
+      cancellation_evidence: existing.cancellationEvidence,
+      cancellation_source_item_id: existing.cancellationSourceItemId,
+      cancellation_confidence: existing.cancellationConfidence,
+      cancellation_at: existing.cancellationAt,
+    }
+  }
+  return noCancellation
 }
 
 export function updateManualEvent(database, id, event) {
@@ -2496,6 +2808,13 @@ export function updateManualEvent(database, id, event) {
          starts_at=@starts_at, ends_at=@ends_at, timezone=@timezone,
          time_precision=@time_precision, status=@status,
          event_type=@event_type, url=@url, provenance='manual',
+         cancellation_status=@cancellation_status,
+         cancellation_source=@cancellation_source,
+         cancellation_reason=@cancellation_reason,
+         cancellation_evidence=@cancellation_evidence,
+         cancellation_source_item_id=@cancellation_source_item_id,
+         cancellation_confidence=@cancellation_confidence,
+         cancellation_at=@cancellation_at,
          manual_locked=1, deleted_at=NULL, updated_at=@updated_at,
          raw_json=@raw_json
        WHERE id=@id`,
@@ -2513,6 +2832,7 @@ export function updateManualEvent(database, id, event) {
         event.timePrecision ??
         (startsAt ? "exact" : "unknown"),
       status: nullable(event.status),
+      ...manualCancellationFields(existing, event, timestamp),
       event_type: event.event_type ?? event.eventType ?? existing.eventType,
       url: nullable(event.url),
       updated_at: timestamp,
@@ -3981,7 +4301,12 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
       `SELECT id, source, source_item_id AS sourceItemId, title, detail,
        starts_on AS startsOn, starts_at AS startsAt, ends_at AS endsAt,
        timezone, time_precision AS timePrecision, status,
-       event_type AS eventType, url, provenance, manual_locked AS manualLocked
+       event_type AS eventType, url, provenance, manual_locked AS manualLocked,
+       cancellation_status AS cancellationStatus,
+       cancellation_source AS cancellationSource,
+       cancellation_reason AS cancellationReason,
+       cancellation_evidence AS cancellationEvidence,
+       cancellation_at AS cancellationAt
        FROM events WHERE deleted_at IS NULL
        ORDER BY starts_on ASC, COALESCE(starts_at, starts_on) ASC`,
     )
@@ -4172,7 +4497,11 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
   // every client re-derive it. It only references rows already in the payload,
   // except latestPost, which survives an empty post window.
   const upcomingEvents = events.filter(
-    (event) => event.isUpcoming && !isCancelledEventStatus(event.status),
+    (event) =>
+      event.isUpcoming &&
+      !isCancelledEventStatus(event.status) &&
+      event.cancellationStatus !== "llm_suspected" &&
+      event.cancellationStatus !== "manual_confirmed",
   )
   const upcomingVideos = mappedVideos
     .filter((video) => video.isUpcoming)

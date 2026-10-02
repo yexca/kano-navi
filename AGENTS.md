@@ -76,6 +76,10 @@ Read it first, then use the focused documents in `docs/` for more detail.
 - Timestamps are stored as parseable ISO 8601 strings. The display layer formats them in `Asia/Tokyo`.
 - Manual event edits, confirmations, and deletions set a durable lock. Source
   synchronization and OpenAI extraction must not overwrite or resurrect them.
+  The one exception is the LLM cancellation overlay
+  (`cancellation_status = llm_suspected` plus reason and evidence), which may
+  annotate a locked event without touching its schedule fields. Only an
+  operator's `manual_confirmed` decision is a definitive cancellation.
 - `LLM_SECRETS_KEY` is the environment-only master key for API keys stored in
   `llm_providers`; plaintext keys and ciphertext must never enter API output,
   logs, or extraction payloads. Providers declare `text` and/or `image`

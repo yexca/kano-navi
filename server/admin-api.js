@@ -786,6 +786,18 @@ function eventInput(body = {}) {
   if (!["exact", "approximate", "unknown"].includes(timePrecision)) {
     throw new AdminInputError("timePrecision is invalid")
   }
+  const cancellationStatus =
+    text(body.cancellationStatus ?? body.cancellation_status, {
+      name: "cancellationStatus",
+      max: 32,
+    }) || "none"
+  // `llm_suspected` only means "keep the current LLM overlay"; the database
+  // ignores it unless the stored event already carries that overlay.
+  if (
+    !["none", "llm_suspected", "manual_confirmed"].includes(cancellationStatus)
+  ) {
+    throw new AdminInputError("cancellationStatus is invalid")
+  }
   return {
     title: text(body.title, { name: "title", required: true, max: 240 }),
     detail: text(body.detail, { name: "detail", max: 500 }),
@@ -795,6 +807,15 @@ function eventInput(body = {}) {
     timezone: "Asia/Tokyo",
     time_precision: timePrecision,
     status: text(body.status, { name: "status", max: 80 }),
+    cancellation_status: cancellationStatus,
+    cancellation_reason:
+      cancellationStatus === "manual_confirmed"
+        ? text(body.cancellationReason ?? body.cancellation_reason, {
+            name: "cancellationReason",
+            required: true,
+            max: 500,
+          })
+        : null,
     event_type: eventType,
     url: publicUrl(body.url),
   }

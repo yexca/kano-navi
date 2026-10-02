@@ -7,6 +7,9 @@ import Database from "better-sqlite3"
 
 import {
   deleteManualEvent,
+  applyLlmCancellationJudgements,
+  createManualEvent,
+  findCancellationTargets,
   bumpDashboardRevision,
   getAppSetting,
   getEvent,
@@ -21,6 +24,7 @@ import {
   seedDatabase,
   setFeaturedVideoId,
   updateManualEvent,
+  updateManualCancellation,
   upsertLlmProvider,
   upsertMediaAsset,
   upsertAssets,
@@ -407,6 +411,156 @@ test("manual edits and tombstones cannot be overwritten by automatic extraction"
     assert.equal(
       getDashboard(database).events.some((event) => event.id === automatic.id),
       false,
+    )
+  } finally {
+    database.close()
+  }
+})
+
+test("LLM cancellation is an evidence overlay that applies to manual events", () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  try {
+    const event = updateManualEvent(database, "manual-cancel-test", {
+      id: "manual-cancel-test",
+      title: "夜配信",
+      startsOn: "2026-09-04",
+      startsAt: "2026-09-04T12:00:00.000Z",
+      eventType: "stream",
+    })
+    assert.equal(event, null)
+    const created = database
+      .prepare(
+        `INSERT INTO events (
+          id, source, source_item_id, source_key, title, starts_on, starts_at,
+          timezone, time_precision, provenance, manual_locked, created_at, updated_at
+        ) VALUES ('manual-cancel-test', 'manual', 'manual-cancel-test',
+          'manual-cancel-test', '夜配信', '2026-09-04',
+          '2026-09-04T12:00:00.000Z', 'Asia/Tokyo', 'exact', 'manual', 1, ?, ?)`,
+      )
+      .run(new Date().toISOString(), new Date().toISOString())
+    assert.equal(created.changes, 1)
+    const judgement = applyLlmCancellationJudgements(database, {
+      sourceItemId: "cancel-post",
+      reason: "取消の可能性",
+      evidence: "中止になりました",
+      confidence: 0.88,
+      targets: [{ eventId: "manual-cancel-test" }],
+    })
+    assert.deepEqual(judgement, { applied: 1, candidates: 1 })
+    const reviewed = getEvent(database, "manual-cancel-test")
+    assert.equal(reviewed.provenance, "manual")
+    assert.equal(reviewed.manualLocked, 1)
+    assert.equal(reviewed.cancellationStatus, "llm_suspected")
+    assert.equal(reviewed.cancellationReason, "取消の可能性")
+    assert.equal(reviewed.cancellationEvidence, "中止になりました")
+    updateManualCancellation(database, "manual-cancel-test", {
+      status: "manual_confirmed",
+      reason: "人工复核确认",
+    })
+    assert.deepEqual(
+      applyLlmCancellationJudgements(database, {
+        sourceItemId: "later-post",
+        reason: "再次判断",
+        evidence: "再次提及中止",
+        targets: [{ eventId: "manual-cancel-test" }],
+      }),
+      { applied: 0, candidates: 1 },
+    )
+    assert.equal(
+      getEvent(database, "manual-cancel-test").cancellationStatus,
+      "manual_confirmed",
+    )
+  } finally {
+    database.close()
+  }
+})
+
+test("manual saves keep, dismiss, or confirm an LLM cancellation explicitly", () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  try {
+    // Seeded and YouTube rows keep a +09:00 offset while extraction emits UTC.
+    const event = createManualEvent(database, {
+      id: "offset-stream",
+      title: "夜配信",
+      startsOn: "2026-09-04",
+      startsAt: "2026-09-04T21:00:00+09:00",
+      eventType: "stream",
+      cancellationStatus: "llm_suspected",
+    })
+    assert.equal(event.cancellationStatus, "none")
+    const targets = findCancellationTargets(database, [
+      {
+        title: "夜配信",
+        starts_on: "2026-09-04",
+        starts_at: "2026-09-04T12:00:00.000Z",
+      },
+    ])
+    assert.deepEqual(
+      targets.map((target) => target.eventId),
+      ["offset-stream"],
+    )
+    assert.deepEqual(
+      findCancellationTargets(database, [
+        {
+          title: "夜配信",
+          starts_on: "2026-09-04",
+          starts_at: "2026-09-04T13:00:00.000Z",
+        },
+      ]),
+      [],
+    )
+    applyLlmCancellationJudgements(database, {
+      sourceItemId: "cancel-post",
+      reason: "本人が中止と告知",
+      evidence: "今日の配信はお休み",
+      confidence: 0.86,
+      targets,
+    })
+
+    const form = {
+      title: "夜配信（変更）",
+      startsOn: "2026-09-04",
+      startsAt: "2026-09-04T12:00:00.000Z",
+      eventType: "stream",
+    }
+    const kept = updateManualEvent(database, "offset-stream", {
+      ...form,
+      cancellationStatus: "llm_suspected",
+    })
+    assert.equal(kept.title, "夜配信（変更）")
+    assert.equal(kept.cancellationStatus, "llm_suspected")
+    assert.equal(kept.cancellationEvidence, "今日の配信はお休み")
+    assert.equal(kept.cancellationSourceItemId, "cancel-post")
+    assert.equal(kept.cancellationConfidence, 0.86)
+
+    const confirmed = updateManualEvent(database, "offset-stream", {
+      ...form,
+      cancellationStatus: "manual_confirmed",
+      cancellationReason: "告知を確認",
+    })
+    assert.equal(confirmed.cancellationStatus, "manual_confirmed")
+    assert.equal(confirmed.cancellationSource, "manual")
+    assert.equal(confirmed.cancellationEvidence, null)
+    const reconfirmed = updateManualEvent(database, "offset-stream", {
+      ...form,
+      cancellationStatus: "manual_confirmed",
+      cancellationReason: "告知を確認",
+    })
+    assert.equal(reconfirmed.cancellationAt, confirmed.cancellationAt)
+
+    // `llm_suspected` cannot be invented by a save without an overlay.
+    const dismissed = updateManualEvent(database, "offset-stream", {
+      ...form,
+      cancellationStatus: "none",
+    })
+    assert.equal(dismissed.cancellationStatus, "none")
+    assert.equal(dismissed.cancellationReason, null)
+    assert.equal(
+      updateManualEvent(database, "offset-stream", {
+        ...form,
+        cancellationStatus: "llm_suspected",
+      }).cancellationStatus,
+      "none",
     )
   } finally {
     database.close()

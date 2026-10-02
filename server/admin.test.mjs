@@ -3,6 +3,7 @@ import test from "node:test"
 
 import { createApp } from "./app.js"
 import {
+  applyLlmCancellationJudgements,
   getEvent,
   getDashboard,
   initializeDatabase,
@@ -49,6 +50,54 @@ test("development admin API bypasses password authentication", async () => {
     )
     assert.equal(configResponse.status, 200)
     assert.equal((await configResponse.json()).openAiKeyConfigured, false)
+  } finally {
+    await close(server)
+    database.close()
+  }
+})
+
+test("confirming an LLM-flagged event keeps the cancellation evidence", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  let server
+  try {
+    upsertEvents(database, [
+      {
+        id: "x-flagged-stream",
+        source: "x",
+        source_item_id: "flagged-post",
+        source_key: "2026-09-04T21:00",
+        provenance: "automatic",
+        title: "夜配信",
+        starts_on: "2026-09-04",
+        starts_at: "2026-09-04T12:00:00.000Z",
+        event_type: "stream",
+      },
+    ])
+    applyLlmCancellationJudgements(database, {
+      sourceItemId: "cancel-post",
+      reason: "本人が中止と告知",
+      evidence: "今日の配信はお休み",
+      confidence: 0.8,
+      targets: [{ eventId: "x-flagged-stream" }],
+    })
+    server = await listen(
+      createApp({
+        database,
+        databaseLabel: ":memory:",
+        adminMode: "development",
+        openAiKeyConfigured: false,
+      }),
+    )
+    const { port } = server.address()
+    const confirmed = await fetch(
+      `http://127.0.0.1:${port}/api/admin/events/x-flagged-stream/confirm`,
+      { method: "POST" },
+    )
+    assert.equal(confirmed.status, 200)
+    const event = getEvent(database, "x-flagged-stream")
+    assert.equal(event.manualLocked, 1)
+    assert.equal(event.cancellationStatus, "llm_suspected")
+    assert.equal(event.cancellationEvidence, "今日の配信はお休み")
   } finally {
     await close(server)
     database.close()

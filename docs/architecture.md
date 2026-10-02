@@ -80,7 +80,11 @@ records.
 
 Automatic event writes have lower precedence than `manual_locked` records.
 Manual edits and confirmations lock the row; manual deletion keeps a hidden
-tombstone so a later extraction cannot recreate the same event.
+tombstone so a later extraction cannot recreate the same event. LLM cancellation
+is a separate evidence overlay: it may mark an existing automatic or manual
+event as `llm_suspected`, but it never deletes the row or changes its core
+schedule fields. A human can clear that overlay or set `manual_confirmed` with
+a reason.
 
 LLM providers store an explicit `text`/`image` capability array in
 `capabilities_json`; `vision_capable` remains a derived migration field for old

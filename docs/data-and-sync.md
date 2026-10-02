@@ -144,10 +144,14 @@ and loopback address guard for provider URLs applies to model discovery too.
 
 A local validator rejects invalid calendar dates, time formats, enumerations,
 or confidence values before any event write. `schedule` results update automatic
-events; `not_schedule` results retire only the matching automatic source rows;
-`uncertain` results are cached in `schedule_extractions` without creating or
-retiring events. Input fingerprints and the extractor version make all of these
-outcomes idempotent. Date-only events store `starts_on`, a null `starts_at`, and
+events. A model never deletes or definitively cancels an event: `action=cancel`
+matches the clearest existing event and writes an `llm_suspected` cancellation
+overlay containing the reason, source evidence, confidence, and post ID. The
+overlay applies to manually locked events too, so a manually entered event can
+remain visible with the model's cancellation evidence. `not_schedule` and
+`uncertain` results only record the extraction outcome and leave existing events
+untouched. Input fingerprints and the extractor version make these outcomes
+idempotent. Date-only events store `starts_on`, a null `starts_at`, and
 `time_precision = unknown`; the model must not invent a specific time.
 
 The default model comes from the database (`app_settings.llm_model` and the
@@ -219,7 +223,14 @@ Creating, editing, or confirming an event through `/admin` changes it to
 `provenance = manual` and sets `manual_locked = 1`. Automatic upserts include a
 database-level lock condition and cannot replace those rows. Manual deletion is
 a soft-delete tombstone with the same lock, so synchronization cannot resurrect
-it. The dashboard hides tombstones and labels visible automatic/manual events.
+it. Manual operators can mark an event `manual_confirmed` with a required reason;
+that decision is separate from the LLM overlay and is what the public dashboard
+uses as a definitive cancellation. Editing or confirming an event that carries
+an `llm_suspected` overlay keeps the overlay and its evidence unless the
+operator explicitly dismisses it (`none`) or replaces it with a manual decision.
+LLM matching compares start instants, so `Z` and `+09:00` offsets refer to the
+same event. The dashboard hides tombstones, keeps cancelled rows visible with
+their reason/evidence, and labels visible automatic/manual events.
 
 ## Failure and Freshness
 

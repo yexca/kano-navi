@@ -12,9 +12,11 @@ import {
   getLlmProviderSecret,
   getScheduleRouteTargets,
   LLM_MAX_RETRIES,
+  findCancellationTargets,
   listMediaLinks,
   listScheduleCandidatePosts,
   normalizeLlmCapabilities,
+  applyLlmCancellationJudgements,
   replaceAutomaticEventsForSource,
   SCHEDULE_BOARD_ROUTE,
   SCHEDULE_MESSAGE_ROUTE,
@@ -34,7 +36,7 @@ const INPUT_MODES = new Set(["text", "image", "text_image"])
 const DETECTION_TYPES = new Set(["board", "message"])
 const CLASSIFICATIONS = new Set(["schedule", "not_schedule", "uncertain"])
 const scheduleInstructions =
-  "First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Return an empty events array for not_schedule."
+  "First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule."
 const scheduleAssetVerificationInstructions =
   "Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the image is unreadable or the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly."
 
@@ -102,12 +104,20 @@ const scheduleSchema = {
     },
     confidence: { type: "number", minimum: 0, maximum: 1 },
     evidence: { type: "string" },
+    reason: { anyOf: [{ type: "string" }, { type: "null" }] },
     action: {
       type: "string",
       enum: ["add", "update", "cancel", "none"],
     },
   },
-  required: ["classification", "events", "confidence", "evidence", "action"],
+  required: [
+    "classification",
+    "events",
+    "confidence",
+    "evidence",
+    "reason",
+    "action",
+  ],
 }
 
 function sha256(value) {
@@ -178,8 +188,7 @@ function routeForDetectionType(detectionType) {
 
 function eventScopeForDetectionType(detectionType) {
   // Both detectors describe the same X source item. Keeping one source scope
-  // lets a later not_schedule result retire an earlier automatic extraction
-  // regardless of which route handled the post.
+  // lets either route update the same automatic event identity.
   normalizeDetectionType(detectionType)
   return "x"
 }
@@ -422,6 +431,9 @@ function normalizeExtractionResult(result, post) {
     evidence: String(result?.evidence || "")
       .trim()
       .slice(0, 1000),
+    reason: String(result?.reason || "")
+      .trim()
+      .slice(0, 500),
     action,
   }
 }
@@ -1123,12 +1135,25 @@ async function extractWithProvider(
           attempts: attempt + 1,
         }
       }
-      const replacement = replaceAutomaticEventsForSource(database, {
-        source: normalizedEventScope,
-        sourceItemId: post.id,
-        extractionId: running.id,
-        events: normalized.events,
-      })
+      let replacement = { upserted: 0, retired: 0 }
+      let cancellation = null
+      if (normalized.action === "cancel") {
+        const targets = findCancellationTargets(database, normalized.events)
+        cancellation = applyLlmCancellationJudgements(database, {
+          sourceItemId: post.id,
+          reason: normalized.reason || normalized.evidence,
+          evidence: normalized.evidence,
+          confidence: normalized.confidence,
+          targets,
+        })
+      } else if (normalized.classification === "schedule") {
+        replacement = replaceAutomaticEventsForSource(database, {
+          source: normalizedEventScope,
+          sourceItemId: post.id,
+          extractionId: running.id,
+          events: normalized.events,
+        })
+      }
       upsertScheduleExtraction(database, {
         source: "x",
         sourceItemId: post.id,
@@ -1146,6 +1171,7 @@ async function extractWithProvider(
         providerId: provider.id,
         classification: normalized.classification,
         attempts: attempt + 1,
+        ...(cancellation ? { cancellation } : {}),
         ...replacement,
       }
     } catch (error) {

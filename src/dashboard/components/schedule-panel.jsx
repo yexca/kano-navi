@@ -64,6 +64,22 @@ function EventRow({ event, locale, now, t, showDay }) {
             {typeKey ? <span className="chip">{t(typeKey)}</span> : null}
             <span>{event.detail || t("schedule.publicEvent")}</span>
             {!time ? <span>{t("common.pendingConfirmation")}</span> : null}
+            {event.cancellationStatus === "llm_suspected" ? (
+              <span className="event-cancellation-note">
+                {t("schedule.cancellationReview")}
+                {event.cancellationReason
+                  ? ` · ${event.cancellationReason}`
+                  : ""}
+                {event.cancellationEvidence
+                  ? ` · ${event.cancellationEvidence}`
+                  : ""}
+              </span>
+            ) : null}
+            {event.cancellationStatus === "manual_confirmed" ? (
+              <span className="event-cancellation-note">
+                {event.cancellationReason || t("schedule.cancellationManual")}
+              </span>
+            ) : null}
           </span>
         </span>
         <span className="event-flags">

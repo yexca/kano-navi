@@ -16,6 +16,11 @@ export const publicEventFields = [
   "eventType",
   "url",
   "provenance",
+  "cancellationStatus",
+  "cancellationSource",
+  "cancellationReason",
+  "cancellationEvidence",
+  "cancellationAt",
 ]
 
 export function publicEvent(event, extraFields = []) {

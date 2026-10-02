@@ -42,6 +42,8 @@ const emptyEvent = {
   endTime: "",
   timePrecision: "exact",
   status: "",
+  cancellationStatus: "none",
+  cancellationReason: "",
   eventType: "event",
   url: "",
 }
@@ -57,6 +59,17 @@ function eventToForm(event) {
     endTime: end ? `${end.hour}:${end.minute}` : "",
     timePrecision: event.timePrecision || (start ? "exact" : "unknown"),
     status: event.status || "",
+    // An unresolved LLM overlay stays selected so an unrelated edit does not
+    // dismiss it; the operator has to pick a decision explicitly.
+    cancellationStatus: ["manual_confirmed", "llm_suspected"].includes(
+      event.cancellationStatus,
+    )
+      ? event.cancellationStatus
+      : "none",
+    cancellationReason:
+      event.cancellationStatus === "manual_confirmed"
+        ? event.cancellationReason || ""
+        : "",
     eventType: event.eventType || "event",
     url: event.url || "",
   }
@@ -90,6 +103,8 @@ function formatEventTime(event, t) {
 
 function eventStatus(event) {
   if (event.deletedAt) return "deleted"
+  if (event.cancellationStatus === "manual_confirmed") return "cancelled"
+  if (event.cancellationStatus === "llm_suspected") return "cancellation_review"
   const explicit = String(event.statusCode || "").toLowerCase()
   const status = String(event.status || "")
     .trim()
@@ -132,6 +147,7 @@ function eventStatus(event) {
 const statusTones = {
   deleted: "danger",
   cancelled: "danger",
+  cancellation_review: "honey",
   pending: "honey",
   upcoming: "sky",
   recorded: "leaf",
@@ -249,6 +265,45 @@ function EventEditor({ event, onClose, onSaved, t }) {
             maxLength={80}
           />
         </Field>
+        <Field label={t("admin.event.cancellationStatus")}>
+          <select
+            value={form.cancellationStatus}
+            onChange={setField("cancellationStatus")}
+          >
+            {editing && event.cancellationStatus === "llm_suspected" ? (
+              <option value="llm_suspected">
+                {t("admin.event.cancellation.keepLlm")}
+              </option>
+            ) : null}
+            <option value="none">{t("admin.event.cancellation.none")}</option>
+            <option value="manual_confirmed">
+              {t("admin.event.cancellation.manual")}
+            </option>
+          </select>
+        </Field>
+        {form.cancellationStatus === "manual_confirmed" ? (
+          <Field label={t("admin.event.cancellationReason")} wide>
+            <textarea
+              value={form.cancellationReason}
+              onChange={setField("cancellationReason")}
+              maxLength={500}
+              rows={2}
+              required
+            />
+          </Field>
+        ) : null}
+        {editing && event.cancellationStatus === "llm_suspected" ? (
+          <div className="adm-callout is-wide">
+            <strong>{t("admin.event.llmCancellationEvidence")}</strong>
+            <p>
+              {event.cancellationReason ||
+                t("admin.event.noCancellationReason")}
+            </p>
+            {event.cancellationEvidence ? (
+              <p>{event.cancellationEvidence}</p>
+            ) : null}
+          </div>
+        ) : null}
         <Field label={t("admin.event.publicUrl")} wide>
           <input
             type="url"
@@ -465,6 +520,10 @@ export function SchedulesView({ data }) {
                     </strong>
                     <small>
                       {event.detail || t("admin.schedule.noDetails")}
+                      {event.cancellationStatus === "llm_suspected" &&
+                      event.cancellationReason
+                        ? ` · ${event.cancellationReason}`
+                        : ""}
                     </small>
                   </div>
                   <div className="adm-event-tags">

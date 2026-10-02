@@ -1105,6 +1105,10 @@ a.event-row:hover {
   background: var(--danger);
 }
 
+.event-row.is-cancellation_review .event-rail {
+  background: var(--honey);
+}
+
 .event-body {
   display: flex;
   flex-direction: column;
@@ -1173,6 +1177,16 @@ a.event-row:hover {
 .status-badge.is-cancelled {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+.status-badge.is-cancellation_review {
+  color: var(--honey);
+  background: var(--honey-soft);
+}
+
+.event-cancellation-note {
+  color: var(--honey);
+  font-weight: 600;
 }
 
 .provenance {

@@ -6,6 +6,7 @@ import {
   getDashboard,
   getEvent,
   getScheduleAssetReview,
+  createManualEvent,
   initializeDatabase,
   setLlmRouteProviders,
   setAppSetting,
@@ -276,6 +277,80 @@ test("uncertain classifications are cached without creating events", async () =>
       database.prepare("SELECT COUNT(*) AS count FROM events").get().count,
       0,
     )
+  } finally {
+    database.close()
+  }
+})
+
+test("cancellation extraction keeps the event and records review evidence", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const post = {
+    id: "cancel-post",
+    source: "x",
+    text: "本日の夜配信は中止になりました",
+    publishedAt: "2026-09-04T01:00:00.000Z",
+    url: "https://x.com/example/status/cancel-post",
+  }
+  let calls = 0
+  const fetchImpl = async () => {
+    calls += 1
+    return new Response(
+      JSON.stringify({
+        output_text: JSON.stringify({
+          classification: "schedule",
+          events: [
+            {
+              title: "夜配信",
+              detail: null,
+              date: "2026-09-04",
+              time: "21:00",
+              endTime: null,
+              timePrecision: "exact",
+              status: "中止",
+              eventType: "stream",
+              url: null,
+              confidence: 0.9,
+              evidence: "中止になりました",
+            },
+          ],
+          confidence: 0.91,
+          evidence: "本日の夜配信は中止になりました",
+          reason: "本人公告と一致するため取消の可能性",
+          action: "cancel",
+        }),
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )
+  }
+  try {
+    upsertPosts(database, [post])
+    createManualEvent(database, {
+      id: "manual-stream",
+      title: "夜配信",
+      startsOn: "2026-09-04",
+      startsAt: "2026-09-04T12:00:00.000Z",
+      eventType: "stream",
+      status: "予定",
+    })
+    const result = await extractSchedulePost(database, post, {
+      apiKey: "not-a-real-api-key",
+      model: "gpt-4o-mini",
+      fetchImpl,
+    })
+    assert.equal(result.status, "success")
+    assert.deepEqual(result.cancellation, { applied: 1, candidates: 1 })
+    const event = getEvent(database, "manual-stream")
+    assert.equal(event.title, "夜配信")
+    assert.equal(event.deletedAt, null)
+    assert.equal(event.cancellationStatus, "llm_suspected")
+    assert.equal(event.cancellationReason, "本人公告と一致するため取消の可能性")
+
+    const cached = await extractSchedulePost(database, post, {
+      apiKey: "not-a-real-api-key",
+      model: "gpt-4o-mini",
+      fetchImpl,
+    })
+    assert.equal(cached.status, "cached")
   } finally {
     database.close()
   }
