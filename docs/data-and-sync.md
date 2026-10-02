@@ -22,6 +22,7 @@ directory, schema, and missing seed records. The current tables are:
 | `sync_state`             | Durable per-account X and YouTube cursors                                                                 |
 | `app_settings`           | Non-secret model, schedule-extractor, X-account, and Featured settings                                    |
 | `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                            |
+| `post_llm_states`        | Per-post LLM status, last attempt, error, and reprocess queue state                                       |
 | `schedule_asset_reviews` | Per-schedule-image LLM verdict, skip reason, and optional manual label with its reason                    |
 | `llm_providers`          | OpenAI-compatible endpoints, Text/Image capabilities, health, and encrypted keys                          |
 | `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)     |
@@ -153,6 +154,16 @@ remain visible with the model's cancellation evidence. `not_schedule` and
 untouched. Input fingerprints and the extractor version make these outcomes
 idempotent. Date-only events store `starts_on`, a null `starts_at`, and
 `time_precision = unknown`; the model must not invent a specific time.
+
+Every stored post has an LLM processing state. Failed, skipped, and uncertain
+attempts remain visible to operators, and `/api/admin/posts/:id/llm/reprocess`
+queues a forced pass that bypasses the successful-result cache. The automatic
+scan consumes queued posts even when they no longer match the current keyword
+heuristic; a missing provider or pending image keeps the queue request pending,
+while a provider failure consumes it. Queued posts run before keyword
+candidates within the shared scan limit. They use the route the operator
+requested; without one, a post that a keyword path also selected keeps that
+route, image posts use `schedule_board`, and text posts use `schedule_message`.
 
 The default model comes from the database (`app_settings.llm_model` and the
 seeded `openai-default` provider). Provider API keys are encrypted with

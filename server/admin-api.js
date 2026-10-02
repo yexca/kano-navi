@@ -26,7 +26,9 @@ import {
   getScheduleProviderOrders,
   getLlmRouteTargets,
   getScheduleRouteTargets,
+  listPostLlmStates,
   listScheduleAssetReviews,
+  requestPostLlmReprocess,
   getWorkflow,
   listLlmModels,
   listWorkflows,
@@ -1573,6 +1575,31 @@ export function createAdminRouter({
       }
       bumpDashboardRevision(database)
       response.json({ asset: scheduleAssetPayload(database, item) })
+    }),
+  )
+
+  router.get("/posts/llm", (request, response) => {
+    response.json({
+      posts: listPostLlmStates(database, {
+        limit: request.query.limit,
+        status: request.query.status,
+        reprocessRequested: queryBoolean(request.query.reprocessRequested),
+      }),
+    })
+  })
+  router.post(
+    "/posts/:id/llm/reprocess",
+    route((request, response) => {
+      const state = requestPostLlmReprocess(
+        database,
+        request.params.id,
+        request.body?.route,
+      )
+      if (!state) {
+        response.status(404).json({ error: "post_not_found" })
+        return
+      }
+      response.json({ state })
     }),
   )
 

@@ -129,6 +129,21 @@ const schema = `
     ON event_sources (source, source_item_id, source_key);
   CREATE INDEX IF NOT EXISTS event_sources_event_idx ON event_sources (event_id);
 
+  CREATE TABLE IF NOT EXISTS post_llm_states (
+    post_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'never',
+    route TEXT,
+    last_attempt_at TEXT,
+    last_processed_at TEXT,
+    last_error TEXT,
+    last_extraction_id INTEGER,
+    reprocess_requested INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS post_llm_states_status_idx
+    ON post_llm_states (status, reprocess_requested, updated_at DESC);
+
   CREATE TABLE IF NOT EXISTS videos (
     id TEXT PRIMARY KEY,
     source TEXT NOT NULL,
@@ -731,6 +746,19 @@ function migrateSchema(database) {
     if (!eventColumns.has(column)) database.exec(statement)
   }
   database.exec(`
+    CREATE TABLE IF NOT EXISTS post_llm_states (
+      post_id TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'never',
+      route TEXT,
+      last_attempt_at TEXT,
+      last_processed_at TEXT,
+      last_error TEXT,
+      last_extraction_id INTEGER,
+      reprocess_requested INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS post_llm_states_status_idx
+      ON post_llm_states (status, reprocess_requested, updated_at DESC);
     CREATE TABLE IF NOT EXISTS schedule_asset_reviews (
       asset_id TEXT PRIMARY KEY REFERENCES assets (id) ON DELETE CASCADE,
       llm_status TEXT NOT NULL DEFAULT 'pending',
@@ -2483,6 +2511,153 @@ export function getEvent(database, id) {
       .prepare(`SELECT ${eventAdminColumns} FROM events WHERE id = ?`)
       .get(String(id)) || null
   )
+}
+
+const POST_LLM_STATUSES = new Set([
+  "never",
+  "queued",
+  "running",
+  "success",
+  "uncertain",
+  "failed",
+  "skipped",
+])
+
+function normalizedPostLlmStatus(value) {
+  const status = String(value || "never")
+    .trim()
+    .toLowerCase()
+  return POST_LLM_STATUSES.has(status) ? status : "never"
+}
+
+export function getPostLlmState(database, postId) {
+  const row = database
+    .prepare(
+      `SELECT post_id AS postId, status, route, last_attempt_at AS lastAttemptAt,
+       last_processed_at AS lastProcessedAt, last_error AS lastError,
+       last_extraction_id AS lastExtractionId,
+       reprocess_requested AS reprocessRequested, updated_at AS updatedAt
+       FROM post_llm_states WHERE post_id = ?`,
+    )
+    .get(String(postId))
+  return row
+    ? { ...row, reprocessRequested: Boolean(row.reprocessRequested) }
+    : null
+}
+
+export function upsertPostLlmState(database, state = {}) {
+  const postId = String(state.postId || state.post_id || "").trim()
+  if (!postId) throw new Error("post LLM state requires postId")
+  const timestamp = nowIso()
+  const status = normalizedPostLlmStatus(state.status)
+  database
+    .prepare(
+      `INSERT INTO post_llm_states (
+         post_id, status, route, last_attempt_at, last_processed_at,
+         last_error, last_extraction_id, reprocess_requested, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(post_id) DO UPDATE SET
+         status=excluded.status, route=COALESCE(excluded.route, post_llm_states.route),
+         last_attempt_at=COALESCE(excluded.last_attempt_at, post_llm_states.last_attempt_at),
+         last_processed_at=COALESCE(excluded.last_processed_at, post_llm_states.last_processed_at),
+         last_error=excluded.last_error,
+         last_extraction_id=COALESCE(excluded.last_extraction_id, post_llm_states.last_extraction_id),
+         reprocess_requested=excluded.reprocess_requested,
+         updated_at=excluded.updated_at`,
+    )
+    .run(
+      postId,
+      status,
+      nullable(state.route),
+      nullable(state.lastAttemptAt ?? state.last_attempt_at),
+      nullable(state.lastProcessedAt ?? state.last_processed_at),
+      nullable(state.lastError ?? state.last_error),
+      asIntegerOrNull(state.lastExtractionId ?? state.last_extraction_id),
+      (state.reprocessRequested ?? state.reprocess_requested) ? 1 : 0,
+      timestamp,
+    )
+  return getPostLlmState(database, postId)
+}
+
+export function requestPostLlmReprocess(database, postId, route = null) {
+  const exists = database
+    .prepare("SELECT 1 FROM posts WHERE id = ?")
+    .get(String(postId))
+  if (!exists) return null
+  const normalizedRoute =
+    route === SCHEDULE_MESSAGE_ROUTE || route === SCHEDULE_BOARD_ROUTE
+      ? route
+      : null
+  return upsertPostLlmState(database, {
+    postId,
+    status: "queued",
+    route: normalizedRoute,
+    reprocessRequested: true,
+    lastError: null,
+  })
+}
+
+export function listPostLlmStates(
+  database,
+  {
+    limit = 50,
+    status = "",
+    reprocessRequested = false,
+    includeRaw = false,
+  } = {},
+) {
+  const boundedLimit = Math.min(200, Math.max(1, Number(limit) || 50))
+  const clauses = []
+  const values = []
+  if (status && POST_LLM_STATUSES.has(String(status))) {
+    clauses.push("s.status = ?")
+    values.push(String(status))
+  }
+  if (reprocessRequested) clauses.push("s.reprocess_requested = 1")
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""
+  return database
+    .prepare(
+      `SELECT p.id, p.source, p.account_handle AS accountHandle, p.text,
+       p.published_at AS publishedAt, p.url, p.media_url AS mediaUrl,
+       p.media_alt AS mediaAlt, p.raw_json AS rawJson,
+       COALESCE(s.status, 'never') AS llmStatus, s.route AS llmRoute,
+       s.last_attempt_at AS llmLastAttemptAt,
+       s.last_processed_at AS llmLastProcessedAt,
+       s.last_error AS llmLastError,
+       s.last_extraction_id AS llmLastExtractionId,
+       COALESCE(s.reprocess_requested, 0) AS llmReprocessRequested
+       FROM posts p LEFT JOIN post_llm_states s ON s.post_id = p.id
+       ${where}
+       ORDER BY p.published_at DESC LIMIT ?`,
+    )
+    .all(...values, boundedLimit)
+    .map((post) => {
+      const { rawJson, ...publicPost } = post
+      if (!includeRaw)
+        return {
+          ...publicPost,
+          llmReprocessRequested: Boolean(post.llmReprocessRequested),
+        }
+      return {
+        ...publicPost,
+        raw: (() => {
+          try {
+            return rawJson ? JSON.parse(rawJson) : null
+          } catch {
+            return null
+          }
+        })(),
+        llmReprocessRequested: Boolean(post.llmReprocessRequested),
+      }
+    })
+}
+
+export function listPostsRequestedForLlm(database, { limit = 20 } = {}) {
+  return listPostLlmStates(database, {
+    limit,
+    reprocessRequested: true,
+    includeRaw: true,
+  })
 }
 
 export function applyLlmCancellationJudgements(

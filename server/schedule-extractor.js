@@ -13,7 +13,9 @@ import {
   getScheduleRouteTargets,
   LLM_MAX_RETRIES,
   findCancellationTargets,
+  getPostLlmState,
   listMediaLinks,
+  listPostsRequestedForLlm,
   listScheduleCandidatePosts,
   normalizeLlmCapabilities,
   applyLlmCancellationJudgements,
@@ -22,6 +24,7 @@ import {
   SCHEDULE_MESSAGE_ROUTE,
   SCHEDULE_VISION_ROUTE,
   updateLlmProviderStatus,
+  upsertPostLlmState,
   listScheduleAssetReviews,
   upsertScheduleAssetReview,
   upsertScheduleExtraction,
@@ -1050,13 +1053,31 @@ function providerExtractorVersion(provider, { detectionType, inputMode } = {}) {
   return `${scheduleExtractorVersion}:${normalizeDetectionType(detectionType)}:${inputMode}:${provider.id}:${provider.protocol}`
 }
 
+function markPostLlm(database, postId, state = {}) {
+  if (!postId) return null
+  const previous = getPostLlmState(database, postId)
+  return upsertPostLlmState(database, {
+    postId,
+    ...state,
+    reprocessRequested:
+      state.reprocessRequested ?? previous?.reprocessRequested ?? false,
+  })
+}
+
 async function extractWithProvider(
   database,
   post,
   images,
   contentFingerprint,
   provider,
-  { fetchImpl = fetch, detectionType = "board", inputMode, eventScope } = {},
+  {
+    fetchImpl = fetch,
+    detectionType = "board",
+    inputMode,
+    eventScope,
+    force = false,
+    route,
+  } = {},
 ) {
   const normalizedDetectionType = normalizeDetectionType(detectionType)
   const normalizedEventScope =
@@ -1072,9 +1093,18 @@ async function extractWithProvider(
     extractorVersion,
   })
   if (
+    !force &&
     ["success", "uncertain"].includes(existing?.status) &&
     String(existing.model || "") === String(provider.model || "")
   ) {
+    markPostLlm(database, post.id, {
+      status: existing.status,
+      route,
+      lastProcessedAt: existing.updatedAt || new Date().toISOString(),
+      lastExtractionId: existing.id,
+      lastError: null,
+      reprocessRequested: false,
+    })
     return {
       status: "cached",
       extractionId: existing.id,
@@ -1089,6 +1119,13 @@ async function extractWithProvider(
       })(),
     }
   }
+  markPostLlm(database, post.id, {
+    status: "running",
+    route,
+    lastAttemptAt: new Date().toISOString(),
+    lastError: null,
+    reprocessRequested: false,
+  })
   const running = upsertScheduleExtraction(database, {
     source: "x",
     sourceItemId: post.id,
@@ -1127,6 +1164,14 @@ async function extractWithProvider(
         })
         if (provider.persisted)
           updateLlmProviderStatus(database, provider.id, { status: "success" })
+        markPostLlm(database, post.id, {
+          status: "uncertain",
+          route,
+          lastProcessedAt: new Date().toISOString(),
+          lastExtractionId: running.id,
+          lastError: null,
+          reprocessRequested: false,
+        })
         return {
           status: "uncertain",
           extractionId: running.id,
@@ -1165,6 +1210,14 @@ async function extractWithProvider(
       })
       if (provider.persisted)
         updateLlmProviderStatus(database, provider.id, { status: "success" })
+      markPostLlm(database, post.id, {
+        status: "success",
+        route,
+        lastProcessedAt: new Date().toISOString(),
+        lastExtractionId: running.id,
+        lastError: null,
+        reprocessRequested: false,
+      })
       return {
         status: "success",
         extractionId: running.id,
@@ -1195,6 +1248,13 @@ async function extractWithProvider(
         status: "failed",
         error: error.message,
       })
+    markPostLlm(database, post.id, {
+      status: "failed",
+      route,
+      lastAttemptAt: new Date().toISOString(),
+      lastExtractionId: running.id,
+      lastError: error.message,
+    })
     return {
       status: "failed",
       extractionId: running.id,
@@ -1207,6 +1267,9 @@ async function extractWithProvider(
 
 export async function extractSchedulePost(database, post, options = {}) {
   const detectionType = normalizeDetectionType(options.detectionType)
+  const route = routeForDetectionType(detectionType)
+  const previousState = getPostLlmState(database, post.id)
+  const force = Boolean(options.force || previousState?.reprocessRequested)
   const media = postImageState(database, post)
   const modalityPost = {
     ...post,
@@ -1215,8 +1278,22 @@ export async function extractSchedulePost(database, post, options = {}) {
     mediaUrls: media.hasImages ? ["linked-image"] : [],
   }
   const inputMode = options.inputMode || inputModeForPost(modalityPost)
-  if (!inputMode) return { status: "skipped", reason: "no_content" }
+  if (!inputMode) {
+    markPostLlm(database, post.id, {
+      status: "skipped",
+      route,
+      lastError: "no_content",
+      reprocessRequested: force,
+    })
+    return { status: "skipped", reason: "no_content" }
+  }
   if (inputMode !== "text" && !media.images.length) {
+    markPostLlm(database, post.id, {
+      status: "skipped",
+      route,
+      lastError: "media_pending",
+      reprocessRequested: force,
+    })
     return { status: "skipped", reason: "media_pending" }
   }
   const configured = configuredProviders(
@@ -1226,8 +1303,21 @@ export async function extractSchedulePost(database, post, options = {}) {
     detectionType,
   )
   if (!configured.providers.length) {
+    markPostLlm(database, post.id, {
+      status: "skipped",
+      route,
+      lastError: configured.reason,
+      reprocessRequested: force,
+    })
     return { status: "skipped", reason: configured.reason }
   }
+  markPostLlm(database, post.id, {
+    status: "running",
+    route,
+    lastAttemptAt: new Date().toISOString(),
+    lastError: null,
+    reprocessRequested: false,
+  })
   const modelPost = {
     ...post,
     publishedAt: post.publishedAt || post.published_at,
@@ -1253,6 +1343,8 @@ export async function extractSchedulePost(database, post, options = {}) {
         ...options,
         detectionType,
         inputMode,
+        force,
+        route,
         eventScope: eventScopeForDetectionType(detectionType),
       },
     )
@@ -1272,6 +1364,18 @@ export async function extractSchedulePost(database, post, options = {}) {
   }
 }
 
+/**
+ * The route an operator asked for wins. Without one, a post that the keyword
+ * paths also selected keeps that route, and any other post follows its own
+ * modality: image posts go to the board route, text posts to the message one.
+ */
+function requestedDetectionType(post, keywordDetectionType) {
+  if (post.llmRoute === SCHEDULE_MESSAGE_ROUTE) return "message"
+  if (post.llmRoute === SCHEDULE_BOARD_ROUTE) return "board"
+  if (keywordDetectionType) return keywordDetectionType
+  return declaredPostMediaUrls(post).length ? "board" : "message"
+}
+
 export async function extractPendingSchedules(database, options = {}) {
   const scheduleConfig = getScheduleExtractionConfig(database)
   const disabled = {
@@ -1285,40 +1389,47 @@ export async function extractPendingSchedules(database, options = {}) {
   const boardEnabled =
     scheduleConfig.keywordEnabled && scheduleConfig.visionEnabled
   const messageEnabled = scheduleConfig.messageEnabled
-  if (!boardEnabled && !messageEnabled) return disabled
   const limit = Math.min(100, Math.max(1, Number(options.limit) || 20))
-  const candidates = []
-  if (boardEnabled) {
+  const requestedPosts = listPostsRequestedForLlm(database, { limit })
+  if (!boardEnabled && !messageEnabled && !requestedPosts.length)
+    return disabled
+  // A post selected by the board path is not sent again through the message
+  // path in the same scan.
+  const keywordCandidates = new Map()
+  for (const [enabled, detectionType] of [
+    [boardEnabled, "board"],
+    [messageEnabled, "message"],
+  ]) {
+    if (!enabled) continue
     for (const post of listScheduleCandidatePosts(database, {
       limit,
       keywords: options.keywords || scheduleConfig.keywords,
-      detectionType: "board",
+      detectionType,
     })) {
-      candidates.push({ post, detectionType: "board" })
-    }
-  }
-  if (messageEnabled) {
-    for (const post of listScheduleCandidatePosts(database, {
-      limit,
-      keywords: options.keywords || scheduleConfig.keywords,
-      detectionType: "message",
-    })) {
-      candidates.push({ post, detectionType: "message" })
-    }
-  }
-  const seen = new Set()
-  const uniqueCandidates = candidates
-    .filter(({ post }) => {
       const id = String(post.id)
-      if (seen.has(id)) return false
-      seen.add(id)
-      return true
-    })
-    .sort(
-      (left, right) =>
-        Date.parse(right.post.publishedAt || right.post.published_at || 0) -
-        Date.parse(left.post.publishedAt || left.post.published_at || 0),
-    )
+      if (!keywordCandidates.has(id))
+        keywordCandidates.set(id, { post, detectionType, force: false })
+    }
+  }
+  // Operator reprocess requests run before keyword candidates so a full scan
+  // limit cannot starve them, and they bypass the keyword heuristic.
+  const requested = requestedPosts.map((post) => ({
+    post,
+    detectionType: requestedDetectionType(
+      post,
+      keywordCandidates.get(String(post.id))?.detectionType,
+    ),
+    force: true,
+  }))
+  const requestedIds = new Set(requested.map(({ post }) => String(post.id)))
+  const publishedAt = ({ post }) =>
+    Date.parse(post.publishedAt || post.published_at || 0)
+  const uniqueCandidates = [
+    ...requested,
+    ...[...keywordCandidates.values()]
+      .filter(({ post }) => !requestedIds.has(String(post.id)))
+      .sort((left, right) => publishedAt(right) - publishedAt(left)),
+  ]
   const summary = {
     attempted: 0,
     success: 0,
@@ -1332,10 +1443,14 @@ export async function extractPendingSchedules(database, options = {}) {
     providers: scheduleConfig.providerOrder,
     providerOrders: scheduleConfig.providerOrders,
   }
-  for (const { post, detectionType } of uniqueCandidates.slice(0, limit)) {
+  for (const { post, detectionType, force } of uniqueCandidates.slice(
+    0,
+    limit,
+  )) {
     const result = await extractSchedulePost(database, post, {
       ...options,
       detectionType,
+      force,
     })
     summary.attempted += 1
     summary[`${detectionType}Attempted`] += 1

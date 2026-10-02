@@ -114,7 +114,9 @@ The synchronization layer handles timeouts, parsing, field normalization, and
   `schedule_board` or `schedule_message` route, filters providers by the
   original text/image modality, makes at most three total calls per provider,
   and then fails over by priority. API keys are encrypted at rest with
-  `LLM_SECRETS_KEY`.
+  `LLM_SECRETS_KEY`. Each stored post also has a processing state and can be
+  queued for a forced reprocess from the admin API; queued posts bypass the
+  normal keyword candidate heuristic on the next scan.
 - Media: register discovered URLs as `media_assets`/`media_links`, then download
   a bounded pending batch during the same synchronization command.
 - Workflows: `server/workflow-catalog.js` declares the modular steps (`x`,

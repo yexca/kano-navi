@@ -5,6 +5,7 @@ import {
   Check,
   ChevronRight,
   Clapperboard,
+  FileText,
   Image as ImageIcon,
   KeyRound,
   LoaderCircle,
@@ -24,6 +25,7 @@ import { useAdminData } from "@/admin/use-admin-data"
 import { ContentView } from "@/admin/views/content-view"
 import { DetectionView } from "@/admin/views/detection-view"
 import { ProvidersView } from "@/admin/views/providers-view"
+import { PostsView } from "@/admin/views/posts-view"
 import { ScheduleImagesView } from "@/admin/views/schedule-images-view"
 import { SchedulesView } from "@/admin/views/schedules-view"
 import { WorkflowView, stepMeta } from "@/admin/views/workflow-view"
@@ -44,6 +46,12 @@ const views = [
     group: "automation",
     icon: ScanSearch,
     component: DetectionView,
+  },
+  {
+    id: "posts",
+    group: "automation",
+    icon: FileText,
+    component: PostsView,
   },
   {
     id: "schedule-images",
@@ -280,11 +288,13 @@ export function AdminApp() {
                   const badge =
                     view.id === "schedules"
                       ? data.eventsPage?.total
-                      : view.id === "schedule-images"
-                        ? data.scheduleAssets?.length
-                        : view.id === "providers"
-                          ? data.config?.providers?.length
-                          : null
+                      : view.id === "posts"
+                        ? data.postLlm?.length
+                        : view.id === "schedule-images"
+                          ? data.scheduleAssets?.length
+                          : view.id === "providers"
+                            ? data.config?.providers?.length
+                            : null
                   return (
                     <a
                       key={view.id}

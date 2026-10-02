@@ -5,9 +5,11 @@ import test from "node:test"
 import {
   getDashboard,
   getEvent,
+  getPostLlmState,
   getScheduleAssetReview,
   createManualEvent,
   initializeDatabase,
+  requestPostLlmReprocess,
   setLlmRouteProviders,
   setAppSetting,
   upsertAssets,
@@ -344,6 +346,7 @@ test("cancellation extraction keeps the event and records review evidence", asyn
     assert.equal(event.deletedAt, null)
     assert.equal(event.cancellationStatus, "llm_suspected")
     assert.equal(event.cancellationReason, "本人公告と一致するため取消の可能性")
+    assert.equal(getPostLlmState(database, post.id).status, "success")
 
     const cached = await extractSchedulePost(database, post, {
       apiKey: "not-a-real-api-key",
@@ -351,6 +354,14 @@ test("cancellation extraction keeps the event and records review evidence", asyn
       fetchImpl,
     })
     assert.equal(cached.status, "cached")
+    requestPostLlmReprocess(database, post.id, "schedule_message")
+    const forced = await extractSchedulePost(database, post, {
+      apiKey: "not-a-real-api-key",
+      model: "gpt-4o-mini",
+      fetchImpl,
+    })
+    assert.equal(forced.status, "success")
+    assert.equal(calls, 2)
   } finally {
     database.close()
   }
@@ -489,6 +500,69 @@ test("schedule images need an image verdict and a board-like source post", async
     for (const file of cachedFiles) fs.rmSync(file, { force: true })
     if (previousSecretsKey == null) delete process.env.LLM_SECRETS_KEY
     else process.env["LLM_SECRETS_KEY"] = previousSecretsKey
+  }
+})
+
+test("queued posts run before keyword candidates and pick a text route", async () => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  const bodies = []
+  const fetchImpl = async (url, options) => {
+    bodies.push(options.body)
+    return new Response(
+      JSON.stringify({
+        output_text: JSON.stringify({
+          classification: "not_schedule",
+          events: [],
+          confidence: 0.9,
+          evidence: "ordinary update",
+          reason: null,
+          action: "none",
+        }),
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    )
+  }
+  const options = {
+    apiKey: "not-a-real-api-key",
+    model: "gpt-4o-mini",
+    fetchImpl,
+    limit: 1,
+  }
+  try {
+    upsertPosts(database, [
+      {
+        id: "fresh-keyword-post",
+        source: "x",
+        text: "9月6日 20時から配信予定です",
+        published_at: "2026-09-05T01:00:00.000Z",
+        url: "https://x.com/example/status/fresh-keyword-post",
+      },
+      {
+        id: "old-queued-post",
+        source: "x",
+        text: "ちょっとした近況です",
+        published_at: "2026-08-01T01:00:00.000Z",
+        url: "https://x.com/example/status/old-queued-post",
+      },
+    ])
+    setAppSetting(database, "schedule_message_enabled", "1")
+    requestPostLlmReprocess(database, "old-queued-post")
+
+    const first = await extractPendingSchedules(database, options)
+    assert.equal(first.attempted, 1)
+    assert.equal(first.messageAttempted, 1)
+    assert.equal(bodies.length, 1)
+    assert.match(bodies[0], /ちょっとした近況/u)
+    const state = getPostLlmState(database, "old-queued-post")
+    assert.equal(state.status, "success")
+    assert.equal(state.route, "schedule_message")
+    assert.equal(state.reprocessRequested, false)
+
+    await extractPendingSchedules(database, options)
+    assert.equal(bodies.length, 2)
+    assert.match(bodies[1], /配信予定/u)
+  } finally {
+    database.close()
   }
 })
 

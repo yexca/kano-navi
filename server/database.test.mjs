@@ -20,6 +20,8 @@ import {
   openDatabase,
   listAdminEvents,
   listAdminEventsPage,
+  requestPostLlmReprocess,
+  getPostLlmState,
   replaceAutomaticEventsForSource,
   seedDatabase,
   setFeaturedVideoId,
@@ -470,6 +472,21 @@ test("LLM cancellation is an evidence overlay that applies to manual events", ()
       getEvent(database, "manual-cancel-test").cancellationStatus,
       "manual_confirmed",
     )
+
+    const postId = "llm-reprocess-post"
+    upsertPosts(database, [
+      {
+        id: postId,
+        source: "x",
+        text: "再確認",
+        published_at: "2026-09-04T00:00:00.000Z",
+        url: "https://x.com/example/status/llm-reprocess-post",
+      },
+    ])
+    const queued = requestPostLlmReprocess(database, postId, "schedule_message")
+    assert.equal(queued.status, "queued")
+    assert.equal(queued.reprocessRequested, true)
+    assert.equal(getPostLlmState(database, postId).route, "schedule_message")
   } finally {
     database.close()
   }

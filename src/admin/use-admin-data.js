@@ -41,6 +41,7 @@ export function useAdminData() {
   const [eventsPage, setEventsPage] = useState(null)
   const [eventFilters, setEventFilters] = useState(emptyFilters)
   const [videos, setVideos] = useState([])
+  const [postLlm, setPostLlm] = useState([])
   const [scheduleAssets, setScheduleAssets] = useState([])
   const [profileMedia, setProfileMedia] = useState({
     items: [],
@@ -119,6 +120,12 @@ export function useAdminData() {
     setVideos(payload.videos || [])
   }, [])
 
+  const loadPostLlm = useCallback(async () => {
+    const payload = await request("/posts/llm?limit=60")
+    setPostLlm(payload.posts || [])
+    return payload.posts || []
+  }, [])
+
   const loadScheduleAssets = useCallback(async () => {
     const payload = await request("/schedule-assets?limit=100")
     setScheduleAssets(payload.assets || [])
@@ -135,6 +142,7 @@ export function useAdminData() {
       loadActivity(),
       loadEventsPage({ page: 1 }),
       loadVideos(),
+      loadPostLlm(),
       loadScheduleAssets(),
       loadProfileMedia(),
     ])
@@ -142,6 +150,7 @@ export function useAdminData() {
     loadActivity,
     loadConfig,
     loadEventsPage,
+    loadPostLlm,
     loadScheduleAssets,
     loadProfileMedia,
     loadVideos,
@@ -178,6 +187,7 @@ export function useAdminData() {
             loadEventsPage({ page: pageRef.current }),
             loadConfig(),
             loadVideos(),
+            loadPostLlm(),
             loadScheduleAssets(),
           ])
         }
@@ -197,6 +207,7 @@ export function useAdminData() {
     loadConfig,
     loadEventsPage,
     loadVideos,
+    loadPostLlm,
     loadScheduleAssets,
   ])
 
@@ -257,6 +268,18 @@ export function useAdminData() {
     [fail, loadActivity, notify],
   )
 
+  const reprocessPostLlm = useCallback(
+    async (postId, route = null) => {
+      const payload = await request(
+        `/posts/${encodeURIComponent(postId)}/llm/reprocess`,
+        { method: "POST", body: jsonBody(route ? { route } : {}) },
+      )
+      await loadPostLlm()
+      return payload.state
+    },
+    [loadPostLlm],
+  )
+
   const reviewScheduleAsset = useCallback(
     async (assetId, status, reason) => {
       const payload = await request(
@@ -285,6 +308,7 @@ export function useAdminData() {
     eventsPage,
     eventFilters,
     videos,
+    postLlm,
     scheduleAssets,
     profileMedia,
     setProfileMedia,
@@ -302,7 +326,9 @@ export function useAdminData() {
     updateFilters,
     resetFilters,
     startJob,
+    loadPostLlm,
     loadScheduleAssets,
+    reprocessPostLlm,
     reviewScheduleAsset,
   }
 }

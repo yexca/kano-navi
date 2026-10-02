@@ -16,6 +16,7 @@ export const adminMessages = {
     "admin.nav.workflow": "Workflows",
     "admin.nav.schedules": "Schedules",
     "admin.nav.detection": "Detection rules",
+    "admin.nav.posts": "Posts",
     "admin.nav.schedule-images": "Schedule images",
     "admin.nav.providers": "LLM providers",
     "admin.nav.content": "Content & media",
@@ -317,6 +318,25 @@ export const adminMessages = {
     "admin.detection.modalityNote":
       "Text posts need a Text model, image posts an Image model, and mixed posts both.",
     "admin.detection.manageModels": "Manage models",
+    "admin.posts.status.never": "Not processed",
+    "admin.posts.status.queued": "Queued",
+    "admin.posts.status.running": "Running",
+    "admin.posts.status.success": "Processed",
+    "admin.posts.status.uncertain": "Uncertain",
+    "admin.posts.status.failed": "Failed",
+    "admin.posts.status.skipped": "Skipped",
+    "admin.posts.title": "Post processing",
+    "admin.posts.description":
+      "Review saved posts, their LLM processing state, and retry individual posts.",
+    "admin.posts.runScan": "Run scan now",
+    "admin.posts.search": "Search posts",
+    "admin.posts.searchPlaceholder": "Search text, URL, or ID",
+    "admin.posts.statusFilter": "Processing status",
+    "admin.posts.allStatuses": "All statuses",
+    "admin.posts.total": ({ count }) => `${count} posts`,
+    "admin.posts.openSource": "Open source post",
+    "admin.posts.reprocess": "Process again",
+    "admin.posts.empty": "No posts match the current filter",
 
     "admin.scheduleImages.title": "Schedule images",
     "admin.scheduleImages.description":
@@ -501,6 +521,7 @@ export const adminMessages = {
     "admin.notice.scheduleSaved": "Schedule saved and locked",
     "admin.notice.scheduleConfirmed": "Schedule confirmed",
     "admin.notice.scheduleDeleted": "Schedule deleted; lock retained",
+    "admin.notice.postQueued": "Post queued for the next scan",
 
     "errors.requestFailed": "The request failed. Please try again.",
     "errors.network": "The local API is unavailable. Please try again.",
@@ -528,6 +549,7 @@ export const adminMessages = {
     "admin.nav.workflow": "工作流",
     "admin.nav.schedules": "日程",
     "admin.nav.detection": "识别规则",
+    "admin.nav.posts": "贴文",
     "admin.nav.schedule-images": "日程图片",
     "admin.nav.providers": "模型服务",
     "admin.nav.content": "内容与媒体",
@@ -805,6 +827,25 @@ export const adminMessages = {
     "admin.detection.modalityNote":
       "纯文本动态需要 Text 模型，纯图片需要 Image 模型，图文混合需要两者兼具。",
     "admin.detection.manageModels": "管理模型",
+    "admin.posts.status.never": "未处理",
+    "admin.posts.status.queued": "已排队",
+    "admin.posts.status.running": "处理中",
+    "admin.posts.status.success": "已处理",
+    "admin.posts.status.uncertain": "不确定",
+    "admin.posts.status.failed": "失败",
+    "admin.posts.status.skipped": "已跳过",
+    "admin.posts.title": "贴文处理",
+    "admin.posts.description":
+      "查看已存贴文、LLM 处理状态，并单独重新处理贴文。",
+    "admin.posts.runScan": "立即扫描",
+    "admin.posts.search": "搜索贴文",
+    "admin.posts.searchPlaceholder": "搜索正文、链接或 ID",
+    "admin.posts.statusFilter": "处理状态",
+    "admin.posts.allStatuses": "全部状态",
+    "admin.posts.total": ({ count }) => `${count} 条贴文`,
+    "admin.posts.openSource": "打开原贴文",
+    "admin.posts.reprocess": "再次处理",
+    "admin.posts.empty": "没有符合当前筛选条件的贴文",
 
     "admin.scheduleImages.title": "日程图片",
     "admin.scheduleImages.description":
@@ -985,6 +1026,7 @@ export const adminMessages = {
     "admin.notice.scheduleSaved": "日程已保存并锁定",
     "admin.notice.scheduleConfirmed": "日程已确认",
     "admin.notice.scheduleDeleted": "日程已删除，锁定已保留",
+    "admin.notice.postQueued": "贴文已排队，将在下次扫描时处理",
 
     "errors.requestFailed": "请求失败，请重试。",
     "errors.network": "本地 API 暂不可用，请稍后重试。",
