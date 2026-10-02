@@ -35,6 +35,7 @@ const imageHosts = new Set([
   "yt3.googleusercontent.com",
   "lh3.googleusercontent.com",
 ])
+const imageHostSuffixes = new Set([".twimg.com", ".ytimg.com"])
 
 const maxProfileImageBytes = 15 * 1024 * 1024
 
@@ -54,9 +55,15 @@ function validSource(value) {
     : null
 }
 
-function hostAllowed(hostname, hosts) {
+function hostAllowed(hostname, hosts, suffixes = new Set()) {
   const normalized = String(hostname || "").toLowerCase()
-  return hosts.has(normalized)
+  return (
+    hosts.has(normalized) ||
+    [...suffixes].some(
+      (suffix) =>
+        normalized.length > suffix.length && normalized.endsWith(suffix),
+    )
+  )
 }
 
 function assertPageUrl(value, source) {
@@ -72,7 +79,10 @@ function assertImageUrl(value) {
   const normalized = normalizeSourceUrl(value)
   if (!normalized) throw new Error("profile image URL is invalid")
   const url = new URL(normalized)
-  if (url.protocol !== "https:" || !hostAllowed(url.hostname, imageHosts))
+  if (
+    url.protocol !== "https:" ||
+    !hostAllowed(url.hostname, imageHosts, imageHostSuffixes)
+  )
     throw new Error("profile image host is not allowed")
   return normalized
 }

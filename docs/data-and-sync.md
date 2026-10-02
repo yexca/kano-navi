@@ -68,7 +68,8 @@ candidates as long as they have a publication time and a media URL.
 `X_HANDLE` remains a single-account compatibility fallback.
 
 Each discovered image URL is registered and linked to its post. A bounded media
-stage later in the same command downloads pending files from `pbs.twimg.com`.
+stage later in the same command downloads pending image files from X's
+`*.twimg.com` media CDN subdomains.
 The X adapter also accepts media and schedule keywords carried by a quoted
 tweet (`qrt`) in the detail response.
 When a schedule asset already has a source status URL but no image URL, the
@@ -90,8 +91,8 @@ recent reservations for `scheduledStartTime`, writing them to both `videos` and
 `events`. When no schedule time is available, the script does not invent one.
 
 Video thumbnails are registered and linked to their rows, then the bounded media
-stage downloads pending files from `i.ytimg.com` or its official numbered CDN
-hosts (`i1.ytimg.com` through `i4.ytimg.com`).
+stage downloads pending files from YouTube's `*.ytimg.com` thumbnail CDN
+subdomains (including `i.ytimg.com` and its numbered hosts).
 
 ### Schedule Extraction Pipeline
 

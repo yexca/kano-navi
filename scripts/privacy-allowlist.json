@@ -22,6 +22,10 @@
       "reason": "Public image CDN URLs returned by X status data."
     },
     {
+      "host": "twimg.com",
+      "reason": "Public X media CDN subdomains, including image and video URLs returned by status data."
+    },
+    {
       "host": "api.openai.com",
       "reason": "OpenAI Responses API used server-side to extract structured schedules from matching public posts."
     },
@@ -48,6 +52,10 @@
     {
       "host": "i4.ytimg.com",
       "reason": "Public YouTube thumbnail CDN URLs."
+    },
+    {
+      "host": "ytimg.com",
+      "reason": "Public YouTube thumbnail CDN subdomains returned by video and channel data."
     },
     {
       "host": "wikipedia.org",

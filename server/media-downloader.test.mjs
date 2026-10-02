@@ -8,7 +8,11 @@ import {
   registerMediaCandidates,
 } from "./database.js"
 import { resolveMediaCachePath } from "./media-cache.js"
-import { defaultAllowedHosts, downloadMediaAsset } from "./media-downloader.js"
+import {
+  defaultAllowedHosts,
+  downloadMediaAsset,
+  isAllowedMediaHost,
+} from "./media-downloader.js"
 
 function register(database, sourceUrl) {
   registerMediaCandidates(database, [
@@ -36,6 +40,16 @@ test("downloader allows only the known YouTube thumbnail CDN hosts", () => {
     assert.equal(defaultAllowedHosts.has(hostname), true)
   }
   assert.equal(defaultAllowedHosts.has("i5.ytimg.com"), false)
+})
+
+test("downloader accepts official X and YouTube CDN subdomains safely", () => {
+  assert.equal(isAllowedMediaHost("pbs.twimg.com"), true)
+  assert.equal(isAllowedMediaHost("video.twimg.com"), true)
+  assert.equal(isAllowedMediaHost("edge-cdn.twimg.com"), true)
+  assert.equal(isAllowedMediaHost("twimg.com"), false)
+  assert.equal(isAllowedMediaHost("twimg.com.attacker.invalid"), false)
+  assert.equal(isAllowedMediaHost("images.ytimg.com"), true)
+  assert.equal(isAllowedMediaHost("ytimg.com"), false)
 })
 
 test("downloader validates and stores an allowed image atomically", async () => {

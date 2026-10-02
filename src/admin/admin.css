@@ -1960,6 +1960,9 @@ button.adm-tag.is-inactive:not(:disabled):hover {
 .adm-health.is-keyMissing {
   color: var(--honey);
 }
+.adm-health.is-pending {
+  color: var(--sky);
+}
 
 .adm-models-search {
   max-width: 320px;

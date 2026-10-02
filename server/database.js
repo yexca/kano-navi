@@ -1294,7 +1294,7 @@ function mediaCandidatesFromPost(post) {
   const urls = Array.isArray(post?.media_urls)
     ? post.media_urls
     : [post?.media_url]
-  return urls.map((source_url, position) => ({
+  return urls.filter(isCacheableImageUrl).map((source_url, position) => ({
     source: post?.source || "x",
     source_url,
     owner_type: "post",
@@ -1303,6 +1303,18 @@ function mediaCandidatesFromPost(post) {
     position,
     alt: post?.media_alt,
   }))
+}
+
+function isCacheableImageUrl(value) {
+  if (typeof value !== "string" || value.trim() === "") return false
+  try {
+    const url = new URL(value)
+    const hostname = url.hostname.toLowerCase()
+    if (hostname === "video.twimg.com") return false
+    return !/\.(?:avi|m4v|mkv|mov|mp4|m3u8|webm)(?:$|[?#])/iu.test(url.pathname)
+  } catch {
+    return false
+  }
 }
 
 function mediaCandidatesFromVideo(video) {

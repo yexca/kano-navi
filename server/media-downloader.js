@@ -13,10 +13,40 @@ const defaultAllowedHosts = new Set([
   "i3.ytimg.com",
   "i4.ytimg.com",
 ])
+// X and YouTube publish media from additional CDN subdomains over time. Keep
+// the suffixes explicit and require a real subdomain boundary, rather than
+// accepting arbitrary lookalike hosts such as `twimg.com.attacker.invalid`.
+const defaultAllowedHostSuffixes = new Set([".twimg.com", ".ytimg.com"])
 
-function assertAllowedUrl(value, allowedHosts) {
+export function isAllowedMediaHost(
+  hostname,
+  allowedHosts = defaultAllowedHosts,
+  allowedHostSuffixes = defaultAllowedHostSuffixes,
+) {
+  const normalized = String(hostname || "")
+    .toLowerCase()
+    .replace(/\.$/u, "")
+  if (allowedHosts.has(normalized)) return true
+  return [...allowedHostSuffixes].some((suffix) => {
+    const normalizedSuffix = String(suffix || "").toLowerCase()
+    return (
+      normalizedSuffix.startsWith(".") &&
+      normalized.length > normalizedSuffix.length &&
+      normalized.endsWith(normalizedSuffix)
+    )
+  })
+}
+
+function assertAllowedUrl(
+  value,
+  allowedHosts,
+  allowedHostSuffixes = defaultAllowedHostSuffixes,
+) {
   const url = new URL(value)
-  if (url.protocol !== "https:" || !allowedHosts.has(url.hostname)) {
+  if (
+    url.protocol !== "https:" ||
+    !isAllowedMediaHost(url.hostname, allowedHosts, allowedHostSuffixes)
+  ) {
     throw new Error("media source host is not allowed")
   }
   return url

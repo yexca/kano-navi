@@ -70,8 +70,9 @@ function ProviderAvatar({ provider }) {
   )
 }
 
-function providerState(provider) {
+function providerState(provider, draftApiKey = "") {
   if (!provider.enabled) return "disabled"
+  if (String(draftApiKey).trim()) return "pending"
   if (!provider.apiKeyConfigured) return "keyMissing"
   if (provider.lastStatus === "failed") return "failed"
   if (provider.lastStatus === "success") return "ok"
@@ -666,7 +667,7 @@ function ConnectionCard({
     }
   }
 
-  const status = providerState(provider)
+  const status = providerState(provider, form.apiKey)
 
   return (
     <Card>
@@ -678,13 +679,13 @@ function ConnectionCard({
           <span className={cn("adm-health", `is-${status}`)}>
             {status === "ok" ? (
               <CircleCheck aria-hidden="true" />
-            ) : status === "keyMissing" ? (
+            ) : ["keyMissing", "pending"].includes(status) ? (
               <KeyRound aria-hidden="true" />
             ) : status === "failed" ? (
               <TriangleAlert aria-hidden="true" />
             ) : null}
             {t(`admin.provider.health.${status}`)}
-            {provider.lastCheckedAt
+            {provider.lastCheckedAt && status !== "pending"
               ? ` · ${formatRelative(provider.lastCheckedAt, locale)}`
               : ""}
           </span>
@@ -731,7 +732,9 @@ function ConnectionCard({
                   : t("admin.provider.apiKeyPlaceholder")
               }
             />
-            {provider.apiKeyConfigured ? (
+            {form.apiKey.trim() ? (
+              <Tag tone="sky">{t("admin.provider.keyPending")}</Tag>
+            ) : provider.apiKeyConfigured ? (
               <Tag tone="leaf">{t("admin.provider.keyStored")}</Tag>
             ) : (
               <Tag tone="honey">{t("admin.provider.health.keyMissing")}</Tag>
