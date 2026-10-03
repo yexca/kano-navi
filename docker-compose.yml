@@ -1,0 +1,25 @@
+services:
+  kano:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${KANO_IMAGE:-kano-navi:local}
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    ports:
+      - "${KANO_PORT:-8787}:8787"
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      APP_MODE: ${APP_MODE:-production}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD to at least 12 characters}
+      LLM_SECRETS_KEY: ${LLM_SECRETS_KEY:-}
+      MCP_CONTROL_TOKEN: ${MCP_CONTROL_TOKEN:-}
+      MCP_ENABLED: ${MCP_ENABLED:-1}
+      WORKFLOW_SCHEDULER_ENABLED: ${WORKFLOW_SCHEDULER_ENABLED:-1}
+      X_HANDLES: ${X_HANDLES:-kano_2525,_Kanotic}
+      YOUTUBE_CHANNEL_ID: ${YOUTUBE_CHANNEL_ID:-UCShXNLMXCfstmWKH_q86B8w}
+    volumes:
+      - ./data:/app/data

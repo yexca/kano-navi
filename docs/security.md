@@ -103,7 +103,9 @@ When a finding appears, fix the underlying content. Do not hide it with an
 GitHub Actions uses read-only repository permissions, `npm ci`, and fixed build
 commands. CI runs scanner and server/cache tests, the workspace scan,
 documentation-link check, Vite build, and local API smoke check; it does not
-call live X, YouTube, image CDN, or OpenAI endpoints.
+call live X, YouTube, image CDN, or OpenAI endpoints. It also builds the
+production Docker image without pushing it. Version tags run the same checks,
+then publish the image to GitHub Container Registry and create a GitHub Release.
 Dependency upgrades and new external hosts should include a review of the lock
 file, allowlist, and synchronization boundary.
 

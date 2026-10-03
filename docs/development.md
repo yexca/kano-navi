@@ -50,6 +50,14 @@ npm run build
 npm start
 ```
 
+The repository also includes a production Docker image and a root
+`docker-compose.yml`. Set `ADMIN_PASSWORD` to a value with at least 12
+characters in `.env`, then run `docker compose up -d --build`. The Compose
+stack mounts `./data` at `/app/data`, so the SQLite snapshot and downloaded
+media survive container replacement. To use a published GitHub Container
+Registry image, set `KANO_IMAGE=ghcr.io/yexca/kano-navi:latest` before starting
+the stack.
+
 The Makefile provides the same entry points. Run `make help` to list targets;
 `make dev` starts development and `make ci` runs the complete local check.
 

@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+node_modules
+data
+dist
+coverage
+.vite
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.sqlite-*

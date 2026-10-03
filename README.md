@@ -31,6 +31,17 @@ npm run build
 npm start
 ```
 
+To run the production container, set `ADMIN_PASSWORD` (at least 12 characters)
+in a `.env` file and start the root Compose stack:
+
+```bash
+docker compose up -d --build
+```
+
+The stack keeps the SQLite database and downloaded media in `./data`. Set
+`KANO_IMAGE=ghcr.io/yexca/kano-navi:latest` when using a published release
+image instead of building locally.
+
 The hidden administration page is available only by entering `/admin`
 directly; it is not linked from the dashboard. `APP_MODE=development` bypasses
 login. Before `npm start`, set `APP_MODE=production` and an

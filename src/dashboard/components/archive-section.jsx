@@ -43,7 +43,7 @@ function ResourceCard({ resource }) {
       </span>
       <span className="resource-copy">
         <strong>{resource.title}</strong>
-        <small>{resource.detail}</small>
+        {resource.detail ? <small>{resource.detail}</small> : null}
       </span>
       <ArrowUpRight className="resource-arrow" aria-hidden="true" />
     </ExternalLink>

@@ -714,6 +714,18 @@ function migrateLegacyEvents(database) {
 
 function migrateSchema(database) {
   migrateLegacyEvents(database)
+  // The seeded resource used to imply that the official site was obsolete.
+  // Update only that exact seeded wording so operator-edited resource records
+  // remain untouched while existing databases receive the corrected copy.
+  database
+    .prepare(
+      `UPDATE resources
+       SET title = 'official site', detail = NULL
+       WHERE id = 9
+         AND title = '旧 official site'
+         AND detail = '更新截至 2022 · 资料存档'`,
+    )
+    .run()
   const eventColumns = tableColumns(database, "events")
   const eventAdditions = [
     [

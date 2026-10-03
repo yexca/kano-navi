@@ -28,6 +28,16 @@ npm run build
 npm start
 ```
 
+也可以直接使用根目录的 Docker Compose。先在 `.env` 中设置至少 12 位的
+`ADMIN_PASSWORD`，然后执行：
+
+```bash
+docker compose up -d --build
+```
+
+SQLite 数据库和下载的媒体会保存在 `./data`。使用已发布的镜像时，可设置
+`KANO_IMAGE=ghcr.io/yexca/kano-navi:latest`，无需本地构建。
+
 管理页只允许手动输入 `/admin` 访问，主页不会显示入口。
 `APP_MODE=development` 时免登录；运行 `npm start` 前，应在不会提交的
 `.env` 中设为 `APP_MODE=production`，并配置至少 12 位的

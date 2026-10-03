@@ -391,8 +391,8 @@ export const seedData = {
     },
     {
       id: 9,
-      title: "旧 official site",
-      detail: "更新截至 2022 · 资料存档",
+      title: "official site",
+      detail: null,
       icon: "⌂",
       tone: "ink",
       url: "https://kano-official.amebaownd.com",

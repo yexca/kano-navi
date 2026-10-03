@@ -43,6 +43,38 @@ import {
   writeMediaFileAtomic,
 } from "./media-cache.js"
 
+test("migrates the old official site resource wording", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kano-resource-"))
+  const filename = path.join(directory, "kano.sqlite")
+  let database
+  try {
+    database = initializeDatabase({ seed: false, filename })
+    database
+      .prepare(
+        "INSERT INTO resources (id, title, detail, url) VALUES (?, ?, ?, ?)",
+      )
+      .run(
+        9,
+        "旧 official site",
+        "更新截至 2022 · 资料存档",
+        "https://kano-official.amebaownd.com",
+      )
+    database.close()
+    database = null
+
+    database = initializeDatabase({ seed: false, filename })
+    assert.deepEqual(
+      database
+        .prepare("SELECT title, detail FROM resources WHERE id = 9")
+        .get(),
+      { title: "official site", detail: null },
+    )
+  } finally {
+    database?.close()
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("legacy provider retry values migrate to the three-request policy", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kano-retry-"))
   const filename = path.join(directory, "kano.sqlite")
