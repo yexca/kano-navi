@@ -726,6 +726,35 @@ function migrateSchema(database) {
          AND detail = '更新截至 2022 · 资料存档'`,
     )
     .run()
+  // The first seeded milestones said the 2026 move "started" VTuber activity
+  // and linked a news URL instead of the agency talent page. Correct only rows
+  // that still carry the exact seeded values, and make room for the 2019/2021
+  // milestones that the next seed pass inserts.
+  database
+    .prepare(
+      `UPDATE timeline
+       SET detail = '8 月加入ミリプロSONA，以新形象开始配信。'
+       WHERE id = 1 AND detail = '加入ミリプロSONA，开始 VTuber 活动。'`,
+    )
+    .run()
+  database
+    .prepare(
+      `UPDATE timeline
+       SET sort_order = CASE id WHEN 3 THEN 5 ELSE 6 END
+       WHERE (id = 3 AND title = 'Major debut' AND sort_order = 3)
+          OR (id = 4 AND title = '第一首投稿' AND sort_order = 4)`,
+    )
+    .run()
+  database
+    .prepare(
+      `UPDATE resources
+       SET url = 'https://milpr.com/talents/kano-mahoro',
+           detail = '事务所个人页 · 资料与公告'
+       WHERE id = 7
+         AND url = 'https://milpr.com/news/mahoro_debut'
+         AND detail = '所属与官方公告'`,
+    )
+    .run()
   const eventColumns = tableColumns(database, "events")
   const eventAdditions = [
     [

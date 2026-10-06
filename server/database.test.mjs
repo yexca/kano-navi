@@ -75,6 +75,69 @@ test("migrates the old official site resource wording", () => {
   }
 })
 
+test("migrates the old seeded milestones and agency link", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kano-timeline-"))
+  const filename = path.join(directory, "kano.sqlite")
+  let database
+  try {
+    database = initializeDatabase({ seed: false, filename })
+    const insertTimeline = database.prepare(
+      "INSERT INTO timeline (id, year, title, detail, sort_order) VALUES (?, ?, ?, ?, ?)",
+    )
+    insertTimeline.run(
+      1,
+      "2026",
+      "鹿乃まほろ",
+      "加入ミリプロSONA，开始 VTuber 活动。",
+      1,
+    )
+    insertTimeline.run(
+      3,
+      "2015",
+      "Major debut",
+      "以《Stella-rium》正式出道。",
+      3,
+    )
+    insertTimeline.run(4, "2010", "第一首投稿", "operator copy", 4)
+    database
+      .prepare(
+        "INSERT INTO resources (id, title, detail, url) VALUES (?, ?, ?, ?)",
+      )
+      .run(
+        7,
+        "ミリプロ / SONA",
+        "所属与官方公告",
+        "https://milpr.com/news/mahoro_debut",
+      )
+    database.close()
+    database = null
+
+    database = initializeDatabase({ filename })
+    assert.deepEqual(
+      database
+        .prepare("SELECT year FROM timeline ORDER BY sort_order, id")
+        .pluck()
+        .all(),
+      ["2026", "2022", "2021", "2019", "2015", "2010"],
+    )
+    assert.equal(
+      database.prepare("SELECT detail FROM timeline WHERE id = 1").get().detail,
+      "8 月加入ミリプロSONA，以新形象开始配信。",
+    )
+    assert.equal(
+      database.prepare("SELECT detail FROM timeline WHERE id = 4").get().detail,
+      "operator copy",
+    )
+    assert.equal(
+      database.prepare("SELECT url FROM resources WHERE id = 7").get().url,
+      "https://milpr.com/talents/kano-mahoro",
+    )
+  } finally {
+    database?.close()
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("legacy provider retry values migrate to the three-request policy", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kano-retry-"))
   const filename = path.join(directory, "kano.sqlite")

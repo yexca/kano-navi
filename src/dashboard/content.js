@@ -35,6 +35,10 @@ export const hashtags = [
     tag: "まほろくりっぷ",
     url: "https://x.com/hashtag/%E3%81%BE%E3%81%BB%E3%82%8D%E3%81%8F%E3%82%8A%E3%81%A3%E3%81%B7",
   },
+  {
+    tag: "まほろしか描かん",
+    url: "https://x.com/hashtag/%E3%81%BE%E3%81%BB%E3%82%8D%E3%81%97%E3%81%8B%E6%8F%8F%E3%81%8B%E3%82%93",
+  },
 ]
 
 export const archiveLinks = {

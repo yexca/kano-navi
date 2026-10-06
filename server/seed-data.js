@@ -291,7 +291,7 @@ export const seedData = {
       id: 1,
       year: "2026",
       title: "鹿乃まほろ",
-      detail: "加入ミリプロSONA，开始 VTuber 活动。",
+      detail: "8 月加入ミリプロSONA，以新形象开始配信。",
       sort_order: 1,
     },
     {
@@ -302,18 +302,32 @@ export const seedData = {
       sort_order: 2,
     },
     {
+      id: 5,
+      year: "2021",
+      title: "鹿乃まほろ",
+      detail: "以粉发双马尾的まほろ形象开始配信。",
+      sort_order: 3,
+    },
+    {
+      id: 6,
+      year: "2019",
+      title: "花寄女子寮",
+      detail: "以花寄女子寮成员身份开始 VTuber 活动。",
+      sort_order: 4,
+    },
+    {
       id: 3,
       year: "2015",
       title: "Major debut",
       detail: "以《Stella-rium》正式出道。",
-      sort_order: 3,
+      sort_order: 5,
     },
     {
       id: 4,
       year: "2010",
       title: "第一首投稿",
       detail: "从 NicoNico 的歌唱投稿开始。",
-      sort_order: 4,
+      sort_order: 6,
     },
   ],
   resources: [
@@ -374,10 +388,10 @@ export const seedData = {
     {
       id: 7,
       title: "ミリプロ / SONA",
-      detail: "所属与官方公告",
+      detail: "事务所个人页 · 资料与公告",
       icon: "✦",
       tone: "coral",
-      url: "https://milpr.com/news/mahoro_debut",
+      url: "https://milpr.com/talents/kano-mahoro",
       sort_order: 7,
     },
     {
@@ -397,6 +411,15 @@ export const seedData = {
       tone: "ink",
       url: "https://kano-official.amebaownd.com",
       sort_order: 9,
+    },
+    {
+      id: 10,
+      title: "ミリプロ shop",
+      detail: "事务所官方商店",
+      icon: "✦",
+      tone: "butter",
+      url: "https://shop.milpr.com/",
+      sort_order: 10,
     },
   ],
   assets: [
