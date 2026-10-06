@@ -21,6 +21,19 @@ npm run dev
 - Vite 前端：`http://localhost:5173`
 - Express API：`http://localhost:8787`
 
+使用 Docker 构建并启动开发环境：
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build --renew-anon-volumes
+```
+
+打开 `http://localhost:5173` 查看页面，`http://localhost:5173/admin` 查看免登录的
+开发管理页。源码挂载支持前端热更新，Linux 依赖保存在独立卷中，SQLite 和媒体
+仍保存在 `./data`。API 通过 Vite 代理访问，不占用宿主机的 8787 端口。
+修改服务端源码后执行 `docker compose -f docker-compose.dev.yml restart`；停止
+开发容器使用 `docker compose -f docker-compose.dev.yml down`。更多细节见
+[本地开发指南](docs/development.md)。
+
 生产构建和启动：
 
 ```bash

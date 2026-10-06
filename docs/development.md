@@ -58,6 +58,30 @@ media survive container replacement. To use a published GitHub Container
 Registry image, set `KANO_IMAGE=ghcr.io/yexca/kano-navi:latest` before starting
 the stack.
 
+For Docker development, use the separate Compose file:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build --renew-anon-volumes
+```
+
+Open `http://localhost:5173` for the dashboard or
+`http://localhost:5173/admin` for the password-free development console.
+The development image starts Vite and Express together. Only the Vite port is
+published, on loopback; `/api`, `/media`, and `/mcp` are proxied to the API
+inside the container. The repository is mounted for frontend hot reload,
+while an anonymous volume keeps Linux dependencies separate from any host
+`node_modules`. Rebuild after dependency changes; `--renew-anon-volumes`
+refreshes that dependency volume. API source changes require
+`docker compose -f docker-compose.dev.yml restart`. The existing `./data`
+directory persists SQLite and media. A local `.env` is optional and is read
+by the server when present; the Compose file sets development mode and disables
+workflow timers.
+
+```bash
+docker compose -f docker-compose.dev.yml logs -f
+docker compose -f docker-compose.dev.yml down
+```
+
 The Makefile provides the same entry points. Run `make help` to list targets;
 `make dev` starts development and `make ci` runs the complete local check.
 

@@ -1,0 +1,21 @@
+name: kano-navi-dev
+
+services:
+  kano-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: kano-navi:dev
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      NODE_ENV: development
+      APP_MODE: development
+      PORT: 8787
+      WORKFLOW_SCHEDULER_ENABLED: 0
+    volumes:
+      - .:/app
+      - /app/node_modules
