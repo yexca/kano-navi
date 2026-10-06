@@ -1,0 +1,402 @@
+/*
+ * /history page. It reuses the board shell from dashboard.css (header,
+ * panels, buttons, tone classes) and adds only the journey timeline here.
+ */
+
+.history-page .site-header-end {
+  margin-left: auto;
+}
+
+.history-back span {
+  white-space: nowrap;
+}
+
+/* Intro */
+
+.history-intro {
+  margin-top: 12px;
+  padding: 32px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--berry) 7%, transparent),
+      transparent 55%
+    ),
+    hsl(var(--card));
+}
+
+.history-intro h1 {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.history-lead {
+  max-width: 68ch;
+  margin: 12px 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.history-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 160px));
+  margin: 24px 0 0;
+  gap: 12px;
+}
+
+.history-stats div {
+  padding: 12px 14px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-inner);
+  background: hsl(var(--card));
+}
+
+.history-stats dt {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.history-stats dd {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-filter {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1.5px dashed hsl(var(--border));
+  gap: 8px;
+}
+
+.history-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 7px;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.history-filter-chip small {
+  color: hsl(var(--muted-foreground));
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.history-filter-chip:hover {
+  border-color: color-mix(
+    in oklab,
+    var(--tone, hsl(var(--foreground))) 50%,
+    transparent
+  );
+}
+
+.history-filter-chip[aria-pressed="true"] {
+  border-color: transparent;
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+.history-filter-chip[class*="tone-"][aria-pressed="true"] {
+  background: var(--tone);
+  color: #fff;
+}
+
+.history-filter-chip[aria-pressed="true"] small {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.history-filter-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--tone);
+}
+
+.history-filter-chip[aria-pressed="true"] .history-filter-swatch {
+  background: currentColor;
+}
+
+/* Journey timeline */
+
+.journey-section {
+  margin-top: 28px;
+}
+
+.journey,
+.journey-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.journey-year {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 0 20px;
+}
+
+.journey-year-label {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  margin: 0;
+  padding-top: 14px;
+  color: var(--berry);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.journey-items {
+  position: relative;
+  padding-bottom: 12px;
+  border-left: 2px solid hsl(var(--border));
+}
+
+.journey-item {
+  position: relative;
+  padding: 10px 0 10px 32px;
+}
+
+.journey-dot {
+  position: absolute;
+  top: 22px;
+  left: -16px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 2px solid var(--tone);
+  border-radius: 999px;
+  background: hsl(var(--card));
+  color: var(--tone);
+}
+
+.journey-dot svg {
+  width: 14px;
+  height: 14px;
+}
+
+.journey-item.is-highlight .journey-dot {
+  background: var(--tone);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--tone) 18%, transparent);
+}
+
+.journey-card {
+  padding: 16px 18px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-inner);
+  background: hsl(var(--card));
+  box-shadow: var(--shadow-sm);
+}
+
+.journey-item.is-highlight .journey-card {
+  border-color: color-mix(in oklab, var(--tone) 45%, transparent);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--tone) 9%, transparent),
+      transparent 70%
+    ),
+    hsl(var(--card));
+}
+
+.journey-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.journey-card-meta time {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.journey-branch {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--tone) 14%, transparent);
+  color: var(--tone);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.journey-kind {
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.journey-card h3 {
+  margin: 8px 0 0;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.journey-card p {
+  margin: 4px 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.journey-source {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 700;
+  gap: 4px;
+}
+
+.journey-source svg {
+  width: 13px;
+  height: 13px;
+}
+
+a.journey-source:hover {
+  color: var(--berry);
+}
+
+.journey-source.is-muted {
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.journey-now .journey-year-label {
+  padding-top: 20px;
+}
+
+.journey-now-card {
+  display: flex;
+  align-items: center;
+  margin: 10px 0 0;
+  padding: 18px 20px;
+  border-radius: var(--radius-inner);
+  background: var(--berry);
+  color: #fff;
+  box-shadow: 0 12px 28px -18px var(--berry);
+  gap: 16px;
+  transition: transform 160ms ease;
+}
+
+.journey-now-card:hover {
+  transform: translateY(-1px);
+}
+
+.journey-now-card strong,
+.journey-now-card small {
+  display: block;
+}
+
+.journey-now-card strong {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.journey-now-card small {
+  margin-top: 2px;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.journey-now-card svg {
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+}
+
+.history-empty {
+  padding: 32px 16px;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+}
+
+.history-note {
+  max-width: 72ch;
+  margin: 28px auto 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 12.5px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .history-intro {
+    padding: 22px 18px;
+  }
+
+  .history-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .history-stats div {
+    padding: 10px;
+  }
+
+  .history-stats dd {
+    font-size: 20px;
+  }
+
+  .history-back span {
+    display: none;
+  }
+
+  .journey-year {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .journey-year-label {
+    position: static;
+    padding: 8px 0 6px;
+    font-size: 22px;
+    text-align: left;
+  }
+
+  .journey-items {
+    margin-left: 15px;
+  }
+
+  .journey-item {
+    padding-left: 26px;
+  }
+
+  .journey-card {
+    padding: 14px;
+  }
+}

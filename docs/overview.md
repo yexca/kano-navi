@@ -41,7 +41,16 @@ YouTube, or any other original source.
    most recent stored post is still shown.
 5. YouTube: the manually selected Featured video with its focus copy, plus
    recent uploads and reservations.
-6. Archive: a milestone timeline, the resource directory, and common hashtags.
+6. Archive: a milestone timeline, the resource directory, and common hashtags,
+   with a link to the full journey page.
+
+A separate `/history` page lists Kano's public milestones from the first 2010
+covers to joining Milpro SONA in 2026. It is static, curated content in
+`src/history/milestones.js`: every entry keeps its original date precision
+(year, month, day, or range), names its activity identity (singer, Hanayori
+Joshiryo, Kano Mahoro, MKLNtic, Milpro SONA), and links the strongest public
+source. Entries backed only by a third-party stream archive show no link.
+Visitors can filter by identity. The page makes no API or external request.
 
 The visual language borrows from the artist's public motifs: strawberry red
 and cream gingham from the banner, the outfit's sky blue as a secondary hue,

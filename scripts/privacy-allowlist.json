@@ -75,11 +75,35 @@
     },
     {
       "host": "milpr.com",
-      "reason": "Public agency/news reference link."
+      "reason": "Public agency talent page, official shop, and news reference links."
     },
     {
       "host": "amebaownd.com",
-      "reason": "Public official-site link used by the resource directory."
+      "reason": "Public official-site link used by the resource directory and /history sources."
+    },
+    {
+      "host": "teichiku.co.jp",
+      "reason": "Public record-label profile and discography pages cited as /history sources."
+    },
+    {
+      "host": "imperialrecords.jp",
+      "reason": "Public record-label artist page cited as a /history source."
+    },
+    {
+      "host": "whv-amusic.com",
+      "reason": "Public record-label debut single page cited as a /history source."
+    },
+    {
+      "host": "sonymusic.co.jp",
+      "reason": "Public record-label discography pages cited as /history sources."
+    },
+    {
+      "host": "prtimes.jp",
+      "reason": "Public agency and event press releases cited as /history sources."
+    },
+    {
+      "host": "booth.pm",
+      "reason": "Public official goods and doujin release pages cited as /history sources."
     },
     {
       "host": "opencollective.com",

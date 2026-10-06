@@ -34,7 +34,8 @@ successful snapshot while a source is unavailable.
 
 ### Presentation: `src/`
 
-`src/main.jsx` only routes between the public board and `/admin`. The board
+`src/main.jsx` only routes between the public board, the static `/history`
+page in `src/history/`, and `/admin`. The board
 lives in `src/dashboard/`: `use-dashboard.js` owns the snapshot request and
 revision polling, `format.js` owns Japan-time and event-status helpers,
 `content.js` holds static public links, and `components/` renders the header,

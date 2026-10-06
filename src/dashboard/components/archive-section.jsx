@@ -1,4 +1,5 @@
 import {
+  ArrowRight,
   ArrowUpRight,
   Globe,
   Hash,
@@ -64,6 +65,10 @@ export function ArchiveSection({ timeline, resources, t }) {
           title={t("archive.title")}
           subtitle={t("archive.subtitle")}
         >
+          <a className="soft-button" href="/history">
+            {t("archive.fullHistory")}
+            <ArrowRight aria-hidden="true" />
+          </a>
           <ExternalLink className="soft-button" href={archiveLinks.wikipedia}>
             {t("archive.wiki")}
             <ArrowUpRight aria-hidden="true" />
