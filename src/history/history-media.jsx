@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ImageOff,
+  Images,
   Maximize2,
   X,
 } from "lucide-react"
@@ -41,9 +42,9 @@ export function HistoryImage({
   )
 }
 
-export function ImageCard({ item, locale, t, onOpen, compact = false }) {
+export function ImageCard({ item, locale, t, onOpen }) {
   return (
-    <figure className={`history-image-card${compact ? " is-compact" : ""}`}>
+    <figure className="history-image-card">
       <button
         type="button"
         className="history-image-preview"
@@ -61,19 +62,19 @@ export function ImageCard({ item, locale, t, onOpen, compact = false }) {
         ) : null}
       </button>
       <figcaption>
+        <span className="history-image-kind">
+          {t(`history.mediaKind.${item.category}`)}
+        </span>
         <strong>{localized(item.title, locale)}</strong>
         <span className="history-image-meta">
           {item.date ? (
-            <time dateTime={item.date}>{item.date}</time>
+            <>
+              <time dateTime={item.date}>{item.date}</time>
+              <span> · {t(`history.dateKind.${item.dateKind}`)}</span>
+            </>
           ) : (
             t("history.dateUnknown")
           )}
-          {item.date ? (
-            <span> · {t(`history.dateKind.${item.dateKind}`)}</span>
-          ) : null}
-        </span>
-        <span className="history-image-meta">
-          {item.width} × {item.height} · {item.mimeType.slice(6).toUpperCase()}
         </span>
         <ExternalLink className="journey-source" href={item.sourcePage}>
           {sourceName(item.sourcePage, t)}
@@ -84,6 +85,78 @@ export function ImageCard({ item, locale, t, onOpen, compact = false }) {
         ) : null}
       </figcaption>
     </figure>
+  )
+}
+
+// Timeline thumbnails: a pair side by side, otherwise one lead image plus up
+// to three smaller ones. Details and provenance live in the viewer, so the
+// card stays compact.
+export function MediaStack({ media, locale, t, onOpen }) {
+  if (media.length === 2) {
+    return (
+      <div className="journey-media is-pair">
+        {media.map((item, index) => (
+          <MediaTile
+            key={item.id}
+            item={item}
+            locale={locale}
+            t={t}
+            onOpen={() => onOpen(index)}
+          />
+        ))}
+      </div>
+    )
+  }
+  const [lead, ...rest] = media
+  const shown = rest.slice(0, 3)
+  const hidden = rest.length - shown.length
+  return (
+    <div className="journey-media">
+      <MediaTile item={lead} locale={locale} t={t} onOpen={() => onOpen(0)}>
+        {media.length > 1 ? (
+          <span className="journey-media-count">
+            <Images aria-hidden="true" />
+            {media.length}
+          </span>
+        ) : null}
+      </MediaTile>
+      {shown.length ? (
+        <div className="journey-media-rest">
+          {shown.map((item, index) => (
+            <MediaTile
+              key={item.id}
+              item={item}
+              locale={locale}
+              t={t}
+              onOpen={() => onOpen(index + 1)}
+            >
+              {hidden && index === shown.length - 1 ? (
+                <span className="journey-media-more">+{hidden}</span>
+              ) : null}
+            </MediaTile>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function MediaTile({ item, locale, t, onOpen, children }) {
+  return (
+    <button
+      type="button"
+      className="journey-media-tile"
+      onClick={onOpen}
+      aria-label={t("history.openImage", {
+        title: localized(item.title, locale),
+      })}
+    >
+      <HistoryImage item={item} locale={locale} t={t} decorative />
+      {item.frameTime ? (
+        <span className="history-frame-time">{item.frameTime}</span>
+      ) : null}
+      {children}
+    </button>
   )
 }
 

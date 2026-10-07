@@ -1,5 +1,8 @@
 export const historyMessages = {
   "zh-CN": {
+    "history.allIdentities": "全部身份",
+    "history.branchCount": "{count} 个节点",
+    "history.yearEmpty": "{years} 没有收录节点",
     "history.stat.images": "收录图片",
     "history.archiveOnly": "依据官方配信的第三方存档",
     "history.identities": "同一段旅程，不同的舞台",
@@ -79,6 +82,9 @@ export const historyMessages = {
       "主办方于 2024-08-09 发布演出视觉；演出日期为 2024-09-14。",
   },
   ja: {
+    "history.allIdentities": "すべての名義",
+    "history.branchCount": "{count} 件",
+    "history.yearEmpty": "{years} の出来事は収録していません",
     "history.stat.images": "収録画像",
     "history.archiveOnly": "公式配信の第三者アーカイブに基づく",
     "history.identities": "ひとつのあゆみ、いろいろな舞台",
@@ -159,6 +165,10 @@ export const historyMessages = {
       "主催者がビジュアルを公開したのは 2024-08-09。公演日は 2024-09-14 です。",
   },
   en: {
+    "history.allIdentities": "Every identity",
+    "history.branchCount": ({ count }) =>
+      `${count} ${count === 1 ? "milestone" : "milestones"}`,
+    "history.yearEmpty": "No milestones recorded for {years}",
     "history.stat.images": "Archived images",
     "history.archiveOnly":
       "Based on a third-party archive of the official stream",

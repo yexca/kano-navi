@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   Disc3,
   GalleryVerticalEnd,
   Image,
+  Layers,
   Mic,
   Radio,
   Shirt,
@@ -32,11 +33,20 @@ import {
   mediaByMilestone,
   sourceName,
 } from "./media"
-import { HistoryImage, HistoryImageViewer, ImageCard } from "./history-media"
+import {
+  HistoryImage,
+  HistoryImageViewer,
+  ImageCard,
+  MediaStack,
+} from "./history-media"
 import "@/dashboard/dashboard.css"
 import "./history.css"
 
 const FIRST_YEAR = 2010
+const MEDIA_KINDS = ["cover", "artwork", "model", "frame", "goods"]
+// Distance from the viewport top at which a year section counts as "being
+// read": the sticky header plus the sticky chronology strip.
+const ACTIVE_YEAR_OFFSET = 180
 
 const kindIcons = {
   start: Mic,
@@ -57,6 +67,8 @@ const kindIcons = {
 const branchById = Object.fromEntries(
   branches.map((branch) => [branch.id, branch]),
 )
+
+const milestonesByYear = groupByYear(milestones)
 
 function currentJapanYear() {
   return Number(
@@ -103,6 +115,23 @@ function groupByYear(items) {
   return groups
 }
 
+// One column per year with records; consecutive empty years fold into a
+// single gap so the 2011–2014 silence stays visible without taking space.
+function chronologySegments(lastYear) {
+  const byYear = Object.fromEntries(
+    milestonesByYear.map((group) => [group.year, group.items]),
+  )
+  const segments = []
+  for (let year = FIRST_YEAR; year <= lastYear; year += 1) {
+    const items = byYear[String(year)]
+    const last = segments[segments.length - 1]
+    if (items) segments.push({ year: String(year), items })
+    else if (last?.gap) last.to = year
+    else segments.push({ gap: true, from: year, to: year })
+  }
+  return segments
+}
+
 function useScrolled() {
   const [isScrolled, setIsScrolled] = useState(false)
   useEffect(() => {
@@ -112,6 +141,123 @@ function useScrolled() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [])
   return isScrolled
+}
+
+// The last year section whose top has passed below the sticky chrome.
+function useActiveYear(anchorKey) {
+  const [activeYear, setActiveYear] = useState(null)
+  useEffect(() => {
+    const ids = anchorKey ? anchorKey.split(" ") : []
+    let frame = 0
+    const update = () => {
+      frame = 0
+      let current = null
+      for (const id of ids) {
+        const element = document.getElementById(id)
+        if (element?.getBoundingClientRect().top <= ACTIVE_YEAR_OFFSET) {
+          current = id
+        }
+      }
+      setActiveYear(current)
+    }
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update)
+    }
+    update()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    window.addEventListener("resize", onScroll)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("scroll", onScroll)
+      window.removeEventListener("resize", onScroll)
+    }
+  }, [anchorKey])
+  return activeYear
+}
+
+function ChronologyStrip({ segments, branchFilter, activeId, t }) {
+  const listRef = useRef(null)
+
+  // Keeps the active year in view when the strip scrolls sideways on phones.
+  useEffect(() => {
+    const list = listRef.current
+    const active = list?.querySelector('[aria-current="location"]')
+    if (!list || !active) return
+    const left = active.offsetLeft - list.clientWidth / 2
+    list.scrollTo({ left, behavior: "smooth" })
+  }, [activeId])
+
+  return (
+    <nav className="history-strip" aria-label={t("history.jumpYear")}>
+      <ol ref={listRef}>
+        {segments.map((segment) => {
+          if (segment.gap) {
+            const label =
+              segment.from === segment.to
+                ? String(segment.from)
+                : `${segment.from}–${String(segment.to).slice(2)}`
+            return (
+              <li key={`gap-${segment.from}`} className="history-strip-gap">
+                <span title={t("history.yearEmpty", { years: label })}>
+                  {label}
+                </span>
+              </li>
+            )
+          }
+          const matching = segment.items.filter(
+            (item) => branchFilter === "all" || item.branch === branchFilter,
+          ).length
+          const content = (
+            <>
+              <span className="history-strip-year">{segment.year}</span>
+              <span className="history-strip-dots" aria-hidden="true">
+                {segment.items.map((item) => (
+                  <i
+                    key={item.id}
+                    className={`tone-${branchById[item.branch].tone}${
+                      branchFilter === "all" || item.branch === branchFilter
+                        ? ""
+                        : " is-dim"
+                    }${item.highlight ? " is-highlight" : ""}`}
+                  />
+                ))}
+              </span>
+            </>
+          )
+          const id = `year-${segment.year}`
+          return (
+            <li key={segment.year}>
+              {matching ? (
+                <a
+                  href={`#${id}`}
+                  aria-current={activeId === id ? "location" : undefined}
+                  aria-label={`${segment.year} · ${t("history.branchCount", {
+                    count: matching,
+                  })}`}
+                >
+                  {content}
+                </a>
+              ) : (
+                <span className="is-disabled">{content}</span>
+              )}
+            </li>
+          )
+        })}
+        <li>
+          <a
+            href="#journey-now"
+            className="history-strip-now"
+            aria-current={activeId === "journey-now" ? "location" : undefined}
+          >
+            <span className="history-strip-year">{t("history.now")}</span>
+            <span className="history-strip-dots" aria-hidden="true">
+              <i className="tone-berry is-pulse" />
+            </span>
+          </a>
+        </li>
+      </ol>
+    </nav>
+  )
 }
 
 function MilestoneCard({ item, locale, t, onOpen }) {
@@ -128,51 +274,51 @@ function MilestoneCard({ item, locale, t, onOpen }) {
       <span className="journey-dot" aria-hidden="true">
         <Icon />
       </span>
-      <article className={`journey-card${media.length ? " has-images" : ""}`}>
-        <header className="journey-card-meta">
-          <time dateTime={item.date}>
-            {formatMilestoneDate(item, locale, t)}
-          </time>
-          <span className="journey-branch">
-            {localized(branch.label, locale)}
-          </span>
-          <span className="journey-kind">{t(`history.kind.${item.kind}`)}</span>
-        </header>
-        <h3>{localized(item.title, locale)}</h3>
-        {detail ? <p>{detail}</p> : null}
-        {item.source ? (
-          <ExternalLink className="journey-source" href={item.source}>
-            {sourceName(item.source, t)}
-            <ArrowUpRight aria-hidden="true" />
-          </ExternalLink>
-        ) : (
-          <span className="journey-source is-muted">
-            {t("history.archiveOnly")}
-          </span>
-        )}
-        {item.links?.map((link) => (
-          <ExternalLink
-            key={link.href}
-            className="journey-source journey-extra-source"
-            href={link.href}
-          >
-            {t(link.label)}
-            <ArrowUpRight aria-hidden="true" />
-          </ExternalLink>
-        ))}
-        {media.length ? (
-          <div className="journey-images">
-            {media.map((image, index) => (
-              <ImageCard
-                key={image.id}
-                item={image}
-                locale={locale}
-                t={t}
-                compact
-                onOpen={() => onOpen(media, index)}
-              />
+      <article className={`journey-card${media.length ? " has-media" : ""}`}>
+        <div className="journey-card-body">
+          <header className="journey-card-meta">
+            <time dateTime={item.date}>
+              {formatMilestoneDate(item, locale, t)}
+            </time>
+            <span className="journey-branch">
+              {localized(branch.label, locale)}
+            </span>
+            <span className="journey-kind">
+              {t(`history.kind.${item.kind}`)}
+            </span>
+          </header>
+          <h3>{localized(item.title, locale)}</h3>
+          {detail ? <p>{detail}</p> : null}
+          <footer className="journey-card-links">
+            {item.source ? (
+              <ExternalLink className="journey-source" href={item.source}>
+                {sourceName(item.source, t)}
+                <ArrowUpRight aria-hidden="true" />
+              </ExternalLink>
+            ) : (
+              <span className="journey-source is-muted">
+                {t("history.archiveOnly")}
+              </span>
+            )}
+            {item.links?.map((link) => (
+              <ExternalLink
+                key={link.href}
+                className="journey-source"
+                href={link.href}
+              >
+                {t(link.label)}
+                <ArrowUpRight aria-hidden="true" />
+              </ExternalLink>
             ))}
-          </div>
+          </footer>
+        </div>
+        {media.length ? (
+          <MediaStack
+            media={media}
+            locale={locale}
+            t={t}
+            onOpen={(index) => onOpen(media, index)}
+          />
         ) : null}
       </article>
     </li>
@@ -194,6 +340,8 @@ export function HistoryApp() {
       ?.setAttribute("content", t("history.metaDescription"))
   }, [t])
 
+  const lastYear = currentJapanYear()
+  const segments = useMemo(() => chronologySegments(lastYear), [lastYear])
   const groups = useMemo(
     () =>
       groupByYear(
@@ -203,19 +351,35 @@ export function HistoryApp() {
       ),
     [branchFilter],
   )
-  const years = currentJapanYear() - FIRST_YEAR
-  const images = useMemo(
+  const activeId = useActiveYear(
+    view === "timeline" && groups.length
+      ? [...groups.map((group) => `year-${group.year}`), "journey-now"].join(
+          " ",
+        )
+      : "",
+  )
+  const branchMedia = useMemo(
     () =>
       historyMedia
         .filter(
           (item) =>
-            (branchFilter === "all" || item.branches.includes(branchFilter)) &&
-            (mediaFilter === "all" || item.category === mediaFilter),
+            branchFilter === "all" || item.branches.includes(branchFilter),
         )
         .sort((left, right) =>
           (right.date || "").localeCompare(left.date || ""),
         ),
-    [branchFilter, mediaFilter],
+    [branchFilter],
+  )
+  const images = useMemo(
+    () =>
+      mediaFilter === "all"
+        ? branchMedia
+        : branchMedia.filter((item) => item.category === mediaFilter),
+    [branchMedia, mediaFilter],
+  )
+  const milestoneCount = groups.reduce(
+    (count, group) => count + group.items.length,
+    0,
   )
   const currentPortrait = historyMedia.find(
     (item) => item.id === branchPortraits.sona,
@@ -283,7 +447,9 @@ export function HistoryApp() {
             <dl className="history-stats">
               <div>
                 <dt>{t("history.stat.yearsLabel")}</dt>
-                <dd>{t("history.stat.years", { count: years })}</dd>
+                <dd>
+                  {t("history.stat.years", { count: lastYear - FIRST_YEAR })}
+                </dd>
               </div>
               <div>
                 <dt>{t("history.stat.milestones")}</dt>
@@ -342,37 +508,54 @@ export function HistoryApp() {
           aria-labelledby="history-identities-title"
         >
           <div className="history-identities-heading">
-            <div>
-              <h2 id="history-identities-title">{t("history.identities")}</h2>
-              <p>{t("history.identitiesNote")}</p>
-            </div>
-            <div
-              className="history-filter"
-              role="group"
-              aria-label={t("history.filter")}
-            >
-              <button
-                type="button"
-                className="history-filter-chip"
-                aria-pressed={branchFilter === "all"}
-                onClick={() => setBranchFilter("all")}
-              >
-                {t("common.all")}
-              </button>
-            </div>
+            <h2 id="history-identities-title">{t("history.identities")}</h2>
+            <p>{t("history.identitiesNote")}</p>
           </div>
-          <div className="history-branch-cards">
+          <div
+            className="history-branch-cards"
+            role="group"
+            aria-label={t("history.filter")}
+          >
+            <button
+              type="button"
+              className="history-branch-card is-all tone-berry"
+              aria-pressed={branchFilter === "all"}
+              onClick={() => setBranchFilter("all")}
+            >
+              <span className="history-branch-image" aria-hidden="true">
+                <span className="history-branch-all-dots">
+                  {branches.map((branch) => (
+                    <i key={branch.id} className={`tone-${branch.tone}`} />
+                  ))}
+                </span>
+                <Layers />
+              </span>
+              <span className="history-branch-copy">
+                <strong>{t("history.allIdentities")}</strong>
+                <small>
+                  {FIRST_YEAR} → {t("history.now")} ·{" "}
+                  {t("history.branchCount", { count: milestones.length })}
+                </small>
+              </span>
+            </button>
             {branches.map((branch) => {
               const image = historyMedia.find(
                 (item) => item.id === branchPortraits[branch.id],
               )
+              const count = milestones.filter(
+                (item) => item.branch === branch.id,
+              ).length
               return (
                 <button
                   key={branch.id}
                   type="button"
                   className={`history-branch-card tone-${branch.tone}`}
                   aria-pressed={branchFilter === branch.id}
-                  onClick={() => setBranchFilter(branch.id)}
+                  onClick={() =>
+                    setBranchFilter((current) =>
+                      current === branch.id ? "all" : branch.id,
+                    )
+                  }
                 >
                   <span className="history-branch-image">
                     <HistoryImage
@@ -385,7 +568,8 @@ export function HistoryApp() {
                   <span className="history-branch-copy">
                     <strong>{localized(branch.label, locale)}</strong>
                     <small>
-                      {t("history.branchSince", { year: branch.since })}
+                      {t("history.branchSince", { year: branch.since })} ·{" "}
+                      {t("history.branchCount", { count })}
                     </small>
                   </span>
                 </button>
@@ -417,34 +601,26 @@ export function HistoryApp() {
               </TabsTrigger>
             </TabsList>
             <p className="history-selection-count" role="status">
+              {branchFilter === "all" ? null : (
+                <span
+                  className={`history-selection-branch tone-${branchById[branchFilter].tone}`}
+                >
+                  {localized(branchById[branchFilter].label, locale)}
+                </span>
+              )}
               {t("history.selectionCount", {
-                milestones: groups.reduce(
-                  (count, group) => count + group.items.length,
-                  0,
-                ),
-                images:
-                  view === "gallery"
-                    ? images.length
-                    : historyMedia.filter(
-                        (item) =>
-                          branchFilter === "all" ||
-                          item.branches.includes(branchFilter),
-                      ).length,
+                milestones: milestoneCount,
+                images: view === "gallery" ? images.length : branchMedia.length,
               })}
             </p>
           </div>
-          <TabsContent value="timeline">
-            <nav
-              className="history-year-nav"
-              aria-label={t("history.jumpYear")}
-            >
-              {groups.map((group) => (
-                <a key={group.year} href={`#year-${group.year}`}>
-                  {group.year}
-                </a>
-              ))}
-              <a href="#journey-now">{t("history.now")}</a>
-            </nav>
+          <TabsContent value="timeline" className="history-timeline-panel">
+            <ChronologyStrip
+              segments={segments}
+              branchFilter={branchFilter}
+              activeId={activeId}
+              t={t}
+            />
             <section
               className="journey-section"
               id="journey"
@@ -458,7 +634,14 @@ export function HistoryApp() {
                       className="journey-year"
                       id={`year-${group.year}`}
                     >
-                      <h2 className="journey-year-label">{group.year}</h2>
+                      <h2 className="journey-year-label">
+                        <span>{group.year}</span>
+                        <small>
+                          {t("history.branchCount", {
+                            count: group.items.length,
+                          })}
+                        </small>
+                      </h2>
                       <ol className="journey-items">
                         {group.items.map((item) => (
                           <MilestoneCard
@@ -473,7 +656,9 @@ export function HistoryApp() {
                     </li>
                   ))}
                   <li className="journey-year journey-now" id="journey-now">
-                    <h2 className="journey-year-label">{t("history.now")}</h2>
+                    <h2 className="journey-year-label">
+                      <span>{t("history.now")}</span>
+                    </h2>
                     <a className="journey-now-card" href="/">
                       <span>
                         <strong>{t("history.nowTitle")}</strong>
@@ -491,37 +676,50 @@ export function HistoryApp() {
           <TabsContent value="gallery" className="history-gallery-panel">
             <div className="history-gallery-heading">
               <p>{t("history.galleryLead")}</p>
-              <label>
-                {t("history.mediaFilter")}
-                <select
-                  value={mediaFilter}
-                  onChange={(event) => setMediaFilter(event.target.value)}
-                >
-                  <option value="all">{t("common.all")}</option>
-                  {["cover", "artwork", "model", "frame", "goods"].map(
-                    (kind) => (
-                      <option value={kind} key={kind}>
-                        {t(`history.mediaKind.${kind}`)}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
+              <div
+                className="history-filter"
+                role="group"
+                aria-label={t("history.mediaFilter")}
+              >
+                {["all", ...MEDIA_KINDS].map((kind) => {
+                  const count =
+                    kind === "all"
+                      ? branchMedia.length
+                      : branchMedia.filter((item) => item.category === kind)
+                          .length
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      className="history-filter-chip"
+                      aria-pressed={mediaFilter === kind}
+                      disabled={!count && mediaFilter !== kind}
+                      onClick={() => setMediaFilter(kind)}
+                    >
+                      {kind === "all"
+                        ? t("common.all")
+                        : t(`history.mediaKind.${kind}`)}
+                      <small>{count}</small>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            <div className="history-gallery-grid">
-              {images.map((image, index) => (
-                <ImageCard
-                  key={image.id}
-                  item={image}
-                  locale={locale}
-                  t={t}
-                  onOpen={() => openMedia(images, index)}
-                />
-              ))}
-            </div>
-            {!images.length ? (
+            {images.length ? (
+              <div className="history-gallery-grid">
+                {images.map((image, index) => (
+                  <ImageCard
+                    key={image.id}
+                    item={image}
+                    locale={locale}
+                    t={t}
+                    onOpen={() => openMedia(images, index)}
+                  />
+                ))}
+              </div>
+            ) : (
               <p className="history-empty">{t("history.galleryEmpty")}</p>
-            ) : null}
+            )}
           </TabsContent>
         </Tabs>
         <p className="history-note">{t("history.note")}</p>

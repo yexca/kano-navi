@@ -3,8 +3,10 @@
 `/history` contains a multilingual timeline of 44 milestones from 2010 onward
 and 59 images from the maintainer's `kano_official` reference collection,
 reviewed in October 2026. Visitors can filter by activity identity, jump to a
-year, or browse the gallery by image type. Image dialogs show the full file,
-dimensions, date basis, recorded credit, and original-source links.
+year from the sticky chronology strip (one dot per milestone, with empty years
+folded into a gap), or browse the gallery by image type. Timeline cards show
+compact thumbnails; image dialogs show the full file, dimensions, date basis,
+recorded credit, and original-source links.
 
 ## Content and Provenance
 
