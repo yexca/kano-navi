@@ -42,11 +42,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APP_MODE=development PORT=8787 node server/index.js > api-smoke.log 2>&1 &
+          APP_MODE=development PORT=7657 node server/index.js > api-smoke.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:8787/api/health > /dev/null; then
+            if curl --fail --silent http://127.0.0.1:7657/api/health > /dev/null; then
               break
             fi
             if [ "$attempt" -eq 30 ]; then
@@ -55,11 +55,11 @@ jobs:
             fi
             sleep 1
           done
-          curl --fail --silent http://127.0.0.1:8787/api/health \
+          curl --fail --silent http://127.0.0.1:7657/api/health \
             | node -e 'let data=""; process.stdin.on("data", chunk => { data += chunk }); process.stdin.on("end", () => { const payload = JSON.parse(data); if (payload.ok !== true) process.exit(1) })'
-          curl --fail --silent 'http://127.0.0.1:8787/api/dashboard?days=3' \
+          curl --fail --silent 'http://127.0.0.1:7657/api/dashboard?days=3' \
             | node -e 'let data=""; process.stdin.on("data", chunk => { data += chunk }); process.stdin.on("end", () => { const payload = JSON.parse(data); if (!payload.profile || !Array.isArray(payload.posts) || !Array.isArray(payload.events)) process.exit(1) })'
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8787/media/not-an-id)" = "404"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:7657/media/not-an-id)" = "404"
 
   docker:
     name: Docker image

@@ -7,9 +7,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      "/api": "http://localhost:8787",
-      "/media": "http://localhost:8787",
-      "/mcp": "http://localhost:8787",
+      "/api": "http://localhost:7657",
+      "/media": "http://localhost:7657",
+      "/mcp": "http://localhost:7657",
     },
   },
   resolve: {

@@ -1,18 +1,16 @@
 services:
   kano:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ${KANO_IMAGE:-kano-navi:local}
+    image: ${KANO_IMAGE:-yexca/kano-navi:latest}
+    pull_policy: always
     restart: unless-stopped
     init: true
     env_file:
       - .env
     ports:
-      - "${KANO_PORT:-8787}:8787"
+      - "${KANO_PORT:-7657}:7657"
     environment:
       NODE_ENV: production
-      PORT: 8787
+      PORT: 7657
       APP_MODE: ${APP_MODE:-production}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD to at least 12 characters}
       LLM_SECRETS_KEY: ${LLM_SECRETS_KEY:-}

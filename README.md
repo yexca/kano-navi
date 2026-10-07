@@ -23,7 +23,7 @@ npm run dev
 Development mode starts both services:
 
 - Vite frontend: `http://localhost:5173`
-- Express API: `http://localhost:8787`
+- Express API: `http://localhost:7657`
 
 For a production build and server:
 
@@ -32,16 +32,23 @@ npm run build
 npm start
 ```
 
-To run the production container, set `ADMIN_PASSWORD` (at least 12 characters)
-in a `.env` file and start the root Compose stack:
+To run the production container, copy `.env.example` to `.env`, keep
+`APP_MODE=production`, and configure `ADMIN_PASSWORD` (at least 12 characters
+after trimming surrounding whitespace). Then start the root Compose stack:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-The stack keeps the SQLite database and downloaded media in `./data`. Set
-`KANO_IMAGE=ghcr.io/yexca/kano-navi:latest` when using a published release
-image instead of building locally.
+The stack automatically pulls `yexca/kano-navi:latest` from Docker Hub on startup and
+keeps the SQLite database and downloaded media in `./data`. Deployment needs
+only `docker-compose.yml` and `.env`; Docker creates the data directory when
+needed. Run the same command to pull an update and replace the container.
+Set `KANO_IMAGE=yexca/kano-navi:0.1.0` in `.env` to pin this release,
+or change `KANO_PORT` to use a host port other than the default `7657`.
+The same releases are also available from GHCR by setting
+`KANO_IMAGE=ghcr.io/yexca/kano-navi:latest`. Open `http://localhost:7657`
+with the default production port.
 
 The hidden administration page is available only by entering `/admin`
 directly; it is not linked from the dashboard. `APP_MODE=development` bypasses

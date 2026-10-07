@@ -20,7 +20,7 @@ npm run dev
 开发环境会同时启动：
 
 - Vite 前端：`http://localhost:5173`
-- Express API：`http://localhost:8787`
+- Express API：`http://localhost:7657`
 
 使用 Docker 构建并启动开发环境：
 
@@ -30,7 +30,7 @@ docker compose -f docker-compose.dev.yml up -d --build --renew-anon-volumes
 
 打开 `http://localhost:5173` 查看页面，`http://localhost:5173/admin` 查看免登录的
 开发管理页。源码挂载支持前端热更新，Linux 依赖保存在独立卷中，SQLite 和媒体
-仍保存在 `./data`。API 通过 Vite 代理访问，不占用宿主机的 8787 端口。
+仍保存在 `./data`。API 通过 Vite 代理访问，不占用宿主机的 7657 端口。
 修改服务端源码后执行 `docker compose -f docker-compose.dev.yml restart`；停止
 开发容器使用 `docker compose -f docker-compose.dev.yml down`。更多细节见
 [本地开发指南](docs/development.md)。
@@ -42,15 +42,22 @@ npm run build
 npm start
 ```
 
-也可以直接使用根目录的 Docker Compose。先在 `.env` 中设置至少 12 位的
+也可以直接使用根目录的 Docker Compose。将 `.env.example` 复制为 `.env`，
+保持 `APP_MODE=production`，并配置去掉首尾空白后至少 12 位的
 `ADMIN_PASSWORD`，然后执行：
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-SQLite 数据库和下载的媒体会保存在 `./data`。使用已发布的镜像时，可设置
-`KANO_IMAGE=ghcr.io/yexca/kano-navi:latest`，无需本地构建。
+启动时会从 Docker Hub 自动拉取 `yexca/kano-navi:latest`，SQLite 数据库和下载的媒体
+保存在 `./data`。部署目录只需 `docker-compose.yml` 和 `.env`，数据目录会自动
+创建；更新时再次执行同一命令即可拉取镜像并替换容器。
+如需固定到本次发布，在 `.env` 中设置
+`KANO_IMAGE=yexca/kano-navi:0.1.0`；宿主机端口默认是 `7657`，可通过
+`KANO_PORT` 修改。相同版本也会发布到 GHCR，可设置
+`KANO_IMAGE=ghcr.io/yexca/kano-navi:latest` 使用。默认生产地址是
+`http://localhost:7657`。
 
 管理页只允许手动输入 `/admin` 访问，主页不会显示入口。
 示例环境和服务默认使用 `APP_MODE=production`；`ADMIN_PASSWORD` 未配置、

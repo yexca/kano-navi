@@ -259,7 +259,7 @@ their reason/evidence, and labels visible automatic/manual events.
 | `APP_MODE`                    | `production`         | Explicit `development` bypasses login; production requires it  |
 | `ADMIN_PASSWORD`              | Empty                | Production startup requires at least 12 non-padding characters |
 | `LLM_SECRETS_KEY`             | Empty                | Environment-only master key for encrypted provider API keys    |
-| `PORT`                        | `8787`               | Express listening port                                         |
+| `PORT`                        | `7657`               | Express listening port                                         |
 | `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Enable the automatic schedule stage                            |
 | `SCHEDULE_KEYWORD_ENABLED`    | `1`                  | Enable keyword candidate selection                             |
 | `SCHEDULE_VISION_ENABLED`     | `1`                  | Enable schedule-board LLM extraction                           |
@@ -285,6 +285,10 @@ their reason/evidence, and labels visible automatic/manual events.
 | `MEDIA_MAX_BYTES`             | `10485760`           | Maximum bytes accepted for one image                           |
 | `SKIP_X`, `SKIP_YOUTUBE`      | `0`                  | Set an individual source flag to `1` to skip it                |
 | `SKIP_MEDIA`, `SKIP_LLM`      | `0`                  | Set a post-processing stage flag to `1` to skip it             |
+
+Docker Compose also uses `KANO_IMAGE` (default
+`yexca/kano-navi:latest` from Docker Hub) for the published image and `KANO_PORT`
+(default `7657`) for the host port. The API also defaults to `7657` inside the container.
 
 `.env.example` is the complete non-secret inventory. `ADMIN_PASSWORD` and
 `LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, and provider API keys are credentials;

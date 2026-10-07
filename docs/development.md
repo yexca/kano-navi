@@ -19,7 +19,7 @@ npm run dev
 ```
 
 Development mode starts Vite (default `http://localhost:5173`) and the Express
-API (default `http://localhost:8787`). Vite proxies `/api`, `/media`, and `/mcp`
+API (default `http://localhost:7657`). Vite proxies `/api`, `/media`, and `/mcp`
 to Express, so the browser and MCP clients use the same origin in development
 and production.
 
@@ -63,13 +63,38 @@ npm run build
 npm start
 ```
 
-The repository also includes a production Docker image and a root
-`docker-compose.yml`. Set `ADMIN_PASSWORD` to a value with at least 12
-characters in `.env`, then run `docker compose up -d --build`. The Compose
-stack mounts `./data` at `/app/data`, so the SQLite snapshot and downloaded
-media survive container replacement. To use a published GitHub Container
-Registry image, set `KANO_IMAGE=ghcr.io/yexca/kano-navi:latest` before starting
-the stack.
+The root `docker-compose.yml` deploys the published production image. Copy
+`.env.example` to `.env`, keep `APP_MODE=production`, and configure
+`ADMIN_PASSWORD` with at least 12 characters after trimming surrounding
+whitespace. Then run:
+
+```bash
+docker compose up -d
+```
+
+Compose pulls `yexca/kano-navi:latest` from Docker Hub on each startup. A deployment
+directory needs only `docker-compose.yml` and `.env`; the `./data` directory
+is created when needed and mounted at `/app/data`, preserving SQLite and media
+across container replacement. Run the same command to apply an image update.
+Set `KANO_IMAGE=yexca/kano-navi:0.1.0` in `.env` to pin the release,
+and use `KANO_PORT` to change the default host port of `7657`. The container
+listens on `7657`; the default public address is `http://localhost:7657`.
+To use the equivalent GHCR image, set
+`KANO_IMAGE=ghcr.io/yexca/kano-navi:latest`.
+
+To build the production image from the local checkout:
+
+```bash
+docker build -t kano-navi:local .
+KANO_IMAGE=kano-navi:local docker compose up -d --pull never
+```
+
+Version tags run the Release workflow, which builds once and publishes the
+same image to Docker Hub and GHCR with version, major/minor, and `latest` tags.
+Configure the repository secret `DOCKERHUB_TOKEN` with push access. The Docker
+Hub username defaults to the GitHub repository owner; set the optional
+repository variable `DOCKERHUB_USERNAME` when those accounts differ. GHCR
+uses the workflow's `GITHUB_TOKEN` with package-write permission.
 
 For Docker development, use the separate Compose file:
 
@@ -145,7 +170,7 @@ for each account.
 | `npm run test:server`      | Test SQLite, admin, sync, media, and LLM contracts     |
 
 For UI changes, check both `/` and `/admin` in a browser at desktop and mobile
-widths. For API or database changes, request `http://localhost:8787/api/health`,
+widths. For API or database changes, request `http://localhost:7657/api/health`,
 `/api/dashboard?days=3`, and `/api/dashboard/revision`, then verify the fields
 and stale-snapshot behavior.
 

@@ -14,7 +14,7 @@ services:
     environment:
       NODE_ENV: development
       APP_MODE: development
-      PORT: 8787
+      PORT: 7657
       WORKFLOW_SCHEDULER_ENABLED: 0
     volumes:
       - .:/app

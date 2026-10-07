@@ -12,7 +12,7 @@ FROM dependencies AS development
 
 ENV NODE_ENV=development \
     APP_MODE=development \
-    PORT=8787
+    PORT=7657
 
 COPY . .
 EXPOSE 5173
@@ -32,7 +32,7 @@ FROM node:24.19.0-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     APP_MODE=production \
-    PORT=8787
+    PORT=7657
 
 WORKDIR /app
 
@@ -47,9 +47,9 @@ COPY --from=build /app/src/history/media.js /app/src/history/media-catalog.json 
 RUN mkdir -p /app/data
 
 VOLUME ["/app/data"]
-EXPOSE 8787
+EXPOSE 7657
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:8787/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:7657/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 CMD ["node", "server/index.js"]

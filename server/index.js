@@ -9,7 +9,7 @@ import { databasePath, initializeDatabase } from "./database.js"
 
 const projectDirectory = path.dirname(fileURLToPath(import.meta.url))
 const distDirectory = path.resolve(projectDirectory, "../dist")
-const port = Number(process.env.PORT || 8787)
+const port = Number(process.env.PORT || 7657)
 // Validate authentication before creating or seeding the runtime database.
 const { mode: adminMode, adminPassword } = resolveAdminConfig()
 

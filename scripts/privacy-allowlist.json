@@ -6,6 +6,10 @@
       "reason": "Public repository and documentation links."
     },
     {
+      "host": "docker.io",
+      "reason": "Docker Hub registry used by production Compose deployments and release-image publishing; never fetched by the browser or synchronization."
+    },
+    {
       "host": "ui.shadcn.com",
       "reason": "Public shadcn/ui schema referenced by components.json."
     },
