@@ -39,9 +39,13 @@ rotated together with the stored provider keys when compromised.
 ## Admin Authentication
 
 - `/admin` is intentionally unlinked, but path obscurity is not authentication.
-- `APP_MODE=development` bypasses login only for local development.
-- `APP_MODE=production` refuses to initialize unless `ADMIN_PASSWORD` contains
-  at least 12 characters.
+- The example environment and server default to `APP_MODE=production`.
+  Only an explicit `APP_MODE=development` bypasses login for local development;
+  `NODE_ENV` does not enable that bypass.
+- Production validates authentication before opening or seeding SQLite.
+  `ADMIN_PASSWORD` must contain at least 12 characters after trimming surrounding
+  whitespace; missing, whitespace-only, and shorter passwords refuse startup.
+  The configured password itself is preserved for login comparison.
 - Successful production login creates a random in-memory session with an
   HttpOnly, SameSite=Strict cookie scoped to `/api/admin`. HTTPS requests also
   receive the `Secure` attribute.
@@ -108,6 +112,15 @@ production Docker image without pushing it. Version tags run the same checks,
 then publish the image to GitHub Container Registry and create a GitHub Release.
 Dependency upgrades and new external hosts should include a review of the lock
 file, allowlist, and synchronization boundary.
+
+Run `npm audit` to check the full dependency tree against the current npm
+advisories, and `npm audit --omit=dev` for the production subset. The
+sensitive-information scan checks source content, not dependency advisories.
+`concurrently` stays in development dependencies, and its `shell-quote`
+override installs a patched package instead of suppressing an audit finding.
+The `allowScripts` policy approves only the reviewed `better-sqlite3@13.0.3`
+native build. Review and update that version-specific entry when upgrading
+SQLite; do not grant a blanket approval to dependency install scripts.
 
 ## Reporting a Problem
 

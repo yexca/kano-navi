@@ -16,6 +16,7 @@ YouTube directly from the browser.
 ```bash
 npm install
 cp .env.example .env
+# Configure ADMIN_PASSWORD, or explicitly set APP_MODE=development locally.
 npm run dev
 ```
 
@@ -44,8 +45,10 @@ image instead of building locally.
 
 The hidden administration page is available only by entering `/admin`
 directly; it is not linked from the dashboard. `APP_MODE=development` bypasses
-login. Before `npm start`, set `APP_MODE=production` and an
-`ADMIN_PASSWORD` of at least 12 characters in the ignored `.env` file.
+login only when explicitly configured. The example environment and server
+default to `APP_MODE=production`; startup refuses missing, whitespace-only,
+or shorter-than-12-character passwords before opening the database. Configure
+`ADMIN_PASSWORD` in the ignored `.env` file before starting the server.
 Provider API keys are managed in `/admin` and encrypted in SQLite. Set the
 environment-only `LLM_SECRETS_KEY` before saving or using a provider. A legacy
 `OPENAI_API_KEY` can be imported once with `npm run migrate:llm`, then removed.

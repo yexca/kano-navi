@@ -4,14 +4,14 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { createApp } from "./app.js"
+import { resolveAdminConfig } from "./admin-auth.js"
 import { databasePath, initializeDatabase } from "./database.js"
 
 const projectDirectory = path.dirname(fileURLToPath(import.meta.url))
 const distDirectory = path.resolve(projectDirectory, "../dist")
 const port = Number(process.env.PORT || 8787)
-const adminMode =
-  process.env.APP_MODE ||
-  (process.env.NODE_ENV === "production" ? "production" : "development")
+// Validate authentication before creating or seeding the runtime database.
+const { mode: adminMode, adminPassword } = resolveAdminConfig()
 
 export const database = initializeDatabase()
 export const app = createApp({
@@ -22,7 +22,7 @@ export const app = createApp({
   ),
   staticDirectory: distDirectory,
   adminMode,
-  adminPassword: process.env.ADMIN_PASSWORD || "",
+  adminPassword,
   // Saved workflows with a schedule are started by this process only.
   startWorkflowScheduler: process.env.WORKFLOW_SCHEDULER_ENABLED !== "0",
 })

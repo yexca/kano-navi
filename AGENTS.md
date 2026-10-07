@@ -68,8 +68,10 @@ Read it first, then use the focused documents in `docs/` for more detail.
 - `GET /api/health` returns service status, the database path relative to the project, and the latest synchronization summary.
 - `GET /api/dashboard?days=3` returns the profile, a `summary` block (`nextEvent`, `nextStream`, `latestVideo`, `latestPost`, and `counts`), aggregated posts in the requested window, all events, videos, the manually selected focus item, the timeline, resource links, image assets, media-cache status, and synchronization metadata (including configured X accounts and the Featured video ID). Schedule images appear only after the source-text gate and an image-model or manual approval described in [Data and synchronization](docs/data-and-sync.md#schedule-images). The server clamps `days` to 1 through 30. `latestPost` survives an empty window. Events and `meta.lastSync` are public projections from `server/public-view.js`: per-source counters, raw fetch errors, job IDs, and source item IDs stay in `/api/admin/*`.
 - `GET /media/<opaque-id>` serves a cached file only when its database row is `ready` and its resolved path remains below the ignored `data/x/`, `data/youtube/`, or legacy cache roots; invalid or unready IDs return `404`. Selected profile media is exposed through `/media/profile/avatar` and `/media/profile/banner`.
-- `/api/admin/*` is password-free only when `APP_MODE=development`. Production
-  requires `ADMIN_PASSWORD` with at least 12 characters and uses an HttpOnly
+- `/api/admin/*` is password-free only when `APP_MODE=development` is explicitly
+  configured. The example environment and server default to production, which
+  validates `ADMIN_PASSWORD` with at least 12 non-padding characters before
+  opening or seeding SQLite and uses an HttpOnly
   session cookie. The `/admin` page is intentionally absent from public navigation.
 - `/mcp` exposes sanitized read-only tools without a key. Revision, sync, and
   automatic-scan tools require `Authorization: Bearer <MCP_CONTROL_TOKEN>` and

@@ -13,6 +13,7 @@ React + Vite + shadcn/ui 风格组件制作的非官方资料整理页。页面�
 ```bash
 npm install
 cp .env.example .env
+# 配置 ADMIN_PASSWORD，或为本地开发显式设置 APP_MODE=development。
 npm run dev
 ```
 
@@ -52,9 +53,10 @@ SQLite 数据库和下载的媒体会保存在 `./data`。使用已发布的镜�
 `KANO_IMAGE=ghcr.io/yexca/kano-navi:latest`，无需本地构建。
 
 管理页只允许手动输入 `/admin` 访问，主页不会显示入口。
-`APP_MODE=development` 时免登录；运行 `npm start` 前，应在不会提交的
-`.env` 中设为 `APP_MODE=production`，并配置至少 12 位的
-`ADMIN_PASSWORD`。provider 密钥由管理页配置并加密保存到 SQLite；环境中只需
+示例环境和服务默认使用 `APP_MODE=production`；`ADMIN_PASSWORD` 未配置、
+仅为空白，或去掉首尾空白后不足 12 位时，服务会在打开数据库前拒绝启动。
+启动前请在不会提交的 `.env` 中配置密码。本地开发可以显式设置
+`APP_MODE=development` 使用免登录模式。provider 密钥由管理页配置并加密保存到 SQLite；环境中只需
 配置 `LLM_SECRETS_KEY`。
 后台首页是一键工作流：选择要更新的模块（X、YouTube、媒体缓存、AI 日程识别），
 立即运行或交给服务端定时执行。其他分区包括分页日程、按路由排序模型的识别规则、
