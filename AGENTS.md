@@ -30,37 +30,38 @@ Read it first, then use the focused documents in `docs/` for more detail.
 
 ## Code Map
 
-| Path                           | Responsibility                                                  |
-| ------------------------------ | --------------------------------------------------------------- |
-| `src/main.jsx`                 | Entry point that routes `/`, `/history`, and `/admin`           |
-| `src/dashboard/`               | Public board: data hook, formatting, sections, and styles       |
-| `src/history/`                 | Static, sourced milestone page from 2010 to now                 |
-| `src/admin/`                   | Hidden `/admin` console: shell, data hook, views, and styles    |
-| `src/admin/views/`             | Workflow, schedule, detection, post, image, LLM, content views  |
-| `src/index.css`                | Global design tokens shared by the board and admin              |
-| `src/components/ui/`           | Reusable shadcn/ui-style primitives                             |
-| `server/database.js`           | SQLite schema, seeding, upserts, and queries                    |
-| `server/media-cache.js`        | Runtime media paths, identities, and atomic-write helpers       |
-| `server/media-downloader.js`   | Bounded X/YouTube image downloader                              |
-| `server/schedule-extractor.js` | Schedule detection, schedule-image checks, and provider routing |
-| `server/schedule-asset.js`     | Source-text gate for promoting a post image to a schedule       |
-| `server/admin-api.js`          | Authenticated provider/schedule/video configuration and CRUD    |
-| `server/mcp-api.js`            | Sanitized MCP reads and bearer-scoped automation tools          |
-| `server/public-view.js`        | Public event and sync-run projections shared by HTTP and MCP    |
-| `server/sync-jobs.js`          | Single-flight asynchronous sync, scan, and workflow jobs        |
-| `server/workflow-catalog.js`   | Modular sync step catalog shared by sync, API, and scheduler    |
-| `server/workflow-scheduler.js` | In-process timer that starts due saved workflows                |
-| `server/llm-catalog.js`        | Provider model-list discovery and model tag suggestions         |
-| `server/secret-store.js`       | Environment-keyed encryption for provider API keys              |
-| `server/admin-auth.js`         | Development bypass and production session authentication        |
-| `server/app.js`                | Testable Express application, APIs, and guarded media route     |
-| `server/index.js`              | Runtime database and HTTP listener assembly                     |
-| `server/seed-data.js`          | Initial public snapshot and resource directory                  |
-| `scripts/sync.mjs`             | Server-side source adapters and the step runners for workflows  |
-| `scripts/seed.mjs`             | Idempotent initial snapshot seeding                             |
-| `public/assets/`               | Tracked fixed branding fallbacks                                |
-| `data/`                        | Ignored runtime database, source media, and profile media       |
-| `docs/`                        | Documentation for Agents, developers, and maintainers           |
+| Path                               | Responsibility                                                  |
+| ---------------------------------- | --------------------------------------------------------------- |
+| `src/main.jsx`                     | Entry point that routes `/`, `/history`, and `/admin`           |
+| `src/dashboard/`                   | Public board: data hook, formatting, sections, and styles       |
+| `src/history/`                     | Static, sourced milestone page from 2010 to now                 |
+| `src/admin/`                       | Hidden `/admin` console: shell, data hook, views, and styles    |
+| `src/admin/views/`                 | Workflow, schedule, detection, post, image, LLM, content views  |
+| `src/index.css`                    | Global design tokens shared by the board and admin              |
+| `src/components/ui/`               | Reusable shadcn/ui-style primitives                             |
+| `server/database.js`               | SQLite schema, seeding, upserts, and queries                    |
+| `server/media-cache.js`            | Runtime media paths, identities, and atomic-write helpers       |
+| `server/media-downloader.js`       | Bounded X/YouTube image downloader                              |
+| `server/schedule-extractor.js`     | Schedule detection, schedule-image checks, and provider routing |
+| `server/schedule-asset.js`         | Source-text gate for promoting a post image to a schedule       |
+| `server/admin-api.js`              | Authenticated provider/schedule/video configuration and CRUD    |
+| `server/mcp-api.js`                | Sanitized MCP reads and bearer-scoped automation tools          |
+| `server/public-view.js`            | Public event and sync-run projections shared by HTTP and MCP    |
+| `server/sync-jobs.js`              | Single-flight asynchronous sync, scan, and workflow jobs        |
+| `server/workflow-catalog.js`       | Modular sync step catalog shared by sync, API, and scheduler    |
+| `server/workflow-scheduler.js`     | In-process timer that starts due saved workflows                |
+| `server/llm-catalog.js`            | Provider model-list discovery and model tag suggestions         |
+| `server/secret-store.js`           | Environment-keyed encryption for provider API keys              |
+| `server/admin-auth.js`             | Development bypass and production session authentication        |
+| `server/app.js`                    | Testable Express application, APIs, and guarded media route     |
+| `server/index.js`                  | Runtime database and HTTP listener assembly                     |
+| `server/seed-data.js`              | Initial public snapshot and resource directory                  |
+| `scripts/sync.mjs`                 | Server-side source adapters and the step runners for workflows  |
+| `scripts/seed.mjs`                 | Idempotent initial snapshot seeding                             |
+| `scripts/import-history-media.mjs` | Verified offline import of the curated history image archive    |
+| `public/assets/`                   | Tracked fixed branding fallbacks                                |
+| `data/`                            | Ignored runtime database, source media, and profile media       |
+| `docs/`                            | Documentation for Agents, developers, and maintainers           |
 
 ## Data Contract
 
@@ -109,6 +110,7 @@ npm install              # Install dependencies for the first run
 npm run dev              # Start Vite and Express
 npm run build            # Create the production bundle
 npm run seed             # Add missing seed records
+npm run history:import -- --from /path/to/kano_official # Import history images
 npm run sync             # Read public sources and update SQLite
 npm run test:server      # Test SQLite and media-cache contracts
 make check-sensitive     # Scan for sensitive information

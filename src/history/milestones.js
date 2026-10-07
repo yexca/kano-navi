@@ -4,7 +4,8 @@
 // TIMELINE.md, reviewed 2026-10-04/05). Dates keep their original precision:
 // release days are label release dates, stream days are the original stream
 // dates, and month/range entries are not narrowed to a guessed day. The array
-// order is the display order. `source` is the strongest public page for the
+// entries are sorted chronologically without inventing missing dates.
+// `source` is the strongest public page for the
 // entry; it is null when the only evidence is a third-party stream archive.
 // Every external host here is listed in scripts/privacy-allowlist.json.
 
@@ -41,7 +42,7 @@ export const branches = [
   },
 ]
 
-export const milestones = [
+const originalMilestones = [
   {
     id: "first-covers",
     date: "2010",
@@ -623,3 +624,194 @@ export const milestones = [
     source: "https://x.com/kano_2525/status/2092160057542582386",
   },
 ]
+
+const visualMilestones = [
+  {
+    id: "hanayori-hated-by-life",
+    date: "2019-11-05",
+    branch: "hanayori",
+    kind: "artwork",
+    title: {
+      "zh-CN": "《命に嫌われている》翻唱插画",
+      ja: "「命に嫌われている」のイラスト",
+      en: "Artwork for “命に嫌われている”",
+    },
+    detail: {
+      "zh-CN": "カグラナナ发布委托翻唱插画，保留粉发红制服的花寄形象。",
+      ja: "カグラナナが担当イラストを公開。花寄のピンク髪と赤い制服の姿。",
+      en: "Kagura Nana published commissioned cover artwork featuring the pink-haired Hanayori design.",
+    },
+    source: "https://x.com/nana_kaguraaa/status/1191706487489355776",
+  },
+  {
+    id: "hanayori-birthday",
+    date: "2019-12-24",
+    branch: "hanayori",
+    kind: "outfit",
+    title: {
+      "zh-CN": "生日配信：侧编发造型",
+      ja: "誕生日配信の編み込みヘア",
+      en: "Braided hairstyle on the birthday stream",
+    },
+    detail: {
+      "zh-CN": "原制服搭配侧编发；配图为原直播 01:05:00 截帧。",
+      ja: "いつもの制服に編み込み。画像は元配信の 01:05:00 のフレーム。",
+      en: "The familiar uniform with a side braid; the archived frame comes from 01:05:00.",
+    },
+    source: null,
+  },
+  {
+    id: "hanayori-hitorigoto",
+    date: "2020-02-14",
+    branch: "hanayori",
+    kind: "artwork",
+    title: {
+      "zh-CN": "《ヒトリゴト》双人翻唱插画",
+      ja: "「ヒトリゴト」のデュエットイラスト",
+      en: "Duet artwork for “ヒトリゴト”",
+    },
+    detail: {
+      "zh-CN": "鹿乃与カグラナナ同框；日期为画师原帖公开日。",
+      ja: "鹿乃とカグラナナの 2 人。日付は画師の公開投稿による。",
+      en: "Kano and Kagura Nana together; dated to the illustrator’s original post.",
+    },
+    source: "https://x.com/nana_kaguraaa/status/1228216027109969922",
+  },
+  {
+    id: "hanayori-anniversary-goods",
+    date: "2020-08",
+    branch: "hanayori",
+    kind: "goods",
+    title: {
+      "zh-CN": "一周年泳装周边插画",
+      ja: "1 周年の水着グッズイラスト",
+      en: "Anniversary swimsuit merchandise artwork",
+    },
+    detail: {
+      "zh-CN": "官方立牌中的夏日插画。商品页未标明精确上架日，仅保留月份。",
+      ja: "公式アクリルスタンドの夏のイラスト。販売開始日は不明のため月単位で記録。",
+      en: "Summer artwork from the official acrylic stand. The exact listing day is unknown, so only the month is recorded.",
+    },
+    source: "https://booth.pm/ja/items/2258381",
+  },
+  {
+    id: "kilig-goods",
+    date: "2020-12-26",
+    branch: "singer",
+    kind: "goods",
+    title: {
+      "zh-CN": "KILIG：手办样品与 SD ばんび",
+      ja: "KILIG：フィギュアサンプルと SD ばんび",
+      en: "KILIG: figure preview and SD Bambi",
+    },
+    detail: {
+      "zh-CN":
+        "官网公开彩色手办样品及 stickits 联动图案，保留商品照片与插画的区别。",
+      ja: "公式サイトで彩色フィギュアサンプルと stickits 図案を公開。写真とイラストを区別して収録。",
+      en: "The official site shared a painted figure preview and stickits artwork, recorded separately as product photography and illustration.",
+    },
+    source: "https://kano-official.amebaownd.com/posts/12437391/",
+  },
+  {
+    id: "singer-keyvisual",
+    date: "2021-05-28",
+    branch: "singer",
+    kind: "artwork",
+    title: {
+      "zh-CN": "歌手鹿乃的新宣传立绘",
+      ja: "歌手・鹿乃の新しい立ち絵",
+      en: "New promotional illustration for singer Kano",
+    },
+    detail: {
+      "zh-CN": "へちま绘制蓝紫星光舞台服全身图；衣装此前已见于 KILIG 周边。",
+      ja: "へちまによる星をあしらった青紫の舞台服。衣装は以前の KILIG グッズにも登場。",
+      en: "Hechima’s full-body illustration in the starry blue-violet stage outfit, already seen in KILIG merchandise.",
+    },
+    source: "https://kano-official-cn.amebaownd.com/posts/17957621/",
+  },
+  {
+    id: "mahoro-yukata",
+    date: "2021-06-03",
+    branch: "mahoro",
+    kind: "artwork",
+    title: {
+      "zh-CN": "まほろ的浅蓝浴衣插画",
+      ja: "まほろの水色の浴衣イラスト",
+      en: "Mahoro in a pale-blue yukata",
+    },
+    detail: {
+      "zh-CN": "本人发布的和装绘图；现有证据未确定对应模型的首次公开日。",
+      ja: "本人が公開した和装イラスト。対応するモデルの初公開日は未確認。",
+      en: "Artwork posted by the artist; the first reveal of a corresponding model remains unverified.",
+    },
+    source: "https://x.com/kanomahoro/status/1400311205160394752",
+  },
+  {
+    id: "mahoro-kimono-recap",
+    date: "2021-06-11",
+    branch: "mahoro",
+    kind: "artwork",
+    title: {
+      "zh-CN": "和装配信回顾图",
+      ja: "和装配信の振り返り画像",
+      en: "A look back at the kimono stream",
+    },
+    detail: {
+      "zh-CN": "本人在配信感谢帖中附上此图。记录的是回顾帖日期。",
+      ja: "配信のお礼投稿に添えられた画像。日付は振り返り投稿のもの。",
+      en: "An image attached to the artist’s thank-you post; the date belongs to that recap post.",
+    },
+    source: "https://x.com/_Kanotic/status/1403257630844280834",
+  },
+  {
+    id: "mahoro-keyvisual",
+    date: "2022-07-17",
+    branch: "mahoro",
+    kind: "artwork",
+    title: {
+      "zh-CN": "まほろ的 2022 主视觉",
+      ja: "まほろの 2022 キービジュアル",
+      en: "Mahoro’s 2022 key visual",
+    },
+    detail: {
+      "zh-CN": "本人公开彩色背景版本，へちま于 7 月 19 日另发白背景版本。",
+      ja: "本人が背景付きの画像を公開。へちまは 7 月 19 日に白背景版を投稿。",
+      en: "The artist shared a version with a colored background; Hechima posted the white-background version on July 19.",
+    },
+    source: "https://x.com/kanomahoro/status/1548646948521267201",
+  },
+  {
+    id: "bambino-promo",
+    date: "2024-04-20",
+    branch: "singer",
+    kind: "artwork",
+    title: {
+      "zh-CN": "Bambino 2024 演出宣传",
+      ja: "Bambino 2024 の告知ビジュアル",
+      en: "Bambino 2024 promotional visual",
+    },
+    detail: {
+      "zh-CN": "本人原帖中的棕发歌手形象；日期为宣传帖日期。",
+      ja: "本人の告知投稿に登場した茶髪の歌手ビジュアル。日付は投稿日のもの。",
+      en: "The brown-haired singer design in the artist’s promotional post, dated to the post itself.",
+    },
+    source: "https://x.com/kano_2525/status/1781563117530673572",
+  },
+]
+
+export const milestones = [...originalMilestones, ...visualMilestones]
+  .map((item) =>
+    item.id === "sona-debut"
+      ? {
+          ...item,
+          source: "https://www.youtube.com/watch?v=YzfwW0zTSpE",
+          links: [
+            {
+              href: "https://milpr.com/talents/kano-mahoro",
+              label: "history.sourceName.agency",
+            },
+          ],
+        }
+      : item,
+  )
+  .sort((left, right) => left.date.localeCompare(right.date))

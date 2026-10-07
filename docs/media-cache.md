@@ -23,13 +23,18 @@ data/
     banner.<extension>
   .tmp/
     <temporary-file>.part
+  cache/media/
+    sha256/<first-two>/<content-sha256>.<extension>
 ```
 
 The whole `data/` directory is ignored by Git. It is created on demand by the
 server or synchronization command. The tracked `public/assets/` directory is
 reserved for fixed fallback branding. Discovered X and YouTube profile
 candidates stay in their source namespaces; local uploads and the selected
-avatar and banner files remain runtime data in `data/avatar/`.
+avatar and banner files remain runtime data in `data/avatar/`. The curated
+history archive imports original publisher files locally into the supported
+`data/cache/media/` root, with X and video sources in their source namespaces.
+See [History and visual archive](history.md) for import and provenance details.
 
 ## Database Model
 

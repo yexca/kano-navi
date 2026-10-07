@@ -35,7 +35,10 @@ successful snapshot while a source is unavailable.
 ### Presentation: `src/`
 
 `src/main.jsx` only routes between the public board, the static `/history`
-page in `src/history/`, and `/admin`. The board
+page in `src/history/`, and `/admin`. History copy and image metadata are
+static; `scripts/import-history-media.mjs` imports a local reference archive
+into the existing media tables and guarded cache without network requests.
+See [History and visual archive](history.md). The board
 lives in `src/dashboard/`: `use-dashboard.js` owns the snapshot request and
 revision polling, `format.js` owns Japan-time and event-status helpers,
 `content.js` holds static public links, and `components/` renders the header,

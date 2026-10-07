@@ -11,6 +11,7 @@ code, maintaining data, and reviewing security.
 - [Local development](development.md)
 - [Data and synchronization](data-and-sync.md)
 - [Media cache](media-cache.md)
+- [History and visual archive](history.md)
 - [Security and privacy](security.md)
 - [SQLite-first architecture decision](decisions/ADR-0001-sqlite-first.md)
 - [Root Agent guide](../AGENTS.md)

@@ -1,4 +1,5 @@
 import { adminMessages } from "./admin-i18n"
+import { historyMessages } from "./history/history-i18n"
 
 export const localeOptions = [
   { value: "en", label: "English", htmlLang: "en" },
@@ -516,10 +517,12 @@ export function createTranslator(locale) {
   const selectedMessages = {
     ...messages[locale],
     ...(adminMessages[locale] || {}),
+    ...(historyMessages[locale] || {}),
   }
   const fallbackMessages = {
     ...messages.en,
     ...adminMessages.en,
+    ...historyMessages.en,
   }
 
   return (key, values = {}) => {

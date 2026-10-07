@@ -42,6 +42,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
 COPY --from=build /app/server ./server
 COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/src/history/media.js /app/src/history/media-catalog.json ./src/history/
 
 RUN mkdir -p /app/data
 

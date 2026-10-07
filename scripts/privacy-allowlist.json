@@ -156,6 +156,38 @@
     {
       "host": "api.moonshot.cn",
       "reason": "Optional OpenAI-compatible provider preset in /admin; the server contacts it only after an operator saves a key."
+    },
+    {
+      "host": "cdn.amebaowndme.com",
+      "reason": "Public artist-site image files retained as provenance links for the locally imported history archive."
+    },
+    {
+      "host": "booth.pximg.net",
+      "reason": "Public official BOOTH product artwork retained as history image provenance; never loaded automatically by the browser."
+    },
+    {
+      "host": "www.livecartoon.net",
+      "reason": "Public commissioned production-studio portfolio cited by the history visual archive."
+    },
+    {
+      "host": "static.wixstatic.com",
+      "reason": "Public studio portfolio image file cited by the history visual archive."
+    },
+    {
+      "host": "prcdn.freetls.fastly.net",
+      "reason": "Public organizer and agency press-release image files cited by the history archive."
+    },
+    {
+      "host": "i2.hdslb.com",
+      "reason": "Public artist-published Bilibili video cover preserved as history image provenance."
+    },
+    {
+      "host": "archive.ragtag.moe",
+      "reason": "Third-party archives of historical official streams, explicitly labelled with original stream links and frame timestamps."
+    },
+    {
+      "host": "storage.googleapis.com",
+      "reason": "Public agency artwork published through the official talent website; a provenance link for a locally imported history image only."
     }
   ]
 }

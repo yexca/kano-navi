@@ -49,8 +49,12 @@ covers to joining Milpro SONA in 2026. It is static, curated content in
 `src/history/milestones.js`: every entry keeps its original date precision
 (year, month, day, or range), names its activity identity (singer, Hanayori
 Joshiryo, Kano Mahoro, MKLNtic, Milpro SONA), and links the strongest public
-source. Entries backed only by a third-party stream archive show no link.
-Visitors can filter by identity. The page makes no API or external request.
+source. Visitors can filter by identity and jump to a year. A visual archive
+adds 59 locally imported images with image-type filtering, full-image dialogs,
+dimensions, date basis, recorded credits, and original-site links. Official
+stream frames explicitly identify the third-party archive and frame timestamp.
+Images load only through local `/media` routes; visits do not fetch external
+sources. See [History and visual archive](history.md) for the import workflow.
 
 The visual language borrows from the artist's public motifs: strawberry red
 and cream gingham from the banner, the outfit's sky blue as a secondary hue,

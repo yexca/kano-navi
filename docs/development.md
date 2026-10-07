@@ -87,6 +87,10 @@ The Makefile provides the same entry points. Run `make help` to list targets;
 
 ## Data Commands
 
+The `/history` visual archive has an offline import command:
+`npm run history:import -- --from /path/to/kano_official`. Run it in the server's
+environment. See [History and visual archive](history.md) for details.
+
 ```bash
 npm run seed                 # Idempotently add missing initial records
 npm run seed -- --overwrite # Overwrite records with matching IDs from seed-data

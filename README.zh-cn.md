@@ -67,6 +67,18 @@ SQLite 数据库和下载的媒体会保存在 `./data`。使用已发布的镜�
 
 ## 数据与 API
 
+`/history` 提供 2010 年起的历程时间线和 59 张来源可追溯的图片图鉴，可按
+活动身份、年份及图片类型浏览，并放大查看尺寸、日期依据、署名和原站链接。
+图片来自本地资料库，需导入运行时缓存后显示：
+
+```bash
+npm run history:import -- --from /path/to/kano_official
+```
+
+导入验证原文件哈希和格式，不访问外网，也不会修改资料库。图片与数据库保存在
+已忽略的 `data/` 中，迁移部署时需保留。Docker 应在容器内导入，详情见
+[历程与图片图鉴说明](docs/history.md)。
+
 SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers`、`llm_models`、`llm_route_targets`（以及已迁移的旧表 `llm_route_providers`）和 `workflows`。
 
 看板接口：
