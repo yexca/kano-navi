@@ -82,6 +82,17 @@ listens on `7657`; the default public address is `http://localhost:7657`.
 To use the equivalent GHCR image, set
 `KANO_IMAGE=ghcr.io/yexca/kano-navi:latest`.
 
+Fresh deployments start with empty X/YouTube snapshots and no LLM providers.
+Add providers and routes in `/admin`, then run a workflow to populate source
+data. Fixed history images are already bundled. Existing `./data` snapshots
+and provider configuration survive upgrades.
+
+Behind an HTTPS reverse proxy, preserve `Sec-Fetch-Site` from browser requests
+and forward `X-Forwarded-Proto: https` so session cookies receive `Secure`.
+Same-origin browser mutations work even if the proxy rewrites Host. Clients
+without Fetch Metadata need the original public Host and forwarded protocol
+to match any supplied `Origin`.
+
 To build the production image from the local checkout:
 
 ```bash

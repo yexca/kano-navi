@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import path from "node:path"
 import test from "node:test"
 
 import {
@@ -41,7 +42,7 @@ test("cache paths reject traversal and preserve content-addressed layout", () =>
   assert.equal(resolveMediaCachePath("/outside.jpg"), null)
   assert.equal(
     resolveMediaCachePath("sha256/aa/file.jpg")?.endsWith(
-      "/data/cache/media/sha256/aa/file.jpg",
+      path.join("data", "cache", "media", "sha256", "aa", "file.jpg"),
     ),
     true,
   )

@@ -29,8 +29,10 @@ code, maintaining data, and reviewing security.
 
 - Stack: React 19, Vite, Tailwind CSS, shadcn/ui-style components, Express 5,
   and better-sqlite3.
-- Page data comes from the local `data/database/kano.sqlite` snapshot. An empty database
-  is initialized with the public snapshot in `server/seed-data.js`.
+- Page data comes from the local `data/database/kano.sqlite` snapshot. An empty
+  database receives only the static profile, milestones, and resource directory
+  in `server/seed-data.js`; source snapshots and LLM providers start empty.
+  Fixed history images ship in `public/assets/history/` and the production bundle.
 - `scripts/sync.mjs` reads public X pages/APIs and YouTube RSS/pages to collect
   bounded incremental updates and scheduled streams. It then downloads pending
   media and optionally extracts structured schedules through OpenAI.

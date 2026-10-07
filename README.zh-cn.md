@@ -78,17 +78,18 @@ docker compose up -d
 
 `/history` 提供 2010 年起的历程时间线和 59 张来源可追溯的图片图鉴，可按
 活动身份、年份及图片类型浏览，并放大查看尺寸、日期依据、署名和原站链接。
-图片来自本地资料库，需导入运行时缓存后显示：
+59 张固定历史图片已随项目、生产构建和 Docker 镜像发布，首次部署即可显示，
+无需导入运行时缓存。维护者更新这批固定素材时可从资料库重新打包：
 
 ```bash
-npm run history:import -- --from /path/to/kano_official
+npm run history:package -- --from /path/to/kano_official
 ```
 
-导入验证原文件哈希和格式，不访问外网，也不会修改资料库。图片与数据库保存在
-已忽略的 `data/` 中，迁移部署时需保留。Docker 应在容器内导入，详情见
+打包验证原文件哈希、大小和格式，不访问外网，也不会修改资料库。
+静态图片位于 `public/assets/history/`，原始来源和署名保持不变。详情见
 [历程与图片图鉴说明](docs/history.md)。
 
-SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并在空表中写入 `server/seed-data.js` 的初始快照。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers`、`llm_models`、`llm_route_targets`（以及已迁移的旧表 `llm_route_providers`）和 `workflows`。
+SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并补充 `server/seed-data.js` 中的静态个人资料、历程和资源链接。X 动态、日程、YouTube 视频、Featured 内容及 LLM provider、模型和路由默认均为空；通过后台工作流抓取来源，并在 `/admin` 手动配置 provider。升级保留已有快照和配置。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers`、`llm_models`、`llm_route_targets`（以及已迁移的旧表 `llm_route_providers`）和 `workflows`。
 
 看板接口：
 
@@ -161,7 +162,7 @@ npm run seed
 npm run seed -- --overwrite
 ```
 
-`public/assets` 只保留固定的兜底素材；会随平台内容变化的缩略图和 schedule 图片属于 `data/x/` 或 `data/youtube/` 运行时缓存，头像和横幅候选按来源写入对应目录，本地上传和人工选择后的头像、横幅属于 `data/avatar/`，均不进入 Git。页面为 fan-made 项目，相关平台链接均指向原始页面。
+`public/assets` 保留固定的兜底素材及经过验证的历史图片；会随平台内容变化的缩略图和 schedule 图片属于 `data/x/` 或 `data/youtube/` 运行时缓存，头像和横幅候选按来源写入对应目录，本地上传和人工选择后的头像、横幅属于 `data/avatar/`，均不进入 Git。页面为 fan-made 项目，相关平台链接均指向原始页面。
 
 ## 本地检查
 

@@ -75,8 +75,11 @@ profile-media selection.
 ## Data and API
 
 The SQLite file is `data/database/kano.sqlite`. When the server starts, it creates the
-schema and fills missing tables with the initial snapshot in
-`server/seed-data.js`. The main tables are `profiles`, `posts`, `events`,
+schema and adds the static profile, milestones, and resource directory from
+`server/seed-data.js`. X posts, events, YouTube videos, Featured content, and
+LLM providers/models/routes start empty. Run a workflow to populate source
+snapshots and configure providers explicitly in `/admin`. Existing snapshots
+and provider settings are preserved on upgrade. The main tables are `profiles`, `posts`, `events`,
 `videos`, `focus`, `timeline`, `resources`, `assets`, `media_assets`,
 `media_links`, `sync_runs`, `sync_state`, `event_sources`, `app_settings`,
 `schedule_extractions`, `llm_providers`, `llm_models`, `llm_route_targets`
@@ -184,7 +187,10 @@ the same IDs, use:
 npm run seed -- --overwrite
 ```
 
-`public/assets/` contains only fixed branding fallbacks. Changing thumbnails
+`public/assets/` contains fixed branding fallbacks and 59 verified history images.
+The history collection ships in production images and works on first deployment
+without an import. See [History and visual archive](docs/history.md) for
+packaging and provenance. Changing thumbnails
 and schedule images belong in the ignored `data/x/` or `data/youtube/` folders;
 discovered profile candidates follow their source namespace, while uploaded and
 selected profile media belongs in `data/avatar/`. This is a fan-made project,

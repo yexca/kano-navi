@@ -172,11 +172,21 @@ function scheduleKeywords(value) {
 }
 
 function mutationOriginGuard(request, response, next) {
+  if (["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    next()
+    return
+  }
   const fetchSite = String(
     request.headers["sec-fetch-site"] || "",
   ).toLowerCase()
   if (fetchSite === "cross-site") {
     response.status(403).json({ error: "csrf_origin_mismatch" })
+    return
+  }
+  // Browsers compute this against the public URL before a reverse proxy can
+  // rewrite Host or terminate HTTPS. It cannot be set by page JavaScript.
+  if (fetchSite === "same-origin") {
+    next()
     return
   }
   const origin = String(request.headers.origin || "").trim()

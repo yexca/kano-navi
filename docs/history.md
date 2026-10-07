@@ -17,7 +17,9 @@ recorded credit, and original-source links.
   dimensions, MIME type, size, SHA-256, source identity, and date basis.
   Original local paths are excluded.
 - `src/history/media.js` groups images and supplies versioned local
-  `/media/<id>?v=<sha256>` URLs.
+  `/assets/history/<filename>?v=<sha256>` URLs.
+- `public/assets/history/` contains the 59 verified original image files,
+  copied by Vite into `dist/` and included in production Docker images.
 - `src/history/history-i18n.js` supplies image and provenance translations.
 
 Release dates, Japan-time post dates, stream dates, depicted outfit reveals,
@@ -32,10 +34,31 @@ art, product illustrations, promotional visuals, and model demonstrations
 remain distinct. Illustrations alone do not establish a new streaming model.
 Agency press-release images display their requested publisher credit.
 
-## Offline Import
+## Fixed Image Packaging
 
-Image bytes remain ignored runtime data, outside Git and the frontend bundle.
-With the reference collection available locally, run:
+The reviewed history collection is fixed site content, tracked with the
+project. A fresh checkout, production build, or container displays these images
+without database media rows, runtime downloads, or an extra import. The
+collection contains about 62 MiB of original bytes. Changing X/YouTube images
+and operator-selected profile media remain ignored runtime data.
+
+To update the fixed collection from the local reference archive, run:
+
+```bash
+npm run history:package -- --from /path/to/kano_official
+```
+
+Packaging reuses the importer's validation of the entire selection before
+writing: manifest entries, contained real paths, size limits, SHA-256
+identities, and image magic bytes must match the catalog. Original bytes,
+credits, and provenance are preserved. Packaging performs no network requests
+and does not change the reference collection or runtime SQLite database.
+Review the catalog and packaged assets together when updating the collection.
+
+## Optional Legacy Import
+
+The original runtime-cache importer remains available for consumers of the
+legacy opaque-ID `/media` URLs. It is no longer required by `/history`:
 
 ```bash
 npm run history:import -- --from /path/to/kano_official
@@ -58,21 +81,21 @@ available inside the container and run the importer there. Avoid simultaneous
 Windows/Linux access to the same SQLite file. Restart the development service
 after an offline import if it holds an older database connection.
 
-When moving a deployment, preserve the ignored `data/` directory, including
-its database and media. A fresh checkout displays text and source links but
-needs the import for images. Missing local files show an unavailable state
-while retaining original-source links.
+When moving a deployment, preserve the ignored `data/` directory for source
+snapshots, dynamic media, and provider configuration. History images are
+supplied by the project and image. Missing fixed files show an unavailable
+state while retaining original-source links.
 
 ## Requests and Verification
 
 The page has no data-fetching hook or external embeds. Gallery and timeline
-images are lazy loaded from the guarded local media route; the introductory
+images are lazy loaded from the local static asset route; the introductory
 portrait is loaded eagerly. Original websites open only when visitors follow
 a link. Provenance hosts are documented in the privacy allowlist without
 expanding the remote downloader's destination policy.
 
 Run `npm run build`, `npm run test:server`, `make check-docs`, and
-`make check-sensitive`. Importer tests use synthetic archives without network
+`make check-sensitive`. Packaging and importer tests use synthetic archives without network
 requests. Browser verification covers identity/image-type filters, year
 navigation, dialog focus and Escape, source links, three languages, themes,
 and desktop/mobile layouts.

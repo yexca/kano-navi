@@ -6,6 +6,7 @@ import path from "node:path"
 import test from "node:test"
 
 import { importHistoryMedia } from "../scripts/import-history-media.mjs"
+import { packageHistoryMedia } from "../scripts/package-history-media.mjs"
 import { historyMedia } from "../src/history/media.js"
 import { milestones } from "../src/history/milestones.js"
 import {
@@ -81,7 +82,10 @@ test("history catalog preserves distinct source identities, dates, and milestone
   for (const item of historyMedia) {
     assert.equal(item.mediaId, mediaIdForSourceUrl(item.sourceUrl))
     assert.ok(!item.milestoneId || milestoneIds.has(item.milestoneId))
-    assert.match(item.url, /^\/media\/[a-f0-9]{64}\?v=[a-f0-9]{64}$/u)
+    assert.match(
+      item.url,
+      /^\/assets\/history\/[a-zA-Z0-9_.-]+\?v=[a-f0-9]{64}$/u,
+    )
     assert.ok(item.title.en && item.title.ja && item.title["zh-CN"])
   }
   const frames = historyMedia.filter((item) => item.frameTime)
@@ -99,6 +103,36 @@ test("history catalog preserves distinct source identities, dates, and milestone
   )
   assert.equal(portrait.dateKind, "capture")
   assert.equal(portrait.date, "2026-09-30")
+})
+
+test("every fixed history image ships with its catalog bytes and identity", async () => {
+  for (const item of historyMedia) {
+    const content = await fs.readFile(
+      new URL(`../public/assets/history/${item.filename}`, import.meta.url),
+    )
+    assert.equal(content.length, item.byteSize, item.id)
+    assert.equal(sha256ForContent(content), item.sha256, item.id)
+  }
+})
+
+test("history packaging validates the archive before publishing fixed images", async (t) => {
+  const { root, content, image } = await fixture(t)
+  const destination = path.join(root, "packaged")
+  assert.deepEqual(await packageHistoryMedia(root, destination, [image]), {
+    packaged: 1,
+    bytes: content.length,
+  })
+  const packagedFile = path.join(destination, image.filename)
+  assert.deepEqual(await fs.readFile(packagedFile), content)
+  await fs.writeFile(
+    path.join(root, image.filename),
+    Buffer.alloc(content.length),
+  )
+  await assert.rejects(
+    packageHistoryMedia(root, destination, [image]),
+    /identity mismatch/u,
+  )
+  assert.deepEqual(await fs.readFile(packagedFile), content)
 })
 
 test("offline history import preserves original bytes and is idempotent", async (t) => {

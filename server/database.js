@@ -2420,26 +2420,6 @@ export function seedDatabase(
   if (getAppSetting(database, "dashboard_revision", null) == null) {
     setAppSetting(database, "dashboard_revision", "0")
   }
-  if (!database.prepare("SELECT 1 FROM llm_providers LIMIT 1").get()) {
-    const legacyModel = getAppSetting(database, "llm_model", "gpt-4o-mini")
-    upsertLlmProvider(database, {
-      id: "openai-default",
-      name: "OpenAI 默认",
-      protocol: "openai-responses",
-      baseUrl: "https://api.openai.com/v1",
-      model: legacyModel,
-      enabled: true,
-      visionCapable: true,
-      capabilities: LLM_CAPABILITIES,
-      timeoutMs: 30000,
-      maxRetries: 2,
-      replaceApiKey: false,
-      apiKeyCiphertext: null,
-    })
-    setLlmRouteProviders(database, SCHEDULE_VISION_ROUTE, ["openai-default"])
-    setLlmRouteProviders(database, SCHEDULE_MESSAGE_ROUTE, ["openai-default"])
-    setLlmRouteProviders(database, SCHEDULE_BOARD_ROUTE, ["openai-default"])
-  }
   if (getAppSetting(database, "workflows_seeded", null) == null) {
     // Seeded workflows start unscheduled: timed polling of public platforms
     // is an explicit operator decision.
@@ -4695,19 +4675,16 @@ export function getDashboard(database, { days = 3, now = new Date() } = {}) {
     { total: 0 },
   )
 
-  const dateCandidates = [
-    profile?.updatedAt,
-    focusRow?.updatedAt,
-    ...posts.map((post) => post.publishedAt),
-    ...mappedVideos.map((video) => video.publishedAt),
-  ]
-    .map((value) => Date.parse(value || ""))
-    .filter((value) => !Number.isNaN(value))
+  // Snapshot freshness belongs to completed synchronization, not profile
+  // metadata, publication dates, page reads, or failed attempts.
   const fetchedAt =
-    latestSync?.finishedAt ||
-    (dateCandidates.length
-      ? new Date(Math.max(...dateCandidates)).toISOString()
-      : null)
+    database
+      .prepare(
+        `SELECT finished_at AS finishedAt FROM sync_runs
+         WHERE status IN ('success', 'partial') AND finished_at IS NOT NULL
+         ORDER BY finished_at DESC, id DESC LIMIT 1`,
+      )
+      .get()?.finishedAt || null
 
   // The summary answers "what should a visitor look at first" without making
   // every client re-derive it. It only references rows already in the payload,

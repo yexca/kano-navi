@@ -51,6 +51,12 @@ rotated together with the stored provider keys when compromised.
   receive the `Secure` attribute.
 - Failed logins are rate-limited per observed client address. Server restarts
   clear all sessions.
+- Admin mutations reject `Sec-Fetch-Site: cross-site`. Browser-provided
+  `same-origin` metadata survives reverse-proxy Host rewriting and HTTPS
+  termination, so it is accepted without comparing the public origin to the
+  internal Host. Page JavaScript cannot set this header. Other clients with an
+  `Origin` must match the observed host and protocol; authentication is still
+  required for every protected request.
 - Manual event mutations require the authenticated admin API and create durable
   locks/tombstones so untrusted source or model output cannot overwrite them.
 

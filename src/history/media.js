@@ -1,10 +1,10 @@
 import catalog from "./media-catalog.json" with { type: "json" }
 
-// Public provenance only. Original bytes are imported separately into the
-// ignored runtime cache; the browser never loads a platform CDN as a fallback.
+// Curated fixed images ship in public/assets/history and the production bundle.
+// Changing source media still uses the runtime cache; visits stay local.
 export const historyMedia = catalog.map((item) => ({
   ...item,
-  url: `/media/${item.mediaId}?v=${item.sha256}`,
+  url: `/assets/history/${item.filename}?v=${item.sha256}`,
 }))
 
 export const mediaByMilestone = historyMedia.reduce((groups, item) => {

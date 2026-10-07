@@ -187,22 +187,17 @@ test("admin provider CRUD keeps keys encrypted and orders provider routes", asyn
     const ordered = await jsonRequest(origin, "/api/admin/providers/order", {
       method: "PUT",
       body: JSON.stringify({
-        providerOrder: [
-          "second-provider",
-          "openai-default",
-          "fallback-provider",
-        ],
+        providerOrder: ["second-provider", "fallback-provider"],
       }),
     })
     assert.equal(ordered.response.status, 200)
     assert.deepEqual(ordered.payload.providerOrder, [
       "second-provider",
-      "openai-default",
       "fallback-provider",
     ])
     assert.deepEqual(
       new Set(ordered.payload.providers.map((provider) => provider.id)),
-      new Set(["openai-default", "fallback-provider", "second-provider"]),
+      new Set(["fallback-provider", "second-provider"]),
     )
 
     const messageOrder = await jsonRequest(
@@ -222,7 +217,6 @@ test("admin provider CRUD keeps keys encrypted and orders provider routes", asyn
       "second-provider",
     ])
     assert.deepEqual(messageOrder.payload.providerOrders.schedule_board, [
-      "openai-default",
       "fallback-provider",
       "second-provider",
     ])

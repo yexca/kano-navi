@@ -12,12 +12,17 @@ import {
   findCancellationTargets,
   bumpDashboardRevision,
   getAppSetting,
+  finishSyncRun,
   getEvent,
   getFeaturedVideoId,
   getDashboard,
+  getScheduleProviderOrders,
   getScheduleExtractionConfig,
   initializeDatabase,
   openDatabase,
+  listLlmModels,
+  listLlmProviders,
+  deleteLlmProvider,
   listAdminEvents,
   listAdminEventsPage,
   requestPostLlmReprocess,
@@ -25,6 +30,7 @@ import {
   replaceAutomaticEventsForSource,
   seedDatabase,
   setFeaturedVideoId,
+  startSyncRun,
   updateManualEvent,
   updateManualCancellation,
   upsertLlmProvider,
@@ -42,6 +48,148 @@ import {
   resolveMediaCachePath,
   writeMediaFileAtomic,
 } from "./media-cache.js"
+
+test("fresh initialization leaves source snapshots and LLM providers empty", () => {
+  const database = initializeDatabase({ filename: ":memory:" })
+  try {
+    seedDatabase(database)
+    const dashboard = getDashboard(database)
+    assert.ok(dashboard.profile)
+    assert.ok(dashboard.resources.length > 0)
+    assert.ok(dashboard.timeline.length > 0)
+    for (const table of [
+      "posts",
+      "events",
+      "videos",
+      "focus",
+      "assets",
+      "event_sources",
+      "media_assets",
+      "media_links",
+      "llm_providers",
+      "llm_models",
+      "llm_route_providers",
+      "llm_route_targets",
+    ]) {
+      assert.equal(
+        database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count,
+        0,
+        table,
+      )
+    }
+    assert.equal(dashboard.summary.latestPost, null)
+    assert.equal(dashboard.summary.latestVideo, null)
+    assert.equal(dashboard.summary.nextEvent, null)
+    assert.equal(dashboard.focus, null)
+    assert.equal(dashboard.meta.fetchedAt, null)
+    assert.equal(dashboard.meta.lastSync, null)
+    assert.equal(getFeaturedVideoId(database), null)
+    assert.deepEqual(listLlmProviders(database), [])
+    assert.deepEqual(listLlmModels(database), [])
+    assert.ok(
+      Object.values(getScheduleProviderOrders(database)).every(
+        (order) => order.length === 0,
+      ),
+    )
+  } finally {
+    database.close()
+  }
+})
+
+test("snapshot freshness uses completed syncs and retains the time after failures", () => {
+  const database = initializeDatabase({ filename: ":memory:" })
+  const finish = (status, timestamp) => {
+    const id = startSyncRun(database, "manual")
+    finishSyncRun(database, id, { status })
+    database
+      .prepare("UPDATE sync_runs SET finished_at = ? WHERE id = ?")
+      .run(timestamp, id)
+  }
+  try {
+    // Legacy profile metadata and content publication times are not syncs.
+    database
+      .prepare("UPDATE profiles SET updated_at = ?")
+      .run("2026-08-27T23:00:00+09:00")
+    upsertPosts(database, [
+      {
+        id: "freshness-post",
+        source: "x",
+        text: "Stored post",
+        published_at: "2026-10-08T00:00:00Z",
+        url: "https://x.com/example/status/freshness-post",
+      },
+    ])
+    assert.equal(getDashboard(database).meta.fetchedAt, null)
+    const runningId = startSyncRun(database, "manual")
+    assert.equal(getDashboard(database).meta.fetchedAt, null)
+    finishSyncRun(database, runningId, { status: "failed" })
+    assert.equal(getDashboard(database).meta.fetchedAt, null)
+
+    finish("success", "2026-10-08T01:00:00.000Z")
+    assert.equal(
+      getDashboard(database).meta.fetchedAt,
+      "2026-10-08T01:00:00.000Z",
+    )
+    finish("partial", "2026-10-08T02:00:00.000Z")
+    finish("failed", "2026-10-08T03:00:00.000Z")
+    for (const date of [
+      "2026-10-08T04:00:00.000Z",
+      "2026-10-09T04:00:00.000Z",
+    ]) {
+      const { meta } = getDashboard(database, { now: new Date(date) })
+      assert.equal(meta.fetchedAt, "2026-10-08T02:00:00.000Z")
+      assert.equal(meta.generatedAt, date)
+    }
+  } finally {
+    database.close()
+  }
+})
+
+test("reseeding preserves stored content and does not recreate deleted providers", () => {
+  const database = initializeDatabase({ filename: ":memory:" })
+  try {
+    upsertPosts(database, [
+      {
+        id: "stored-post",
+        source: "x",
+        text: "Stored post",
+        published_at: "2026-09-01T00:00:00Z",
+        url: "https://x.com/example/status/stored-post",
+      },
+    ])
+    upsertVideos(database, [
+      {
+        id: "stored-video",
+        source: "youtube",
+        title: "Stored video",
+        published_at: "2026-09-01T00:00:00Z",
+        url: "https://www.youtube.com/watch?v=stored-video",
+      },
+    ])
+    createManualEvent(database, {
+      title: "Stored event",
+      startsOn: "2026-09-01",
+    })
+    upsertLlmProvider(database, {
+      id: "configured-provider",
+      name: "Configured provider",
+      baseUrl: "https://provider.example.invalid/v1",
+      model: "configured-model",
+      enabled: false,
+    })
+    seedDatabase(database)
+    assert.equal(listLlmProviders(database)[0].enabled, false)
+    deleteLlmProvider(database, "configured-provider")
+    seedDatabase(database)
+    assert.deepEqual(listLlmProviders(database), [])
+    const dashboard = getDashboard(database)
+    assert.equal(dashboard.summary.latestPost.id, "stored-post")
+    assert.equal(dashboard.summary.latestVideo.id, "stored-video")
+    assert.equal(dashboard.events.length, 1)
+  } finally {
+    database.close()
+  }
+})
 
 test("migrates the old official site resource wording", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kano-resource-"))
@@ -359,7 +507,9 @@ test("ready media keeps its opaque URL and rejects unsafe cache metadata", async
       cache_path: written.relativePath,
     })
     assert.equal(
-      resolveMediaCachePath(row.cache_path)?.includes("/data/cache/media/"),
+      resolveMediaCachePath(row.cache_path)?.includes(
+        path.join("data", "cache", "media"),
+      ),
       true,
     )
 

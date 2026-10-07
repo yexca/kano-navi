@@ -24,6 +24,97 @@ async function close(server) {
   )
 }
 
+test("production mutations accept same-origin browser requests behind HTTPS proxies", async () => {
+  const database = initializeDatabase({ filename: ":memory:" })
+  let server
+  try {
+    server = await listen(
+      createApp({
+        database,
+        adminMode: "production",
+        adminPassword: "not-a-real-password",
+      }),
+    )
+    const backend = `http://127.0.0.1:${server.address().port}`
+    const proxyHeaders = {
+      origin: "https://board.example.invalid",
+      "x-forwarded-proto": "https",
+      "sec-fetch-site": "same-origin",
+      "content-type": "application/json",
+    }
+    const login = await fetch(`${backend}/api/admin/login`, {
+      method: "POST",
+      headers: proxyHeaders,
+      body: JSON.stringify({ password: "not-a-real-password" }),
+    })
+    assert.equal(login.status, 200)
+    assert.match(login.headers.get("set-cookie"), /; Secure/u)
+    const cookie = login.headers.get("set-cookie").split(";", 1)[0]
+    const headers = { ...proxyHeaders, cookie }
+    const config = await fetch(`${backend}/api/admin/config`, { headers })
+    assert.equal(config.status, 200)
+    const payload = await config.json()
+    assert.deepEqual(payload.providers, [])
+    assert.deepEqual(payload.models, [])
+    assert.ok(
+      Object.values(payload.providerOrders).every(
+        (order) => order.length === 0,
+      ),
+    )
+
+    let eventId
+    for (const method of ["POST", "PUT", "DELETE"]) {
+      const result = await fetch(
+        `${backend}/api/admin/events${method === "POST" ? "" : `/${eventId}`}`,
+        {
+          method,
+          headers,
+          ...(method === "DELETE"
+            ? {}
+            : {
+                body: JSON.stringify({
+                  id: "proxy-event",
+                  title: "Proxy event",
+                  startsOn: "2026-10-07",
+                }),
+              }),
+        },
+      )
+      assert.equal(
+        result.status,
+        method === "POST" ? 201 : method === "DELETE" ? 204 : 200,
+      )
+      if (method === "POST") eventId = (await result.json()).event.id
+    }
+    for (const site of ["cross-site", "same-site", "none", ""]) {
+      const rejected = await fetch(`${backend}/api/admin/config`, {
+        method: "PUT",
+        headers: { ...headers, "sec-fetch-site": site },
+        body: JSON.stringify({ scheduleMessageEnabled: false }),
+      })
+      assert.equal(rejected.status, 403, site)
+      assert.equal((await rejected.json()).error, "csrf_origin_mismatch")
+    }
+    const withoutSession = await fetch(`${backend}/api/admin/config`, {
+      method: "PUT",
+      headers: proxyHeaders,
+      body: "{}",
+    })
+    assert.equal(withoutSession.status, 401)
+
+    // Clients without Fetch Metadata must still match the observed origin.
+    const direct = await fetch(`${backend}/api/admin/config`, {
+      method: "PUT",
+      headers: { cookie, origin: backend, "content-type": "application/json" },
+      body: JSON.stringify({ scheduleMessageEnabled: false }),
+    })
+    assert.equal(direct.status, 200)
+  } finally {
+    await close(server)
+    database.close()
+  }
+})
+
 test("development admin API bypasses password authentication", async () => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
   let server

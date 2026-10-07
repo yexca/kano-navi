@@ -44,10 +44,12 @@ boundary.
 
 ## Seed versus Synchronization
 
-`server/seed-data.js` is the reviewable initial public snapshot used for a new
-environment and offline display. `npm run seed` only fills missing IDs by
-default. `npm run sync` reads public sources and upserts updated records. Neither
-command should silently delete historical posts or events.
+`server/seed-data.js` initializes the static profile, milestone timeline, and
+resource directory. New environments have no X posts, events, YouTube videos,
+Featured item, schedule assets, or LLM providers/models/routes. `npm run seed`
+only fills missing static IDs by default; it does not recreate deleted providers.
+`npm run sync` reads public sources and upserts updated records. Neither command
+silently deletes existing snapshots or operator-configured providers.
 
 Legacy `events` and `focus` tables are migrated in place. Existing X schedule
 rows are treated as manually curated and locked; existing YouTube reservations
@@ -165,11 +167,13 @@ candidates within the shared scan limit. They use the route the operator
 requested; without one, a post that a keyword path also selected keeps that
 route, image posts use `schedule_board`, and text posts use `schedule_message`.
 
-The default model comes from the database (`app_settings.llm_model` and the
-seeded `openai-default` provider). Provider API keys are encrypted with
+Providers and model routes are configured explicitly in `/admin`; initialization
+does not create or enable an OpenAI provider. The legacy model preference comes
+from `app_settings.llm_model`. Provider API keys are encrypted with
 `LLM_SECRETS_KEY`; ciphertext is never returned by an API response or written
 to extraction `raw_json`. A legacy `OPENAI_API_KEY` can be imported once with
-`npm run migrate:llm`; synchronization never reads that environment variable.
+`npm run migrate:llm` after creating an `openai-default` provider in `/admin`;
+synchronization never reads that environment variable.
 Candidates from either X account use the same idempotent fingerprint and
 manual-lock rules. The stage flags are stored as `schedule_keyword_enabled`,
 `schedule_vision_enabled`, and `schedule_message_enabled` and can be changed
@@ -249,7 +253,13 @@ their reason/evidence, and labels visible automatic/manual events.
 - A source failure does not clear another source or any existing snapshot; errors are available for maintainer diagnosis.
 - A media failure never downgrades an existing ready file. An invalid LLM result
   never replaces existing events.
-- The page shows the latest completion time, but that is not the same as real-time data. Users should follow the original platform link for confirmation.
+- `meta.fetchedAt` is the latest completed `success` or `partial` synchronization
+  time. With no such run it is `null`, and the page shows “Not synced yet” instead
+  of a timestamp or healthy snapshot. Profile dates, post/video publication
+  dates, and API reads do not count as synchronization. A failed attempt changes
+  `meta.lastSync` and the warning state but retains the previous snapshot time.
+  This is synchronization freshness, not the latest message's publication time;
+  original platform pages remain authoritative.
 - CI never performs live synchronization, so builds do not depend on platform networks, login walls, or rate limits.
 
 ## Environment Variables

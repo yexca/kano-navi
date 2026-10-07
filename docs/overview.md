@@ -50,11 +50,11 @@ covers to joining Milpro SONA in 2026. It is static, curated content in
 (year, month, day, or range), names its activity identity (singer, Hanayori
 Joshiryo, Kano Mahoro, MKLNtic, Milpro SONA), and links the strongest public
 source. Visitors can filter by identity and jump to a year. A visual archive
-adds 59 locally imported images with image-type filtering, full-image dialogs,
+adds 59 bundled local images with image-type filtering, full-image dialogs,
 dimensions, date basis, recorded credits, and original-site links. Official
 stream frames explicitly identify the third-party archive and frame timestamp.
-Images load only through local `/media` routes; visits do not fetch external
-sources. See [History and visual archive](history.md) for the import workflow.
+Images load from local `/assets/history/` URLs; visits do not fetch external
+sources. See [History and visual archive](history.md) for the packaging workflow.
 
 The visual language borrows from the artist's public motifs: strawberry red
 and cream gingham from the banner, the outfit's sky blue as a secondary hue,
@@ -76,7 +76,8 @@ automation; confirmation and other human-only actions remain in `/admin`.
 
 ## Current Status and Known Limits
 
-- The page and API run locally, and an initial dataset ships with the code.
+- The page and API run locally. Static profile, milestones, resource links, and
+  history images ship with the code; source snapshots and LLM providers start empty.
 - X profile structure, the public status endpoint, and YouTube page structure may change. The synchronization script records warnings and retains the old snapshot; a failed fetch must not be interpreted as no update.
 - Activity times are displayed in the Japan time zone. Schedule-board candidates
   and heuristic single-message candidates can be classified and parsed through

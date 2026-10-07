@@ -69,8 +69,16 @@ export function SiteHeader({ profile, syncState, syncTime, syncIso, t }) {
             title={syncState.label}
           >
             <span className="sync-dot" aria-hidden="true" />
-            <span className="sync-pill-label">{t("header.lastUpdated")}</span>
-            <time dateTime={syncIso || undefined}>{syncTime}</time>
+            {syncIso ? (
+              <>
+                <span className="sync-pill-label">
+                  {t("header.lastUpdated")}
+                </span>
+                <time dateTime={syncIso}>{syncTime}</time>
+              </>
+            ) : (
+              <span>{syncTime}</span>
+            )}
           </span>
           <PreferenceControls className="header-preferences" />
         </div>

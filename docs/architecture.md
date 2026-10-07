@@ -36,8 +36,10 @@ successful snapshot while a source is unavailable.
 
 `src/main.jsx` only routes between the public board, the static `/history`
 page in `src/history/`, and `/admin`. History copy and image metadata are
-static; `scripts/import-history-media.mjs` imports a local reference archive
-into the existing media tables and guarded cache without network requests.
+static; verified fixed images ship in `public/assets/history/` and `dist/`.
+`scripts/package-history-media.mjs` updates these files from a local reference
+archive without network requests; the runtime importer remains available for
+legacy `/media` consumers.
 See [History and visual archive](history.md). The board
 lives in `src/dashboard/`: `use-dashboard.js` owns the snapshot request and
 revision polling, `format.js` owns Japan-time and event-status helpers,
@@ -66,9 +68,11 @@ Ready runtime media is served only through the opaque-ID `/media/:id` route.
 management, the model catalog (`/providers/:id/models`, `/models/discover`,
 `/models/remove`), route targets (`/routes/:route`), saved workflows
 (`/workflows`, `/workflows/:id/run`), paginated event queries, asynchronous
-job status, video listing, and event CRUD endpoints. Mutating requests with a browser `Origin` are checked
-against the local origin; production still relies on the HttpOnly admin session
-and SameSite cookie.
+job status, video listing, and event CRUD endpoints. Mutating requests reject
+cross-site Fetch Metadata. Browser `Sec-Fetch-Site: same-origin` requests remain
+valid when a reverse proxy rewrites Host or terminates HTTPS; other requests
+with an `Origin` must match the observed local origin. Production also requires
+the HttpOnly admin session and SameSite cookie.
 The server defaults to `APP_MODE=production` and validates the admin password
 before opening or seeding SQLite. An explicit `APP_MODE=development` bypasses
 authentication for local work. Production uses in-memory HttpOnly cookie sessions;

@@ -23,7 +23,10 @@ const database = initializeDatabase()
 
 try {
   const provider = getLlmProvider(database, "openai-default")
-  if (!provider) throw new Error("openai-default provider is not configured")
+  if (!provider)
+    throw new Error(
+      "Create the openai-default provider in /admin before migrating its key",
+    )
 
   const existing = getLlmProviderSecret(database, provider.id)
   if (existing?.apiKeyCiphertext && !force) {

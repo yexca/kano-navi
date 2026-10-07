@@ -28,11 +28,7 @@ function sourceAdapter(sourceUrl) {
 
 // Validate the entire selection before writing anything, so an incomplete or
 // altered archive cannot partially replace a previously working snapshot.
-export async function importHistoryMedia(
-  database,
-  directory,
-  catalog = historyMedia,
-) {
+export async function prepareHistoryMedia(directory, catalog = historyMedia) {
   const root = await fs.realpath(directory)
   const manifest = JSON.parse(
     (await fs.readFile(path.join(root, "manifest.json"), "utf8")).replace(
@@ -86,6 +82,15 @@ export async function importHistoryMedia(
     prepared.push({ item, content, adapter: sourceAdapter(item.sourceUrl) })
   }
 
+  return prepared
+}
+
+export async function importHistoryMedia(
+  database,
+  directory,
+  catalog = historyMedia,
+) {
+  const prepared = await prepareHistoryMedia(directory, catalog)
   const stored = []
   for (const { item, content, adapter } of prepared) {
     const file = await writeMediaFileAtomic({

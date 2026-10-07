@@ -17,8 +17,7 @@ import "./dashboard.css"
 function syncStateFor(meta, error, t) {
   if (error) return { tone: "danger", label: t("sync.apiUnavailable") }
   const status = meta?.lastSync?.status
-  if (!status && !meta?.fetchedAt)
-    return { tone: "muted", label: t("sync.waiting") }
+  if (!status) return { tone: "muted", label: t("sync.waiting") }
   if (!status || status === "success")
     return { tone: "leaf", label: t("sync.snapshot") }
   if (status === "partial") return { tone: "honey", label: t("sync.partial") }
@@ -74,7 +73,7 @@ export function DashboardApp() {
   const { profile, summary, meta } = dashboard
   const windowDays = meta.postWindowDays || POST_WINDOW_DAYS
   const syncState = syncStateFor(meta, error, t)
-  const syncIso = meta.lastSync?.finishedAt || meta.fetchedAt
+  const syncIso = meta.fetchedAt
   const syncTime = syncIso ? formatStamp(syncIso) : t("sync.waiting")
   const counts = summary.counts || {
     posts: dashboard.posts.length,
