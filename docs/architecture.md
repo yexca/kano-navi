@@ -69,8 +69,9 @@ management, the model catalog (`/providers/:id/models`, `/models/discover`,
 job status, video listing, and event CRUD endpoints. Mutating requests with a browser `Origin` are checked
 against the local origin; production still relies on the HttpOnly admin session
 and SameSite cookie.
-`APP_MODE=development` bypasses authentication for local work. Production
-requires a configured password and uses in-memory HttpOnly cookie sessions;
+The server defaults to `APP_MODE=production` and validates the admin password
+before opening or seeding SQLite. An explicit `APP_MODE=development` bypasses
+authentication for local work. Production uses in-memory HttpOnly cookie sessions;
 restarting the process invalidates all sessions. The API exposes whether an
 OpenAI key is configured, never its value.
 

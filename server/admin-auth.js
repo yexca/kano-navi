@@ -31,19 +31,32 @@ function passwordMatches(actual, expected) {
   )
 }
 
+function validateAdminConfig({ mode, adminPassword }) {
+  if (!["development", "production"].includes(mode)) {
+    throw new Error("APP_MODE must be development or production")
+  }
+  if (mode === "production" && String(adminPassword).trim().length < 12) {
+    throw new Error(
+      "ADMIN_PASSWORD must contain at least 12 characters in production mode",
+    )
+  }
+}
+
+export function resolveAdminConfig(environment = process.env) {
+  const config = {
+    mode: environment.APP_MODE || "production",
+    adminPassword: environment.ADMIN_PASSWORD || "",
+  }
+  validateAdminConfig(config)
+  return config
+}
+
 export function createAdminAuth({
   mode = "development",
   adminPassword = "",
   sessionTtlMs = 8 * 60 * 60 * 1000,
 } = {}) {
-  if (!["development", "production"].includes(mode)) {
-    throw new Error("APP_MODE must be development or production")
-  }
-  if (mode === "production" && String(adminPassword).length < 12) {
-    throw new Error(
-      "ADMIN_PASSWORD must contain at least 12 characters in production mode",
-    )
-  }
+  validateAdminConfig({ mode, adminPassword })
 
   const sessions = new Map()
   const attempts = new Map()

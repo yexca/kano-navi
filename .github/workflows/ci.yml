@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PORT=8787 node server/index.js > api-smoke.log 2>&1 &
+          APP_MODE=development PORT=8787 node server/index.js > api-smoke.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           for attempt in {1..30}; do

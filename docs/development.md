@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20.19+ (or a currently supported LTS release)
+- Node.js 24 LTS (the same major version used by CI and Docker)
 - npm 10+
 - Git
 
@@ -14,6 +14,7 @@ local compiler toolchain on the current platform.
 ```bash
 npm install
 cp .env.example .env
+# Configure ADMIN_PASSWORD, or explicitly set APP_MODE=development locally.
 npm run dev
 ```
 
@@ -23,8 +24,12 @@ to Express, so the browser and MCP clients use the same origin in development
 and production.
 
 The public dashboard is `/`. The admin interface is available only by entering
-`/admin`; no public navigation links to it. The example environment defaults to
-`APP_MODE=development`, so local admin requests do not require a password.
+`/admin`; no public navigation links to it. The example environment and server
+default to `APP_MODE=production`. Configure `ADMIN_PASSWORD` before starting,
+or explicitly set `APP_MODE=development` in the ignored `.env` for password-free
+local work. An unset `APP_MODE` never enables the development bypass, even when
+`NODE_ENV=development`. Missing, whitespace-only, and shorter-than-12-character
+passwords are rejected before the runtime database is opened or seeded.
 The console opens on Workflows: pick modules, run them now, or enable a timer
 for a saved workflow. LLM providers are configured once (API host, format, and
 key), their model list is fetched from `<baseUrl>/models`, and each model is
@@ -35,6 +40,14 @@ the Featured video and profile media. Provider URLs that resolve to loopback or
 private ranges are rejected, so local mock endpoints cannot be configured.
 Set `WORKFLOW_SCHEDULER_ENABLED=0` to keep timed workflows from firing while
 developing.
+
+Tailwind CSS 4 runs through `@tailwindcss/vite`; `src/index.css` loads the
+existing `tailwind.config.js` with `@config`. The CSS runtime requires Safari
+16.4+, Chromium 111+, or Firefox 128+. `tailwind-merge` uses its Tailwind 4
+compatible major version. `concurrently` is development-only; its scoped
+`shell-quote` override selects a patched version because the current upstream
+release pins a vulnerable one. Recheck `npm audit` and development startup
+when changing that override.
 
 `/mcp` exposes public read-only tools without a key. Set `MCP_CONTROL_TOKEN` to
 enable the protected control tools; send it only as an `Authorization: Bearer`

@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
 /*
  * Global tokens shared by the public board and /admin.
@@ -90,7 +89,11 @@
     color-scheme: dark;
   }
 
-  * {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
     @apply border-border;
   }
 
@@ -121,6 +124,16 @@
   button,
   a {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
   }
 
   ::selection {
