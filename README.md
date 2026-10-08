@@ -49,7 +49,7 @@ The stack automatically pulls `yexca/kano-navi:latest` from Docker Hub on startu
 keeps the SQLite database and downloaded media in `./data`. Deployment needs
 only `docker-compose.yml` and `.env`; Docker creates the data directory when
 needed. Run the same command to pull an update and replace the container.
-Set `KANO_IMAGE=yexca/kano-navi:0.1.0` in `.env` to pin this release,
+Set `KANO_IMAGE=yexca/kano-navi:0.1.1` in `.env` to pin this release,
 or change `KANO_PORT` to use a host port other than the default `7657`.
 The same releases are also available from GHCR by setting
 `KANO_IMAGE=ghcr.io/yexca/kano-navi:latest`. Open `http://localhost:7657`

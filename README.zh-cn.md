@@ -57,7 +57,7 @@ docker compose up -d
 保存在 `./data`。部署目录只需 `docker-compose.yml` 和 `.env`，数据目录会自动
 创建；更新时再次执行同一命令即可拉取镜像并替换容器。
 如需固定到本次发布，在 `.env` 中设置
-`KANO_IMAGE=yexca/kano-navi:0.1.0`；宿主机端口默认是 `7657`，可通过
+`KANO_IMAGE=yexca/kano-navi:0.1.1`；宿主机端口默认是 `7657`，可通过
 `KANO_PORT` 修改。相同版本也会发布到 GHCR，可设置
 `KANO_IMAGE=ghcr.io/yexca/kano-navi:latest` 使用。默认生产地址是
 `http://localhost:7657`。
