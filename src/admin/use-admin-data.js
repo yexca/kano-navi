@@ -41,6 +41,7 @@ export function useAdminData() {
   const [eventsPage, setEventsPage] = useState(null)
   const [eventFilters, setEventFilters] = useState(emptyFilters)
   const [videos, setVideos] = useState([])
+  const [sourceFetch, setSourceFetch] = useState(null)
   const [postLlm, setPostLlm] = useState([])
   const [scheduleAssets, setScheduleAssets] = useState([])
   const [profileMedia, setProfileMedia] = useState({
@@ -119,6 +120,9 @@ export function useAdminData() {
     const payload = await request("/videos")
     setVideos(payload.videos || [])
   }, [])
+  const loadSourceFetch = useCallback(async () => {
+    setSourceFetch(await request("/sources/fetch"))
+  }, [])
 
   const loadPostLlm = useCallback(async () => {
     const payload = await request("/posts/llm?limit=60")
@@ -142,6 +146,7 @@ export function useAdminData() {
       loadActivity(),
       loadEventsPage({ page: 1 }),
       loadVideos(),
+      loadSourceFetch(),
       loadPostLlm(),
       loadScheduleAssets(),
       loadProfileMedia(),
@@ -154,6 +159,7 @@ export function useAdminData() {
     loadScheduleAssets,
     loadProfileMedia,
     loadVideos,
+    loadSourceFetch,
   ])
 
   useEffect(() => {
@@ -187,6 +193,7 @@ export function useAdminData() {
             loadEventsPage({ page: pageRef.current }),
             loadConfig(),
             loadVideos(),
+            loadSourceFetch(),
             loadPostLlm(),
             loadScheduleAssets(),
           ])
@@ -207,6 +214,7 @@ export function useAdminData() {
     loadConfig,
     loadEventsPage,
     loadVideos,
+    loadSourceFetch,
     loadPostLlm,
     loadScheduleAssets,
   ])
@@ -248,9 +256,12 @@ export function useAdminData() {
 
   /** Start a job and report whether it was accepted. */
   const startJob = useCallback(
-    async (path) => {
+    async (path, body = null) => {
       try {
-        const payload = await request(path, { method: "POST" })
+        const payload = await request(path, {
+          method: "POST",
+          ...(body ? { body: jsonBody(body) } : {}),
+        })
         await loadActivity()
         wasActiveRef.current = true
         notify(adminMessage("admin.notice.queued"))
@@ -308,6 +319,7 @@ export function useAdminData() {
     eventsPage,
     eventFilters,
     videos,
+    sourceFetch,
     postLlm,
     scheduleAssets,
     profileMedia,

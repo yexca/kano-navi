@@ -5,6 +5,26 @@
  * quieter gingham in the brand mark, and dense-but-calm operator surfaces.
  */
 
+.adm-fetch-result {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-fetch-result p,
+.adm-fetch-result ul {
+  width: 100%;
+  margin: 0;
+}
+
+.adm-lookback-fields {
+  margin: 12px 0;
+}
+
 .adm-shell,
 .adm-login-shell,
 .adm-loading {

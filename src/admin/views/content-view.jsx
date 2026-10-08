@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
+import { SourceFetchCard } from "@/admin/components/source-fetch-card"
 import { adminMessage, formatAdminError, jsonBody, request } from "@/admin/api"
 import {
   Btn,
@@ -384,6 +385,7 @@ export function ContentView({ data }) {
         title={t("admin.content.title")}
         description={t("admin.content.description")}
       />
+      <SourceFetchCard source="youtube" data={data} />
       <FeaturedVideoCard
         config={config}
         videos={videos}

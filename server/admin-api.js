@@ -1,4 +1,9 @@
 import crypto from "node:crypto"
+import {
+  normalizeFetchWindow,
+  normalizeSourceLookback,
+  sourceFetchStatus,
+} from "./fetch-window.js"
 import fs from "node:fs"
 import net from "node:net"
 import path from "node:path"
@@ -730,7 +735,15 @@ function workflowInput(body = {}, existing = null) {
     WORKFLOW_MAX_INTERVAL_MINUTES,
     existing?.intervalMinutes ?? 60,
   )
-  return { name, steps, scheduleEnabled, intervalMinutes }
+  let sourceLookbackDays
+  try {
+    sourceLookbackDays = normalizeSourceLookback(
+      body.sourceLookbackDays ?? existing?.sourceLookbackDays,
+    )
+  } catch (error) {
+    throw new AdminInputError(error.message)
+  }
+  return { name, steps, scheduleEnabled, intervalMinutes, sourceLookbackDays }
 }
 
 function workflowId(name) {
@@ -1385,6 +1398,47 @@ export function createAdminRouter({
         ...result,
         ...workflowsPayload(database, workflows, jobs),
       })
+    }),
+  )
+
+  router.get("/sources/fetch", (_request, response) => {
+    response.json(sourceFetchStatus(database))
+  })
+  router.post(
+    "/sources/:source/fetch",
+    route((request, response) => {
+      const source = request.params.source
+      if (!["x", "youtube"].includes(source))
+        throw new AdminInputError("unsupported source")
+      let window
+      try {
+        window = normalizeFetchWindow(request.body?.window)
+      } catch (error) {
+        throw new AdminInputError(error.message)
+      }
+      const status = sourceFetchStatus(database)[source]
+      if (window.mode !== "recent" && !status.historyAvailable)
+        throw new AdminInputError(
+          source === "x"
+            ? "X_API_BEARER_TOKEN is required for history search"
+            : "YOUTUBE_API_KEY is required for history search",
+        )
+      if (
+        window.mode === "before" &&
+        !(source === "x"
+          ? status.accounts.some((account) => account.oldest)
+          : status.oldest)
+      )
+        throw new AdminInputError(
+          "no stored records to backfill; select a date range first",
+        )
+      if (!jobs)
+        return response.status(503).json({ error: "sync_jobs_unavailable" })
+      const result = jobs.start("workflow", "admin", {
+        steps: [source, "media"],
+        fetchWindows: { [source]: window },
+      })
+      response.status(result.accepted ? 202 : 409).json(result)
     }),
   )
 

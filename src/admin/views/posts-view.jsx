@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { ExternalLink, FileText, RefreshCw, Search } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
+import { SourceFetchCard } from "@/admin/components/source-fetch-card"
 import {
   Btn,
   Card,
@@ -111,6 +112,7 @@ export function PostsView({ data }) {
           </select>
         </div>
       </Card>
+      <SourceFetchCard source="x" data={data} />
       <Card className="adm-posts-card">
         <div className="adm-table-meta">
           <span>{t("admin.posts.total", { count: filteredPosts.length })}</span>

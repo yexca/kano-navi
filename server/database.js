@@ -5,6 +5,7 @@ import Database from "better-sqlite3"
 import { isLikelyScheduleBoardText } from "./schedule-asset.js"
 import { fileURLToPath } from "node:url"
 import { seedData } from "./seed-data.js"
+import { normalizeSourceLookback } from "./fetch-window.js"
 import {
   WORKFLOW_STEP_IDS,
   clampWorkflowInterval,
@@ -394,6 +395,7 @@ const schema = `
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     steps_json TEXT NOT NULL,
+    source_lookback_json TEXT NOT NULL DEFAULT '{}',
     schedule_enabled INTEGER NOT NULL DEFAULT 0,
     interval_minutes INTEGER NOT NULL DEFAULT 60,
     last_run_at TEXT,
@@ -714,6 +716,16 @@ function migrateLegacyEvents(database) {
 
 function migrateSchema(database) {
   migrateLegacyEvents(database)
+  if (
+    !database
+      .prepare("PRAGMA table_info(workflows)")
+      .all()
+      .some((column) => column.name === "source_lookback_json")
+  ) {
+    database.exec(
+      "ALTER TABLE workflows ADD COLUMN source_lookback_json TEXT NOT NULL DEFAULT '{}'",
+    )
+  }
   // The seeded resource used to imply that the official site was obsolete.
   // Update only that exact seeded wording so operator-edited resource records
   // remain untouched while existing databases receive the corrected copy.
@@ -4208,6 +4220,7 @@ export function listSyncRuns(
 
 const workflowColumns = `
   id, name, steps_json AS stepsJson, schedule_enabled AS scheduleEnabled,
+  source_lookback_json AS sourceLookbackJson,
   interval_minutes AS intervalMinutes, last_run_at AS lastRunAt,
   last_job_id AS lastJobId, last_status AS lastStatus,
   next_run_at AS nextRunAt, created_at AS createdAt, updated_at AS updatedAt
@@ -4215,10 +4228,13 @@ const workflowColumns = `
 
 function mapWorkflow(row) {
   if (!row) return null
-  const { stepsJson, ...workflow } = row
+  const { stepsJson, sourceLookbackJson, ...workflow } = row
   return {
     ...workflow,
     steps: normalizeWorkflowSteps(stepsJson),
+    sourceLookbackDays: normalizeSourceLookback(
+      JSON.parse(sourceLookbackJson || "{}"),
+    ),
     scheduleEnabled: Boolean(row.scheduleEnabled),
     intervalMinutes: clampWorkflowInterval(row.intervalMinutes),
   }
@@ -4275,6 +4291,9 @@ export function upsertWorkflow(
     workflow.intervalMinutes ?? existing?.intervalMinutes ?? 60,
   )
   const timestamp = now.toISOString()
+  const sourceLookbackDays = normalizeSourceLookback(
+    workflow.sourceLookbackDays ?? existing?.sourceLookbackDays,
+  )
   let nextRunAt = null
   if (scheduleEnabled) {
     const keepPlan =
@@ -4288,10 +4307,11 @@ export function upsertWorkflow(
   database
     .prepare(
       `INSERT INTO workflows
-       (id, name, steps_json, schedule_enabled, interval_minutes, next_run_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       (id, name, steps_json, source_lookback_json, schedule_enabled, interval_minutes, next_run_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name=excluded.name, steps_json=excluded.steps_json,
+         source_lookback_json=excluded.source_lookback_json,
          schedule_enabled=excluded.schedule_enabled,
          interval_minutes=excluded.interval_minutes,
          next_run_at=excluded.next_run_at, updated_at=excluded.updated_at`,
@@ -4300,6 +4320,7 @@ export function upsertWorkflow(
       id,
       name,
       JSON.stringify(steps),
+      JSON.stringify(sourceLookbackDays),
       scheduleEnabled ? 1 : 0,
       intervalMinutes,
       nextRunAt,

@@ -26,6 +26,10 @@ import {
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
+import {
+  SourceLookbackEditor,
+  SourceLookbackFields,
+} from "@/admin/components/source-fetch-card"
 import { adminMessage, jsonBody, request } from "@/admin/api"
 import {
   formatDateTime,
@@ -294,6 +298,10 @@ function WorkflowDialog({ steps, onClose, onCreate, t }) {
   const [selected, setSelected] = useState(steps.map((step) => step.id))
   const [scheduleEnabled, setScheduleEnabled] = useState(false)
   const [intervalMinutes, setIntervalMinutes] = useState(60)
+  const [sourceLookbackDays, setSourceLookbackDays] = useState({
+    x: 7,
+    youtube: 14,
+  })
   const [busy, setBusy] = useState(false)
   const submit = async (event) => {
     event.preventDefault()
@@ -305,6 +313,12 @@ function WorkflowDialog({ steps, onClose, onCreate, t }) {
         steps: selected,
         scheduleEnabled,
         intervalMinutes,
+        sourceLookbackDays: Object.fromEntries(
+          Object.entries(sourceLookbackDays).map(([source, days]) => [
+            source,
+            Number(days),
+          ]),
+        ),
       })
     } finally {
       setBusy(false)
@@ -357,6 +371,13 @@ function WorkflowDialog({ steps, onClose, onCreate, t }) {
             })}
           </div>
         </fieldset>
+        <div className="is-wide">
+          <SourceLookbackFields
+            value={sourceLookbackDays}
+            sources={selected}
+            onChange={setSourceLookbackDays}
+          />
+        </div>
         <div className="adm-inline-row is-wide">
           <Switch
             checked={scheduleEnabled}
@@ -705,6 +726,14 @@ export function WorkflowView({ data, onNavigate }) {
             </ol>
 
             <div className="adm-runner-foot">
+              <SourceLookbackEditor
+                key={selected.id}
+                workflow={selected}
+                disabled={busy !== ""}
+                onSave={(sourceLookbackDays) =>
+                  save(selected, { sourceLookbackDays }, "lookback")
+                }
+              />
               <div className="adm-schedule-bar">
                 <Switch
                   checked={selected.scheduleEnabled}

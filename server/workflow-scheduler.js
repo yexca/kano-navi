@@ -37,6 +37,12 @@ export function createWorkflowScheduler({
       return { accepted: false, reason: "workflow_not_found", job: null }
     const result = jobs.start("workflow", triggeredBy, {
       steps: workflow.steps,
+      fetchWindows: Object.fromEntries(
+        Object.entries(workflow.sourceLookbackDays).map(([source, days]) => [
+          source,
+          { mode: "recent", days },
+        ]),
+      ),
       workflowId: workflow.id,
       workflowName: workflow.name,
       onSettled: (job) =>

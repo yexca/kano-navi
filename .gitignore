@@ -8,4 +8,6 @@ data/
 .npmrc
 coverage/
 .vite/
+.claude/
+.codegraph/
 .DS_Store

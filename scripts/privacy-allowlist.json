@@ -2,6 +2,14 @@
   "version": 1,
   "hosts": [
     {
+      "host": "fsf.org",
+      "reason": "Free Software Foundation link in the unmodified GNU AGPL v3 license text."
+    },
+    {
+      "host": "gnu.org",
+      "reason": "GNU license reference in the unmodified GNU AGPL v3 license text."
+    },
+    {
       "host": "docs.x.com",
       "reason": "Official documentation link for the optional historical X source API."
     },
@@ -10,12 +18,12 @@
       "reason": "Official documentation link describing YouTube date-window search and source limits."
     },
     {
-      "host": "fsf.org",
-      "reason": "Free Software Foundation link in the unmodified GNU AGPL v3 license text."
+      "host": "api.x.com",
+      "reason": "Optional server-side official X full-archive search for operator-selected date windows; bearer credentials are sent only in headers."
     },
     {
-      "host": "gnu.org",
-      "reason": "GNU license reference in the unmodified GNU AGPL v3 license text."
+      "host": "www.googleapis.com",
+      "reason": "Optional server-side YouTube Data API date-window search and pagination; API credentials are sent only in headers."
     },
     {
       "host": "github.com",

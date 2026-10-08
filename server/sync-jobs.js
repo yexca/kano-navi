@@ -32,6 +32,7 @@ function publicJob(state, database) {
     workflowId: state.workflowId || null,
     workflowName: state.workflowName || null,
     steps: state.steps ? [...state.steps] : null,
+    fetchWindows: state.fetchWindows || null,
     progress: state.progress ? { ...state.progress } : null,
     error: state.error || null,
     result: state.result || null,
@@ -106,6 +107,7 @@ export function createSyncJobManager({
           triggeredBy: state.triggeredBy,
           jobId: state.id,
           setExitCode: false,
+          fetchWindows: state.fetchWindows,
           ...(state.kind === "workflow"
             ? {
                 steps: state.steps,
@@ -180,6 +182,9 @@ export function createSyncJobManager({
         ? String(options.workflowName).slice(0, 120)
         : null,
       steps,
+      fetchWindows: options.fetchWindows
+        ? structuredClone(options.fetchWindows)
+        : null,
       progress: steps ? initialProgress(steps) : null,
       onSettled:
         typeof options.onSettled === "function" ? options.onSettled : null,

@@ -27,6 +27,13 @@ import {
 import { downloadPendingMedia } from "../server/media-downloader.js"
 import { extractPendingSchedules } from "../server/schedule-extractor.js"
 import { isLikelyScheduleBoardPost } from "../server/schedule-asset.js"
+import { fetchSourceWindow } from "./source-history.mjs"
+import {
+  isInFetchWindow,
+  oldestSourceTimestamp,
+  resolveFetchWindow,
+  sourceXHandles,
+} from "../server/fetch-window.js"
 import {
   WORKFLOW_STEPS,
   WORKFLOW_STEP_IDS,
@@ -102,11 +109,7 @@ function normalizeXHandle(value) {
 }
 
 function configuredXHandles() {
-  const configured = process.env.X_HANDLES || process.env.X_HANDLE
-  const values = configured
-    ? String(configured).split(/[\n,，]+/u)
-    : DEFAULT_X_HANDLES
-  const handles = [...new Set(values.map(normalizeXHandle).filter(Boolean))]
+  const handles = sourceXHandles()
   return handles.length ? handles : [...DEFAULT_X_HANDLES]
 }
 
@@ -443,12 +446,14 @@ async function syncXAccount(
     scheduleKeywords = [],
     scheduleRefreshLimit = 1,
     isPrimary = false,
+    fetchWindow = null,
   },
 ) {
   const profileUrl = `https://x.com/${handle}`
   const html = await fetchText(profileUrl)
   const discoveredIds = extractStatusIds(html).slice(0, discoveryLimit)
   const state = getSyncState(database, "x", handle)
+  const selectedWindow = fetchWindow ? resolveFetchWindow(fetchWindow) : null
   const cutoff = Date.now() - bootstrapDays * 24 * 60 * 60 * 1000
   const scheduleCandidates = collectScheduleRefreshCandidates(
     database,
@@ -493,6 +498,12 @@ async function syncXAccount(
   const candidates = ids
     .filter((id) => {
       const createdAt = snowflakeDate(id)
+      if (
+        selectedWindow &&
+        !isInFetchWindow(createdAt?.toISOString(), selectedWindow)
+      )
+        return false
+      if (selectedWindow && !knownIds.has(id)) return true
       if (!state && createdAt && createdAt.getTime() < cutoff) return false
       if (priorityIds.has(id)) return true
       if (!knownIds.has(id)) return isAfterCursor(id)
@@ -517,6 +528,8 @@ async function syncXAccount(
       const screenName = post?.author_screen_name?.replace(/^@/u, "")
       if (
         post &&
+        (!selectedWindow ||
+          isInFetchWindow(post.published_at, selectedWindow)) &&
         (!screenName || screenName.toLowerCase() === handle.toLowerCase())
       ) {
         posts.push(post)
@@ -561,19 +574,20 @@ async function syncXAccount(
     newestPost?.published_at || snowflakeDate(newestDiscoveredId)?.toISOString()
   const shouldAdvanceCursor =
     !state || isAfterCursor(nextCursorId) || !state.cursorId
-  upsertSyncState(database, {
-    source: "x",
-    accountId: handle,
-    cursorId: shouldAdvanceCursor ? nextCursorId : state.cursorId,
-    cursorTime: shouldAdvanceCursor ? nextCursorTime : state.cursorTime,
-    metadata: {
-      handle,
-      discovered: discoveredIds.length,
-      requested: candidates.length,
-      supplemented: scheduleIds.length,
-      bootstrap: !state,
-    },
-  })
+  if (!selectedWindow)
+    upsertSyncState(database, {
+      source: "x",
+      accountId: handle,
+      cursorId: shouldAdvanceCursor ? nextCursorId : state.cursorId,
+      cursorTime: shouldAdvanceCursor ? nextCursorTime : state.cursorTime,
+      metadata: {
+        handle,
+        discovered: discoveredIds.length,
+        requested: candidates.length,
+        supplemented: scheduleIds.length,
+        bootstrap: !state,
+      },
+    })
   return {
     handle,
     count: posts.length,
@@ -584,10 +598,20 @@ async function syncXAccount(
     scheduleAssets: scheduleAsset ? 1 : 0,
     scheduleAsset,
     errors,
+    ...(selectedWindow
+      ? {
+          window: selectedWindow,
+          coverage: "public_profile_only",
+          errors: [
+            ...errors,
+            "public_profile_limited; historical completeness is unavailable",
+          ],
+        }
+      : {}),
   }
 }
 
-export async function syncX(database) {
+export async function syncX(database, fetchWindow = null) {
   const handles = configuredXHandles()
   const scheduleKeywords = getScheduleExtractionConfig(database).keywords
   const discoveryLimit = boundedInteger(
@@ -615,21 +639,67 @@ export async function syncX(database) {
   let remainingRequests = requestLimit
   let requestedTotal = 0
   for (const [index, handle] of handles.entries()) {
+    if (
+      fetchWindow?.mode === "before" &&
+      !oldestSourceTimestamp(database, "x", handle)
+    ) {
+      accounts.push({
+        handle,
+        count: 0,
+        discovered: 0,
+        requested: 0,
+        supplemented: 0,
+        errors: [
+          "no stored records for this account; select a date range first",
+        ],
+      })
+      continue
+    }
     const remainingAccounts = handles.length - index
     const accountLimit =
       remainingRequests > 0
         ? Math.max(1, Math.ceil(remainingRequests / remainingAccounts))
         : 0
     try {
-      const result = await syncXAccount(database, handle, {
-        discoveryLimit,
-        requestLimit: accountLimit,
-        bootstrapDays,
-        refreshKnown,
-        scheduleKeywords,
-        scheduleRefreshLimit,
-        isPrimary: index === 0,
-      })
+      if (accountLimit <= 0) throw new Error("X request budget exhausted")
+      if (
+        fetchWindow &&
+        fetchWindow.mode !== "recent" &&
+        !process.env.X_API_BEARER_TOKEN?.trim()
+      )
+        throw new Error("X_API_BEARER_TOKEN is required for history search")
+      const result =
+        fetchWindow && process.env.X_API_BEARER_TOKEN?.trim()
+          ? {
+              handle,
+              supplemented: 0,
+              scheduleAsset: null,
+              ...(await fetchSourceWindow(database, {
+                source: "x",
+                account: handle,
+                window: fetchWindow,
+                mapTweet,
+                pageLimit: Math.min(
+                  accountLimit,
+                  boundedInteger(
+                    process.env.SOURCE_HISTORY_MAX_PAGES,
+                    4,
+                    1,
+                    20,
+                  ),
+                ),
+              })),
+            }
+          : await syncXAccount(database, handle, {
+              discoveryLimit,
+              requestLimit: accountLimit,
+              bootstrapDays,
+              refreshKnown,
+              scheduleKeywords,
+              scheduleRefreshLimit,
+              isPrimary: index === 0,
+              fetchWindow,
+            })
       accounts.push(result)
       requestedTotal += result.requested
       remainingRequests = Math.max(0, remainingRequests - result.requested)
@@ -765,10 +835,35 @@ function extractYoutubeIds(html) {
   return [...ids]
 }
 
-export async function syncYoutube(database) {
+export async function syncYoutube(database, fetchWindow = null) {
   const channelId = process.env.YOUTUBE_CHANNEL_ID || DEFAULT_YOUTUBE_CHANNEL
+  const apiResult =
+    fetchWindow && process.env.YOUTUBE_API_KEY?.trim()
+      ? await fetchSourceWindow(database, {
+          source: "youtube",
+          account: channelId,
+          window: fetchWindow,
+          classifyVideo,
+        })
+      : null
+  if (apiResult && fetchWindow.mode !== "recent") return apiResult
+  if (fetchWindow && fetchWindow.mode !== "recent")
+    throw new Error("YOUTUBE_API_KEY is required for history search")
+  const selectedWindow = fetchWindow ? resolveFetchWindow(fetchWindow) : null
   const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`
-  const feedXml = await fetchText(rssUrl)
+  let feedXml
+  try {
+    feedXml = await fetchText(rssUrl)
+  } catch (error) {
+    if (!apiResult) throw error
+    return {
+      ...apiResult,
+      errors: [
+        ...apiResult.errors,
+        "youtube_rss_unavailable; reservation refresh was skipped",
+      ],
+    }
+  }
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "@_",
@@ -777,7 +872,17 @@ export async function syncYoutube(database) {
   const parsed = parser.parse(feedXml)
   const entries = asArray(parsed?.feed?.entry)
   const feedVideos = entries.map(mapFeedEntry).filter(Boolean)
-  if (!feedVideos.length) throw new Error("YouTube RSS 没有返回视频")
+  if (!feedVideos.length) {
+    if (apiResult)
+      return {
+        ...apiResult,
+        errors: [
+          ...apiResult.errors,
+          "youtube_rss_empty; reservation refresh was skipped",
+        ],
+      }
+    throw new Error("YouTube RSS 没有返回视频")
+  }
   const state = getSyncState(database, "youtube", channelId)
   const bootstrapLimit = boundedInteger(
     process.env.YOUTUBE_BOOTSTRAP_VIDEOS,
@@ -800,9 +905,15 @@ export async function syncYoutube(database) {
           )
         })
     : []
-  const videos = state
-    ? incrementalVideos.filter((video) => !getVideoRecord(database, video.id))
-    : feedVideos.slice(0, bootstrapLimit)
+  const videos = selectedWindow
+    ? feedVideos.filter(
+        (video) =>
+          isInFetchWindow(video.published_at, selectedWindow) &&
+          !getVideoRecord(database, video.id),
+      )
+    : state
+      ? incrementalVideos.filter((video) => !getVideoRecord(database, video.id))
+      : feedVideos.slice(0, bootstrapLimit)
   if (videos.length) upsertVideos(database, videos)
 
   let streamHtml = ""
@@ -915,25 +1026,43 @@ export async function syncYoutube(database) {
   const newest = feedVideos
     .filter((video) => video.published_at)
     .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))[0]
-  upsertSyncState(database, {
-    source: "youtube",
-    accountId: channelId,
-    cursorId: newest?.id || feedVideos[0].id,
-    cursorTime: newest?.published_at || null,
-    metadata: {
-      feedEntries: feedVideos.length,
-      inserted: videos.length,
-      bootstrap: !state,
-      streamIds: streamIds.length,
-      inspected: detailIds.length,
-    },
-  })
+  if (!selectedWindow)
+    upsertSyncState(database, {
+      source: "youtube",
+      accountId: channelId,
+      cursorId: newest?.id || feedVideos[0].id,
+      cursorTime: newest?.published_at || null,
+      metadata: {
+        feedEntries: feedVideos.length,
+        inserted: videos.length,
+        bootstrap: !state,
+        streamIds: streamIds.length,
+        inspected: detailIds.length,
+      },
+    })
   return {
-    count: videos.length,
+    count: videos.length + (apiResult?.count || 0),
     discovered: feedVideos.length,
     inspected: inspectedVideos.length,
     upcoming: reservationEvents.filter((event) => event.is_upcoming).length,
     errors: streamErrors,
+    ...(selectedWindow
+      ? {
+          window: selectedWindow,
+          coverage: apiResult ? "api" : "rss_only",
+          ...(apiResult
+            ? { hasMore: apiResult.hasMore, requested: apiResult.requested }
+            : {}),
+          errors: [
+            ...streamErrors,
+            ...(apiResult
+              ? apiResult.errors
+              : [
+                  "youtube_rss_limited; historical completeness is unavailable",
+                ]),
+          ],
+        }
+      : {}),
   }
 }
 
@@ -944,16 +1073,16 @@ export async function syncYoutube(database) {
 const stepRunners = {
   x: {
     resultKey: "x",
-    run: async (database) => {
-      const result = await syncX(database)
+    run: async (database, fetchWindows) => {
+      const result = await syncX(database, fetchWindows?.x)
       console.log(`X: ${result.count} 条更新，${result.requested} 次状态请求`)
       return result
     },
   },
   youtube: {
     resultKey: "youtube",
-    run: async (database) => {
-      const result = await syncYoutube(database)
+    run: async (database, fetchWindows) => {
+      const result = await syncYoutube(database, fetchWindows?.youtube)
       console.log(
         `YouTube: RSS ${result.count} 条，检查 ${result.inspected} 条预约`,
       )
@@ -1000,6 +1129,7 @@ export async function runSync({
   steps = null,
   runSource = "manual",
   onStep = null,
+  fetchWindows = null,
 } = {}) {
   const ownsDatabase = !database
   const activeDatabase = database || initializeDatabase()
@@ -1039,9 +1169,15 @@ export async function runSync({
       if (step.group === "source") {
         attempted += 1
         try {
-          results[runner.resultKey] = await runner.run(activeDatabase)
+          results[runner.resultKey] = await runner.run(
+            activeDatabase,
+            fetchWindows,
+          )
           successCount += 1
-          report(step.id, "completed")
+          report(
+            step.id,
+            results[runner.resultKey]?.errors?.length ? "partial" : "completed",
+          )
         } catch (error) {
           results[runner.resultKey] = { error: error.message }
           console.error(`${step.id} 同步失败: ${error.message}`)

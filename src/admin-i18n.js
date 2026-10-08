@@ -1,6 +1,38 @@
 // Messages for the hidden /admin console. Japanese falls back to English.
 export const adminMessages = {
   en: {
+    "admin.fetch.title": ({ source }) => `Fetch ${source} records`,
+    "admin.fetch.description":
+      "Choose a recent window or backfill older records.",
+    "admin.fetch.mode": "Fetch mode",
+    "admin.fetch.recent": "Recent period",
+    "admin.fetch.before": "Continue before the oldest record",
+    "admin.fetch.range": "Date range",
+    "admin.fetch.start": "Start date",
+    "admin.fetch.end": "End date",
+    "admin.fetch.days": "Recent days",
+    "admin.fetch.backfillDays": "Days to backfill per interval",
+    "admin.fetch.oldest": ({ time }) => `Oldest stored record: ${time}`,
+    "admin.fetch.noRecords": "No records",
+    "admin.fetch.timezone":
+      "Dates include both selected days in Asia/Tokyo. Maximum: 365 days.",
+    "admin.fetch.beforeHint":
+      "X continues per account. Interrupted pages resume first; completed empty intervals also advance the backfill boundary.",
+    "admin.fetch.youtubeBeforeHint":
+      "Continue before the oldest published video. Interrupted pages resume first; completed empty intervals also advance the backfill boundary.",
+    "admin.fetch.emptyHint":
+      "Fetch a date range first when no records are stored.",
+    "admin.fetch.xKeyHint":
+      "Recent fetching covers only the public profile. Historical search requires the server's X_API_BEARER_TOKEN with full-archive access.",
+    "admin.fetch.youtubeKeyHint":
+      "Recent fetching covers only the RSS feed. Historical search requires the server's YOUTUBE_API_KEY.",
+    "admin.fetch.run": "Start fetch",
+    "admin.fetch.result": ({ count }) => `Stored or refreshed ${count} records`,
+    "admin.fetch.partialHint":
+      "This run has incomplete coverage or a source warning. See workflow run details; repeat an interrupted range to continue.",
+    "admin.fetch.workflowDays": ({ source }) => `${source}: recent days`,
+    "admin.fetch.workflowHint":
+      "Each manual or timed workflow run uses this rolling period. Without API credentials, only publicly visible recent records are available.",
     "admin.meta.title": "Admin console / Kano status board",
     "admin.loading": "Loading admin state",
     "admin.brand.kanoStatusBoard": "KANO STATUS BOARD",
@@ -534,6 +566,36 @@ export const adminMessages = {
     "errors.csrf": "This request was rejected. Reload the page and try again.",
   },
   "zh-CN": {
+    "admin.fetch.title": ({ source }) => `抓取 ${source} 记录`,
+    "admin.fetch.description": "选择最近时间段，或向前补抓历史记录。",
+    "admin.fetch.mode": "抓取方式",
+    "admin.fetch.recent": "最近时间段",
+    "admin.fetch.before": "从当前最旧记录继续向前",
+    "admin.fetch.range": "指定日期区间",
+    "admin.fetch.start": "开始日期",
+    "admin.fetch.end": "结束日期",
+    "admin.fetch.days": "最近天数",
+    "admin.fetch.backfillDays": "每个区间向前抓取的天数",
+    "admin.fetch.oldest": ({ time }) => `已存储的最旧记录：${time}`,
+    "admin.fetch.noRecords": "暂无记录",
+    "admin.fetch.timezone":
+      "日期按日本时间计算，包含所选首尾两天；最多 365 天。",
+    "admin.fetch.beforeHint":
+      "X 按各账号分别向前抓取。未完成的分页会优先续抓；已查完的空区间也会推进补抓边界。",
+    "admin.fetch.youtubeBeforeHint":
+      "从最旧的已发布视频继续向前抓取。未完成的分页会优先续抓；已查完的空区间也会推进补抓边界。",
+    "admin.fetch.emptyHint": "暂无记录时，请先抓取一个指定日期区间。",
+    "admin.fetch.xKeyHint":
+      "最近抓取仅覆盖公开主页可见记录。历史查询需要在服务端配置具有完整历史搜索权限的 X_API_BEARER_TOKEN。",
+    "admin.fetch.youtubeKeyHint":
+      "最近抓取仅覆盖 RSS 可见记录。历史查询需要在服务端配置 YOUTUBE_API_KEY。",
+    "admin.fetch.run": "开始抓取",
+    "admin.fetch.result": ({ count }) => `本次存储或更新 ${count} 条记录`,
+    "admin.fetch.partialHint":
+      "本次覆盖不完整或数据源有警告，请在工作流运行详情查看；未完成的日期区间可再次抓取以继续。",
+    "admin.fetch.workflowDays": ({ source }) => `${source} 最近抓取天数`,
+    "admin.fetch.workflowHint":
+      "工作流手动运行与定时运行均使用此滚动时间段。未配置 API 凭据时，仅能获取公开页面或 RSS 可见的近期记录。",
     "admin.meta.title": "管理后台 / Kano 状态板",
     "admin.loading": "正在加载后台状态",
     "admin.brand.kanoStatusBoard": "KANO STATUS BOARD",
