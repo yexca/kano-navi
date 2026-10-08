@@ -1,5 +1,8 @@
 import assert from "node:assert/strict"
 import crypto from "node:crypto"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import test from "node:test"
 
 import {
@@ -26,6 +29,122 @@ function snowflakeFor(date) {
 
 function response(body, options: Record<string, any> = {}) {
   return new Response(body, { status: 200, ...options })
+}
+
+for (const failure of ["budget", "503", "all-failed"]) {
+  test(`X resumes durable pending IDs after ${failure}, even outside the profile and bootstrap window`, async (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kano-x-pending-"))
+    const filename = path.join(directory, "snapshot.sqlite")
+    let database = initializeDatabase({ seed: false, filename })
+    const originalFetch = globalThis.fetch
+    const originalEnvironment = Object.fromEntries(
+      [
+        "X_HANDLES",
+        "X_MAX_STATUS_REQUESTS",
+        "X_REFRESH_KNOWN",
+        "X_BOOTSTRAP_DAYS",
+        "X_SCHEDULE_REFRESH_LIMIT",
+        "X_API_BEARER_TOKEN",
+      ].map((key) => [key, process.env[key]]),
+    )
+    const fixedNow = Date.parse("2026-09-16T00:00:00Z")
+    t.mock.method(Date, "now", () => fixedNow)
+    const ids = [
+      snowflakeFor(new Date(fixedNow - 3600_000)),
+      snowflakeFor(new Date(fixedNow - 7200_000)),
+    ]
+    const oldId = snowflakeFor(new Date(fixedNow - 8 * 86400_000))
+    let firstRun = true
+    let profileIds = [...ids, oldId]
+    const requested = []
+    try {
+      process.env.X_HANDLES = "kano_2525"
+      process.env.X_MAX_STATUS_REQUESTS = failure === "budget" ? "1" : "2"
+      process.env.X_REFRESH_KNOWN = "0"
+      process.env.X_BOOTSTRAP_DAYS = "7"
+      process.env.X_SCHEDULE_REFRESH_LIMIT = "0"
+      delete process.env.X_API_BEARER_TOKEN
+      globalThis.fetch = async (url) => {
+        const value = String(url)
+        if (value === "https://x.com/kano_2525")
+          return response(
+            profileIds
+              .map((id) => `<a href="/kano_2525/status/${id}">post</a>`)
+              .join(""),
+          )
+        const id = value.match(/\/status\/(\d+)$/u)?.[1]
+        assert.ok(id)
+        requested.push(id)
+        if (
+          firstRun &&
+          (failure === "all-failed" || (failure === "503" && id === ids[1]))
+        )
+          return response("temporary", { status: 503 })
+        return response(
+          JSON.stringify({
+            tweetID: id,
+            text: "synthetic",
+            date: snowflakeDate(id).toISOString(),
+            author: { screenName: "kano_2525" },
+          }),
+        )
+      }
+      if (failure === "all-failed") await assert.rejects(syncX(database))
+      else await syncX(database)
+      assert.equal(
+        database
+          .prepare<unknown[], { count: number }>(
+            "SELECT COUNT(*) AS count FROM posts",
+          )
+          .get().count,
+        failure === "all-failed" ? 0 : 1,
+      )
+      assert.deepEqual(
+        getSyncState(database, "x", "kano_2525").metadata.pendingStatusIds,
+        failure === "all-failed" ? ids : [ids[1]],
+      )
+      const incrementalState = getSyncState(database, "x", "kano_2525")
+      // A public recent window must not consume or rewrite normal incremental work.
+      profileIds = [oldId]
+      firstRun = false
+      await syncX(database, { mode: "recent", days: 1 })
+      assert.deepEqual(
+        getSyncState(database, "x", "kano_2525"),
+        incrementalState,
+      )
+      database.close()
+      database = initializeDatabase({ seed: false, filename })
+      requested.length = 0
+      t.mock.method(Date, "now", () => fixedNow + 10 * 86400_000)
+      profileIds = []
+      await syncX(database)
+      if (failure === "budget") assert.deepEqual(requested, [ids[1]])
+      else
+        assert.deepEqual(requested, failure === "all-failed" ? ids : [ids[1]])
+      assert.equal(
+        database
+          .prepare<unknown[], { count: number }>(
+            "SELECT COUNT(*) AS count FROM posts",
+          )
+          .get().count,
+        2,
+      )
+      assert.deepEqual(
+        getSyncState(database, "x", "kano_2525").metadata.pendingStatusIds,
+        [],
+      )
+      assert.equal(getSyncState(database, "x", "kano_2525").cursorId, ids[0])
+      assert.equal(getSyncState(database, "x", "_Kanotic"), null)
+    } finally {
+      globalThis.fetch = originalFetch
+      for (const [key, value] of Object.entries(originalEnvironment)) {
+        if (value == null) delete process.env[key]
+        else process.env[key] = value
+      }
+      database.close()
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
 }
 
 test("X bootstrap stays within seven days and later requests only new posts", async () => {
@@ -314,6 +433,7 @@ test("X sync aggregates accounts and keeps failed detail requests within the sha
     _Kanotic: secondaryIds,
   }
   let detailRequests = 0
+  let recovered = false
   try {
     process.env.X_HANDLES = "kano_2525,_Kanotic"
     process.env.X_MAX_STATUS_REQUESTS = "3"
@@ -336,13 +456,14 @@ test("X sync aggregates accounts and keeps failed detail requests within the sha
       assert.ok(statusMatch)
       detailRequests += 1
       const [, handle, id] = statusMatch
-      if (handle === "kano_2525") return response("failed", { status: 503 })
+      if (handle === "kano_2525" && !recovered)
+        return response("failed", { status: 503 })
       return response(
         JSON.stringify({
           tweetID: id,
           text: "WEEKLY schedule",
           date: snowflakeDate(id).toISOString(),
-          author: { screenName: "_Kanotic" },
+          author: { screenName: handle },
           mediaURLs: ["https://pbs.twimg.com/media/weekly.png"],
         }),
         { headers: { "content-type": "application/json" } },
@@ -362,7 +483,12 @@ test("X sync aggregates accounts and keeps failed detail requests within the sha
         .all(),
       [{ accountHandle: "_Kanotic" }],
     )
-    assert.equal(getSyncState(database, "x", "kano_2525"), null)
+    assert.equal(getSyncState(database, "x", "kano_2525").cursorId, null)
+    assert.equal(getSyncState(database, "x", "kano_2525").lastSuccessAt, null)
+    assert.deepEqual(
+      getSyncState(database, "x", "kano_2525").metadata.pendingStatusIds,
+      primaryIds,
+    )
     assert.equal(
       getSyncState(database, "x", "_Kanotic").metadata.bootstrap,
       true,
@@ -375,6 +501,27 @@ test("X sync aggregates accounts and keeps failed detail requests within the sha
         .get().url,
       "https://pbs.twimg.com/media/weekly.png",
     )
+    recovered = true
+    detailRequests = 0
+    const resumed = await syncX(database)
+    assert.equal(resumed.requested, 3)
+    assert.equal(detailRequests, 3)
+    for (const [handle, ids] of Object.entries(profiles)) {
+      assert.deepEqual(
+        getSyncState(database, "x", handle).metadata.pendingStatusIds,
+        [],
+      )
+      assert.equal(getSyncState(database, "x", handle).cursorId, ids[0])
+      assert.deepEqual(
+        database
+          .prepare<unknown[], Record<string, any>>(
+            "SELECT id FROM posts WHERE account_handle=? ORDER BY id DESC",
+          )
+          .all(handle)
+          .map((post) => post.id),
+        ids,
+      )
+    }
   } finally {
     globalThis.fetch = originalFetch
     for (const [key, value] of Object.entries(originalEnvironment)) {

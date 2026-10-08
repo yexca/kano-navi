@@ -91,6 +91,9 @@ function EventRow({
             {event.cancellationStatus === "manual_confirmed" ? (
               <span className="event-cancellation-note">
                 {event.cancellationReason || t("schedule.cancellationManual")}
+                {event.cancellationEvidence
+                  ? ` · ${event.cancellationEvidence}`
+                  : ""}
               </span>
             ) : null}
           </span>

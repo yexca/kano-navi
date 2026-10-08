@@ -71,6 +71,24 @@ LLM matching compares start instants, so `Z` and `+09:00` offsets refer to the
 same event. The dashboard hides tombstones, keeps cancelled rows visible with
 their reason/evidence, and labels visible automatic/manual events.
 
+X event IDs always include a hash of the date, time (or unknown), and normalized
+title, independently of the number of events in a result. Matching evidence in
+`event_sources` and the unique source tuple reuse existing IDs, including legacy
+date IDs, manual locks, and tombstones. Identical activities across X posts share
+an event; evidence attached by an old date-ID collision is reused only when it
+matches the surviving row's source key, so re-extraction can separate those
+activities. YouTube URLs use the video reservation identity. Replacing a source's
+events and retiring its missing evidence happen in one transaction. An automatic
+event retires only when no active source evidence remains.
+
+Event and video ordering compares actual ISO instants rather than timestamp
+strings. Date-only events follow timed events on the same Japan date without
+inventing a start time; equal instants use event/video ID as the stable tie break.
+The dashboard and paginated admin schedule apply this ordering. A linked YouTube
+reservation with `manual_confirmed` cancellation is excluded from `nextStream`,
+including after source refresh. An `llm_suspected` overlay remains review evidence
+and does not definitively cancel its video.
+
 ## Schema Changes
 
 server/database.ts owns the schema and additive upgrade behavior. Update this

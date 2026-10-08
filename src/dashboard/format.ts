@@ -263,11 +263,21 @@ export function eventTypeKey(event) {
 }
 
 export function sortEvents(events) {
-  return [...events].sort((a, b) =>
-    String(a.startsAt || `${a.startsOn}T99`).localeCompare(
-      String(b.startsAt || `${b.startsOn}T99`),
-    ),
+  return [...events].sort(
+    (a, b) =>
+      scheduleSortTime(a.startsAt, a.startsOn) -
+        scheduleSortTime(b.startsAt, b.startsOn) ||
+      String(a.id || "").localeCompare(String(b.id || "")),
   )
+}
+
+// Date-only entries follow timed entries on the same Japan date. This is a
+// sorting boundary only; it does not supply an event start or countdown.
+export function scheduleSortTime(time, dateOnly = null) {
+  const instant = Date.parse(time || "")
+  if (Number.isFinite(instant)) return instant
+  const dayEnd = Date.parse(`${dateOnly}T23:59:59.999+09:00`)
+  return Number.isFinite(dayEnd) ? dayEnd : Infinity
 }
 
 // ---------------------------------------------------------------------------

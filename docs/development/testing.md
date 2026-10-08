@@ -46,6 +46,15 @@ beside their source as server/*.test.ts and scanner tests live under scripts/.
 Do not add tests for prose or a purely visual change without a documented
 interaction or responsive contract. Do not mirror internal implementation.
 
+`server/schedule-regression.test.ts` protects same-day event coexistence,
+re-extraction through changing event counts, legacy identities and collisions, manual locks and
+tombstones, transaction rollback, X/YouTube merging, confirmed stream
+cancellation, and mixed-offset ordering in API/admin/board/spotlight consumers.
+`server/sync.test.ts` covers budget-limited and failed X details, durable pending
+work beyond profile/bootstrap coverage, account isolation, and date-window
+separation. These fixtures use synthetic records, in-memory/temporary SQLite and mocked
+platform/model responses.
+
 Use manually authored synthetic records, example.invalid URLs, fixed neutral
 timestamps, and temporary files. Never derive fixtures from operator databases,
 provider responses, credentials, local paths, or logs. Do not call live X,

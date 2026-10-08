@@ -1293,19 +1293,19 @@ function insertEvent(database: DatabaseConnection, event, overwrite) {
          is_upcoming=excluded.is_upcoming, provenance=excluded.provenance,
          manual_locked=excluded.manual_locked, confidence=excluded.confidence,
          extraction_id=excluded.extraction_id, deleted_at=excluded.deleted_at,
-         cancellation_status=CASE WHEN events.cancellation_status='llm_suspected'
+         cancellation_status=CASE WHEN events.cancellation_status IN ('llm_suspected', 'manual_confirmed')
            THEN events.cancellation_status ELSE excluded.cancellation_status END,
-         cancellation_source=CASE WHEN events.cancellation_status='llm_suspected'
+         cancellation_source=CASE WHEN events.cancellation_status IN ('llm_suspected', 'manual_confirmed')
            THEN events.cancellation_source ELSE excluded.cancellation_source END,
-         cancellation_reason=CASE WHEN events.cancellation_status='llm_suspected'
+         cancellation_reason=CASE WHEN events.cancellation_status IN ('llm_suspected', 'manual_confirmed')
            THEN events.cancellation_reason ELSE excluded.cancellation_reason END,
-         cancellation_evidence=CASE WHEN events.cancellation_status='llm_suspected'
+         cancellation_evidence=CASE WHEN events.cancellation_status IN ('llm_suspected', 'manual_confirmed')
            THEN events.cancellation_evidence ELSE excluded.cancellation_evidence END,
-         cancellation_source_item_id=CASE WHEN events.cancellation_status='llm_suspected'
+         cancellation_source_item_id=CASE WHEN events.cancellation_status IN ('llm_suspected', 'manual_confirmed')
            THEN events.cancellation_source_item_id ELSE excluded.cancellation_source_item_id END,
-         cancellation_confidence=CASE WHEN events.cancellation_status='llm_suspected'
+         cancellation_confidence=CASE WHEN events.cancellation_status IN ('llm_suspected', 'manual_confirmed')
            THEN events.cancellation_confidence ELSE excluded.cancellation_confidence END,
-         cancellation_at=CASE WHEN events.cancellation_status='llm_suspected'
+         cancellation_at=CASE WHEN events.cancellation_status IN ('llm_suspected', 'manual_confirmed')
            THEN events.cancellation_at ELSE excluded.cancellation_at END,
          updated_at=excluded.updated_at, raw_json=excluded.raw_json
        WHERE events.manual_locked = 0`
@@ -1387,6 +1387,15 @@ function insertEvent(database: DatabaseConnection, event, overwrite) {
     updated_at: nullable(event.updated_at ?? event.updatedAt) || timestamp,
     raw_json: json(event),
   }
+  // The persisted source identity wins over a newly generated ID, including
+  // legacy date-only IDs and locked/deleted rows. Never insert a second row
+  // for a tuple already protected by the unique source index.
+  const existingIdentity = database
+    .prepare<unknown[], Record<string, any>>(
+      "SELECT id FROM events WHERE source=? AND source_item_id=? AND source_key=?",
+    )
+    .get(values.source, values.source_item_id, values.source_key)
+  if (existingIdentity) values.id = existingIdentity.id
   const result = database
     .prepare<unknown[], Record<string, any>>(sql)
     .run(values)
@@ -2591,8 +2600,8 @@ export function upsertPosts(database: DatabaseConnection, posts = []) {
 export function upsertEvents(database: DatabaseConnection, events = []) {
   const run = database.transaction((rows) => {
     for (const event of rows) {
-      insertEvent(database, event, true)
-      insertEventSource(database, event, event.id)
+      const { values } = insertEvent(database, event, true)
+      insertEventSource(database, event, values.id)
     }
   })
   run(events)
@@ -2976,7 +2985,7 @@ export function listAdminEvents(
   return database
     .prepare<unknown[], Record<string, any>>(
       `SELECT ${eventAdminColumns} FROM events ${where}
-       ORDER BY starts_on DESC, COALESCE(starts_at, starts_on) DESC, id ASC`,
+       ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) DESC, id ASC`,
     )
     .all()
     .map((event): Record<string, any> => ({
@@ -3056,7 +3065,7 @@ export function listAdminEventsPage(
   const rows = database
     .prepare<unknown[], Record<string, any>>(
       `SELECT ${eventAdminColumns} FROM events ${where}
-       ORDER BY starts_on DESC, COALESCE(starts_at, starts_on) DESC, id ASC
+       ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) DESC, id ASC
        LIMIT ? OFFSET ?`,
     )
     .all(...values, boundedPageSize, (safePage - 1) * boundedPageSize)
@@ -3256,7 +3265,25 @@ export function replaceAutomaticEventsForSource(
         extraction_id: extractionId,
         deleted_at: null,
       }
-      insertEvent(database, value, true)
+      if (value.source === "x") {
+        // Source evidence survives manual edits and tombstones. Reuse its ID
+        // across posts as well as across the old and new ID schemes.
+        const previousIdentity = database
+          .prepare<unknown[], Record<string, any>>(
+            `SELECT s.event_id AS eventId FROM event_sources s
+             JOIN events e ON e.id=s.event_id
+             WHERE s.source=? AND s.source_key=? AND e.source='x' AND e.source_key=?
+             ORDER BY (s.source_item_id=?) DESC, s.id ASC LIMIT 1`,
+          )
+          .get(
+            String(source),
+            sourceKey,
+            value.source_key,
+            String(sourceItemId),
+          )
+        if (previousIdentity) value.id = previousIdentity.eventId
+      }
+      const { values } = insertEvent(database, value, true)
       insertEventSource(
         database,
         {
@@ -3265,7 +3292,7 @@ export function replaceAutomaticEventsForSource(
           source_item_id: String(sourceItemId),
           source_key: sourceKey,
         },
-        event.id,
+        values.id,
         timestamp,
       )
     }
@@ -4058,7 +4085,7 @@ export function listAdminVideos(
        scheduled_at AS scheduledAt, url, thumbnail_url AS thumbnailUrl,
        kind, is_upcoming AS isUpcoming
        FROM videos
-       ORDER BY COALESCE(scheduled_at, published_at) DESC, id ASC
+       ORDER BY julianday(COALESCE(scheduled_at, published_at)) DESC, id ASC
        LIMIT ?`,
     )
     .all(boundedLimit)
@@ -4112,15 +4139,17 @@ export function upsertSyncState(
     cursorId = null,
     cursorTime = null,
     metadata = {},
+    recordSuccess = true,
   }: {
     source: any
     accountId: any
     cursorId?: any
     cursorTime?: any
     metadata?: any
+    recordSuccess?: boolean
   },
 ) {
-  const timestamp = nowIso()
+  const timestamp = recordSuccess ? nowIso() : null
   database
     .prepare<unknown[], Record<string, any>>(
       `INSERT INTO sync_state (
@@ -4128,7 +4157,7 @@ export function upsertSyncState(
        ) VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(source, account_id) DO UPDATE SET
          cursor_id=excluded.cursor_id, cursor_time=excluded.cursor_time,
-         last_success_at=excluded.last_success_at,
+         last_success_at=COALESCE(excluded.last_success_at, sync_state.last_success_at),
          metadata_json=excluded.metadata_json`,
     )
     .run(
@@ -4366,7 +4395,7 @@ export function listActiveVideoIds(
     .prepare<unknown[], Record<string, any>>(
       `SELECT id FROM videos
        WHERE is_upcoming=1 OR scheduled_at IS NOT NULL
-       ORDER BY COALESCE(scheduled_at, published_at) DESC LIMIT ?`,
+       ORDER BY julianday(COALESCE(scheduled_at, published_at)) DESC, id ASC LIMIT ?`,
     )
     .all(boundedLimit)
     .map((row) => String(row.id))
@@ -4833,7 +4862,7 @@ export function getDashboard(
        cancellation_evidence AS cancellationEvidence,
        cancellation_at AS cancellationAt
        FROM events WHERE deleted_at IS NULL
-       ORDER BY starts_on ASC, COALESCE(starts_at, starts_on) ASC`,
+       ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) ASC, id ASC`,
     )
     .all()
     .map((event): Record<string, any> => ({
@@ -4850,7 +4879,7 @@ export function getDashboard(
     .prepare<unknown[], Record<string, any>>(
       `SELECT id, source, title, published_at AS publishedAt, scheduled_at AS scheduledAt, url,
     thumbnail_url AS thumbnailUrl, kind, is_upcoming AS isUpcoming FROM videos
-    ORDER BY COALESCE(scheduled_at, published_at) DESC LIMIT 30`,
+    ORDER BY julianday(COALESCE(scheduled_at, published_at)) DESC, id ASC LIMIT 30`,
     )
     .all()
   if (
@@ -5025,11 +5054,31 @@ export function getDashboard(
       event.cancellationStatus !== "llm_suspected" &&
       event.cancellationStatus !== "manual_confirmed",
   )
+  const cancelledVideoIds = new Set(
+    database
+      .prepare<unknown[], Record<string, any>>(
+        `SELECT source_item_id AS videoId FROM events
+       WHERE source='youtube' AND cancellation_status='manual_confirmed'
+       UNION SELECT substr(id, 9) AS videoId FROM events
+       WHERE id LIKE 'youtube-%' AND cancellation_status='manual_confirmed'
+       UNION SELECT s.source_item_id AS videoId FROM event_sources s
+       JOIN events e ON e.id=s.event_id
+       WHERE s.source='youtube' AND e.cancellation_status='manual_confirmed'`,
+      )
+      .all()
+      .map((row) => row.videoId),
+  )
   const upcomingVideos = mappedVideos
-    .filter((video) => video.isUpcoming)
-    .sort((a, b) =>
-      String(a.scheduledAt || "").localeCompare(String(b.scheduledAt || "")),
-    )
+    .filter((video) => video.isUpcoming && !cancelledVideoIds.has(video.id))
+    .sort((a, b) => {
+      const left = Date.parse(a.scheduledAt || "")
+      const right = Date.parse(b.scheduledAt || "")
+      return (
+        (Number.isFinite(left) ? left : Infinity) -
+          (Number.isFinite(right) ? right : Infinity) ||
+        String(a.id).localeCompare(String(b.id))
+      )
+    })
   const summary = {
     nextEvent: upcomingEvents[0] || null,
     nextStream: upcomingVideos[0] || null,

@@ -137,7 +137,7 @@ test("OpenAI structured extraction uses cached vision input and caches results",
     assert.equal(content[0].type, "input_text")
     assert.equal(content[1].type, "input_image")
     assert.match(content[1].image_url, /^data:image\/png;base64,/u)
-    const event = getEvent(database, "x-schedule-20260906")
+    const event = getDashboard(database).events[0]
     assert.equal(event.startsOn, "2026-09-06")
     assert.equal(event.startsAt, null)
     assert.equal(event.timePrecision, "unknown")
@@ -179,7 +179,7 @@ test("OpenAI structured extraction uses cached vision input and caches results",
     )
     assert.equal(invalid.status, "failed")
     assert.match(invalid.error, /invalid event/u)
-    assert.equal(getEvent(database, "x-schedule-20260906").title, "配信予定")
+    assert.equal(getEvent(database, event.id).title, "配信予定")
   } finally {
     database.close()
     if (cachedFile) fs.rmSync(cachedFile, { force: true })

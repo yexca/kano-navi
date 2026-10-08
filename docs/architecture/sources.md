@@ -16,6 +16,15 @@ and returned as one time-ordered feed. Image-only posts are retained as
 candidates as long as they have a publication time and a media URL.
 `X_HANDLE` remains a single-account compatibility fallback.
 
+Normal incremental runs persist admitted but unfinished status IDs in the
+account's `sync_state.metadata_json.pendingStatusIds` before detail requests.
+Pending work runs before newly discovered IDs and remains retryable when it
+falls out of the profile or ages beyond the bootstrap window. Successful posts,
+pending-work removal, and the latest successful cursor commit atomically.
+Budget exhaustion and failed/invalid detail responses retain unfinished IDs;
+an all-failed run does not record a successful cursor or timestamp. Date-window
+fetches neither consume this queue nor update normal incremental state.
+
 Each discovered image URL is registered and linked to its post. A bounded media
 stage later in the same command downloads pending image files from X's
 `*.twimg.com` media CDN subdomains.

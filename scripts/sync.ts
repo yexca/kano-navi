@@ -486,7 +486,7 @@ async function syncXAccount(
     database,
     handle,
     scheduleKeywords,
-    { includePostCandidates: !state },
+    { includePostCandidates: !state?.cursorId },
   )
     .filter((candidate) => {
       const createdAt = snowflakeDate(candidate.id)
@@ -494,7 +494,13 @@ async function syncXAccount(
     })
     .slice(0, scheduleRefreshLimit)
   const scheduleIds = scheduleCandidates.map((candidate) => candidate.id)
-  const ids = [...new Set([...scheduleIds, ...discoveredIds])]
+  const pendingIds: string[] =
+    !selectedWindow && Array.isArray(state?.metadata.pendingStatusIds)
+      ? state.metadata.pendingStatusIds.filter(
+          (id) => typeof id === "string" && /^\d+$/u.test(id),
+        )
+      : []
+  const ids = [...new Set([...pendingIds, ...scheduleIds, ...discoveredIds])]
   if (!ids.length) throw new Error("无法从 X 公开页面找到状态 ID")
   if (requestLimit <= 0) {
     return {
@@ -511,9 +517,11 @@ async function syncXAccount(
 
   const knownIds = getKnownPostIds(database, ids)
   const priorityIds = new Set(scheduleIds)
+  const pendingSet = new Set(pendingIds)
+  const hasCursor = Boolean(state?.cursorId || state?.cursorTime)
   const cursorTime = Date.parse(state?.cursorTime || "")
   const isAfterCursor = (id) => {
-    if (!state) return true
+    if (!hasCursor) return true
     const byId = compareSnowflakeIds(id, state.cursorId)
     if (byId != null) return byId > 0
     const createdAt = snowflakeDate(id)?.getTime()
@@ -522,25 +530,47 @@ async function syncXAccount(
       : true
   }
   let knownRefreshes = 0
-  const candidates = ids
-    .filter((id) => {
-      const createdAt = snowflakeDate(id)
-      if (
-        selectedWindow &&
-        !isInFetchWindow(createdAt?.toISOString(), selectedWindow)
-      )
-        return false
-      if (selectedWindow && !knownIds.has(id)) return true
-      if (!state && createdAt && createdAt.getTime() < cutoff) return false
-      if (priorityIds.has(id)) return true
-      if (!knownIds.has(id)) return isAfterCursor(id)
-      if (knownRefreshes < refreshKnown) {
-        knownRefreshes += 1
-        return true
-      }
+  const eligibleIds = ids.filter((id) => {
+    const createdAt = snowflakeDate(id)
+    if (
+      selectedWindow &&
+      !isInFetchWindow(createdAt?.toISOString(), selectedWindow)
+    )
       return false
+    if (selectedWindow && !knownIds.has(id)) return true
+    if (!knownIds.has(id) && pendingSet.has(id)) return true
+    if (!hasCursor && createdAt && createdAt.getTime() < cutoff) return false
+    if (priorityIds.has(id)) return true
+    if (!knownIds.has(id)) return isAfterCursor(id)
+    if (knownRefreshes < refreshKnown) {
+      knownRefreshes += 1
+      return true
+    }
+    return false
+  })
+  const candidates = eligibleIds.slice(0, Math.max(0, requestLimit))
+  const pendingStatusIds = eligibleIds.filter((id) => !knownIds.has(id))
+  const metadata = {
+    ...state?.metadata,
+    handle,
+    discovered: discoveredIds.length,
+    requested: candidates.length,
+    supplemented: scheduleIds.length,
+    bootstrap: !hasCursor,
+    pendingStatusIds,
+  }
+  if (!selectedWindow) {
+    // Admit all discovered work before attempting details. Budget limits,
+    // upstream failures and process interruption must not lose these IDs.
+    upsertSyncState(database, {
+      source: "x",
+      accountId: handle,
+      cursorId: state?.cursorId,
+      cursorTime: state?.cursorTime,
+      metadata,
+      recordSuccess: false,
     })
-    .slice(0, Math.max(0, requestLimit))
+  }
 
   const posts = []
   const errors = []
@@ -574,7 +604,6 @@ async function syncXAccount(
     throw error
   }
 
-  if (posts.length) upsertPosts(database, posts)
   const schedulePost = posts
     .filter((post) => post.media_url && isLikelyScheduleBoardPost(post))
     .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))[0]
@@ -595,26 +624,27 @@ async function syncXAccount(
     (left, right) =>
       Date.parse(right.published_at) - Date.parse(left.published_at),
   )[0]
-  const newestDiscoveredId = discoveredIds[0] || ids[0]
-  const nextCursorId = newestPost?.id || newestDiscoveredId
-  const nextCursorTime =
-    newestPost?.published_at || snowflakeDate(newestDiscoveredId)?.toISOString()
+  const nextCursorId = newestPost?.id || state?.cursorId || null
+  const nextCursorTime = newestPost?.published_at || state?.cursorTime || null
   const shouldAdvanceCursor =
-    !state || isAfterCursor(nextCursorId) || !state.cursorId
-  if (!selectedWindow)
-    upsertSyncState(database, {
-      source: "x",
-      accountId: handle,
-      cursorId: shouldAdvanceCursor ? nextCursorId : state.cursorId,
-      cursorTime: shouldAdvanceCursor ? nextCursorTime : state.cursorTime,
-      metadata: {
-        handle,
-        discovered: discoveredIds.length,
-        requested: candidates.length,
-        supplemented: scheduleIds.length,
-        bootstrap: !state,
-      },
-    })
+    Boolean(newestPost) && (!hasCursor || isAfterCursor(nextCursorId))
+  database.transaction(() => {
+    if (posts.length) upsertPosts(database, posts)
+    if (!selectedWindow)
+      upsertSyncState(database, {
+        source: "x",
+        accountId: handle,
+        cursorId: shouldAdvanceCursor ? nextCursorId : state?.cursorId,
+        cursorTime: shouldAdvanceCursor ? nextCursorTime : state?.cursorTime,
+        metadata: {
+          ...metadata,
+          pendingStatusIds: pendingStatusIds.filter(
+            (id) => !posts.some((post) => post.id === id),
+          ),
+        },
+        recordSuccess: posts.length > 0,
+      })
+  })()
   return {
     handle,
     count: posts.length,

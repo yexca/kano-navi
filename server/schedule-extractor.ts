@@ -51,7 +51,7 @@ import {
 import { mediaIdForSourceUrl, resolveMediaCachePath } from "./media-cache.ts"
 import { decryptSecret } from "./secret-store.ts"
 
-export const scheduleExtractorVersion = "openai-schedule-v2"
+export const scheduleExtractorVersion = "openai-schedule-v3"
 export const defaultScheduleModel = "gpt-4o-mini"
 const defaultOpenAiBaseUrl = "https://api.openai.com/v1"
 const INPUT_MODES = new Set(["text", "image", "text_image"])
@@ -362,11 +362,6 @@ function normalizeExtractedEvents(result, post) {
       throw new Error("schedule extraction contained an invalid event")
     }
   }
-  const perDate = result.events.reduce((counts, event) => {
-    counts.set(event.date, (counts.get(event.date) || 0) + 1)
-    return counts
-  }, new Map())
-
   return result.events.map((event) => {
     const title = String(event.title).trim().slice(0, 240)
     const time = event.time || null
@@ -375,9 +370,7 @@ function normalizeExtractedEvents(result, post) {
     const dateId = String(event.date).replaceAll("-", "")
     const eventId = youtubeId
       ? `youtube-${youtubeId}`
-      : perDate.get(event.date) === 1
-        ? `x-schedule-${dateId}`
-        : `x-schedule-${dateId}-${sha256(sourceKey).slice(0, 10)}`
+      : `x-schedule-${dateId}-${sha256(sourceKey).slice(0, 10)}`
     const startsAt = isoAtJapanTime(event.date, time)
     return {
       id: eventId,
