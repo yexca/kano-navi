@@ -1,179 +1,149 @@
-# 鹿乃まほろ / status board
+<div align="center">
+  <img src="public/assets/kano-avatar.jpg" alt="鹿乃まほろ" width="96">
+  <h1>Kano Navi</h1>
+  <p><strong>把鹿乃まほろ的近况、日程与旅程，放在同一个地方。</strong></p>
+  <p>
+    <a href="https://github.com/yexca/kano-navi/actions/workflows/ci.yml"><img src="https://github.com/yexca/kano-navi/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://github.com/yexca/kano-navi/actions/workflows/release.yml"><img src="https://github.com/yexca/kano-navi/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="许可证：AGPL v3"></a>
+  </p>
+  <p>
+    <a href="https://kano.yexca.net/"><strong>在线访问</strong></a> ·
+    <a href="#功能概览">功能概览</a> ·
+    <a href="#使用-docker-快速部署">快速部署</a> ·
+    <a href="docs/README.md">项目文档</a> ·
+    <a href="https://github.com/yexca/kano-navi/releases">版本发布</a>
+  </p>
+  <p><a href="README.md">English</a> · 简体中文</p>
+</div>
 
-React + Vite + shadcn/ui 风格组件制作的非官方资料整理页。页面本身只读取本地 SQLite 快照，不会在浏览器里直接抓取 X 或 YouTube。
+Kano Navi 是为 **鹿乃まほろ（Kano Mahoro）** 的粉丝制作的非官方、可自行部署的近况看板。
+查看下一场配信，浏览 X 与 YouTube 的最近更新，也可以沿着历程与图片图鉴回顾她从 2010 年至今的公开活动。
+界面支持日语、英语、简体中文和明暗主题，适配桌面与手机。
 
-`/about` 页面介绍项目、作者、参与开发的 AI 模型与技术栈。项目代码采用
-[GNU AGPL v3](LICENSE) 许可证；第三方图片及其他内容的权利归原权利人所有，
-不属于代码许可证的授权范围。
+## 界面预览
 
-## 项目文档
+**[在线访问 Kano Navi](https://kano.yexca.net/)**，或前往
+[旅程与图片图鉴](https://kano.yexca.net/history)回顾公开活动与历史影像。
+截图来自首次启动的本地实例，来源内容将在运行工作流后填充。
 
-- [Agent 指南](AGENTS.md)：代码边界、数据契约和协作规则。
-- [文档索引](docs/README.md)：概览、架构、开发、同步和安全说明。
-- [安全策略](SECURITY.md)：敏感信息和问题报告边界。
+![Kano Navi 近况看板，浅色主题](docs/assets/readme/dashboard.jpg)
 
-## 本地运行
+<details>
+<summary>展开旅程页面预览</summary>
+
+![Kano Navi 旅程页面，浅色主题](docs/assets/readme/history.jpg)
+
+</details>
+
+## 功能概览
+
+| 模块           | 可以做什么                                                                       |
+| -------------- | -------------------------------------------------------------------------------- |
+| 近况看板       | 一眼查看下一场配信或活动、日本时间倒计时与最近动态。                             |
+| 每周日程       | 按周浏览活动列表与日程图片，区分自动识别和人工确认。                             |
+| X 与 YouTube   | 聚合两个 X 账号的动态、视频更新与预约配信，展示精选视频。                        |
+| 旅程与图片图鉴 | 按活动身份和年份浏览里程碑，查看附有来源与署名的本地图片档案。                   |
+| 管理后台       | 手动或定时运行更新工作流、整理日程、管理头像与横幅，以及配置可选的 AI 日程识别。 |
+| MCP 集成       | 读取公开快照，通过独立鉴权的控制工具启动自动任务。                               |
+
+## 使用 Docker 快速部署
+
+需要 **支持 Linux 容器的 Docker 与 Docker Compose**。
+
+1. 将 [docker-compose.yml](docker-compose.yml) 和 [.env.example](.env.example)
+   保存到同一目录，将 `.env.example` 复制为 `.env`。
+2. 编辑 `.env`：保持 `APP_MODE=production`，配置去掉首尾空白后
+   **至少 12 个字符**的 `ADMIN_PASSWORD`。
+3. 启动应用：
+
+   ```bash
+   docker compose up -d
+   ```
+
+打开 **[localhost:7657](http://localhost:7657/)**。
+管理后台位于 `/admin`，需要手动输入路径，并使用刚才配置的密码登录。
+
+Compose 默认拉取 `yexca/kano-navi:latest`。数据库、缓存媒体和后台配置保存在
+`./data` 中，升级时会保留。再次运行 `docker compose up -d` 即可拉取更新并替换容器。
+
+固定版本、GHCR 镜像、自定义端口和反向代理配置见
+[Docker 部署说明](docs/operations/docker.md)。
+
+### 首次使用
+
+个人资料、历程、资源链接和历史图片开箱即用。
+X 动态、YouTube 视频、日程与 AI 服务配置初始为空。
+
+- 在 `/admin` 中运行包含 X、YouTube 和媒体缓存步骤的工作流，填充看板内容。
+- 如需定期更新，为保存的工作流启用定时器。
+- 如需 AI 日程识别，在 `.env` 中配置 `LLM_SECRETS_KEY`，再在后台添加服务商、
+  模型与识别路由。设置方法见[配置说明](docs/operations/configuration.md)。
+
+## 内容如何更新
+
+工作流在服务端收集公开内容、缓存媒体，并写入本地 SQLite 快照。
+打开页面或点击看板的重新读取按钮，只会读取这份快照，不会启动平台抓取或模型请求。
+来源暂时不可用时，已有快照仍然保留。
+
+人工编辑和删除的日程受到保护，自动同步不能覆盖或复活它们。
+内容新鲜度取决于来源的可用性，信息以原平台为准。
+抓取覆盖范围与限制见[来源说明](docs/architecture/sources.md)和
+[工作流说明](docs/architecture/workflows.md)。
+
+## 本地开发
+
+需要 **Node.js 24 LTS（24.19 或更新版本）**、**npm 10+** 和 Git。
 
 ```bash
-npm install
+git clone https://github.com/yexca/kano-navi.git
+cd kano-navi
+npm ci
 cp .env.example .env
-# 配置 ADMIN_PASSWORD，或为本地开发显式设置 APP_MODE=development。
+```
+
+本地开发时，在 `.env` 中设置 `APP_MODE=development`，启用免密码管理后台；
+设置 `WORKFLOW_SCHEDULER_ENABLED=0`，关闭定时工作流。然后启动：
+
+```bash
 npm run dev
 ```
 
-开发环境的 Vite 前端和 Express API 共用 `http://localhost:7657`，管理页为
-`http://localhost:7657/admin`。开发、构建预览和生产均默认使用 `7657`，可通过
-`PORT` 修改；开发和预览在端口被占用时会报错。
+前端与 API 共用 [localhost:7657](http://localhost:7657/)。
+PowerShell 中的复制命令为 `Copy-Item .env.example .env`。
+构建、预览和 Docker 开发环境见[本地开发指南](docs/development/local-dev.md)。
 
-使用 Docker 构建并启动开发环境：
-
-```bash
-docker compose -f docker-compose.dev.yml up -d --build --renew-anon-volumes
-```
-
-打开 `http://localhost:7657` 查看页面，`http://localhost:7657/admin` 查看免登录的
-开发管理页。源码挂载支持前端热更新，Linux 依赖保存在独立卷中，SQLite 和媒体
-仍保存在 `./data`。前端与 API 共用容器的 7657 端口，宿主机端口可通过 `KANO_PORT` 修改。
-修改服务端源码后执行 `docker compose -f docker-compose.dev.yml restart`；停止
-开发容器使用 `docker compose -f docker-compose.dev.yml down`。更多细节见
-[本地开发指南](docs/development/local-dev.md)。
-
-生产构建和启动：
+技术栈：**React · TypeScript · Vite · Tailwind CSS · Express · SQLite**。
+项目通过 GNU Make 统一运行检查：
 
 ```bash
-npm run build
-npm start
+make check             # 使用已安装依赖，运行检查、构建和隔离的 API 冒烟验证
+make ci                # 安装锁定依赖，运行全部检查及 Docker 运行验证
+make sensitive-check   # 扫描敏感信息
 ```
 
-也可以直接使用根目录的 Docker Compose。将 `.env.example` 复制为 `.env`，
-保持 `APP_MODE=production`，并配置去掉首尾空白后至少 12 位的
-`ADMIN_PASSWORD`，然后执行：
+这些检查不会执行实时来源同步。分项检查与前置条件见
+[测试与 CI](docs/development/testing.md)。
 
-```bash
-docker compose up -d
-```
+## 文档导航
 
-启动时会从 Docker Hub 自动拉取 `yexca/kano-navi:latest`，SQLite 数据库和下载的媒体
-保存在 `./data`。部署目录只需 `docker-compose.yml` 和 `.env`，数据目录会自动
-创建；更新时再次执行同一命令即可拉取镜像并替换容器。
-如需固定到本次发布，在 `.env` 中设置
-`KANO_IMAGE=yexca/kano-navi:0.1.1`；宿主机端口默认是 `7657`，可通过
-`KANO_PORT` 修改。相同版本也会发布到 GHCR，可设置
-`KANO_IMAGE=ghcr.io/yexca/kano-navi:latest` 使用。默认生产地址是
-`http://localhost:7657`。
+| 想了解……                  | 从这里开始                                                      |
+| ------------------------- | --------------------------------------------------------------- |
+| 项目定位与页面功能        | [项目概览](docs/overview.md)                                    |
+| 部署、配置与备份          | [运维文档](docs/operations/index.md)                            |
+| API、数据模型、来源与媒体 | [架构文档](docs/architecture/index.md)                          |
+| 历史图片的来源与署名      | [历程与图片图鉴](docs/product/history.md)                       |
+| 开发、检查与贡献约定      | [开发文档](docs/development/index.md) · [Agent 指南](AGENTS.md) |
+| 安全边界与问题报告        | [安全策略](SECURITY.md) · [安全文档](docs/security/index.md)    |
 
-管理页只允许手动输入 `/admin` 访问，主页不会显示入口。
-示例环境和服务默认使用 `APP_MODE=production`；`ADMIN_PASSWORD` 未配置、
-仅为空白，或去掉首尾空白后不足 12 位时，服务会在打开数据库前拒绝启动。
-启动前请在不会提交的 `.env` 中配置密码。本地开发可以显式设置
-`APP_MODE=development` 使用免登录模式。provider 密钥由管理页配置并加密保存到 SQLite；环境中只需
-配置 `LLM_SECRETS_KEY`。
-后台首页是一键工作流：选择要更新的模块（X、YouTube、媒体缓存、AI 日程识别），
-立即运行或交给服务端定时执行。其他分区包括分页日程、按路由排序模型的识别规则、
-集中的模型服务页（填写 API 地址和 Key 后获取模型列表并打标签），以及内容与头像
-媒体。
+完整指南见[文档索引](docs/README.md)。
 
-`/mcp` 是独立的无状态集成入口。公开读取工具不需要密钥；推进 revision、
-启动同步和运行自动扫描才需要 `Authorization: Bearer <MCP_CONTROL_TOKEN>`。
-该 token 与管理员密码分离，也不能执行人工确认、编辑、删除或素材选择。
+## 致谢与许可
 
-## 数据与 API
+由 [yexca](https://github.com/yexca) 制作。应用的 `/about` 页面列有开发致谢和技术栈。
 
-`/history` 提供 2010 年起的历程时间线和 59 张来源可追溯的图片图鉴，可按
-活动身份、年份及图片类型浏览，并放大查看尺寸、日期依据、署名和原站链接。
-59 张固定历史图片已随项目、生产构建和 Docker 镜像发布，首次部署即可显示，
-无需导入运行时缓存。维护者更新这批固定素材时可从资料库重新打包：
+项目代码采用 [GNU AGPL v3](LICENSE) 许可证。插画、艺人名称及其他第三方内容的权利
+归原权利人所有，代码许可证不授予这些素材的使用权。
+图片来源与已记录的署名见[历史图鉴说明](docs/product/history.md)。
 
-```bash
-npm run history:package -- --from /path/to/kano_official
-```
-
-打包验证原文件哈希、大小和格式，不访问外网，也不会修改资料库。
-静态图片位于 `public/assets/history/`，原始来源和署名保持不变。详情见
-[历程与图片图鉴说明](docs/product/history.md)。
-
-SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并补充 `server/seed-data.ts` 中的静态个人资料、历程和资源链接。X 动态、日程、YouTube 视频、Featured 内容及 LLM provider、模型和路由默认均为空；通过后台工作流抓取来源，并在 `/admin` 手动配置 provider。升级保留已有快照和配置。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers`、`llm_models`、`llm_route_targets`（以及已迁移的旧表 `llm_route_providers`）和 `workflows`。
-
-看板接口：
-
-```text
-GET /api/dashboard?days=3
-```
-
-返回 profile、`summary` 摘要（下一项日程、下一场预约直播、最新视频、即使超出时间窗口也保留的最新动态，以及计数）、最近窗口内聚合的两个 X 账号动态、全部日程、YouTube 视频与预约、手动选择的 Featured 视频、时间轴、资料入口、schedule 图片和同步元数据。`days` 可设为 1–30。
-
-远程图片会登记到 `media_assets`，并通过 `media_links` 关联推文、视频和其他内容。缓存完成的文件由带内容版本的 `GET /media/<opaque-id>?v=<content-sha256>` 提供；尚未缓存或缓存失败时，API 会返回 `null` 媒体地址，浏览器不会改为直连平台 CDN。运行时文件统一保存在已被 Git 忽略的 `data/`：数据库在 `data/database/`，X 图片在 `data/x/`，YouTube 图片在 `data/youtube/`，管理员选中的头像和横幅在 `data/avatar/`。
-
-健康检查：
-
-```text
-GET /api/health
-```
-
-## 更新快照
-
-```bash
-npm run sync
-```
-
-同步脚本在服务端执行：
-
-- X：每个账号首次最多回溯 7 天，后续只请求未知状态 ID，并按可配置的小额度刷新已知项；两个账号的结果按时间聚合。
-- YouTube：首次保存 RSS 中最近 6 条，后续只保存游标之后的新条目，同时持续复查仍活跃的预约。
-- 媒体：下载白名单内的 X 图片和 YouTube 缩略图，写入内容寻址缓存。
-- 日程看板：先按管理页单独配置的关键词阶段筛选候选，再把帖子文字与缓存图片
-  交给独立的 board provider 队列；
-- 单条消息：用轻量的日期/告知启发式筛选疑似日程消息，再交给独立的 message
-  provider 队列；
-- provider 会按照原始消息模态筛选：纯文字需要 `Text`，纯图片需要 `Image`，
-  文字加图片需要同时具备两种能力。单个 provider 最多尝试三次，失败后按优先级
-  切换到下一个兼容 provider。支持 OpenAI Responses 和 Chat Completions。
-
-看板和单条消息检测共享一次扫描的总数量限制，并共同更新自动日程快照。模型返回
-`uncertain` 时会缓存识别结果供检查，但不会创建日程。`SCHEDULE_MESSAGE_ENABLED`
-独立控制单条消息阶段；原有的关键词和看板开关仍然分别生效。
-
-同步失败时不会清空已有数据，会在 `sync_runs` 中记录失败原因；模型返回非法结构时也会保留旧日程。provider 密钥在管理页输入后会使用环境变量中的 `LLM_SECRETS_KEY` 加密保存到 SQLite，运行时不再读取 `OPENAI_API_KEY`。旧版密钥可通过一次性命令 `npm run migrate:llm` 导入，验证后应从环境中移除。API 不会回显明文。可用环境变量调整来源或跳过某一来源：
-
-```bash
-X_HANDLES=kano_2525,_Kanotic YOUTUBE_CHANNEL_ID=UCShXNLMXCfstmWKH_q86B8w npm run sync
-SKIP_X=1 npm run sync
-SKIP_YOUTUBE=1 npm run sync
-```
-
-完整的首抓窗口、请求预算、媒体限制和分阶段跳过选项见
-[.env.example](.env.example)。
-
-管理页可以新增、编辑、确认和删除日程。任何人工操作都会把该记录标为
-“人工确认”并永久锁定，后续平台同步或 LLM 结果不能覆盖或复活它；主页日历会区分“自动识别”和“人工确认”。
-MCP 只允许读取和启动自动任务，不会执行这些人工操作；任务完成后会递增
-dashboard revision，已打开的主页会重新读取 SQLite 快照。
-
-X / YouTube 的公开页面可能受到限流、登录墙或页面结构变化影响，因此同步结果应以原平台页面为准。页面上的“重新读取”只重新请求 SQLite API，不会触发外部抓取。
-
-如果希望自动保持快照，可以用系统 cron、launchd 或其他任务调度器每天（或每几小时）执行一次 `npm run sync`；看板服务本身不会在每次打开页面时抓取外部平台。
-
-## 重新写入初始数据
-
-```bash
-npm run seed
-```
-
-该命令幂等地补充缺失的种子记录；需要覆盖已有同 ID 记录时再使用：
-
-```bash
-npm run seed -- --overwrite
-```
-
-`public/assets` 保留固定的兜底素材及经过验证的历史图片；会随平台内容变化的缩略图和 schedule 图片属于 `data/x/` 或 `data/youtube/` 运行时缓存，头像和横幅候选按来源写入对应目录，本地上传和人工选择后的头像、横幅属于 `data/avatar/`，均不进入 Git。页面为 fan-made 项目，相关平台链接均指向原始页面。
-
-## 本地检查
-
-```bash
-make docs-check
-make check
-make sensitive-check
-make ci
-```
-
-`make check` 使用已安装依赖，运行格式、文档、隐私、服务端测试、前端构建和隔离的 API 冒烟检查。`make ci` 先安装锁定依赖，再增加 Docker 镜像及运行验证，需要运行中的 Linux 容器引擎。两者都不会执行实时 X/YouTube 同步；分项检查见[测试与 CI](docs/development/testing.md)。
+Kano Navi 是独立的粉丝项目，与官方无隶属关系，也未获官方背书。

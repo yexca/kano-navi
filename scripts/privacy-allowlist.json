@@ -30,6 +30,14 @@
       "reason": "Public repository and documentation links."
     },
     {
+      "host": "kano.yexca.net",
+      "reason": "Maintainer-hosted public Kano Navi instance linked from the README; never used as a synchronization source."
+    },
+    {
+      "host": "img.shields.io",
+      "reason": "Static license badge displayed in the README only; never fetched by the application or synchronization."
+    },
+    {
       "host": "docker.io",
       "reason": "Docker Hub registry used by production Compose deployments and release-image publishing; never fetched by the browser or synchronization."
     },
