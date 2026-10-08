@@ -970,76 +970,206 @@ test("an entirely failed schedule stage marks an otherwise skipped sync as faile
   }
 })
 
-test("RSS/streams overlap recovers reservation details under budget and preserves them after failure", async (t) => {
+for (const failure of [
+  "503",
+  "incomplete 200",
+  "metadata-only 200",
+  "upcoming without schedule 200",
+  "invalid schedule 200",
+])
+  test(`RSS/streams overlap recovers reservation details after ${failure} under budget and preserves snapshots`, async (t) => {
+    const database = initializeDatabase({ seed: false, filename: ":memory:" })
+    t.after(() => database.close())
+    const originalFetch = globalThis.fetch
+    const savedEnvironment = Object.fromEntries(
+      [
+        "YOUTUBE_MAX_DETAIL_REQUESTS",
+        "YOUTUBE_CHANNEL_ID",
+        "YOUTUBE_API_KEY",
+      ].map((key) => [key, process.env[key]]),
+    )
+    t.after(() => {
+      globalThis.fetch = originalFetch
+      for (const [key, value] of Object.entries(savedEnvironment)) {
+        if (value == null) delete process.env[key]
+        else process.env[key] = value
+      }
+    })
+    process.env.YOUTUBE_MAX_DETAIL_REQUESTS = "1"
+    process.env.YOUTUBE_CHANNEL_ID = "synthetic-channel"
+    delete process.env.YOUTUBE_API_KEY
+    const id = "overlap0001"
+    let watchCalls = 0
+    let fail = true
+    let includeOverflow = true
+    globalThis.fetch = async (url) => {
+      const value = String(url)
+      if (value.includes("/feeds/videos.xml"))
+        return response(
+          feedXml([
+            {
+              id,
+              title: "RSS reservation",
+              publishedAt: "2098-01-01T00:00:00Z",
+            },
+          ]),
+        )
+      if (value.endsWith("/streams"))
+        return response(
+          `<a href="/watch?v=${id}">reservation</a>${includeOverflow ? '<a href="/watch?v=overflow001">other</a>' : ""}`,
+        )
+      assert.equal(value, `https://www.youtube.com/watch?v=${id}`)
+      watchCalls++
+      if (fail) {
+        if (failure === "503") return response(null, { status: 503 })
+        if (failure === "incomplete 200")
+          return response("<html>temporarily incomplete</html>")
+        if (failure === "metadata-only 200")
+          return response('<meta property="og:title" content="Partial page"/>')
+        if (failure === "upcoming without schedule 200")
+          return response(
+            `<script>var ytInitialPlayerResponse = ${JSON.stringify({ videoDetails: { videoId: id, title: "Reservation", isUpcoming: true } })};</script>`,
+          )
+        return response(
+          '<meta property="og:title" content="Reservation"/><script>{"scheduledStartTime":"invalid","isUpcoming":true}</script>',
+        )
+      }
+      return response(
+        '<meta property="og:title" content="Detailed reservation"/><script>{"scheduledStartTime":"2099-01-01T11:00:00Z","isUpcoming":true}</script>',
+      )
+    }
+    const first = await syncYoutube(database)
+    assert.equal(first.inspected, 0)
+    assert.equal(watchCalls, 1)
+    assert.equal(getVideoRecord(database, id).scheduledAt, null)
+    assert.deepEqual(
+      getSyncState(database, "youtube", "synthetic-channel").metadata
+        .streamDetailsCheckedIds,
+      [],
+    )
+    assert.equal(first.errors.length, 1)
+    if (failure !== "503")
+      assert.match(first.errors[0], /youtube_watch_details_incomplete/u)
+    assert.equal(
+      getSyncState(database, "youtube", "synthetic-channel").metadata.inspected,
+      0,
+    )
+    assert.equal(
+      getSyncState(database, "youtube", "synthetic-channel").metadata
+        .detailRequested,
+      1,
+    )
+    const rssSnapshot = getVideoRecord(database, id)
+    fail = false
+    // The failed detail remains eligible despite its RSS row and cursor.
+    const second = await syncYoutube(database)
+    assert.equal(second.inspected, 1)
+    assert.equal(watchCalls, 2)
+    const known = getVideoRecord(database, id)
+    assert.equal(known.isUpcoming, 1)
+    assert.equal(known.scheduledAt, "2099-01-01T11:00:00.000Z")
+    assert.equal(known.title, "Detailed reservation")
+    assert.equal(known.publishedAt, rssSnapshot.publishedAt)
+    assert.deepEqual(
+      getSyncState(database, "youtube", "synthetic-channel").metadata
+        .streamDetailsCheckedIds,
+      [id],
+    )
+    assert.equal(
+      database
+        .prepare<unknown[], { count: number }>(
+          "SELECT COUNT(*) AS count FROM events WHERE id=?",
+        )
+        .get(`youtube-${id}`).count,
+      1,
+    )
+    const reservation = database
+      .prepare<unknown[], Record<string, any>>(
+        "SELECT * FROM events WHERE id=?",
+      )
+      .get(`youtube-${id}`)
+    assert.equal(reservation.starts_at, known.scheduledAt)
+    // A bounded recent window may refresh reservations but cannot rewrite the
+    // normal incremental cursor or its successful-check metadata.
+    const incrementalState = getSyncState(
+      database,
+      "youtube",
+      "synthetic-channel",
+    )
+    includeOverflow = false
+    await syncYoutube(database, { mode: "recent", days: 7 })
+    assert.equal(watchCalls, 3)
+    assert.deepEqual(
+      getSyncState(database, "youtube", "synthetic-channel"),
+      incrementalState,
+    )
+    const refreshedReservation = database
+      .prepare<unknown[], Record<string, any>>(
+        "SELECT * FROM events WHERE id=?",
+      )
+      .get(`youtube-${id}`)
+    // Budget prioritizes unchecked discoveries before rechecking known reservations.
+    globalThis.fetch = async (url) => {
+      const value = String(url)
+      if (value.includes("/feeds/videos.xml"))
+        return response(
+          feedXml([
+            {
+              id,
+              title: "RSS reservation",
+              publishedAt: "2098-01-01T00:00:00Z",
+            },
+          ]),
+        )
+      if (value.endsWith("/streams"))
+        return response(`<a href="/watch?v=${id}">reservation</a>`)
+      watchCalls++
+      return response(
+        '<html><meta property="og:title" content="Partial refresh"/></html>',
+      )
+    }
+    await syncYoutube(database)
+    assert.deepEqual(getVideoRecord(database, id), known)
+    assert.deepEqual(
+      database.prepare("SELECT * FROM events WHERE id=?").get(`youtube-${id}`),
+      refreshedReservation,
+    )
+    assert.equal(watchCalls, 4)
+  })
+
+test("a valid ordinary YouTube player completes its detail check without a reservation", async (t) => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
   t.after(() => database.close())
-  const originalFetch = globalThis.fetch
-  const originalBudget = process.env.YOUTUBE_MAX_DETAIL_REQUESTS
-  t.after(() => {
-    globalThis.fetch = originalFetch
-    if (originalBudget == null) delete process.env.YOUTUBE_MAX_DETAIL_REQUESTS
-    else process.env.YOUTUBE_MAX_DETAIL_REQUESTS = originalBudget
-  })
-  process.env.YOUTUBE_MAX_DETAIL_REQUESTS = "1"
-  const id = "overlap0001"
+  const id = "ordinary001"
   let watchCalls = 0
-  let fail = true
-  globalThis.fetch = async (url) => {
+  t.mock.method(globalThis, "fetch", async (url) => {
     const value = String(url)
     if (value.includes("/feeds/videos.xml"))
       return response(
         feedXml([
-          { id, title: "RSS reservation", publishedAt: "2098-01-01T00:00:00Z" },
+          { id, title: "Ordinary video", publishedAt: "2098-01-01T00:00:00Z" },
         ]),
       )
     if (value.endsWith("/streams"))
-      return response(
-        `<a href="/watch?v=${id}">reservation</a><a href="/watch?v=overflow001">other</a>`,
-      )
+      return response(`<a href="/watch?v=${id}">video</a>`)
     assert.equal(value, `https://www.youtube.com/watch?v=${id}`)
     watchCalls++
-    if (fail) return response(null, { status: 503 })
     return response(
-      '<meta property="og:title" content="Detailed reservation"/><script>{"scheduledStartTime":"2099-01-01T11:00:00Z","isUpcoming":true}</script>',
+      `<script>var ytInitialPlayerResponse = ${JSON.stringify({ playabilityStatus: { status: "OK" }, videoDetails: { videoId: id, title: "Ordinary video", isUpcoming: false } })};</script>`,
     )
-  }
-  const first = await syncYoutube(database)
-  assert.equal(first.inspected, 0)
+  })
+  assert.equal((await syncYoutube(database)).inspected, 1)
+  assert.equal((await syncYoutube(database)).inspected, 0)
   assert.equal(watchCalls, 1)
   assert.equal(getVideoRecord(database, id).scheduledAt, null)
-  fail = false
-  // The failed detail remains eligible despite its RSS row and cursor.
-  const second = await syncYoutube(database)
-  assert.equal(second.inspected, 1)
-  assert.equal(watchCalls, 2)
-  const known = getVideoRecord(database, id)
-  assert.equal(known.isUpcoming, 1)
-  assert.equal(known.scheduledAt, "2099-01-01T11:00:00.000Z")
   assert.equal(
     database
       .prepare<unknown[], { count: number }>(
-        "SELECT COUNT(*) AS count FROM events WHERE id=?",
+        "SELECT count(*) AS count FROM events",
       )
-      .get(`youtube-${id}`).count,
-    1,
+      .get().count,
+    0,
   )
-  // Budget prioritizes unchecked discoveries before rechecking known reservations.
-  globalThis.fetch = async (url) => {
-    const value = String(url)
-    if (value.includes("/feeds/videos.xml"))
-      return response(
-        feedXml([
-          { id, title: "RSS reservation", publishedAt: "2098-01-01T00:00:00Z" },
-        ]),
-      )
-    if (value.endsWith("/streams"))
-      return response(`<a href="/watch?v=${id}">reservation</a>`)
-    watchCalls++
-    return response(null, { status: 503 })
-  }
-  await syncYoutube(database)
-  assert.deepEqual(getVideoRecord(database, id), known)
-  assert.equal(watchCalls, 3)
 })
 
 test("source deadline covers delayed RSS bodies and failed jobs release the single-flight queue", async (t) => {

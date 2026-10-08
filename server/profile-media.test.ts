@@ -12,6 +12,12 @@ import {
   getActiveProfileMedia,
   selectProfileMedia,
   upsertProfileMediaCandidate,
+  upsertVideos,
+  setAppSetting,
+  getAppSetting,
+  getVideoRecord,
+  upsertProfile,
+  getDashboardRevision,
 } from "./database.ts"
 import { resolveMediaCachePath } from "./media-cache.ts"
 import {
@@ -316,49 +322,293 @@ test("failed and successful redownloads retain selected bytes, URL and ETag unti
   }
 })
 
-test("profile active metadata upgrades additively and survives subsequent candidate downloads", () => {
-  const directory = fs.mkdtempSync(
-    path.join(os.tmpdir(), "kano-profile-upgrade-"),
-  )
-  const filename = path.join(directory, "fixture.sqlite")
-  let database = initializeDatabase({ seed: false, filename })
-  try {
-    const candidate = upsertProfileMediaCandidate(database, {
-      slot: "avatar",
-      source: "x",
-      sourceUrl: "https://pbs.twimg.com/synthetic-legacy-avatar.jpg",
-    })
-    const hash = "a".repeat(64)
-    database
-      .prepare(
-        "UPDATE profile_media SET is_active=1, status='ready', cache_path='x/legacy.jpg', active_cache_path='avatar/avatar.jpg', sha256=?, mime_type='image/jpeg' WHERE id=?",
-      )
-      .run(hash, candidate.id)
-    // Only this disposable fixture is shaped into the pre-upgrade schema.
-    for (const column of [
-      "active_sha256",
-      "active_mime_type",
-      "download_status",
-      "last_download_at",
-    ])
-      database.exec(`ALTER TABLE profile_media DROP COLUMN ${column}`)
-    database.close()
-    database = initializeDatabase({ seed: false, filename })
-    const active = getActiveProfileMedia(database, "avatar")
-    assert.equal(active.sha256, hash)
-    assert.equal(active.mimeType, "image/jpeg")
-    assert.equal(active.activeCachePath, "avatar/avatar.jpg")
-    assert.equal(active.publicUrl, `/media/profile/avatar?v=${hash}`)
-    database.close()
-    database = initializeDatabase({ seed: false, filename })
-    assert.deepEqual(getActiveProfileMedia(database, "avatar"), active)
-  } finally {
-    database.close()
-    assert.ok(
-      path
-        .resolve(directory)
-        .startsWith(`${path.resolve(os.tmpdir())}${path.sep}`),
+for (const schema of ["legacy", "incorrect-active", "incorrect-mime"])
+  test(`profile ${schema} upgrade recovers selected A bytes independently of candidate B and is idempotent`, async () => {
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "kano-profile-upgrade-"),
     )
-    fs.rmSync(directory, { recursive: true, force: true })
-  }
-})
+    const filename = path.join(directory, "fixture.sqlite")
+    let database = initializeDatabase({ seed: false, filename })
+    const marker = crypto.randomUUID()
+    const activePath = `avatar/upgrade-${marker}.png`
+    const candidatePath = `x/upgrade-${marker}.jpg`
+    const bodyA = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from(`selected-${marker}`),
+    ])
+    const bodyB = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff]),
+      Buffer.from(`candidate-${marker}`),
+    ])
+    const hashA = crypto.createHash("sha256").update(bodyA).digest("hex")
+    const hashB = crypto.createHash("sha256").update(bodyB).digest("hex")
+    let server
+    try {
+      fs.writeFileSync(resolveMediaCachePath(activePath), bodyA)
+      fs.writeFileSync(resolveMediaCachePath(candidatePath), bodyB)
+      const candidate = upsertProfileMediaCandidate(database, {
+        slot: "avatar",
+        source: "x",
+        sourceUrl: "https://pbs.twimg.com/synthetic-legacy-avatar.jpg",
+      })
+      database
+        .prepare(
+          "UPDATE profile_media SET is_active=1, status='ready', cache_path=?, active_cache_path=?, sha256=?, mime_type='image/jpeg', active_sha256=?, active_mime_type='image/jpeg' WHERE id=?",
+        )
+        .run(
+          candidatePath,
+          activePath,
+          hashB,
+          schema === "incorrect-mime" ? hashA : hashB,
+          candidate.id,
+        )
+      upsertProfile(database, {
+        id: "synthetic-profile",
+        display_name: "Synthetic profile",
+        romanized_name: "Synthetic profile",
+        bio: "Synthetic fixture",
+        avatar_url: "/assets/avatar.svg",
+        banner_url: "/assets/banner.svg",
+        x_url: "https://example.invalid/profile",
+        youtube_url: "https://example.invalid/channel",
+      })
+      if (schema !== "legacy")
+        database
+          .prepare(
+            "UPDATE profile_media SET download_status='failed', last_download_at='2098-12-31T00:00:00Z', last_error='synthetic retry failure' WHERE id=?",
+          )
+          .run(candidate.id)
+      upsertVideos(database, [
+        {
+          id: "upgrade-snapshot",
+          source: "youtube",
+          title: "Keep snapshot",
+          url: "https://example.invalid/upgrade",
+          published_at: "2099-01-01T00:00:00Z",
+        },
+      ])
+      setAppSetting(database, "featured_video_id", "upgrade-snapshot")
+      const snapshot = getVideoRecord(database, "upgrade-snapshot")
+      const candidateBefore = getProfileMedia(database, candidate.id)
+      setAppSetting(database, "dashboard_revision", "17")
+      server = await listen(createApp({ database }))
+      let origin = `http://127.0.0.1:${server.address().port}`
+      let browserSnapshot = await (
+        await fetch(`${origin}/api/dashboard`)
+      ).json()
+      assert.equal(browserSnapshot.meta.revision, 17)
+      assert.equal(
+        browserSnapshot.profile.avatarUrl,
+        `/media/profile/avatar?v=${schema === "incorrect-mime" ? hashA : hashB}`,
+      )
+      await close(server)
+      server = null
+      // Only this disposable fixture is shaped into the pre-upgrade schema.
+      if (schema === "legacy")
+        for (const column of [
+          "active_sha256",
+          "active_mime_type",
+          "download_status",
+          "last_download_at",
+        ])
+          database.exec(`ALTER TABLE profile_media DROP COLUMN ${column}`)
+      let previousActive
+      for (let startup = 0; startup < 2; startup++) {
+        database.close()
+        database = initializeDatabase({ seed: false, filename })
+        assert.equal(getDashboardRevision(database), 18)
+        const active = getActiveProfileMedia(database, "avatar")
+        assert.equal(active.sha256, hashA)
+        assert.equal(active.mimeType, "image/png")
+        assert.equal(active.activeCachePath, activePath)
+        assert.equal(active.isActive, true)
+        assert.equal(active.publicUrl, `/media/profile/avatar?v=${hashA}`)
+        if (previousActive) assert.deepEqual(active, previousActive)
+        previousActive = active
+        const candidateAfter = getProfileMedia(database, candidate.id)
+        for (const field of [
+          "sha256",
+          "mimeType",
+          "cachePath",
+          "isActive",
+          "updatedAt",
+          "activeCachePath",
+          "status",
+          "lastError",
+          "sourceUrl",
+          "downloadStatus",
+          "lastDownloadAt",
+        ])
+          assert.equal(candidateAfter[field], candidateBefore[field])
+        assert.deepEqual(getVideoRecord(database, "upgrade-snapshot"), snapshot)
+        assert.equal(
+          getAppSetting(database, "featured_video_id"),
+          "upgrade-snapshot",
+        )
+        server = await listen(createApp({ database }))
+        origin = `http://127.0.0.1:${server.address().port}`
+        // Follow useDashboard's existing revision comparison before reloading.
+        const hint = await (
+          await fetch(
+            `${origin}/api/dashboard/revision?since=${browserSnapshot.meta.revision}`,
+          )
+        ).json()
+        assert.equal(hint.revision, 18)
+        assert.equal(hint.changed, startup === 0)
+        if (Number(hint.revision) !== Number(browserSnapshot.meta.revision))
+          browserSnapshot = await (
+            await fetch(`${origin}/api/dashboard`)
+          ).json()
+        assert.equal(browserSnapshot.meta.revision, 18)
+        assert.equal(browserSnapshot.profile.avatarUrl, active.publicUrl)
+        for (const url of [active.publicUrl, "/media/profile/avatar"]) {
+          const response = await fetch(`${origin}${url}`)
+          assert.equal(response.status, 200)
+          assert.equal(response.headers.get("content-type"), "image/png")
+          assert.equal(response.headers.get("etag"), `"${hashA}"`)
+          assert.deepEqual(Buffer.from(await response.arrayBuffer()), bodyA)
+        }
+        assert.equal(
+          (await fetch(`${origin}/media/profile/avatar?v=${hashB}`)).status,
+          404,
+        )
+        await close(server)
+        server = null
+      }
+    } finally {
+      await close(server)
+      database.close()
+      for (const relative of [activePath, candidatePath])
+        fs.rmSync(resolveMediaCachePath(relative), { force: true })
+      assert.ok(
+        path
+          .resolve(directory)
+          .startsWith(`${path.resolve(os.tmpdir())}${path.sep}`),
+      )
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+for (const schema of ["legacy", "incorrect-active"])
+  for (const condition of [
+    "missing",
+    "traversal",
+    "source-namespace",
+    "symlink-escape",
+    "invalid-media",
+    "oversize",
+  ])
+    test(`profile ${schema} upgrade rejects ${condition} selected files while retaining selection, candidate and unrelated state`, async () => {
+      const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), "kano-profile-invalid-"),
+      )
+      const filename = path.join(directory, "fixture.sqlite")
+      let database = initializeDatabase({ seed: false, filename })
+      const marker = crypto.randomUUID()
+      const safePath = `avatar/invalid-${marker}.png`
+      const sourcePath = `x/invalid-${marker}.png`
+      const linkPath = resolveMediaCachePath(`avatar/link-${marker}`)
+      const body = Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.from(marker),
+      ])
+      const hash = crypto.createHash("sha256").update(body).digest("hex")
+      let server
+      let linked = false
+      try {
+        let activePath = safePath
+        if (condition === "traversal") activePath = "avatar/../x/illegal.png"
+        if (condition === "source-namespace") {
+          fs.writeFileSync(resolveMediaCachePath(sourcePath), body)
+          activePath = sourcePath
+        }
+        if (condition === "invalid-media")
+          fs.writeFileSync(
+            resolveMediaCachePath(safePath),
+            "<svg>unsupported</svg>",
+          )
+        if (condition === "oversize")
+          fs.writeFileSync(
+            resolveMediaCachePath(safePath),
+            Buffer.concat([body, Buffer.alloc(15 * 1024 * 1024)]),
+          )
+        if (condition === "symlink-escape") {
+          fs.writeFileSync(path.join(directory, "outside.png"), body)
+          fs.symlinkSync(
+            directory,
+            linkPath,
+            process.platform === "win32" ? "junction" : "dir",
+          )
+          linked = true
+          activePath = `avatar/link-${marker}/outside.png`
+        }
+        const candidate = upsertProfileMediaCandidate(database, {
+          slot: "avatar",
+          source: "x",
+          sourceUrl: "https://pbs.twimg.com/synthetic-invalid-upgrade.png",
+        })
+        database
+          .prepare(
+            "UPDATE profile_media SET is_active=1, status='ready', active_cache_path=?, sha256=?, mime_type='image/png', active_sha256=?, active_mime_type='image/png' WHERE id=?",
+          )
+          .run(activePath, hash, hash, candidate.id)
+        upsertVideos(database, [
+          {
+            id: "preserved",
+            source: "youtube",
+            title: "Keep snapshot",
+            url: "https://example.invalid/preserved",
+          },
+        ])
+        setAppSetting(database, "featured_video_id", "preserved")
+        const candidateBefore = getProfileMedia(database, candidate.id)
+        const snapshot = getVideoRecord(database, "preserved")
+        if (schema === "legacy")
+          for (const column of ["active_sha256", "active_mime_type"])
+            database.exec(`ALTER TABLE profile_media DROP COLUMN ${column}`)
+        for (let startup = 0; startup < 2; startup++) {
+          database.close()
+          database = initializeDatabase({ seed: false, filename })
+          const active = getActiveProfileMedia(database, "avatar")
+          assert.equal(active.sha256, null)
+          assert.equal(active.mimeType, null)
+          assert.equal(active.publicUrl, null)
+          assert.equal(active.activeCachePath, activePath)
+          assert.equal(active.isActive, true)
+          const current = getProfileMedia(database, candidate.id)
+          for (const field of [
+            "sha256",
+            "mimeType",
+            "status",
+            "isActive",
+            "updatedAt",
+          ])
+            assert.equal(current[field], candidateBefore[field])
+          assert.deepEqual(getVideoRecord(database, "preserved"), snapshot)
+          assert.equal(
+            getAppSetting(database, "featured_video_id"),
+            "preserved",
+          )
+          server = await listen(createApp({ database }))
+          const origin = `http://127.0.0.1:${server.address().port}`
+          const response = await fetch(
+            `${origin}/media/profile/avatar?v=${hash}`,
+          )
+          assert.equal(response.status, 404)
+          assert.deepEqual(Object.keys(await response.json()), ["error"])
+          await close(server)
+          server = null
+        }
+      } finally {
+        await close(server)
+        database.close()
+        for (const relative of [safePath, sourcePath])
+          fs.rmSync(resolveMediaCachePath(relative), { force: true })
+        if (linked) fs.rmdirSync(linkPath)
+        const resolved = path.resolve(directory)
+        assert.ok(
+          resolved.startsWith(`${path.resolve(os.tmpdir())}${path.sep}`),
+        )
+        fs.rmSync(resolved, { recursive: true, force: true })
+      }
+    })

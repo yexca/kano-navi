@@ -92,8 +92,16 @@ and does not definitively cancel its video.
 Selected profile-media rows have additive `active_sha256` and
 `active_mime_type` columns describing the selected file independently of the
 latest candidate download. `download_status` and `last_download_at` record the
-latest attempt; `last_error` remains diagnostic. Migration copies existing
-selected metadata into the active columns without changing files or snapshots.
+latest attempt; `last_error` remains diagnostic. Every startup reconciles active
+hash/MIME from the actual selected file, including databases previously upgraded
+with candidate metadata. It preserves candidate metadata, the manual selection,
+and unrelated snapshots/settings. Missing, unsafe, oversized, or unsupported
+files leave active hash/MIME unavailable and cannot be served; a subsequent
+startup can recover them after a valid selected file is restored. When active
+hash/MIME changes, the repair increments the persistent `dashboard_revision`
+once in the same transaction as all selected metadata updates. An unchanged
+startup does not increment it. Existing revision polling therefore reloads the
+repaired public profile snapshot, including its versioned avatar URL.
 Schedule image reviews add `llm_input_fingerprint` for content/configuration
 cache validation; legacy reviews are rechecked when next scanned.
 

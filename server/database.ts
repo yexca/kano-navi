@@ -54,6 +54,7 @@ import {
   publicAssetExists,
   publicMediaUrl,
   resolveMediaCachePath,
+  readSelectedProfileMedia,
   mediaCacheTempDirectory,
   sanitizeExtension,
 } from "./media-cache.ts"
@@ -820,10 +821,28 @@ function migrateSchema(database: DatabaseConnection) {
     if (!profileColumns.has(column))
       database.exec(`ALTER TABLE profile_media ADD COLUMN ${column} TEXT`)
   }
-  if (!profileColumns.has("active_sha256")) {
-    database.exec(`UPDATE profile_media SET active_sha256=sha256, active_mime_type=mime_type
-      WHERE is_active=1 AND active_cache_path IS NOT NULL`)
-  }
+  // Older selected files can differ from the latest candidate. Reconcile on
+  // every startup, including rows already written by the former metadata-copy
+  // migration; never change the candidate, manual choice, or unrelated state.
+  const selectedProfiles = database
+    .prepare<unknown[], Record<string, any>>(
+      "SELECT id, active_cache_path AS activeCachePath FROM profile_media WHERE is_active=1",
+    )
+    .all()
+  const repairSelected = database.transaction(() => {
+    let repaired = 0
+    const update = database.prepare(
+      "UPDATE profile_media SET active_sha256=?, active_mime_type=? WHERE id=? AND (active_sha256 IS NOT ? OR active_mime_type IS NOT ?)",
+    )
+    for (const selected of selectedProfiles) {
+      const media = readSelectedProfileMedia(selected.activeCachePath)
+      const hash = media?.sha256 || null
+      const mime = media?.mimeType || null
+      repaired += update.run(hash, mime, selected.id, hash, mime).changes
+    }
+    if (repaired) bumpDashboardRevision(database)
+  })
+  repairSelected()
   const eventColumns = tableColumns(database, "events")
   const eventAdditions = [
     [

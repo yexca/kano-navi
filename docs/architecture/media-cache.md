@@ -113,6 +113,16 @@ MIME only; the selected file keeps its own active hash/MIME and versioned public
 URL until the operator selects it. `/media/profile/:slot` validates and serves
 that selected version, so its bytes, ETag, and URL hash agree.
 
+Startup repairs selected hash/MIME from the selected file's bytes rather than
+the candidate, including earlier incorrect active-metadata upgrades. This is
+idempotent and retains the manual selection and candidate version. Reads require
+both the stored path and its symlink-resolved target to stay inside `data/avatar/`,
+a regular file under the 15 MiB profile limit, and the existing supported-image
+magic-byte validation. Unavailable/illegal files clear only active hash/MIME,
+leaving other snapshots and configuration intact. HTTP uses the same bounded
+reader, checks its hash/MIME against active metadata, and sends those exact bytes;
+an unexpected file replacement returns 404 until reconciled or selected again.
+
 ## HTTP Contract
 
 The server exposes `GET /media/<id>` for ready assets only. The ID must match

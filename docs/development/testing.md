@@ -53,6 +53,18 @@ processing, image-review failure aggregation, and snapshot time transitions.
 timeout and byte-limit checks; source-job tests verify queue recovery. Profile
 redownload tests use a disposable SQLite fixture, restore existing selected
 files, and check actual response bytes, URL versions, and ETags.
+Upgrade fixtures also keep different selected/candidate bytes and MIME types,
+exercise both the legacy schema and previously incorrect active metadata, repeat
+startup, verify revision advances from 17 to 18 on repair and remains 18 on the
+next startup (including MIME-only repair), and follow the existing HTTP revision
+hint to reload the repaired avatar URL. They preserve candidate download and
+manual selection state, settings, and unrelated snapshots, and reject missing,
+escaping/symlinked, unsupported, and oversized files. Snapshot-to-spotlight regressions
+cover explicit stream ends and the three-hour fallback before, at, and after
+their boundary using public HTTP snapshots. They cover equivalent YouTube watch,
+short, live, shorts, and share links in both directions, ordinary exact URL
+matching, and unrelated videos/lookalike hosts that must retain their own grace
+period.
 
 `server/schedule-regression.test.ts` protects same-day event coexistence,
 re-extraction through changing event counts, legacy identities and collisions, manual locks and
@@ -62,7 +74,11 @@ cancellation, and mixed-offset ordering in API/admin/board/spotlight consumers.
 work beyond profile/bootstrap coverage, account isolation, and date-window
 separation. It also guards against persistent 404 retry starvation, verifies
 503 recovery, and checks fair rotation with new arrivals under one- and
-two-request budgets. These fixtures use synthetic records, in-memory/temporary SQLite and mocked
+two-request budgets. YouTube overlap fixtures recover from incomplete HTTP
+200 pages to reservations under the detail budget, preserve existing snapshots
+after invalid refreshes, complete ordinary-video checks, and verify that selected
+windows leave normal incremental cursors/check metadata intact. These fixtures use
+synthetic records, in-memory/temporary SQLite and mocked
 platform/model responses.
 
 Use manually authored synthetic records, example.invalid URLs, fixed neutral

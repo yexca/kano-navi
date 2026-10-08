@@ -1,5 +1,5 @@
 import { cleanVideoTitle, scheduleSortTime, eventIsUpcoming } from "./format.ts"
-import { eventIsLive, LIVE_GRACE_MS } from "./derive-dashboard.ts"
+import { eventIsLive, videoIsInFocus } from "./derive-dashboard.ts"
 
 export function pickSpotlight(summary, now) {
   const candidates = []
@@ -33,13 +33,12 @@ export function pickSpotlight(summary, now) {
   }
   const upcoming = candidates
     .filter((candidate) => {
-      const time = Date.parse(candidate.time || "")
       if (candidate.event)
         return (
           eventIsUpcoming(candidate.event, now) ||
           eventIsLive(candidate.event, now)
         )
-      return Number.isFinite(time) && time > now - LIVE_GRACE_MS
+      return videoIsInFocus(candidate.video, now)
     })
     .sort(
       (a, b) =>

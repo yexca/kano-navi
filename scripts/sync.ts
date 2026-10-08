@@ -843,6 +843,62 @@ function extractYoutubeIds(html) {
   return [...ids]
 }
 
+function extractYoutubePlayer(html) {
+  const match = /\bytInitialPlayerResponse(?:["']\])?\s*[:=]\s*\{/u.exec(html)
+  if (!match) return undefined
+  const start = match.index + match[0].length - 1
+  let depth = 0
+  let quoted = false
+  let escaped = false
+  for (let index = start; index < html.length; index++) {
+    const character = html[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (character === "\\") escaped = true
+      else if (character === '"') quoted = false
+    } else if (character === '"') quoted = true
+    else if (character === "{") depth++
+    else if (character === "}" && --depth === 0) {
+      try {
+        return JSON.parse(html.slice(start, index + 1))
+      } catch {
+        return null
+      }
+    }
+  }
+  return null
+}
+
+function parseYoutubeDetails(html, id) {
+  const player = extractYoutubePlayer(html)
+  if (player === null) throw new Error("youtube_watch_details_incomplete")
+  const details = player?.videoDetails
+  const title =
+    (typeof details?.title === "string" ? details.title.trim() : null) ||
+    extractMeta(html, "og:title") ||
+    extractMeta(html, "twitter:title")
+  const rawSchedule =
+    extractJsonField(html, "scheduledStartTime") ||
+    extractJsonField(html, "startTimestamp")
+  const scheduledAt = parseDate(rawSchedule)
+  const isUpcoming = details
+    ? details.isUpcoming === true
+    : /["']isUpcoming["']\s*:\s*true/i.test(html)
+  // Metadata alone (or an old RSS row) cannot prove that a watch-page check
+  // completed. Ordinary videos require a complete, matching playable player;
+  // reservation pages may instead supply a title and valid schedule timestamp.
+  if (
+    !title ||
+    (details && details.videoId !== id) ||
+    (rawSchedule && !scheduledAt) ||
+    (isUpcoming && !scheduledAt) ||
+    (!scheduledAt &&
+      !(details?.videoId === id && player?.playabilityStatus?.status === "OK"))
+  )
+    throw new Error("youtube_watch_details_incomplete")
+  return { title, scheduledAt, isUpcoming }
+}
+
 export async function syncYoutube(
   database: DatabaseConnection,
   fetchWindow = null,
@@ -977,17 +1033,9 @@ export async function syncYoutube(
   for (const [index, id] of detailIds.entries()) {
     try {
       const html = await fetchText(`https://www.youtube.com/watch?v=${id}`)
+      const details = parseYoutubeDetails(html, id)
       const existing = getVideoRecord(database, id)
-      const scheduledAt = parseDate(
-        extractJsonField(html, "scheduledStartTime") ||
-          extractJsonField(html, "startTimestamp"),
-      )
-      const isUpcomingFlag = /["']isUpcoming["']\s*:\s*true/i.test(html)
-      const title =
-        extractMeta(html, "og:title") ||
-        extractMeta(html, "twitter:title") ||
-        existing?.title ||
-        `YouTube Live ${id}`
+      const { title, scheduledAt, isUpcoming: isUpcomingFlag } = details
       const thumbnail =
         extractMeta(html, "og:image") ||
         existing?.thumbnailUrl ||
@@ -1054,7 +1102,8 @@ export async function syncYoutube(
         inserted: videos.length,
         bootstrap: !state,
         streamIds: streamIds.length,
-        inspected: detailIds.length,
+        inspected: inspectedVideos.length,
+        detailRequested: detailIds.length,
         streamDetailsCheckedIds: [
           ...new Set([
             ...checkedIds,

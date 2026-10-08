@@ -690,6 +690,166 @@ test("the unchanged snapshot advances focus, videos and date-only events at Japa
   assert.equal(live.summary.nextStream.id, "video")
 })
 
+for (const [linkForm, eventUrl, videoUrl] of [
+  [
+    "ordinary URL",
+    "https://example.invalid/linked-stream",
+    "https://example.invalid/linked-stream",
+  ],
+  [
+    "watch URL",
+    "https://www.youtube.com/watch?v=synth000001",
+    "https://www.youtube.com/watch?v=synth000001",
+  ],
+  [
+    "short URL",
+    "https://youtu.be/synth000001",
+    "https://www.youtube.com/watch?v=synth000001",
+  ],
+  [
+    "live URL",
+    "https://www.youtube.com/live/synth000001",
+    "https://www.youtube.com/watch?v=synth000001",
+  ],
+  [
+    "share query",
+    "https://www.youtube.com/watch?v=synth000001&feature=share",
+    "https://www.youtube.com/watch?v=synth000001",
+  ],
+  [
+    "shorts URL",
+    "https://www.youtube.com/shorts/synth000001",
+    "https://www.youtube.com/watch?v=synth000001",
+  ],
+  [
+    "mobile watch URL",
+    "https://m.youtube.com/watch?feature=share&v=synth000001",
+    "https://www.youtube.com/watch?v=synth000001",
+  ],
+  [
+    "short video URL",
+    "https://www.youtube.com/watch?v=synth000001",
+    "https://youtu.be/synth000001?feature=share",
+  ],
+])
+  for (const explicitEnd of [true, false])
+    test(`snapshot-to-spotlight ${linkForm} respects ${explicitEnd ? "the linked stream end" : "the three-hour live grace boundary"}`, async (t) => {
+      const db = databaseFixture(t)
+      upsertEvents(db, [
+        {
+          id: "linked-stream",
+          source: "manual",
+          title: "Linked stream",
+          starts_on: "2099-01-01",
+          starts_at: "2099-01-01T09:00:00Z",
+          ends_at: explicitEnd ? "2099-01-01T09:30:00Z" : null,
+          event_type: "stream",
+          url: eventUrl,
+        },
+        {
+          id: "later",
+          source: "manual",
+          title: "Later activity",
+          starts_on: "2099-01-01",
+          starts_at: explicitEnd
+            ? "2099-01-01T10:00:00Z"
+            : "2099-01-01T13:00:00Z",
+          event_type: "event",
+          url: "https://example.invalid/later",
+        },
+      ])
+      upsertVideos(db, [
+        {
+          id: "linked-video",
+          source: "youtube",
+          title: "Linked stream",
+          scheduled_at: "2099-01-01T09:00:00Z",
+          is_upcoming: true,
+          url: videoUrl,
+        },
+      ])
+      const origin = await appFixture(t, db)
+      const snapshot = await (await fetch(`${origin}/api/dashboard`)).json()
+      assert.ok(snapshot.events.every((event) => !("sourceItemId" in event)))
+      const original = structuredClone(snapshot)
+      const boundary = Date.parse(
+        explicitEnd ? "2099-01-01T09:30:00Z" : "2099-01-01T12:00:00Z",
+      )
+      for (const now of [
+        Date.parse("2099-01-01T08:59:00Z"),
+        boundary - 1,
+        boundary,
+        boundary + 1,
+        boundary + 15 * 60_000,
+      ]) {
+        const derived = deriveDashboardAt(snapshot, now)
+        const spotlight = pickSpotlight(derived.summary, now)
+        assert.equal(derived.meta.revision, snapshot.meta.revision)
+        if (now < boundary) {
+          assert.equal(derived.summary.nextEvent.id, "linked-stream")
+          assert.equal(derived.summary.nextStream.id, "linked-video")
+          assert.equal(spotlight.video.id, "linked-video")
+        } else {
+          assert.equal(derived.summary.nextEvent.id, "later")
+          assert.equal(derived.summary.nextStream, null)
+          assert.equal(spotlight.event.id, "later")
+        }
+      }
+      // A summary derived just before the boundary must also expire at pick time.
+      const before = deriveDashboardAt(snapshot, boundary - 1)
+      assert.equal(pickSpotlight(before.summary, boundary).mode, "latest")
+      assert.deepEqual(snapshot, original)
+    })
+
+for (const eventUrl of [
+  "https://youtu.be/synth000002",
+  "https://www.youtube.com/live/synth000002",
+  "https://www.youtube.com/watch?v=synth000002&feature=share",
+  "https://notyoutube.example.invalid/watch?v=synth000001",
+  "https://youtube.com.example.invalid/watch?v=synth000001",
+  "https://example.invalid/linked-stream?feature=share",
+])
+  test(`snapshot focus does not inherit an unrelated end from ${eventUrl}`, (t) => {
+    const db = databaseFixture(t)
+    upsertEvents(db, [
+      {
+        id: "other-stream",
+        source: "manual",
+        title: "Other stream",
+        starts_on: "2099-01-01",
+        starts_at: "2099-01-01T09:00:00Z",
+        ends_at: "2099-01-01T09:30:00Z",
+        event_type: "stream",
+        url: eventUrl,
+      },
+    ])
+    upsertVideos(db, [
+      {
+        id: "linked-video",
+        source: "youtube",
+        title: "Linked stream",
+        scheduled_at: "2099-01-01T09:00:00Z",
+        is_upcoming: true,
+        url: eventUrl.startsWith("https://example.invalid/")
+          ? "https://example.invalid/linked-stream"
+          : "https://www.youtube.com/watch?v=synth000001",
+      },
+    ])
+    const snapshot = getDashboard(db) as any
+    const live = deriveDashboardAt(snapshot, Date.parse("2099-01-01T09:45:00Z"))
+    assert.equal(live.summary.nextEvent, null)
+    assert.equal(live.summary.nextStream.endsAt, null)
+    assert.equal(
+      pickSpotlight(live.summary, Date.parse("2099-01-01T09:45:00Z")).video.id,
+      "linked-video",
+    )
+    assert.equal(
+      deriveDashboardAt(snapshot, Date.parse("2099-01-01T12:00:00Z")).summary
+        .nextStream,
+      null,
+    )
+  })
+
 test("post cache invalidates on publication time and cached image changes", async (t) => {
   const db = databaseFixture(t)
   const sourceUrl = "https://pbs.twimg.com/media/regression-post-cache.png"

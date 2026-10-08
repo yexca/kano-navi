@@ -70,6 +70,8 @@ export interface Video {
   title: string
   publishedAt: string | null
   scheduledAt: string | null
+  /** Derived locally from the linked snapshot event for focus expiry. */
+  endsAt?: string | null
   url: string
   thumbnailUrl: string | null
   thumbnailStatus: string

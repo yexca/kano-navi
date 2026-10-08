@@ -39,8 +39,19 @@ its local snapshot every 30 seconds and when the page regains visibility/focus,
 even when `dashboard_revision` is unchanged. Expired activities yield to later
 events; date-only entries use the current Asia/Tokyo date and never acquire a
 synthetic start time. Streams retain a three-hour live grace period, or their
-explicit end time. Confirmed cancellation flags on videos prevent local
-rederivation from restoring a cancelled reservation. This requires no source
+explicit end time. A video linked to an event inherits its explicit end time for
+both `nextStream` and `pickSpotlight`. YouTube watch, youtu.be, live, and shorts
+links match by the video identity parsed locally from their public URL, ignoring
+share/query parameters and supported YouTube subdomain differences. Other links
+retain exact URL matching; different videos and lookalike hosts do not match.
+Matching needs no protected source item IDs or additional public API fields.
+At the end instant the video yields to later focus candidates. This derived video
+`endsAt` belongs to local snapshot state. Without an explicit end, the three-hour
+grace ends exactly three hours after the start. Confirmed cancellation flags prevent local
+rederivation from restoring a cancelled reservation. Selected-media startup
+repairs follow the [durable revision contract](data-model.md#event-precedence),
+so existing revision polling reloads a changed avatar URL without increasing
+full-snapshot request frequency. This requires no source
 synchronization or external request.
 
 ## Provider Company Icons

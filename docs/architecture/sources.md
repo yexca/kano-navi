@@ -56,7 +56,15 @@ does not count as a reservation detail check. Successful stream-page detail
 checks are recorded in incremental `sync_state.metadata.streamDetailsCheckedIds`
 for currently discovered/active videos. Unchecked discoveries precede known
 reservation refreshes within the detail budget; failed checks remain eligible,
-and failed refreshes retain existing video/event snapshots. Historical windows
+and failed refreshes retain existing video/event snapshots. HTTP 200 alone is
+not success: a reservation needs a parsed timestamp and page title; an ordinary
+video without a reservation needs a complete, playable player response with a
+matching video ID and title. Missing/truncated details, invalid timestamps, and
+upcoming pages without a start time remain retryable within the existing request
+budget. They record the protected `youtube_watch_details_incomplete` diagnostic
+without updating video/event details or claiming a successful check. Incremental
+metadata distinguishes successful `inspected` checks from `detailRequested`
+attempts. Historical windows
 do not write this incremental metadata.
 
 Video thumbnails are registered and linked to their rows, then the bounded media

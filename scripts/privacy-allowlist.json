@@ -74,6 +74,10 @@
       "reason": "Public YouTube channel, video, RSS, and stream links."
     },
     {
+      "host": "youtu.be",
+      "reason": "Public YouTube short video links already supported by schedule identity parsing; synthetic focus regressions parse these locally without fetching them."
+    },
+    {
       "host": "i.ytimg.com",
       "reason": "Public YouTube thumbnail CDN URLs."
     },

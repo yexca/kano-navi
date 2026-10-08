@@ -235,6 +235,49 @@ export function profileSlotRelativePath(slot, extension = "bin") {
   )
 }
 
+/** Read only a contained selected image, under the profile download byte limit. */
+export function readSelectedProfileMedia(relativePath) {
+  const filePath = resolveMediaCachePath(relativePath)
+  const root = path.resolve(avatarMediaDirectory)
+  if (!filePath || !filePath.startsWith(`${root}${path.sep}`)) return null
+  let descriptor
+  try {
+    const resolved = fs.realpathSync(filePath)
+    // Resolve symlinks before opening; neither a file nor the avatar root may
+    // redirect this read outside the selected-media namespace.
+    if (!resolved.startsWith(`${root}${path.sep}`)) return null
+    descriptor = fs.openSync(resolved, "r")
+    const stat = fs.fstatSync(descriptor)
+    if (!stat.isFile() || stat.size <= 0 || stat.size > 15 * 1024 * 1024)
+      return null
+    const content = Buffer.alloc(stat.size)
+    let offset = 0
+    while (offset < content.length) {
+      const count = fs.readSync(
+        descriptor,
+        content,
+        offset,
+        content.length - offset,
+        null,
+      )
+      if (!count) return null
+      offset += count
+    }
+    if (fs.readSync(descriptor, Buffer.alloc(1), 0, 1, null)) return null
+    const mimeType = sniffImageMimeType(content)
+    if (!mimeType) return null
+    return {
+      content,
+      mimeType,
+      sha256: crypto.createHash("sha256").update(content).digest("hex"),
+    }
+  } catch {
+    return null
+  } finally {
+    if (descriptor != null) fs.closeSync(descriptor)
+  }
+}
+
 export function publicMediaUrl(mediaId, contentHash = null) {
   if (!isSafeMediaId(mediaId)) return null
   if (contentHash == null) return `/media/${mediaId}`
@@ -322,4 +365,44 @@ export async function writeMediaFileAtomic({
   }
 
   return { relativePath, sha256: actualHash, byteSize: body.byteLength }
+}
+
+export function sniffImageMimeType(body) {
+  if (
+    body.length >= 3 &&
+    body[0] === 0xff &&
+    body[1] === 0xd8 &&
+    body[2] === 0xff
+  ) {
+    return "image/jpeg"
+  }
+  if (
+    body.length >= 8 &&
+    body
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
+    return "image/png"
+  }
+  if (
+    body.length >= 6 &&
+    /^GIF8[79]a$/u.test(body.subarray(0, 6).toString("ascii"))
+  ) {
+    return "image/gif"
+  }
+  if (
+    body.length >= 12 &&
+    body.subarray(0, 4).toString("ascii") === "RIFF" &&
+    body.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp"
+  }
+  if (
+    body.length >= 12 &&
+    body.subarray(4, 8).toString("ascii") === "ftyp" &&
+    ["avif", "avis"].includes(body.subarray(8, 12).toString("ascii"))
+  ) {
+    return "image/avif"
+  }
+  return null
 }

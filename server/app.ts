@@ -13,12 +13,12 @@ import {
   getMediaAsset,
 } from "./database.ts"
 import {
-  avatarMediaDirectory,
   isAllowedMediaMimeType,
   isSafeContentHash,
   isSafeMediaId,
   mediaCacheDirectory,
   resolveMediaCachePath,
+  readSelectedProfileMedia,
 } from "./media-cache.ts"
 import { createMcpRouter } from "./mcp-api.ts"
 import {
@@ -37,17 +37,23 @@ function createProfileMediaHandler(database: DatabaseConnection) {
       return
     }
     const asset = getActiveProfileMedia(database, slot)
-    const filePath = asset?.activeCachePath
-      ? resolveMediaCachePath(asset.activeCachePath)
-      : null
     if (
       !asset ||
       !asset.isActive ||
       asset.status !== "ready" ||
       !isSafeContentHash(asset.sha256) ||
-      !filePath
+      !asset.activeCachePath
     ) {
       response.status(404).json({ error: "profile_media_not_ready" })
+      return
+    }
+    const selected = readSelectedProfileMedia(asset.activeCachePath)
+    if (
+      !selected ||
+      selected.sha256 !== asset.sha256 ||
+      selected.mimeType !== asset.mimeType
+    ) {
+      response.status(404).json({ error: "profile_media_not_found" })
       return
     }
     const requestedVersion = request.query.v
@@ -59,31 +65,7 @@ function createProfileMediaHandler(database: DatabaseConnection) {
       response.status(404).json({ error: "profile_media_version_not_found" })
       return
     }
-    let resolvedFilePath
-    try {
-      resolvedFilePath = fs.realpathSync(filePath)
-      const avatarRoot = fs.realpathSync(avatarMediaDirectory)
-      if (
-        resolvedFilePath !== avatarRoot &&
-        !resolvedFilePath.startsWith(`${avatarRoot}${path.sep}`)
-      ) {
-        response.status(404).json({ error: "profile_media_not_found" })
-        return
-      }
-      if (!fs.statSync(resolvedFilePath).isFile()) throw new Error("not a file")
-    } catch {
-      response.status(404).json({ error: "profile_media_not_found" })
-      return
-    }
-    const mimeType = String(asset.mimeType || "")
-      .split(";", 1)[0]
-      .trim()
-      .toLowerCase()
-    if (!isAllowedMediaMimeType(mimeType)) {
-      response.status(404).json({ error: "profile_media_not_found" })
-      return
-    }
-    response.set("Content-Type", mimeType)
+    response.set("Content-Type", selected.mimeType)
     response.set("Content-Security-Policy", "default-src 'none'; sandbox")
     response.set("X-Content-Type-Options", "nosniff")
     response.set(
@@ -93,9 +75,7 @@ function createProfileMediaHandler(database: DatabaseConnection) {
         : "public, max-age=31536000, immutable",
     )
     response.set("ETag", `"${asset.sha256}"`)
-    response.sendFile(path.basename(resolvedFilePath), {
-      root: path.dirname(resolvedFilePath),
-    })
+    response.send(selected.content)
   }
 }
 
