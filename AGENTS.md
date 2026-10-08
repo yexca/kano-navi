@@ -1,169 +1,121 @@
 # Agent Guide
 
-This repository contains an unofficial status board for Kano Mahoro (鹿乃まほろ).
-This file is the entry point for Agents and developers working in the repository.
-Read it first, then use the focused documents in `docs/` for more detail.
+This repository contains an unofficial status board for Kano Mahoro
+(鹿乃まほろ). Read this guide first, then the focused documentation for the
+area you are changing.
 
 ## Read First
 
-- [Project overview](docs/overview.md): product goals, scope, and current status.
-- [Architecture](docs/architecture.md): boundaries between the browser, API, SQLite, and synchronization.
-- [Development guide](docs/development.md): local setup, checks, and change workflow.
-- [Data and synchronization](docs/data-and-sync.md): tables, sources, snapshots, and failure behavior.
-- [Media cache](docs/media-cache.md): runtime layout, media lifecycle, and HTTP contract.
-- [Security](docs/security.md): sensitive information, external links, and CI checks.
-- [Documentation index](docs/README.md): the complete reading map.
-- [Chinese README](README.zh-cn.md): the Chinese project introduction.
+- [Project overview](docs/overview.md)
+- [Core boundaries](docs/architecture/core-boundaries.md)
+- [Data model](docs/architecture/data-model.md)
+- [Sources and schedule extraction](docs/architecture/sources.md)
+- [Workflows and fetch windows](docs/architecture/workflows.md)
+- [Backend](docs/architecture/backend.md) or [Frontend](docs/architecture/frontend.md)
+- [Design](docs/development/design.md) for UI work
+- [Testing](docs/development/testing.md)
+- [Security policy](SECURITY.md) and [Secure development](docs/development/security.md)
+- [Documentation index](docs/README.md) for operations and other topics
 
-## Product Boundaries
+## Product and Data Boundaries
 
-- This is a fan-made, read-mostly status board. It is not operated by Kano Mahoro or any affiliated organization.
-- The frontend uses React, Vite, and shadcn/ui-style components. It only calls the local API; it must not fetch X, YouTube, or other platforms directly.
-- The Express service reads SQLite and exposes `/api/health`, `/api/dashboard`,
-  guarded `/api/admin/*` endpoints, the public-read/scoped-control `/mcp` route,
-  and the guarded `/media/:id` cache route.
-- External reads belong to the synchronization path in `scripts/sync.mjs` and
-  its server-side media/schedule helpers. The results are stored as SQLite
-  snapshots; opening the page or clicking refresh must not trigger an external fetch.
-- If a source fails or is temporarily unavailable, retain the existing snapshot and record the outcome in `sync_runs`. Never replace known data with an empty result just because a fetch failed.
-- Public platform links are product data. When adding an external host, document the reason in `scripts/privacy-allowlist.json` and make the sensitive-information scan pass.
+The browser reads a prepared SQLite snapshot through the local API.
+External reads belong to server-side synchronization and its helpers.
 
-## Code Map
+- Page loads, refreshes, and revision requests never fetch X, YouTube, or model
+  providers. A failed source retains known snapshots and records its outcome.
+- src/main.jsx composes /, /history, /about, and /admin. Keep board requests in
+  src/dashboard/use-dashboard.js and admin requests in src/admin/use-admin-data.js.
+  Reuse React, semantic Tailwind tokens, and the existing UI primitives.
+- Manual event edits, confirmations, and deletions create durable locks or
+  tombstones. Automatic sync/extraction must not replace or resurrect them.
+  The LLM cancellation overlay may annotate a locked event without changing
+  its schedule fields; only manual_confirmed is definitive cancellation.
+- Schedule images require the source-text gate and image-model or manual approval.
+  Pending images remain pending rather than being sent as text-only input.
+- Historical source windows are inclusive Japan dates with bounded pages and
+  atomic checkpoints. They must not overwrite normal incremental cursors.
+  Workflow source lookback days are independent of timer intervals.
+- Timed workflows run only in the API process and share the single-flight queue.
+  Fresh initialization keeps source snapshots and LLM providers/models/routes
+  empty. Seeding preserves existing snapshots and operator configuration.
+- server/database.js owns additive schema upgrades, seed/upsert/query behavior.
+  Update the data contract and verification with schema changes; never silently
+  drop columns or clear snapshots. Store parseable ISO timestamps and display
+  Asia/Tokyo times.
 
-| Path                                | Responsibility                                                  |
-| ----------------------------------- | --------------------------------------------------------------- |
-| `src/main.jsx`                      | Entry point that routes `/`, `/history`, `/about`, and `/admin` |
-| `src/about/`                       | Static project introduction, development credits, and license  |
-| `src/dashboard/`                    | Public board: data hook, formatting, sections, and styles       |
-| `src/history/`                      | Static, sourced milestone page from 2010 to now                 |
-| `src/admin/`                        | Hidden `/admin` console: shell, data hook, views, and styles    |
-| `src/admin/views/`                  | Workflow, schedule, detection, post, image, LLM, content views  |
-| `src/index.css`                     | Global design tokens shared by the board and admin              |
-| `src/components/ui/`                | Reusable shadcn/ui-style primitives                             |
-| `server/database.js`                | SQLite schema, seeding, upserts, and queries                    |
-| `server/media-cache.js`             | Runtime media paths, identities, and atomic-write helpers       |
-| `server/media-downloader.js`        | Bounded X/YouTube image downloader                              |
-| `server/schedule-extractor.js`      | Schedule detection, schedule-image checks, and provider routing |
-| `server/schedule-asset.js`          | Source-text gate for promoting a post image to a schedule       |
-| `server/admin-api.js`               | Authenticated provider/schedule/video configuration and CRUD    |
-| `server/mcp-api.js`                 | Sanitized MCP reads and bearer-scoped automation tools          |
-| `server/public-view.js`             | Public event and sync-run projections shared by HTTP and MCP    |
-| `server/sync-jobs.js`               | Single-flight asynchronous sync, scan, and workflow jobs        |
-| `server/workflow-catalog.js`        | Modular sync step catalog shared by sync, API, and scheduler    |
-| `server/workflow-scheduler.js`      | In-process timer that starts due saved workflows                |
-| `server/llm-catalog.js`             | Provider model-list discovery and model tag suggestions         |
-| `server/secret-store.js`            | Environment-keyed encryption for provider API keys              |
-| `server/admin-auth.js`              | Development bypass and production session authentication        |
-| `server/app.js`                     | Testable Express application, APIs, and guarded media route     |
-| `server/index.js`                   | Runtime database and HTTP listener assembly                     |
-| `server/seed-data.js`               | Static profile, milestones, and resource directory              |
-| `scripts/sync.mjs`                  | Server-side source adapters and the step runners for workflows  |
-| `scripts/seed.mjs`                  | Idempotent initial snapshot seeding                             |
-| `scripts/import-history-media.mjs`  | Verified offline import of the curated history image archive    |
-| `scripts/package-history-media.mjs` | Verified packaging of fixed history images                      |
-| `public/assets/`                    | Tracked fixed branding and curated history images               |
-| `data/`                             | Ignored runtime database, source media, and profile media       |
-| `docs/`                             | Documentation for Agents, developers, and maintainers           |
+## Security and Media Boundaries
 
-## Data Contract
+- Production is the default. Validate ADMIN_PASSWORD with at least 12
+  non-padding characters before opening SQLite. Only explicit
+  APP_MODE=development bypasses admin authentication; /admin stays unlinked.
+- Public HTTP and MCP responses use sanitized projections. Keep raw errors,
+  source item IDs, counters, job IDs, raw_json, secrets, and absolute paths in
+  their protected boundaries; never expose provider plaintext or ciphertext.
+- /mcp public reads need no key. Control requires its separate MCP_CONTROL_TOKEN
+  and never grants manual confirmation/edit/delete, media selection/upload,
+  SQL, arbitrary file access, or URL proxying.
+- LLM_SECRETS_KEY, source API credentials, and MCP_CONTROL_TOKEN stay in the
+  environment. OPENAI_API_KEY is accepted only by the explicit migration command.
+  Model discovery is an operator action; preserve per-route provider/model order
+  and original text/image capability requirements.
+- New outbound paths need explicit destinations, timeout and response limits,
+  redirect policy, error handling, and snapshot retention. Follow the existing
+  source/downloader/provider protections; privacy allowlisting alone does not
+  make a destination safe.
+- Register new public hosts with a reason in scripts/privacy-allowlist.json.
+  When the scanner reports a finding, fix the source; do not hide it with an
+  allow comment or formatting change.
+- Source media is ignored runtime data in data/x/ or data/youtube/, registered
+  through media_assets/media_links. Profile candidates follow their source;
+  uploads and selected profile media use data/avatar/. Serve only ready,
+  contained opaque-ID assets. See [Media cache](docs/architecture/media-cache.md).
+- The verified fixed history collection is tracked in public/assets/history/.
+  Preserve original bytes, catalog hashes, credits, and provenance when changing it.
 
-- `GET /api/health` returns service status, the database path relative to the project, and the latest synchronization summary.
-- `GET /api/dashboard?days=3` returns the profile, a `summary` block (`nextEvent`, `nextStream`, `latestVideo`, `latestPost`, and `counts`), aggregated posts in the requested window, all events, videos, the manually selected focus item, the timeline, resource links, image assets, media-cache status, and synchronization metadata (including configured X accounts and the Featured video ID). Schedule images appear only after the source-text gate and an image-model or manual approval described in [Data and synchronization](docs/data-and-sync.md#schedule-images). The server clamps `days` to 1 through 30. `latestPost` survives an empty window. Events and `meta.lastSync` are public projections from `server/public-view.js`: per-source counters, raw fetch errors, job IDs, and source item IDs stay in `/api/admin/*`.
-- `GET /media/<opaque-id>` serves a cached file only when its database row is `ready` and its resolved path remains below the ignored `data/x/`, `data/youtube/`, or legacy cache roots; invalid or unready IDs return `404`. Selected profile media is exposed through `/media/profile/avatar` and `/media/profile/banner`.
-- `/api/admin/*` is password-free only when `APP_MODE=development` is explicitly
-  configured. The example environment and server default to production, which
-  validates `ADMIN_PASSWORD` with at least 12 non-padding characters before
-  opening or seeding SQLite and uses an HttpOnly
-  session cookie. The `/admin` page is intentionally absent from public navigation.
-- `/mcp` exposes sanitized read-only tools without a key. Revision, sync, and
-  automatic-scan tools require `Authorization: Bearer <MCP_CONTROL_TOKEN>` and
-  never expose manual confirmation, editing, deletion, or profile-media
-  selection/upload.
-- Timestamps are stored as parseable ISO 8601 strings. The display layer formats them in `Asia/Tokyo`.
-- Manual event edits, confirmations, and deletions set a durable lock. Source
-  synchronization and OpenAI extraction must not overwrite or resurrect them.
-  The one exception is the LLM cancellation overlay
-  (`cancellation_status = llm_suspected` plus reason and evidence), which may
-  annotate a locked event without touching its schedule fields. Only an
-  operator's `manual_confirmed` decision is a definitive cancellation.
-- `LLM_SECRETS_KEY` is the environment-only master key for API keys stored in
-  `llm_providers`; plaintext keys and ciphertext must never enter API output,
-  logs, or extraction payloads. Providers declare `text` and/or `image`
-  capabilities, and the `schedule_board`, `schedule_message`, and legacy
-  `schedule_vision` routes keep independent priority orders. Each provider
-  owns a model catalog (`llm_models`) whose `text`/`image` tags are routing
-  capabilities and whose `reasoning`/`tools`/`embedding` tags are labels;
-  routes (`llm_route_targets`) order provider + model pairs, where an empty
-  model ID follows the provider's default model. Model lists are fetched
-  server-side from `<baseUrl>/models` only on an operator action.
-- Workflows (`workflows`) are saved selections of the modular steps in
-  `server/workflow-catalog.js` (`x`, `youtube`, `media`, `schedule`) with an
-  optional timer of 15 minutes to 7 days. Seeded workflows start unscheduled.
-  Timers fire only inside the server process (`WORKFLOW_SCHEDULER_ENABLED`),
-  never from a page view, and share the single-flight job queue.
-- X posts carry `accountHandle` so the public feed can identify the source
-  account without exposing the internal classification used by extraction.
-  Image-only posts are retained so the schedule extractor can use their
-  original image modality after the cache is ready.
-- Fresh initialization leaves posts, events, videos, focus, schedule assets,
-  LLM providers, models, and provider routes empty. Seeding retains existing
-  snapshots and operator-configured providers; deleting all providers must not
-  recreate an OpenAI default. Fixed history images ship in `public/assets/history/`.
-- The current tables are created by the schema constant in `server/database.js`. When changing the schema, update the documentation, seed data, and verification steps together. Do not silently drop columns or clear snapshots.
+## Code Ownership
 
-## Common Commands
+| Area                             | Main paths                                                                                            |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Public UI and history            | src/dashboard/, src/history/, src/about/, src/components/ui/                                          |
+| Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.js                                             |
+| API, authentication, projections | server/app.js, server/admin-api.js, server/admin-auth.js, server/mcp-api.js, server/public-view.js    |
+| SQLite and static initialization | server/database.js, server/seed-data.js, scripts/seed.mjs                                             |
+| Sources and historical windows   | scripts/sync.mjs, scripts/source-history.mjs, server/fetch-window.js                                  |
+| Jobs, steps, timers              | server/sync-jobs.js, server/workflow-catalog.js, server/workflow-scheduler.js                         |
+| Model routing and extraction     | server/schedule-extractor.js, server/schedule-asset.js, server/llm-catalog.js, server/secret-store.js |
+| Dynamic media                    | server/media-cache.js, server/media-downloader.js                                                     |
+| Fixed history packaging          | scripts/package-history-media.mjs, scripts/import-history-media.mjs, public/assets/history/           |
 
-```bash
-npm install              # Install dependencies for the first run
-npm run dev              # Start Vite and Express
-npm run build            # Create the production bundle
-npm run seed             # Add missing seed records
-npm run history:import -- --from /path/to/kano_official # Import history images
-npm run history:package -- --from /path/to/kano_official # Update fixed history images
-npm run sync             # Read public sources and update SQLite
-npm run test:server      # Test SQLite and media-cache contracts
-make check-sensitive     # Scan for sensitive information
-make check-docs          # Check local Markdown links
-make ci                  # Run the full local CI check
-```
+## Validation and Handoff
 
-Synchronization accepts the source, bootstrap, request-budget, media-limit,
-schedule-stage, and skip variables documented in `.env.example`.
-`SCHEDULE_MESSAGE_ENABLED` controls the single-message detector independently
-of the keyword/board stages. `WORKFLOW_SCHEDULER_ENABLED=0` disables timed
-workflows without affecting manual runs. Provider keys entered in `/admin` are encrypted
-in SQLite with the environment-only `LLM_SECRETS_KEY`. A legacy
-`OPENAI_API_KEY` is accepted only by the explicit `npm run migrate:llm`
-command. `MCP_CONTROL_TOKEN` is a separate
-environment-only integration credential. None may be written to source code,
-SQLite in plaintext, a URL, API output, or a log.
+The Makefile is the canonical validation entry point for local work and Actions.
 
-## Change and Verification Rules
+- Begin with git status --short and preserve existing user changes. Do not use
+  destructive reset or checkout commands.
+- Choose the smallest sufficient target: make docs-check for docs, make ci-style
+  for style/tooling, make ci-backend for data/API/sync, and make ci-frontend for UI.
+  Check affected UI in a browser at desktop and mobile widths.
+- Use make smoke for seeded snapshot/API integration and make docker-build plus
+  make production-smoke for runtime/container work. Smoke uses disposable state;
+  do not run live synchronization to validate CI changes.
+- make check runs installed-dependency checks without Docker. make ci-local adds
+  Docker build/runtime checks. make ci installs first and runs the full sequence.
+- Before every commit, run make ci and make sensitive-check and review scanner
+  findings and git diff --cached manually. Stage only the requested scope.
+- Before handoff, run proportional validation and make sensitive-check. Tests
+  protect concrete behaviors and contracts and use synthetic records and URLs.
+- Never commit .env, .npmrc, credentials, personal paths, logs, databases/WAL,
+  runtime media, or unrelated changes. Ignore rules are not a secrecy boundary.
+- Agents create commits, amend/rebase, push, or rewrite history only when the user
+  explicitly requests it. Follow [Commit and release](docs/development/commit-and-release.md)
+  for the exact Conventional Commit format and publication rules.
 
-- Begin with `git status --short` and preserve existing user changes. Do not use destructive reset or checkout commands.
-- Follow the existing React, Tailwind token, and UI-component patterns. Do not add a new state or request layer for a one-off page change.
-- New external requests belong in the server-side synchronization scripts and must have a timeout, error handling, and snapshot-retention behavior.
-- Remote images belong in the ignored `data/x/` or `data/youtube/` namespace after synchronization; discovered profile candidates follow their source namespace, while selected profile media belongs in `data/avatar/`. Register source media with `media_assets`/`media_links` and do not commit downloaded files.
-- The reviewed, fixed history collection is an explicit exception: its verified
-  original bytes are tracked in `public/assets/history/` and copied into releases.
-- For UI changes, at minimum run `npm run build`. For data or API changes, also run `npm run seed` and a health check or relevant script. For documentation changes, run `make check-docs`.
-- Before a commit, run `make ci` and `make check-sensitive`, then review the scanner output manually. CI must not depend on live X or YouTube requests.
-- An Agent must not create commits, push, or rewrite someone else's changes unless the user explicitly asks for it.
+## Documentation Maintenance
 
-## Commit Convention
-
-- Use Conventional Commits with the exact subject form `<type>(<scope>): <description>`.
-- Use one of `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`, `perf`, `style`, or `revert` as the type.
-- Keep the scope short, lowercase, and tied to the primary subsystem, such as `app`, `media`, `sync`, `docs`, or `ci`.
-- Write the description in lowercase imperative language, keep the subject at 72 characters or fewer, and do not end it with a period.
-- Keep each commit focused on one coherent change. Use a body when the reason or migration behavior is not evident from the subject.
-- Mark an incompatible change with `!` before the colon and a `BREAKING CHANGE:` footer.
-- Before committing, run the required checks, review `git diff --cached`, and confirm that staged files match the user's requested boundary. Never stage ignored runtime data, secrets, or unrelated user changes.
-- Create, amend, rebase, or otherwise rewrite a commit only when the user explicitly requests it.
-
-## Privacy and Security Baseline
-
-- Never commit `.env`, `.npmrc`, private keys, access tokens, personal paths, runtime logs, or SQLite/WAL files.
-- `.gitignore` is a convenience, not a confidentiality boundary; sensitive files are still rejected by the scanner.
-- Use `example.invalid`, placeholders, and synthetic values in tests and documentation. Real public resource links may remain, but every new host needs an allowlist reason.
-- When the scanner reports a finding, fix the source content. Do not suppress it with an `allow` comment or a formatting change.
+Use architecture for contracts, product for page behavior, operations for
+runtime/recovery, development for checks and contribution, and ADRs for durable
+choices. .env.example owns the complete variable inventory; document new fields
+in [Configuration](docs/operations/configuration.md) and their affected contract.
+Old flat docs are navigation pages. Update focused documents and their indexes
+instead of duplicating contracts in this guide.

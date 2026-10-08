@@ -1,0 +1,99 @@
+# Testing and CI
+
+The Makefile is the canonical validation entry point. GitHub Actions invokes
+its targets so local and hosted checks protect the same contracts. Use the
+smallest target that covers the change; aggregate checks are for broad changes,
+CI/tooling work, and pre-commit validation.
+
+## Validation Targets
+
+| Change or task                                        | Target                | Requirements                   |
+| ----------------------------------------------------- | --------------------- | ------------------------------ |
+| Documentation links                                   | make docs-check       | Node.js                        |
+| Formatting, docs, scanner behavior and source privacy | make ci-style         | Locked dependencies            |
+| SQLite, API, sync, media or extraction                | make ci-backend       | Locked dependencies            |
+| Public or admin UI                                    | make ci-frontend      | Locked dependencies            |
+| Seed and HTTP snapshot integration                    | make smoke            | Locked dependencies            |
+| Production image                                      | make docker-build     | Docker with Linux containers   |
+| Production entry point, pages and guards              | make production-smoke | The locally built DOCKER_IMAGE |
+| All checks without Docker or installation             | make check            | Locked dependencies            |
+| Full locally portable Actions validation              | make ci-local         | Locked dependencies and Docker |
+| Install then full validation                          | make ci               | Node/npm and Docker            |
+| Manual privacy review before handoff or commit        | make sensitive-check  | Node and Git                   |
+
+make install uses npm ci. Narrow targets and ci-local do not reinstall.
+make ci installs first, then runs ci-local. Both full targets enforce image
+build before production smoke even under make -j. Override NPM, NODE, DOCKER,
+DOCKER_BUILD, DOCKER_BUILD_ARGS, or DOCKER_IMAGE for the corresponding toolchain.
+DOCKER is an executable path/name for the smoke helper, not a shell command.
+Existing check-docs, check-sensitive, and privacy-check aliases remain supported.
+npm run check remains the previous non-Docker formatting/test/privacy/docs/build
+sequence; use make check to include API smoke as well.
+
+## Cross-platform Formatting
+
+Prettier accepts the file's existing LF/CRLF style through endOfLine=auto,
+so a Windows checkout does not require rewriting otherwise unchanged source.
+Local tool directories (.claude and .codegraph) are excluded from formatting;
+this does not widen the privacy scanner's exclusions.
+
+## Test Scope
+
+Tests should guard an observable contract, state transition, security boundary,
+or previous regression. Choose the lowest sufficient layer. Server tests live
+beside their source as server/*.test.mjs and scanner tests live under scripts/.
+Do not add tests for prose or a purely visual change without a documented
+interaction or responsive contract. Do not mirror internal implementation.
+
+Use manually authored synthetic records, example.invalid URLs, fixed neutral
+timestamps, and temporary files. Never derive fixtures from operator databases,
+provider responses, credentials, local paths, or logs. Do not call live X,
+YouTube, image CDN, or model APIs. Dependency installation and image builds may
+access package registries; that is separate from platform-data synchronization.
+
+For UI changes, run the build and review the affected pages at desktop and
+mobile widths, including loading, empty, error, stale, and dialog states.
+For API/schema changes, run server tests and smoke. The smoke helper seeds a
+temporary SQLite file twice, checks fresh snapshot reads, revision polling,
+unready media and unauthenticated admin access, then removes the fixture.
+It never opens the operator database or imports .env. Initialization may create
+the standard empty cache directories; it does not download media.
+
+Production smoke creates a disposable container from the built image, uses
+synthetic production authentication, disables workflow timers, and publishes a
+random loopback-only port. Its anonymous data volume is removed in cleanup.
+It validates server/index.js startup, fresh SQLite, public API, SPA page routes,
+and the protected admin API. It does not mount host data or pass host secrets.
+This HTTP check does not claim to verify browser interaction.
+
+## GitHub Actions
+
+The CI workflow runs on pull requests, pushes to main, and reusable workflow
+calls from Release:
+
+```text
+Style -> Backend, Frontend, API smoke, Docker image -> Validate
+```
+
+Style runs make ci-style. Backend and Frontend run their corresponding narrow
+Make targets. API smoke runs make smoke. Docker image runs make docker-build
+with Buildx cache arguments and then make production-smoke against that image.
+Every runner has a timeout, locked installation, and read-only repository
+permissions. Checkout does not persist credentials. Caches speed installation
+and image layers but never skip validation targets. Actions are pinned to
+reviewed commit SHAs; Node 24.19.0 matches the Docker build toolchain.
+
+Validate always evaluates all five job results and fails on failure,
+cancellation, or a skipped job. There is no path-based job selection; even
+documentation-only changes run the complete sequence. The existing Validate
+and Docker image check names are preserved. Release calls this workflow rather
+than maintaining another list of check commands, then grants write permissions
+only to publication jobs. Only normal CI runs cancel superseded runs; release
+publication is serialized per tag.
+
+## Related Docs
+
+- [Local development](local-dev.md)
+- [Design](design.md)
+- [Secure development](security.md)
+- [Commit and release](commit-and-release.md)

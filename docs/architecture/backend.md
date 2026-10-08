@@ -1,0 +1,64 @@
+# Backend and HTTP
+
+## API: `server/app.js` and `server/index.js`
+
+`server/app.js` builds an Express app around an injected database, while
+`server/index.js` opens the runtime database and listener. Express exposes the
+health and dashboard read endpoints and serves `dist/` in production.
+Responses should remain stable and sanitized; do not expose
+`raw_json`, stack traces, credentials, or absolute local paths to the browser.
+Ready runtime media is served only through the opaque-ID `/media/:id` route.
+
+`server/admin-api.js` exposes session, model/schedule/video settings, provider
+management, the model catalog (`/providers/:id/models`, `/models/discover`,
+`/models/remove`), route targets (`/routes/:route`), saved workflows
+(`/workflows`, `/workflows/:id/run`), paginated event queries, asynchronous
+job status, video listing, and event CRUD endpoints. Mutating requests reject
+cross-site Fetch Metadata. Browser `Sec-Fetch-Site: same-origin` requests remain
+valid when a reverse proxy rewrites Host or terminates HTTPS; other requests
+with an `Origin` must match the observed local origin. Production also requires
+the HttpOnly admin session and SameSite cookie.
+The server defaults to `APP_MODE=production` and validates the admin password
+before opening or seeding SQLite. An explicit `APP_MODE=development` bypasses
+authentication for local work. Production uses in-memory HttpOnly cookie sessions;
+restarting the process invalidates all sessions. The API exposes provider-key availability, never plaintext or ciphertext.
+
+## MCP Boundary: `/mcp`
+
+`/mcp` uses stateless Streamable HTTP. `dashboard_read`, `schedule_list`,
+`posts_list`, and `health_read` are public read-only tools and do not require a
+credential. Control tools are only registered for requests carrying
+`Authorization: Bearer <MCP_CONTROL_TOKEN>`: they can advance a dashboard
+revision, start or inspect an asynchronous sync, or run the automatic schedule
+scan. The token is independent of `ADMIN_PASSWORD` and browser sessions.
+
+The endpoint deliberately has no tool for manual event confirmation, editing,
+deletion, bulk approval, profile-media selection/upload, SQL, file paths, DOM
+commands, or arbitrary URL proxying. Human confirmation remains a human-only
+workflow at `/admin`.
+
+## Public Snapshot Contract
+
+GET /api/health returns service status, the database label relative to the
+project, and the latest synchronization summary. GET /api/dashboard?days=3
+clamps days to 1 through 30 and returns profile, summary, posts, events, videos,
+focus, timeline, resources, schedule assets, media status, and metadata.
+The summary contains nextEvent, nextStream, latestVideo, latestPost, and counts;
+latestPost survives an empty requested window. Metadata includes configured
+X accounts and the Featured video ID.
+
+server/public-view.js owns shared public event and synchronization projections.
+Per-source counters, raw fetch errors, job IDs, and internal source item IDs
+stay in the guarded admin API. GET /api/dashboard/revision reports a small
+revision hint without external work. Timestamps are parseable ISO 8601 strings;
+display and date-window boundaries use Asia/Tokyo.
+
+Media responses follow the [media HTTP contract](media-cache.md#http-contract).
+Selected profile media uses /media/profile/avatar and /media/profile/banner.
+
+## Related Docs
+
+- [Data model](data-model.md)
+- [Workflows](workflows.md)
+- [Deployment security](../operations/security.md)
+- [Secure development](../development/security.md)

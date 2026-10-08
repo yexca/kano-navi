@@ -194,7 +194,7 @@ npm run seed -- --overwrite
 
 `public/assets/` contains fixed branding fallbacks and 59 verified history images.
 The history collection ships in production images and works on first deployment
-without an import. See [History and visual archive](docs/history.md) for
+without an import. See [History and visual archive](docs/product/history.md) for
 packaging and provenance. Changing thumbnails
 and schedule images belong in the ignored `data/x/` or `data/youtube/` folders;
 discovered profile candidates follow their source namespace, while uploaded and
@@ -204,11 +204,15 @@ and resource links point to the original public pages.
 ## Local Checks
 
 ```bash
-make check-sensitive
-make check-docs
+make docs-check
+make check
+make sensitive-check
 make ci
 ```
 
-`make ci` installs the locked dependencies, runs the sensitive-information and
-documentation checks, runs the SQLite/media-cache tests, and verifies the
-production build. It does not run a live X or YouTube synchronization.
+`make check` uses installed dependencies for formatting, documentation, privacy,
+server tests, the frontend build, and an isolated API smoke check. `make ci`
+installs locked dependencies first and adds Docker image/runtime validation;
+it requires a running Docker engine with Linux containers. Neither command runs
+live X/YouTube synchronization. See [Testing and CI](docs/development/testing.md)
+for focused targets.

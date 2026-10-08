@@ -37,7 +37,7 @@ docker compose -f docker-compose.dev.yml up -d --build --renew-anon-volumes
 仍保存在 `./data`。API 通过 Vite 代理访问，不占用宿主机的 7657 端口。
 修改服务端源码后执行 `docker compose -f docker-compose.dev.yml restart`；停止
 开发容器使用 `docker compose -f docker-compose.dev.yml down`。更多细节见
-[本地开发指南](docs/development.md)。
+[本地开发指南](docs/development/local-dev.md)。
 
 生产构建和启动：
 
@@ -91,7 +91,7 @@ npm run history:package -- --from /path/to/kano_official
 
 打包验证原文件哈希、大小和格式，不访问外网，也不会修改资料库。
 静态图片位于 `public/assets/history/`，原始来源和署名保持不变。详情见
-[历程与图片图鉴说明](docs/history.md)。
+[历程与图片图鉴说明](docs/product/history.md)。
 
 SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并补充 `server/seed-data.js` 中的静态个人资料、历程和资源链接。X 动态、日程、YouTube 视频、Featured 内容及 LLM provider、模型和路由默认均为空；通过后台工作流抓取来源，并在 `/admin` 手动配置 provider。升级保留已有快照和配置。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers`、`llm_models`、`llm_route_targets`（以及已迁移的旧表 `llm_route_providers`）和 `workflows`。
 
@@ -171,9 +171,10 @@ npm run seed -- --overwrite
 ## 本地检查
 
 ```bash
-make check-sensitive
-make check-docs
+make docs-check
+make check
+make sensitive-check
 make ci
 ```
 
-`make ci` 会安装锁定依赖、运行敏感信息、服务端缓存契约和文档检查，并验证生产构建；它不会执行实时 X/YouTube 同步。
+`make check` 使用已安装依赖，运行格式、文档、隐私、服务端测试、前端构建和隔离的 API 冒烟检查。`make ci` 先安装锁定依赖，再增加 Docker 镜像及运行验证，需要运行中的 Linux 容器引擎。两者都不会执行实时 X/YouTube 同步；分项检查见[测试与 CI](docs/development/testing.md)。

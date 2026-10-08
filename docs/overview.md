@@ -54,7 +54,7 @@ adds 59 bundled local images with image-type filtering, full-image dialogs,
 dimensions, date basis, recorded credits, and original-site links. Official
 stream frames explicitly identify the third-party archive and frame timestamp.
 Images load from local `/assets/history/` URLs; visits do not fetch external
-sources. See [History and visual archive](history.md) for the packaging workflow.
+sources. See [History and visual archive](product/history.md) for the packaging workflow.
 
 A separate `/about` page introduces Kano Navi, credits yexca and the three
 development models (GPT-5.6-Sol, Claude Opus 5.5, GPT-6.1-Sol), lists the actual

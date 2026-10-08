@@ -44,6 +44,7 @@ function targetPath(rawTarget) {
 export function checkMarkdownLinks() {
   const files = [
     "README.md",
+    "README.zh-cn.md",
     ...markdownFiles(path.join(repositoryRoot, "docs"), "docs"),
     "SECURITY.md",
     "AGENTS.md",

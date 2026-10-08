@@ -2,6 +2,14 @@
   "version": 1,
   "hosts": [
     {
+      "host": "docs.x.com",
+      "reason": "Official documentation link for the optional historical X source API."
+    },
+    {
+      "host": "developers.google.com",
+      "reason": "Official documentation link describing YouTube date-window search and source limits."
+    },
+    {
       "host": "fsf.org",
       "reason": "Free Software Foundation link in the unmodified GNU AGPL v3 license text."
     },

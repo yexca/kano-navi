@@ -1,63 +1,48 @@
-# Documentation Index
+# Kano Navi Documentation
 
-These documents describe the Kano Mahoro status board for Agents, developers,
-and maintainers. They are organized around understanding the project, changing
-code, maintaining data, and reviewing security.
+These documents are organized by reader task: understand the board, operate a
+deployment, change code, or review security and design decisions.
 
 ## Start Here
 
-- [Project overview](overview.md)
-- [Architecture](architecture.md)
-- [Local development](development.md)
-- [Data and synchronization](data-and-sync.md)
-- [Media cache](media-cache.md)
-- [History and visual archive](history.md)
-- [Security and privacy](security.md)
-- [SQLite-first architecture decision](decisions/ADR-0001-sqlite-first.md)
-- [Root Agent guide](../AGENTS.md)
+- [Project overview](overview.md): scope, pages, current behavior and limits.
+- [Local development](development/local-dev.md): setup and change workflow.
+- [Docker deployment](operations/docker.md): running and updating an instance.
+- [Repository Agent guide](../AGENTS.md): boundaries and validation rules.
 
-## Reading by Task
+## By Area
 
-| Task                              | Recommended reading                                 |
-| --------------------------------- | --------------------------------------------------- |
-| Taking over the project           | `overview.md`, `architecture.md`                    |
-| Changing the page or components   | `architecture.md`, `development.md`                 |
-| Adjusting synchronization or data | `data-and-sync.md`, `media-cache.md`, `security.md` |
-| Preparing a merge or release      | `development.md`, `security.md`, `AGENTS.md`        |
+| Area         | Entry point                               | Contents                                                     |
+| ------------ | ----------------------------------------- | ------------------------------------------------------------ |
+| Architecture | [Architecture map](architecture/index.md) | Browser/API boundary, schema, sources, workflows, media      |
+| Product      | [Product map](product/index.md)           | Board scope and curated history provenance                   |
+| Operations   | [Operations map](operations/index.md)     | Configuration, Docker, backup, reliability, troubleshooting  |
+| Development  | [Development map](development/index.md)   | Setup, design, testing, secure changes, commits and releases |
+| Security     | [Security map](security/index.md)         | Reporting policy, deployment and development boundaries      |
+| Decisions    | [ADR index](decisions/index.md)           | Durable architecture trade-offs                              |
 
-## Current Implementation at a Glance
+## Reading Paths
 
-- Stack: React 19, Vite, Tailwind CSS, shadcn/ui-style components, Express 5,
-  and better-sqlite3.
-- Page data comes from the local `data/database/kano.sqlite` snapshot. An empty
-  database receives only the static profile, milestones, and resource directory
-  in `server/seed-data.js`; source snapshots and LLM providers start empty.
-  Fixed history images ship in `public/assets/history/` and the production bundle.
-- `scripts/sync.mjs` reads public X pages/APIs and YouTube RSS/pages to collect
-  bounded incremental updates and scheduled streams. It then downloads pending
-  media and optionally extracts structured schedules through OpenAI.
-- `server/media-cache.js` defines the ignored runtime media store, safe path
-  helpers, source identities, and atomic-write primitive.
-- `/admin` is an unlinked maintainer console. It opens on one-click workflows
-  (selectable X/YouTube/media/schedule modules with optional timers and live
-  per-module progress), then offers paginated schedules, detection rules with
-  per-route model order, a central LLM provider page (API host + key, fetched
-  model list, capability tags), and content/profile media. Production access
-  requires the environment-provided admin password.
-- `/mcp` is a stateless integration endpoint. Public read tools need no key;
-  synchronization, automatic scanning, and revision controls require a
-  dedicated bearer token. Human confirmation and other admin mutations are
-  never exposed there.
-- CI runs server/cache and sensitive-scanner tests, checks documentation and
-  sensitive information, builds the frontend, and runs an API smoke check. It
-  does not fetch live platform data.
+- Taking over the project: overview, core boundaries, data model, sources,
+  workflows, and testing.
+- Changing public or admin UI: frontend ownership, design, and testing.
+- Changing fetch or extraction behavior: sources, workflows, data model, media,
+  and secure development.
+- Operating a deployment: configuration, Docker, database, reliability, and
+  deployment security.
+- Preparing a release: testing, commit and release, and deployment instructions.
 
-## Documentation Conventions
+## Documentation Rules
 
-- User-facing page behavior belongs in the overview or architecture document.
-- Runtime commands belong in the development guide.
-- Sources, fields, and freshness rules belong in the data and synchronization document.
-- Security boundaries and scanner rules belong in the security document.
-- Durable trade-offs should be recorded as an ADR.
-- Paths in examples are relative to the repository root. Examples must not contain
-  personal machine paths or real credentials.
+- Visitor-visible behavior belongs in overview or product; module and data
+  contracts belong in architecture.
+- Runtime setup and recovery belong in operations; local workflow and checks
+  belong in development.
+- Security reporting belongs in SECURITY.md; technical boundaries belong in the
+  linked deployment and development security documents.
+- Record durable trade-offs as ADRs. Update current contracts with code changes;
+  do not infer current behavior from historical notes.
+- Use repository-relative paths, synthetic examples, and empty credential fields.
+  .env.example is the complete runtime variable inventory.
+- Old flat documentation paths remain navigation pages for existing links.
+  Put substantive updates in the focused documents and run make docs-check.

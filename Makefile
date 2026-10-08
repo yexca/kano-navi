@@ -1,28 +1,18 @@
-.PHONY: help install dev dev-client dev-server build preview start seed sync format format-check check-sensitive sensitive-check privacy-check test-sensitive test-server check-docs check ci
+.DEFAULT_GOAL := help
 
 NPM ?= npm
+NODE ?= node
+DOCKER ?= docker
+DOCKER_BUILD ?= $(DOCKER) build
+DOCKER_BUILD_ARGS ?=
+DOCKER_IMAGE ?= kano-navi:ci
+
+.PHONY: help install dev dev-client dev-server build preview start seed sync
+.PHONY: format format-check docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
+.PHONY: smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
 help:
-	@printf '%s\n' \
-		'Usage: make <target>' \
-		'' \
-		'install          Install locked npm dependencies' \
-		'dev              Start Vite and Express together' \
-		'dev-client       Start the Vite client only' \
-		'dev-server       Start the Express API only' \
-		'build            Create the production frontend bundle' \
-		'preview          Preview the Vite bundle' \
-		'start            Start the production server' \
-		'seed             Seed the local SQLite snapshot' \
-		'sync             Sync public X and YouTube sources' \
-		'format           Format supported files with Prettier' \
-		'format-check     Check formatting with Prettier' \
-		'check-sensitive  Scan the workspace for sensitive information' \
-		'test-sensitive   Run scanner unit tests' \
-		'test-server      Run database and media-cache tests' \
-		'check-docs       Check local Markdown links' \
-		'check            Run checks without reinstalling dependencies' \
-		'ci               Install dependencies and run the full local CI check'
+	@$(NODE) scripts/make-help.mjs
 
 install:
 	$(NPM) ci
@@ -42,8 +32,9 @@ build:
 preview:
 	$(NPM) run preview
 
+start: export NODE_ENV := production
 start:
-	$(NPM) start
+	$(NODE) server/index.js
 
 seed:
 	$(NPM) run seed
@@ -57,10 +48,15 @@ format:
 format-check:
 	$(NPM) run format:check
 
-check-sensitive:
+docs-check:
+	$(NPM) run docs:check-links
+
+check-docs: docs-check
+
+sensitive-check:
 	$(NPM) run check-sensitive
 
-sensitive-check privacy-check: check-sensitive
+check-sensitive privacy-check: sensitive-check
 
 test-sensitive:
 	$(NPM) run test:sensitive
@@ -68,11 +64,29 @@ test-sensitive:
 test-server:
 	$(NPM) run test:server
 
-check-docs:
-	$(NPM) run docs:check-links
+smoke:
+	$(NODE) scripts/smoke.mjs
 
-check:
-	$(NPM) run check
+docker-build:
+	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -t $(DOCKER_IMAGE) .
 
+production-smoke:
+	$(NODE) scripts/production-smoke.mjs $(DOCKER_IMAGE)
+
+# Narrow checks use the existing locked installation and never fetch source data.
+ci-style: format-check docs-check test-sensitive sensitive-check
+
+ci-backend: test-server
+
+ci-frontend: build
+
+check: ci-style ci-backend ci-frontend smoke
+
+# The recursive calls enforce build-before-smoke even when make uses -j.
+ci-local: check
+	$(MAKE) docker-build
+	$(MAKE) production-smoke
+
+# Installation completes before any checks start, including parallel invocations.
 ci: install
-	$(NPM) run check
+	$(MAKE) ci-local

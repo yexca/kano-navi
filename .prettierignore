@@ -3,4 +3,6 @@ dist/
 data/
 coverage/
 .vite/
+.claude/
+.codegraph/
 public/assets/
