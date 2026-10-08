@@ -40,6 +40,7 @@ import {
   Tag,
 } from "@/admin/components/primitives"
 import { cn } from "@/lib/utils"
+import { providerIcon } from "@/admin/provider-icons"
 
 const selectedProviderKey = "kano-admin-provider"
 const discoverRenderLimit = 300
@@ -53,6 +54,7 @@ function readSelectedProvider() {
 }
 
 function ProviderAvatar({ provider }: { provider: any }) {
+  const icon = providerIcon(provider)
   const initial = String(provider?.name || provider?.id || "?")
     .trim()
     .slice(0, 1)
@@ -65,7 +67,14 @@ function ProviderAvatar({ provider }: { provider: any }) {
       )}
       aria-hidden="true"
     >
-      {initial}
+      {icon ? (
+        <span
+          className="adm-provider-logo"
+          style={{ maskImage: `url("${icon}")` }}
+        />
+      ) : (
+        initial
+      )}
     </span>
   )
 }
@@ -227,7 +236,7 @@ function NewProviderDialog({
                 onClick={() => choose(item)}
               >
                 <ProviderAvatar
-                  provider={{ id: item.id, name: item.name || "+" }}
+                  provider={{ ...item, name: item.name || "+" }}
                 />
                 <span>{item.name || t("admin.provider.custom")}</span>
               </button>
@@ -261,6 +270,9 @@ function NewProviderDialog({
             <option value="openai-responses">
               {t("admin.provider.protocol.responses")}
             </option>
+            <option value="anthropic-messages">
+              {t("admin.provider.protocol.anthropic")}
+            </option>
           </select>
         </Field>
         <Field
@@ -284,7 +296,7 @@ function NewProviderDialog({
               }))
             }
             required
-            placeholder="https://api.example.invalid/v1"
+            placeholder="https://api.example.invalid"
           />
         </Field>
         <Field
@@ -767,6 +779,9 @@ function ConnectionCard({
             </option>
             <option value="openai-responses">
               {t("admin.provider.protocol.responses")}
+            </option>
+            <option value="anthropic-messages">
+              {t("admin.provider.protocol.anthropic")}
             </option>
           </select>
         </Field>

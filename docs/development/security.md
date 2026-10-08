@@ -11,8 +11,8 @@
 
 The model boundary is opt-in. Matching public schedule-post text and ready
 cached post images are sent only to the ordered, administrator-configured
-OpenAI-compatible provider route. Responses and Chat Completions protocols are
-supported. Every provider request has a timeout, bounded retries, and redirect
+provider route. OpenAI Responses, Chat Completions, and Anthropic Messages are
+supported. Every provider request has a timeout, bounded responses/retries, and redirect
 blocking; a failed provider is skipped in favor of the next configured one.
 Provider keys are encrypted with the `LLM_SECRETS_KEY` master key before they
 reach SQLite. `OPENAI_API_KEY` is accepted only by the explicit one-time
@@ -21,6 +21,8 @@ Neither plaintext keys nor ciphertext are returned by the admin API, written to
 `raw_json`, or logged.
 The master key itself exists only in the process environment and must be
 rotated together with the stored provider keys when compromised.
+Runtime startup rejects a missing or whitespace-only `LLM_SECRETS_KEY` before
+opening SQLite, including in development mode.
 
 ## Sensitive-Information Scan
 

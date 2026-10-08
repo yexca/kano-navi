@@ -6,7 +6,7 @@
 | ----------------------------- | -------------------- | ------------------------------------------------------------------ |
 | `APP_MODE`                    | `production`         | Explicit `development` bypasses login; production requires it      |
 | `ADMIN_PASSWORD`              | Empty                | Production startup requires at least 12 non-padding characters     |
-| `LLM_SECRETS_KEY`             | Empty                | Environment-only master key for encrypted provider API keys        |
+| `LLM_SECRETS_KEY`             | Empty                | Required non-blank encryption master key at startup in every mode  |
 | `PORT`                        | `7657`               | Shared frontend/API port for development, preview, and production  |
 | `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Initial legacy default for independent schedule stages             |
 | `SCHEDULE_KEYWORD_ENABLED`    | `1`                  | Enable keyword candidate selection                                 |
@@ -51,6 +51,14 @@ to environment-only credentials require a server restart. Provider hosts,
 models, encrypted keys, routes, source accounts, and workflow windows are
 operator settings managed through /admin. Source windows and timer intervals
 are independent.
+
+Set `LLM_SECRETS_KEY` before starting development, preview, or production, even
+when no provider has been added. Missing, empty, or whitespace-only values
+refuse startup before SQLite opens. Use a random master key and retain it
+across restarts; changing it makes previously stored provider keys unreadable.
+For example, generate a value locally with
+`node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`
+and save it only in the ignored environment file or deployment secret store.
 
 ## Related Docs
 

@@ -460,7 +460,11 @@ export const LLM_MODEL_TAGS = [
   "embedding",
 ]
 export const LLM_MODEL_ID_PATTERN = /^[A-Za-z0-9@][A-Za-z0-9._:/@+-]{0,199}$/u
-export const LLM_PROTOCOLS = ["openai-responses", "openai-chat-completions"]
+export const LLM_PROTOCOLS = [
+  "openai-responses",
+  "openai-chat-completions",
+  "anthropic-messages",
+]
 const japanDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: JAPAN_TIME_ZONE,
   year: "numeric",

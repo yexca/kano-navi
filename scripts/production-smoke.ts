@@ -29,6 +29,8 @@ async function runProductionSmoke() {
       "--env",
       "ADMIN_PASSWORD=synthetic-password",
       "--env",
+      "LLM_SECRETS_KEY=synthetic-encryption-key",
+      "--env",
       "WORKFLOW_SCHEDULER_ENABLED=0",
       "--env",
       "MCP_CONTROL_TOKEN=",

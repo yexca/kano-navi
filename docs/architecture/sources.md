@@ -85,8 +85,8 @@ columns are kept identical whichever side is edited. Target selection follows
 the original post modality. Text-only input requires `text`; image-only input
 requires `image`; mixed input requires a model with both tags. Only ready cached images are sent to the model. A post that
 declares an image but whose cache is not ready is recorded as `media_pending`
-and is not silently reduced to text-only input. Each provider uses the OpenAI
-Responses or Chat Completions shape, receives at most three total calls (one
+and is not silently reduced to text-only input. Each provider uses OpenAI
+Responses, Chat Completions, or Anthropic Messages, receives at most three total calls (one
 initial request plus two retries), and then yields to the next enabled, keyed,
 capability-compatible provider in that route's priority order. The persisted
 `max_retries` field is retained for old clients and migrated to this fixed
@@ -95,7 +95,7 @@ policy; it is not a cost-control override.
 ### LLM Provider Catalog
 
 `/admin` manages providers centrally. A provider stores the API host, format
-(Responses or Chat Completions), timeout, and encrypted key. On an operator
+(Responses, Chat Completions, or Anthropic Messages), timeout, and encrypted key. On an operator
 action the server requests `GET <baseUrl>/models` with the stored key, a
 timeout, `redirect: "error"`, and a 4 MB response limit; it accepts OpenAI-style
 `{ data: [{ id }] }`, `{ models: [...] }`, or bare arrays. Upstream bodies and
@@ -103,6 +103,17 @@ errors are reduced to fixed messages. Tags for newly added models are suggested
 from the model ID and stay editable. Removing a model removes its route
 targets; removing the default model clears `llm_providers.model`. The private
 and loopback address guard for provider URLs applies to model discovery too.
+
+API hosts can omit `/v1`: bare origins use `/v1`, while OpenRouter and Gemini
+use their preset API roots. Explicit versioned roots and custom paths are
+preserved, and a pasted inference endpoint is reduced to its API root.
+`src/lib/llm-endpoints.ts` owns this rule for both UI previews and server calls.
+Anthropic requests use `x-api-key` and `anthropic-version: 2023-06-01`.
+Model discovery follows `has_more`/`last_id` with 100 models per page and a
+20-page cap under one timeout. Extraction uses a forced tool with the existing
+JSON schema and validates its `tool_use.input` locally; cached images are sent
+as base64 image blocks. Model and inference responses are bounded to 4 MiB of
+streamed bytes, and redirects are rejected.
 
 A local validator rejects invalid calendar dates, time formats, enumerations,
 or confidence values before any event write. `schedule` results update automatic

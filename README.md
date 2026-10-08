@@ -22,6 +22,7 @@ original rights and are not covered by the code license.
 npm install
 cp .env.example .env
 # Configure ADMIN_PASSWORD, or explicitly set APP_MODE=development locally.
+# Configure LLM_SECRETS_KEY in every mode before starting.
 npm run dev
 ```
 
@@ -39,7 +40,8 @@ npm start
 
 To run the production container, copy `.env.example` to `.env`, keep
 `APP_MODE=production`, and configure `ADMIN_PASSWORD` (at least 12 characters
-after trimming surrounding whitespace). Then start the root Compose stack:
+after trimming surrounding whitespace) and a non-blank `LLM_SECRETS_KEY`.
+Then start the root Compose stack:
 
 ```bash
 docker compose up -d
@@ -62,7 +64,8 @@ default to `APP_MODE=production`; startup refuses missing, whitespace-only,
 or shorter-than-12-character passwords before opening the database. Configure
 `ADMIN_PASSWORD` in the ignored `.env` file before starting the server.
 Provider API keys are managed in `/admin` and encrypted in SQLite. Set the
-environment-only `LLM_SECRETS_KEY` before saving or using a provider. A legacy
+environment-only `LLM_SECRETS_KEY` before starting in any mode. A missing or
+whitespace-only key refuses startup before SQLite opens. A legacy
 `OPENAI_API_KEY` can be imported once with `npm run migrate:llm`, then removed.
 The console opens on a one-click workflow page: choose which modules to update
 (X, YouTube, media cache, AI schedule scan), run them now, or let the server run
@@ -138,8 +141,8 @@ The server-side synchronization script:
 - filters each route by the original post modality: text requires `Text`, an
   image requires `Image`, and text plus image requires both capabilities. Each
   provider is attempted at most three times before the next compatible provider
-  in the priority order is tried. Providers can use OpenAI Responses or Chat
-  Completions.
+  in the priority order is tried. Providers can use OpenAI Responses, Chat
+  Completions, or Anthropic Messages. API hosts can omit `/v1`.
 
 The board and message detectors share the scan limit and event snapshot. A
 model response classified as `uncertain` is cached for inspection but does not

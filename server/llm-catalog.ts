@@ -1,4 +1,8 @@
 import { LLM_MODEL_ID_PATTERN, normalizeLlmModelTags } from "./database.ts"
+import { modelsEndpoint } from "../src/lib/llm-endpoints.ts"
+import { providerHeaders, readLlmJson } from "./llm-http.ts"
+
+export { modelsEndpoint } from "../src/lib/llm-endpoints.ts"
 
 const MAX_REMOTE_MODELS = 2000
 const MAX_MODEL_LIST_BYTES = 4 * 1024 * 1024
@@ -26,17 +30,6 @@ export function inferModelTags(modelId) {
   if (reasoningPattern.test(id)) tags.push("reasoning")
   if (toolsPattern.test(id)) tags.push("tools")
   return normalizeLlmModelTags(tags)
-}
-
-/**
- * OpenAI-compatible model listing endpoint for a provider base URL. A base
- * URL that already names an inference endpoint is reduced to its API root.
- */
-export function modelsEndpoint(baseUrl) {
-  const base = String(baseUrl || "")
-    .replace(/\/+$/u, "")
-    .replace(/\/(?:responses|chat\/completions)$/u, "")
-  return `${base}/models`
 }
 
 /**
@@ -69,8 +62,10 @@ export function parseModelList(payload) {
             .slice(0, 120) || null
         : null
     const displayName =
-      typeof item === "object" && item && typeof item.display_name === "string"
-        ? item.display_name.trim().slice(0, 120) || null
+      typeof item === "object" &&
+      item &&
+      typeof (item.display_name ?? (item.id && item.name)) === "string"
+        ? (item.display_name ?? item.name).trim().slice(0, 120) || null
         : null
     models.push({ id, ownedBy, name: displayName })
     if (models.length >= MAX_REMOTE_MODELS) break
@@ -89,7 +84,8 @@ export async function fetchRemoteModels(
     baseUrl,
     apiKey,
     timeoutMs = 15_000,
-  }: { baseUrl: any; apiKey: any; timeoutMs?: number },
+    protocol = "openai-responses",
+  }: { baseUrl: any; apiKey: any; timeoutMs?: number; protocol?: string },
   { fetchImpl = fetch }: { fetchImpl?: any } = {},
 ) {
   const controller = new AbortController()
@@ -98,26 +94,40 @@ export async function fetchRemoteModels(
     Math.min(60_000, Math.max(1000, Number(timeoutMs) || 15_000)),
   )
   try {
-    const response = await fetchImpl(modelsEndpoint(baseUrl), {
-      method: "GET",
-      redirect: "error",
-      signal: controller.signal,
-      headers: {
-        accept: "application/json",
-        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
-      },
-    })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const declaredLength = Number(response.headers?.get?.("content-length"))
-    if (declaredLength > MAX_MODEL_LIST_BYTES)
-      throw new Error("model list too large")
-    const body = await response.text()
-    if (body.length > MAX_MODEL_LIST_BYTES)
-      throw new Error("model list too large")
-    return parseModelList(JSON.parse(body))
+    const collected = []
+    const cursors = new Set<string>()
+    for (let page = 0; page < 20; page += 1) {
+      const url = new URL(modelsEndpoint(baseUrl))
+      if (protocol === "anthropic-messages") {
+        url.searchParams.set("limit", "100")
+        const cursor = [...cursors].at(-1)
+        if (cursor) url.searchParams.set("after_id", cursor)
+      }
+      const response = await fetchImpl(url.toString(), {
+        method: "GET",
+        redirect: "error",
+        signal: controller.signal,
+        headers: {
+          accept: "application/json",
+          ...providerHeaders(protocol, apiKey),
+        },
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const payload = await readLlmJson(response, MAX_MODEL_LIST_BYTES)
+      collected.push(...parseModelList(payload))
+      if (protocol !== "anthropic-messages" || !payload.has_more) {
+        return parseModelList(collected)
+      }
+      const cursor = String(payload.last_id || "")
+      if (!LLM_MODEL_ID_PATTERN.test(cursor) || cursors.has(cursor)) {
+        throw new Error("invalid model list cursor")
+      }
+      cursors.add(cursor)
+    }
+    throw new Error("model list pagination limit exceeded")
   } catch (error) {
     const wrapped = new Error(
-      error?.name === "AbortError"
+      controller.signal.aborted
         ? "model list request timed out"
         : "model list request failed",
     )

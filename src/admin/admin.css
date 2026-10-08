@@ -2091,6 +2091,15 @@ button.adm-tag.is-inactive:not(:disabled):hover {
   color: hsl(var(--background));
 }
 
+.adm-provider-logo {
+  width: 70%;
+  height: 70%;
+  background: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+}
+
 .adm-avatar-0 {
   --avatar: var(--berry);
 }

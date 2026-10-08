@@ -6,12 +6,14 @@ import { fileURLToPath } from "node:url"
 import { createApp } from "./app.ts"
 import { resolveAdminConfig } from "./admin-auth.ts"
 import { databasePath, initializeDatabase } from "./database.ts"
+import { validateLlmSecretsKey } from "./secret-store.ts"
 
 const projectDirectory = path.dirname(fileURLToPath(import.meta.url))
 const distDirectory = path.resolve(projectDirectory, "../dist")
 const port = Number(process.env.PORT || 7657)
-// Validate authentication before creating or seeding the runtime database.
+// Validate required credentials before creating or seeding the runtime database.
 const { mode: adminMode, adminPassword } = resolveAdminConfig()
+validateLlmSecretsKey()
 
 export const database = initializeDatabase()
 export const app = createApp({

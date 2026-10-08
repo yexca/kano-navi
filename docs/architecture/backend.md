@@ -24,7 +24,8 @@ valid when a reverse proxy rewrites Host or terminates HTTPS; other requests
 with an `Origin` must match the observed local origin. Production also requires
 the HttpOnly admin session and SameSite cookie.
 The server defaults to `APP_MODE=production` and validates the admin password
-before opening or seeding SQLite. An explicit `APP_MODE=development` bypasses
+and requires a non-blank `LLM_SECRETS_KEY` in every mode before opening or
+seeding SQLite. An explicit `APP_MODE=development` bypasses
 authentication for local work. Production uses in-memory HttpOnly cookie sessions;
 restarting the process invalidates all sessions. The API exposes provider-key availability, never plaintext or ciphertext.
 

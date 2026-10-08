@@ -7,7 +7,7 @@ external reads.
 ## System Shape
 
 ```text
-Public X / YouTube pages          OpenAI-compatible LLM APIs
+Public X / YouTube pages          Configured LLM provider APIs
           |                                ^
           v                                |
 scripts/sync.ts ---- media download / schedule extraction

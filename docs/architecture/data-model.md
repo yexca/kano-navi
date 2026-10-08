@@ -24,7 +24,7 @@ directory, schema, and missing seed records. The current tables are:
 | `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                            |
 | `post_llm_states`        | Per-post LLM status, last attempt, error, and reprocess queue state                                       |
 | `schedule_asset_reviews` | Per-schedule-image LLM verdict, skip reason, and optional manual label with its reason                    |
-| `llm_providers`          | OpenAI-compatible endpoints, Text/Image capabilities, health, and encrypted keys                          |
+| `llm_providers`          | OpenAI-compatible or Anthropic endpoints, Text/Image capabilities, health, and encrypted keys             |
 | `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)     |
 | `llm_route_targets`      | Ordered provider + model failover targets for `schedule_board`, `schedule_message`, and `schedule_vision` |
 | `llm_route_providers`    | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                   |
@@ -115,7 +115,11 @@ schedule fields. A human can clear that overlay or set `manual_confirmed` with
 a reason.
 
 LLM providers store an explicit `text`/`image` capability array in
-`capabilities_json`; `vision_capable` remains a derived migration field for old
+`capabilities_json` and a protocol (`openai-responses`,
+`openai-chat-completions`, or `anthropic-messages`). No schema rebuild is needed
+to store Anthropic providers. The same capability and route rules apply to all
+protocols. The
+`vision_capable` field remains a derived migration field for old
 clients. The provider routes `schedule_board`, `schedule_message`, and legacy
 `schedule_vision` each have their own priority order.
 

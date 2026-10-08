@@ -2,6 +2,12 @@ import crypto from "node:crypto"
 
 const version = "v1"
 
+export function validateLlmSecretsKey(environment = process.env) {
+  if (!String(environment.LLM_SECRETS_KEY || "").trim()) {
+    throw new Error("LLM_SECRETS_KEY is not configured; refusing to start")
+  }
+}
+
 function keyBytes(secret) {
   const value = String(secret || "")
   if (!value) return null

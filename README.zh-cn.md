@@ -18,6 +18,7 @@ React + Vite + shadcn/ui 风格组件制作的非官方资料整理页。页面�
 npm install
 cp .env.example .env
 # 配置 ADMIN_PASSWORD，或为本地开发显式设置 APP_MODE=development。
+# 所有模式均需在启动前配置 LLM_SECRETS_KEY。
 npm run dev
 ```
 
@@ -47,7 +48,7 @@ npm start
 
 也可以直接使用根目录的 Docker Compose。将 `.env.example` 复制为 `.env`，
 保持 `APP_MODE=production`，并配置去掉首尾空白后至少 12 位的
-`ADMIN_PASSWORD`，然后执行：
+`ADMIN_PASSWORD` 及非空白的 `LLM_SECRETS_KEY`，然后执行：
 
 ```bash
 docker compose up -d
@@ -67,7 +68,8 @@ docker compose up -d
 仅为空白，或去掉首尾空白后不足 12 位时，服务会在打开数据库前拒绝启动。
 启动前请在不会提交的 `.env` 中配置密码。本地开发可以显式设置
 `APP_MODE=development` 使用免登录模式。provider 密钥由管理页配置并加密保存到 SQLite；环境中只需
-配置 `LLM_SECRETS_KEY`。
+配置 `LLM_SECRETS_KEY`。所有运行模式（包括开发与预览）都会在打开数据库前
+检查该密钥，未设置、空字符串或纯空白时明确提示未配置并拒绝启动。
 后台首页是一键工作流：选择要更新的模块（X、YouTube、媒体缓存、AI 日程识别），
 立即运行或交给服务端定时执行。其他分区包括分页日程、按路由排序模型的识别规则、
 集中的模型服务页（填写 API 地址和 Key 后获取模型列表并打标签），以及内容与头像
@@ -127,7 +129,7 @@ npm run sync
   provider 队列；
 - provider 会按照原始消息模态筛选：纯文字需要 `Text`，纯图片需要 `Image`，
   文字加图片需要同时具备两种能力。单个 provider 最多尝试三次，失败后按优先级
-  切换到下一个兼容 provider。支持 OpenAI Responses 和 Chat Completions。
+  切换到下一个兼容 provider。支持 OpenAI Responses、Chat Completions 和 Anthropic Messages。
 
 看板和单条消息检测共享一次扫描的总数量限制，并共同更新自动日程快照。模型返回
 `uncertain` 时会缓存识别结果供检查，但不会创建日程。`SCHEDULE_MESSAGE_ENABLED`
