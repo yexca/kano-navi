@@ -175,6 +175,9 @@ export function DashboardApp() {
           <strong>{t("footer.fanMade")}</strong>
         </div>
         <p>{t("footer.disclaimer")}</p>
+        <a href="/about" className="soft-button">
+          {t("about.label")}
+        </a>
         <a href="#now" className="soft-button">
           <ArrowUp aria-hidden="true" />
           {t("footer.backToTop")}

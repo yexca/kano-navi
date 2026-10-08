@@ -56,6 +56,14 @@ stream frames explicitly identify the third-party archive and frame timestamp.
 Images load from local `/assets/history/` URLs; visits do not fetch external
 sources. See [History and visual archive](history.md) for the packaging workflow.
 
+A separate `/about` page introduces Kano Navi, credits yexca and the three
+development models (GPT-5.6-Sol, Claude Opus 5.5, GPT-6.1-Sol), lists the actual
+technology stack, and explains the fan-made status and GNU AGPL v3 code license.
+It is static, supports English, Japanese, and Simplified Chinese with the shared
+theme controls, and is linked from the board and history-page footers. It makes
+no API or external-source requests. Third-party artwork retains its original
+rights outside the code license.
+
 The visual language borrows from the artist's public motifs: strawberry red
 and cream gingham from the banner, the outfit's sky blue as a secondary hue,
 rounded cards, and a rounded Japanese display face where the system has one.

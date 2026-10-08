@@ -4,6 +4,11 @@ An unofficial fan-made status board built with React, Vite, and shadcn/ui-style
 components. The page reads a local SQLite snapshot and never fetches X or
 YouTube directly from the browser.
 
+The `/about` page introduces the project, credits its author and development
+models, and lists its technology stack. Project code is licensed under
+[GNU AGPL v3](LICENSE). Third-party images and other content retain their
+original rights and are not covered by the code license.
+
 ## Documentation
 
 - [Agent guide](AGENTS.md): code boundaries, data contracts, and collaboration rules.

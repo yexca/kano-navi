@@ -2,6 +2,14 @@
   "version": 1,
   "hosts": [
     {
+      "host": "fsf.org",
+      "reason": "Free Software Foundation link in the unmodified GNU AGPL v3 license text."
+    },
+    {
+      "host": "gnu.org",
+      "reason": "GNU license reference in the unmodified GNU AGPL v3 license text."
+    },
+    {
       "host": "github.com",
       "reason": "Public repository and documentation links."
     },

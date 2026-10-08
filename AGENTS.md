@@ -32,7 +32,8 @@ Read it first, then use the focused documents in `docs/` for more detail.
 
 | Path                                | Responsibility                                                  |
 | ----------------------------------- | --------------------------------------------------------------- |
-| `src/main.jsx`                      | Entry point that routes `/`, `/history`, and `/admin`           |
+| `src/main.jsx`                      | Entry point that routes `/`, `/history`, `/about`, and `/admin` |
+| `src/about/`                       | Static project introduction, development credits, and license  |
 | `src/dashboard/`                    | Public board: data hook, formatting, sections, and styles       |
 | `src/history/`                      | Static, sourced milestone page from 2010 to now                 |
 | `src/admin/`                        | Hidden `/admin` console: shell, data hook, views, and styles    |

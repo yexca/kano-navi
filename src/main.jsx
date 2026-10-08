@@ -1,12 +1,14 @@
 import { createRoot } from "react-dom/client"
 
 import { AppSettingsProvider } from "@/app-settings"
+import { AboutApp } from "@/about/about-app"
 import { AdminApp } from "@/admin"
 import { DashboardApp } from "@/dashboard/dashboard-app"
 import { HistoryApp } from "@/history/history-app"
 import "./index.css"
 
 const routes = {
+  "/about": AboutApp,
   "/admin": AdminApp,
   "/history": HistoryApp,
 }

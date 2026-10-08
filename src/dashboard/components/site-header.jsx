@@ -61,6 +61,7 @@ export function SiteHeader({ profile, syncState, syncTime, syncIso, t }) {
               {t(labelKey)}
             </a>
           ))}
+          <a href="/about">{t("about.label")}</a>
         </nav>
 
         <div className="site-header-end">

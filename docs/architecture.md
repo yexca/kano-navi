@@ -35,7 +35,10 @@ successful snapshot while a source is unavailable.
 ### Presentation: `src/`
 
 `src/main.jsx` only routes between the public board, the static `/history`
-page in `src/history/`, and `/admin`. History copy and image metadata are
+page in `src/history/`, the static `/about` page in `src/about/`, and `/admin`.
+About shares the existing language/theme settings and reads its displayed
+version from `package.json`; it does not request the dashboard API or external
+services. History copy and image metadata are
 static; verified fixed images ship in `public/assets/history/` and `dist/`.
 `scripts/package-history-media.mjs` updates these files from a local reference
 archive without network requests; the runtime importer remains available for
