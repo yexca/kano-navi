@@ -10,4 +10,5 @@ coverage/
 .vite/
 .claude/
 .codegraph/
+codegraph/
 .DS_Store
