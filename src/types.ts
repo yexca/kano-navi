@@ -75,6 +75,7 @@ export interface Video {
   thumbnailStatus: string
   kind: string
   isUpcoming: boolean
+  isCancelled?: boolean
 }
 
 export interface ScheduleAsset {

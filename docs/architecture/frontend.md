@@ -32,6 +32,17 @@ Shared primitives must remain independent of dashboard, history, and admin
 features. Extract cohesive helpers when needed; avoid a repository-wide move
 for a small change.
 
+## Time-dependent Snapshot State
+
+The board rederives event/video availability, counts, and focus candidates from
+its local snapshot every 30 seconds and when the page regains visibility/focus,
+even when `dashboard_revision` is unchanged. Expired activities yield to later
+events; date-only entries use the current Asia/Tokyo date and never acquire a
+synthetic start time. Streams retain a three-hour live grace period, or their
+explicit end time. Confirmed cancellation flags on videos prevent local
+rederivation from restoring a cancelled reservation. This requires no source
+synchronization or external request.
+
 ## Provider Company Icons
 
 The provider presets are OpenAI, Anthropic, DeepSeek, OpenRouter, Gemini, and

@@ -209,6 +209,8 @@ export function eventDateKey(event) {
 export function eventIsUpcoming(event, now = Date.now()) {
   const timestamp = Date.parse(event.startsAt || "")
   if (!Number.isNaN(timestamp)) return timestamp >= now
+  const day = eventDateKey(event)
+  if (day) return day >= dateKey(new Date(now))
   return Boolean(event.isUpcoming)
 }
 

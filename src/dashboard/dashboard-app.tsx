@@ -27,8 +27,9 @@ function syncStateFor(meta, error, t) {
 
 export function DashboardApp() {
   const { locale, t } = useAppSettings()
-  const { dashboard, isLoading, isRefreshing, error, reload } = useDashboard()
   const now = useNow()
+  const { dashboard, isLoading, isRefreshing, error, reload } =
+    useDashboard(now)
   const [toast, setToast] = useState(null)
   const [lightbox, setLightbox] = useState(null)
 

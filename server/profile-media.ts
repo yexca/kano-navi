@@ -1,3 +1,4 @@
+import { fetchBounded } from "./http-fetch.ts"
 import type { Database as DatabaseConnection } from "better-sqlite3"
 
 import fs from "node:fs"
@@ -123,66 +124,16 @@ function keyedImageUrls(html, slot) {
   )
 }
 
-function readBodyLimited(response, maxBytes) {
-  const declaredSize = Number(response.headers.get("content-length"))
-  if (Number.isFinite(declaredSize) && declaredSize > maxBytes)
-    throw new Error("profile image exceeds the size limit")
-  if (!response.body)
-    return response.arrayBuffer().then((body) => {
-      if (body.byteLength > maxBytes)
-        throw new Error("profile image exceeds the size limit")
-      return Buffer.from(body)
-    })
-  return (async () => {
-    const reader = response.body.getReader()
-    const chunks = []
-    let size = 0
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      size += value.byteLength
-      if (size > maxBytes) {
-        await reader.cancel()
-        throw new Error("profile image exceeds the size limit")
-      }
-      chunks.push(Buffer.from(value))
-    }
-    return Buffer.concat(chunks, size)
-  })()
-}
-
-async function fetchWithTimeout(
-  url,
-  {
-    fetchImpl = fetch,
-    timeoutMs = 10_000,
-    headers = {},
-    redirect = "follow",
-  }: {
-    fetchImpl?: any
-    timeoutMs?: number
-    headers?: any
-    redirect?: string
-  } = {},
-) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    return await fetchImpl(url, {
-      signal: controller.signal,
-      redirect,
-      headers: {
-        "user-agent": "kano-status-board/0.1 (+local profile media)",
-        ...headers,
-      },
-    })
-  } catch (error) {
-    if (controller.signal.aborted)
-      throw new Error("profile media request timed out")
-    throw error
-  } finally {
-    clearTimeout(timer)
-  }
+async function fetchWithTimeout(url, options: Record<string, any> = {}) {
+  return fetchBounded(url, {
+    redirect: "manual",
+    maxBytes: 4 * 1024 * 1024,
+    ...options,
+    headers: {
+      "user-agent": "kano-status-board/0.1 (+local profile media)",
+      ...(options.headers || {}),
+    },
+  })
 }
 
 function dimensionsForImage(body, mimeType) {
@@ -254,7 +205,7 @@ export async function discoverProfileMedia(
   const resolvedPageUrl = fetchedPage.url
   if (!response.ok)
     throw new Error(`profile page returned HTTP ${response.status}`)
-  const html = await response.text()
+  const html = fetchedPage.body.toString("utf8")
   const existing = database
     .prepare<unknown[], Record<string, any>>(
       `SELECT ${normalizedSlot === "avatar" ? "avatar_url" : "banner_url"} AS sourceUrl
@@ -296,16 +247,25 @@ async function fetchImage(
     fetchImpl = fetch,
     timeoutMs = 10_000,
     maxRedirects = 3,
-  }: { fetchImpl?: any; timeoutMs?: number; maxRedirects?: number } = {},
+    maxBytes = maxProfileImageBytes,
+  }: {
+    fetchImpl?: any
+    timeoutMs?: number
+    maxRedirects?: number
+    maxBytes?: number
+  } = {},
 ) {
+  const deadline = Date.now() + timeoutMs
   let current = assertImageUrl(sourceUrl)
   for (let redirect = 0; redirect <= maxRedirects; redirect += 1) {
-    const response = await fetchWithTimeout(current, {
+    const fetched = await fetchWithTimeout(current, {
       fetchImpl,
-      timeoutMs,
+      timeoutMs: Math.max(1, deadline - Date.now()),
       redirect: "manual",
+      maxBytes,
     })
-    if (![301, 302, 303, 307, 308].includes(response.status)) return response
+    const { response } = fetched
+    if (![301, 302, 303, 307, 308].includes(response.status)) return fetched
     const location = response.headers.get("location")
     if (!location || redirect === maxRedirects)
       throw new Error("profile image redirect limit exceeded")
@@ -323,16 +283,18 @@ async function fetchProfilePage(
     maxRedirects = 3,
   }: { fetchImpl?: any; timeoutMs?: number; maxRedirects?: number } = {},
 ) {
+  const deadline = Date.now() + timeoutMs
   let current = assertPageUrl(sourceUrl, source)
   for (let redirect = 0; redirect <= maxRedirects; redirect += 1) {
-    const response = await fetchWithTimeout(current, {
+    const fetched = await fetchWithTimeout(current, {
       fetchImpl,
-      timeoutMs,
+      timeoutMs: Math.max(1, deadline - Date.now()),
       redirect: "manual",
       headers: { accept: "text/html,application/xhtml+xml" },
     })
+    const { response } = fetched
     if (![301, 302, 303, 307, 308].includes(response.status)) {
-      return { response, url: current }
+      return { ...fetched, url: current }
     }
     const location = response.headers.get("location")
     if (!location || redirect === maxRedirects)
@@ -357,13 +319,13 @@ export async function downloadProfileMedia(
   if (!candidate.sourceUrl)
     throw new Error("profile media candidate has no source URL")
   try {
-    const response = await fetchImage(candidate.sourceUrl, {
+    const { response, body } = await fetchImage(candidate.sourceUrl, {
       fetchImpl,
       timeoutMs,
+      maxBytes,
     })
     if (!response.ok)
       throw new Error(`profile image returned HTTP ${response.status}`)
-    const body = await readBodyLimited(response, maxBytes)
     const sniffed = sniffImageMimeType(body)
     const declared = normalizeMediaMimeType(
       response.headers.get("content-type"),

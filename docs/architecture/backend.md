@@ -45,15 +45,20 @@ workflow at `/admin`.
 
 ## Public Snapshot Contract
 
-GET /api/health returns service status, the database label relative to the
-project, and the latest synchronization summary. GET /api/dashboard?days=3
+GET /api/health returns service status, the current ISO timestamp, and a
+whitelisted synchronization summary; it does not return a database path or label. GET /api/dashboard?days=3
 clamps days to 1 through 30 and returns profile, summary, posts, events, videos,
 focus, timeline, resources, schedule assets, media status, and metadata.
 The summary contains nextEvent, nextStream, latestVideo, latestPost, and counts;
 latestPost survives an empty requested window. Metadata includes configured
 X accounts and the Featured video ID.
 
-server/public-view.ts owns shared public event and synchronization projections.
+server/public-view.ts owns shared public event, synchronization, and selected
+profile-media projections for HTTP and MCP. A public sync summary contains only
+id, source, start/finish times, status, and a fixed status message. Public profile
+slots contain only id, slot, source, sourceUrl, status, isActive, and publicUrl.
+Cache paths, source references, download errors, and candidate metadata remain
+available through authenticated admin reads.
 Per-source counters, raw fetch errors, job IDs, and internal source item IDs
 stay in the guarded admin API. GET /api/dashboard/revision reports a small
 revision hint without external work. Timestamps are parseable ISO 8601 strings;

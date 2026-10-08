@@ -75,6 +75,13 @@ that finds the queue busy is retried on the next tick. Two workflows are seeded
 once (`full-refresh` and `sources-only`) without timers; deleting them does not
 recreate them. Set `WORKFLOW_SCHEDULER_ENABLED=0` to disable timers.
 
+Schedule-step outcomes combine post extraction and image verification. An
+image-only failure cannot be reported as success: a scan with failures and no
+successful/cached/uncertain work is `failed`; mixed outcomes are `partial`.
+Workflow progress, persisted `sync_runs`, and standalone scans use the same
+aggregation. Completed sync/workflow jobs expose their persisted run, including
+its failure status, and always release the single-flight queue after settlement.
+
 ## Implementation Ownership
 
 server/workflow-catalog.ts owns the ordered step catalog. scripts/sync.ts maps

@@ -15,7 +15,11 @@ import {
   listAdminEventsPage,
   listSyncRuns,
 } from "./database.ts"
-import { publicEvent, publicSyncRun } from "./public-view.ts"
+import {
+  publicEvent,
+  publicSyncRun,
+  publicProfileMediaSlots,
+} from "./public-view.ts"
 
 const CONTROL_TOOLS = new Set([
   "dashboard_request_reload",
@@ -103,6 +107,7 @@ function publicDashboard(database: DatabaseConnection, days) {
   const dashboard = getDashboard(database, { days: boundedDays })
   return {
     ...dashboard,
+    profileMedia: publicProfileMediaSlots(dashboard.profileMedia),
     events: (dashboard.events || []).map((event) => publicEvent(event)),
     summary: dashboard.summary && {
       ...dashboard.summary,

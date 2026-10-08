@@ -99,6 +99,20 @@ Content-addressed paths are deliberately preferred over layouts such as
 validation deterministic, and allows atomic replacement without trusting a
 platform identifier as a path component.
 
+## Selected Profile Media
+
+Profile discovery reads at most 4 MiB of page bytes. Candidate downloads read
+at most 15 MiB of image bytes, verify MIME and magic bytes, and follow at most
+three independently allowlisted redirects under one deadline covering headers
+and the complete body. Timeout/oversize failures cancel the response.
+
+A candidate download and an explicit selection are separate operations. A failed
+redownload records its outcome/error while keeping any ready candidate and
+selected file available. A successful redownload updates the candidate hash and
+MIME only; the selected file keeps its own active hash/MIME and versioned public
+URL until the operator selects it. `/media/profile/:slot` validates and serves
+that selected version, so its bytes, ETag, and URL hash agree.
+
 ## HTTP Contract
 
 The server exposes `GET /media/<id>` for ready assets only. The ID must match

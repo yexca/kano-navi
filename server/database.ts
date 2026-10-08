@@ -237,6 +237,7 @@ const schema = `
     llm_evidence TEXT,
     llm_model TEXT,
     llm_checked_at TEXT,
+    llm_input_fingerprint TEXT,
     manual_status TEXT NOT NULL DEFAULT 'unreviewed',
     manual_reason TEXT,
     manual_checked_at TEXT,
@@ -254,6 +255,10 @@ const schema = `
     source_url TEXT,
     cache_path TEXT,
     active_cache_path TEXT,
+    active_sha256 TEXT,
+    active_mime_type TEXT,
+    download_status TEXT,
+    last_download_at TEXT,
     mime_type TEXT,
     extension TEXT,
     byte_size INTEGER,
@@ -805,6 +810,20 @@ function migrateSchema(database: DatabaseConnection) {
          AND detail = '所属与官方公告'`,
     )
     .run()
+  const profileColumns = tableColumns(database, "profile_media")
+  for (const column of [
+    "active_sha256",
+    "active_mime_type",
+    "download_status",
+    "last_download_at",
+  ]) {
+    if (!profileColumns.has(column))
+      database.exec(`ALTER TABLE profile_media ADD COLUMN ${column} TEXT`)
+  }
+  if (!profileColumns.has("active_sha256")) {
+    database.exec(`UPDATE profile_media SET active_sha256=sha256, active_mime_type=mime_type
+      WHERE is_active=1 AND active_cache_path IS NOT NULL`)
+  }
   const eventColumns = tableColumns(database, "events")
   const eventAdditions = [
     [
@@ -858,6 +877,7 @@ function migrateSchema(database: DatabaseConnection) {
       llm_evidence TEXT,
       llm_model TEXT,
       llm_checked_at TEXT,
+      llm_input_fingerprint TEXT,
       manual_status TEXT NOT NULL DEFAULT 'unreviewed',
       manual_reason TEXT,
       manual_checked_at TEXT,
@@ -873,6 +893,15 @@ function migrateSchema(database: DatabaseConnection) {
       ON events (source, source_item_id, source_key)
       WHERE source_item_id IS NOT NULL AND source_key IS NOT NULL;
   `)
+  if (
+    !tableColumns(database, "schedule_asset_reviews").has(
+      "llm_input_fingerprint",
+    )
+  ) {
+    database.exec(
+      "ALTER TABLE schedule_asset_reviews ADD COLUMN llm_input_fingerprint TEXT",
+    )
+  }
   const focusColumns = tableColumns(database, "focus")
   if (!focusColumns.has("video_id")) {
     database.exec("ALTER TABLE focus ADD COLUMN video_id TEXT")
@@ -1638,6 +1667,7 @@ const scheduleAssetReviewColumns = `
   r.llm_status AS llmStatus, r.llm_confidence AS llmConfidence,
   r.llm_reason AS llmReason, r.llm_evidence AS llmEvidence,
   r.llm_model AS llmModel, r.llm_checked_at AS llmCheckedAt,
+  r.llm_input_fingerprint AS llmInputFingerprint,
   COALESCE(r.manual_status, 'unreviewed') AS manualStatus,
   r.manual_reason AS manualReason, r.manual_checked_at AS manualCheckedAt,
   r.updated_at AS reviewUpdatedAt
@@ -1656,7 +1686,7 @@ export function getScheduleAssetReview(database: DatabaseConnection, assetId) {
 
 export function listScheduleAssetReviews(
   database: DatabaseConnection,
-  { limit = 100 }: { limit?: number | string } = {},
+  { limit = 100 }: { limit?: number | string | null } = {},
 ) {
   const boundedLimit = Math.min(200, Math.max(1, Number(limit) || 100))
   return database
@@ -1667,7 +1697,7 @@ export function listScheduleAssetReviews(
        ORDER BY COALESCE(a.week_start, a.updated_at) DESC, a.id ASC
        LIMIT ?`,
     )
-    .all(boundedLimit)
+    .all(limit == null ? -1 : boundedLimit)
     .map(scheduleAssetReviewRow)
 }
 
@@ -1682,9 +1712,9 @@ export function upsertScheduleAssetReview(
     .prepare<unknown[], Record<string, any>>(
       `INSERT INTO schedule_asset_reviews (
          asset_id, llm_status, llm_confidence, llm_reason, llm_evidence,
-         llm_model, llm_checked_at, manual_status, manual_reason,
+         llm_model, llm_checked_at, llm_input_fingerprint, manual_status, manual_reason,
          manual_checked_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(asset_id) DO UPDATE SET
          llm_status=excluded.llm_status,
          llm_confidence=excluded.llm_confidence,
@@ -1692,6 +1722,7 @@ export function upsertScheduleAssetReview(
          llm_evidence=excluded.llm_evidence,
          llm_model=excluded.llm_model,
          llm_checked_at=excluded.llm_checked_at,
+         llm_input_fingerprint=excluded.llm_input_fingerprint,
          manual_status=excluded.manual_status,
          manual_reason=excluded.manual_reason,
          manual_checked_at=excluded.manual_checked_at,
@@ -1708,6 +1739,7 @@ export function upsertScheduleAssetReview(
       nullable(review.llmEvidence),
       nullable(review.llmModel),
       nullable(review.llmCheckedAt),
+      nullable(review.llmInputFingerprint),
       normalizedScheduleAssetManualStatus(review.manualStatus),
       nullable(review.manualReason),
       nullable(review.manualCheckedAt),
@@ -2078,6 +2110,8 @@ export function listMediaAssets(
 const profileMediaColumns = `
   id, slot, source, source_ref AS sourceRef, source_url AS sourceUrl,
   cache_path AS cachePath, active_cache_path AS activeCachePath,
+  active_sha256 AS activeSha256, active_mime_type AS activeMimeType,
+  download_status AS downloadStatus, last_download_at AS lastDownloadAt,
   mime_type AS mimeType, extension, byte_size AS byteSize, sha256, width, height,
   status, is_active AS isActive, last_error AS lastError,
   created_at AS createdAt, updated_at AS updatedAt
@@ -2124,10 +2158,8 @@ function mapProfileMedia(row): Record<string, any> {
     ...row,
     isActive: Boolean(row.isActive),
     publicUrl:
-      row.isActive &&
-      row.status === MEDIA_STATUS.READY &&
-      isSafeContentHash(row.sha256)
-        ? `/media/profile/${row.slot}?v=${row.sha256}`
+      row.isActive && row.activeCachePath && isSafeContentHash(row.activeSha256)
+        ? `/media/profile/${row.slot}?v=${row.activeSha256}`
         : null,
   }
 }
@@ -2163,16 +2195,27 @@ export function listProfileMedia(
   return rows.map(mapProfileMedia)
 }
 
-export function getActiveProfileMedia(database: DatabaseConnection, slot) {
+export function getActiveProfileMedia(
+  database: DatabaseConnection,
+  slot,
+): Record<string, any> {
   const normalizedSlot = normalizedProfileSlot(slot)
   if (!normalizedSlot) return null
-  return mapProfileMedia(
+  const active = mapProfileMedia(
     database
       .prepare<unknown[], Record<string, any>>(
         `SELECT ${profileMediaColumns} FROM profile_media WHERE slot = ? AND is_active = 1 LIMIT 1`,
       )
       .get(normalizedSlot),
   )
+  return active
+    ? {
+        ...active,
+        sha256: active.activeSha256,
+        mimeType: active.activeMimeType,
+        status: active.publicUrl ? "ready" : active.status,
+      }
+    : null
 }
 
 /** Register a manually discovered profile image without downloading it. */
@@ -2271,7 +2314,7 @@ export function updateProfileMediaReady(
   database
     .prepare<unknown[], Record<string, any>>(
       `UPDATE profile_media SET cache_path=?, mime_type=?, extension=?, byte_size=?,
-       sha256=?, width=?, height=?, status='ready', last_error=NULL, updated_at=?
+       sha256=?, width=?, height=?, status='ready', download_status='success', last_download_at=?, last_error=NULL, updated_at=?
        WHERE id=?`,
     )
     .run(
@@ -2282,6 +2325,7 @@ export function updateProfileMediaReady(
       hash,
       asIntegerOrNull(width),
       asIntegerOrNull(height),
+      timestamp,
       timestamp,
       String(id),
     )
@@ -2297,9 +2341,11 @@ export function markProfileMediaFailed(
   if (!existing) return null
   database
     .prepare<unknown[], Record<string, any>>(
-      `UPDATE profile_media SET status='failed', last_error=?, updated_at=? WHERE id=?`,
+      `UPDATE profile_media SET status=CASE WHEN cache_path IS NOT NULL AND sha256 IS NOT NULL THEN 'ready' ELSE 'failed' END,
+       download_status='failed', last_download_at=?, last_error=?, updated_at=? WHERE id=?`,
     )
     .run(
+      nowIso(),
       String(error || "profile media download failed").slice(0, 500),
       nowIso(),
       String(id),
@@ -2354,9 +2400,15 @@ export function selectProfileMedia(database: DatabaseConnection, id) {
       .run(timestamp, candidate.slot)
     database
       .prepare<unknown[], Record<string, any>>(
-        `UPDATE profile_media SET is_active=1, active_cache_path=?, updated_at=? WHERE id=?`,
+        `UPDATE profile_media SET is_active=1, active_cache_path=?, active_sha256=?, active_mime_type=?, updated_at=? WHERE id=?`,
       )
-      .run(destinationRelative, timestamp, String(id))
+      .run(
+        destinationRelative,
+        candidate.sha256,
+        candidate.mimeType,
+        timestamp,
+        String(id),
+      )
   })
   select()
   return getProfileMedia(database, id)
@@ -3280,7 +3332,14 @@ export function replaceAutomaticEventsForSource(
     sourceItemId,
     extractionId = null,
     events = [],
-  }: { source: any; sourceItemId: any; extractionId?: any; events?: any },
+    preserveEventIds = [],
+  }: {
+    source: any
+    sourceItemId: any
+    extractionId?: any
+    events?: any
+    preserveEventIds?: any[]
+  },
 ) {
   const timestamp = nowIso()
   const replace = database.transaction(() => {
@@ -3349,7 +3408,11 @@ export function replaceAutomaticEventsForSource(
     )
     let retired = 0
     for (const row of previous) {
-      if (activeKeys.has(row.sourceKey)) continue
+      if (
+        activeKeys.has(row.sourceKey) ||
+        preserveEventIds.includes(row.eventId)
+      )
+        continue
       hideSource.run(timestamp, timestamp, row.id)
       retired += 1
       if (activeSourceCount.get(row.eventId).count === 0) {
@@ -4315,7 +4378,7 @@ export function listScheduleCandidatePosts(
     detectionType = "board",
     includeAll = false,
   }: {
-    limit?: number | string
+    limit?: number | string | null
     keywords?: any
     detectionType?: string
     includeAll?: boolean
@@ -4379,7 +4442,7 @@ export function listScheduleCandidatePosts(
       if (detectionType === "message") return looksLikeScheduleMessage(post)
       return matchesKeyword(post)
     })
-    .slice(0, boundedLimit)
+    .slice(0, limit == null ? undefined : boundedLimit)
 }
 
 /**
@@ -5101,6 +5164,8 @@ export function getDashboard(
       .all()
       .map((row) => row.videoId),
   )
+  for (const video of mappedVideos)
+    video.isCancelled = cancelledVideoIds.has(video.id)
   const upcomingVideos = mappedVideos
     .filter((video) => video.isUpcoming && !cancelledVideoIds.has(video.id))
     .sort((a, b) => {

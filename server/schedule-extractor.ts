@@ -3,7 +3,7 @@ import type { Database as DatabaseConnection } from "better-sqlite3"
 interface SchedulePostResult {
   status: string
   classification?: string
-  cancellation?: { count: number; [key: string]: any }
+  cancellation?: { applied: number; candidates: number; [key: string]: any }
   [key: string]: any
 }
 interface ScheduleScanResult {
@@ -33,6 +33,7 @@ import {
   LLM_MAX_RETRIES,
   findCancellationTargets,
   getPostLlmState,
+  isCancelledEventStatus,
   listMediaLinks,
   listPostsRequestedForLlm,
   listScheduleCandidatePosts,
@@ -51,9 +52,9 @@ import {
 import { mediaIdForSourceUrl, resolveMediaCachePath } from "./media-cache.ts"
 import { decryptSecret } from "./secret-store.ts"
 import { inferenceEndpoint } from "../src/lib/llm-endpoints.ts"
-import { providerHeaders, readLlmJson } from "./llm-http.ts"
+import { providerHeaders, readLlmJson, outputTokenLimit } from "./llm-http.ts"
 
-export const scheduleExtractorVersion = "openai-schedule-v3"
+export const scheduleExtractorVersion = "openai-schedule-v4"
 export const defaultScheduleModel = "gpt-4o-mini"
 const defaultOpenAiBaseUrl = "https://api.openai.com/v1"
 const INPUT_MODES = new Set(["text", "image", "text_image"])
@@ -387,7 +388,12 @@ function normalizeExtractedEvents(result, post) {
       ends_at: endIsoAtJapanTime(event.date, time, event.endTime),
       timezone: "Asia/Tokyo",
       time_precision: time ? event.timePrecision : "unknown",
-      status: String(event.status || "待确认")
+      cancellationSuspected: isCancelledEventStatus(event.status),
+      status: String(
+        isCancelledEventStatus(event.status)
+          ? "待确认"
+          : event.status || "待确认",
+      )
         .trim()
         .slice(0, 80),
       event_type: event.eventType,
@@ -564,7 +570,10 @@ async function callAnthropicStructured({
     endpoint,
     {
       model,
-      max_tokens: Math.min(4000, Math.max(1, Number(maxTokens))),
+      ...outputTokenLimit(
+        "anthropic-messages",
+        Math.min(4000, Math.max(1, Number(maxTokens))),
+      ),
       system: instructions,
       messages: [{ role: "user", content }],
       tools: [
@@ -681,7 +690,7 @@ async function callOpenAiScheduleExtraction(
             schema: scheduleSchema,
           },
         },
-        max_output_tokens: 4000,
+        ...outputTokenLimit(protocol, 4000),
       },
       { apiKey, fetchImpl, timeoutMs },
     )
@@ -702,7 +711,7 @@ async function callOpenAiScheduleExtraction(
           schema: scheduleSchema,
         },
       },
-      max_output_tokens: 4000,
+      ...outputTokenLimit(protocol, 4000),
     },
     { apiKey, fetchImpl, timeoutMs },
   )
@@ -800,7 +809,7 @@ async function callOpenAiScheduleAssetVerification(
             schema: scheduleAssetVerificationSchema,
           },
         },
-        max_output_tokens: 800,
+        ...outputTokenLimit(protocol, 800),
       },
       { apiKey, fetchImpl, timeoutMs },
     )
@@ -833,14 +842,17 @@ async function callOpenAiScheduleAssetVerification(
           schema: scheduleAssetVerificationSchema,
         },
       },
-      max_output_tokens: 800,
+      ...outputTokenLimit(protocol, 800),
     },
     { apiKey, fetchImpl, timeoutMs },
   )
   return JSON.parse(extractResponseText(payload))
 }
 
-function scheduleAssetImage(database: DatabaseConnection, asset) {
+function scheduleAssetImage(
+  database: DatabaseConnection,
+  asset,
+): Record<string, any> {
   const mediaId = mediaIdForSourceUrl(asset?.url)
   const media = mediaId ? getMediaAsset(database, mediaId) : null
   const filePath = media?.cachePath
@@ -868,17 +880,6 @@ export async function verifyScheduleAsset(
 ) {
   const review = getScheduleAssetReview(database, assetId)
   if (!review) return { status: "missing", assetId: String(assetId) }
-  if (
-    !force &&
-    ["schedule", "not_schedule", "uncertain"].includes(review.llmStatus)
-  ) {
-    return {
-      status: "cached",
-      assetId: review.id,
-      classification: review.llmStatus,
-      confidence: review.llmConfidence,
-    }
-  }
   if (!review.sourceMatchesBoard) {
     // Older snapshots promoted any keyword post; such an image can only be
     // published by a manual label, so it is not worth an image-model call.
@@ -925,6 +926,32 @@ export async function verifyScheduleAsset(
     })
     return { status: "skipped", assetId: review.id, reason: configured.reason }
   }
+  const fingerprint = sha256(
+    JSON.stringify({
+      version: scheduleExtractorVersion,
+      image: image.sha256,
+      sourceUrl: review.sourceUrl,
+      sourceText: review.sourceText,
+      providers: configured.providers.map((provider) => [
+        provider.id,
+        provider.model,
+        provider.protocol,
+        provider.baseUrl,
+      ]),
+    }),
+  )
+  if (
+    !force &&
+    review.llmInputFingerprint === fingerprint &&
+    ["schedule", "not_schedule", "uncertain"].includes(review.llmStatus)
+  ) {
+    return {
+      status: "cached",
+      assetId: review.id,
+      classification: review.llmStatus,
+      confidence: review.llmConfidence,
+    }
+  }
   upsertScheduleAssetReview(database, {
     assetId: review.id,
     llmStatus: "running",
@@ -959,6 +986,7 @@ export async function verifyScheduleAsset(
           llmEvidence: result.evidence,
           llmModel: provider.model,
           llmCheckedAt: new Date().toISOString(),
+          llmInputFingerprint: fingerprint,
           manualStatus: review.manualStatus,
           manualReason: review.manualReason,
           manualCheckedAt: review.manualCheckedAt,
@@ -1001,14 +1029,14 @@ export async function verifyPendingScheduleAssets(
     fetchImpl = fetch,
   }: { limit?: number; force?: boolean; fetchImpl?: any } = {},
 ) {
-  const candidates = listScheduleAssetReviews(database, {
-    limit: Math.min(200, Math.max(1, Number(limit) || 20)),
-  }).filter(
-    (asset) =>
-      asset.manualStatus === "unreviewed" &&
-      (force ||
-        !["schedule", "not_schedule", "uncertain"].includes(asset.llmStatus)),
-  )
+  const budget = Math.min(200, Math.max(1, Number(limit) || 20))
+  const candidates = listScheduleAssetReviews(database, { limit: null })
+    .filter((asset) => asset.manualStatus === "unreviewed")
+    .sort(
+      (a, b) =>
+        Date.parse(a.llmCheckedAt || a.reviewUpdatedAt || 0) -
+        Date.parse(b.llmCheckedAt || b.reviewUpdatedAt || 0),
+    )
   const unique = [
     ...new Map(
       candidates.map((asset) => [asset.url || asset.id, asset]),
@@ -1025,11 +1053,12 @@ export async function verifyPendingScheduleAssets(
     notSchedule: 0,
   }
   for (const asset of unique) {
+    if (summary.attempted >= budget) break
     const result = await verifyScheduleAsset(database, asset.id, {
       fetchImpl,
       force,
     })
-    summary.attempted += 1
+    if (result.status !== "cached") summary.attempted += 1
     summary[result.status] = (summary[result.status] || 0) + 1
     if (result.classification === "uncertain") summary.uncertain += 1
     if (result.classification === "schedule") summary.schedule += 1
@@ -1050,6 +1079,7 @@ export async function verifyPendingScheduleAssets(
           llmReason: verified?.llmReason,
           llmEvidence: verified?.llmEvidence,
           llmModel: verified?.llmModel,
+          llmInputFingerprint: verified?.llmInputFingerprint,
           llmCheckedAt: verified?.llmCheckedAt || new Date().toISOString(),
           manualStatus: current?.manualStatus,
           manualReason: current?.manualReason,
@@ -1181,7 +1211,7 @@ function providerExtractorVersion(
   provider,
   { detectionType, inputMode }: { detectionType?: any; inputMode?: any } = {},
 ) {
-  return `${scheduleExtractorVersion}:${normalizeDetectionType(detectionType)}:${inputMode}:${provider.id}:${provider.protocol}`
+  return `${scheduleExtractorVersion}:${normalizeDetectionType(detectionType)}:${inputMode}:${provider.id}:${provider.protocol}:${sha256(JSON.stringify([provider.baseUrl, provider.endpoint, provider.model]))}`
 }
 
 function markPostLlm(
@@ -1322,25 +1352,46 @@ async function extractWithProvider(
           attempts: attempt + 1,
         }
       }
-      let replacement = { upserted: 0, retired: 0 }
-      let cancellation = null
-      if (normalized.action === "cancel") {
-        const targets = findCancellationTargets(database, normalized.events)
-        cancellation = applyLlmCancellationJudgements(database, {
-          sourceItemId: post.id,
-          reason: normalized.reason || normalized.evidence,
-          evidence: normalized.evidence,
-          confidence: normalized.confidence,
-          targets,
-        })
-      } else if (normalized.classification === "schedule") {
-        replacement = replaceAutomaticEventsForSource(database, {
-          source: normalizedEventScope,
-          sourceItemId: post.id,
-          extractionId: running.id,
-          events: normalized.events,
-        })
-      }
+      const { replacement, cancellation } = database.transaction(() => {
+        const cancellationEvents =
+          normalized.action === "cancel"
+            ? normalized.events
+            : normalized.events.filter((event) => event.cancellationSuspected)
+        const scheduledEvents = normalized.events.filter(
+          (event) => !event.cancellationSuspected,
+        )
+        const targets = findCancellationTargets(database, cancellationEvents)
+        // Cancellation evidence must not retire a source's existing schedules.
+        const replacement =
+          normalized.classification === "schedule" &&
+          normalized.action !== "cancel" &&
+          (scheduledEvents.length || !cancellationEvents.length)
+            ? replaceAutomaticEventsForSource(database, {
+                source: normalizedEventScope,
+                sourceItemId: post.id,
+                extractionId: running.id,
+                events: scheduledEvents,
+                preserveEventIds: targets.map(
+                  (target) => target.eventId || target.id,
+                ),
+              })
+            : { upserted: 0, retired: 0 }
+        const cancellation =
+          cancellationEvents.length || normalized.action === "cancel"
+            ? applyLlmCancellationJudgements(database, {
+                sourceItemId: post.id,
+                reason: normalized.reason || normalized.evidence,
+                evidence:
+                  normalized.evidence ||
+                  cancellationEvents
+                    .map((event) => event.raw.evidence)
+                    .join("; "),
+                confidence: normalized.confidence,
+                targets,
+              })
+            : null
+        return { replacement, cancellation }
+      })()
       upsertScheduleExtraction(database, {
         source: "x",
         sourceItemId: post.id,
@@ -1427,6 +1478,7 @@ export async function extractSchedulePost(
   if (!inputMode) {
     markPostLlm(database, post.id, {
       status: "skipped",
+      lastAttemptAt: new Date().toISOString(),
       route,
       lastError: "no_content",
       reprocessRequested: force,
@@ -1436,6 +1488,7 @@ export async function extractSchedulePost(
   if (inputMode !== "text" && !media.images.length) {
     markPostLlm(database, post.id, {
       status: "skipped",
+      lastAttemptAt: new Date().toISOString(),
       route,
       lastError: "media_pending",
       reprocessRequested: force,
@@ -1451,19 +1504,13 @@ export async function extractSchedulePost(
   if (!configured.providers.length) {
     markPostLlm(database, post.id, {
       status: "skipped",
+      lastAttemptAt: new Date().toISOString(),
       route,
       lastError: configured.reason,
       reprocessRequested: force,
     })
     return { status: "skipped", reason: configured.reason }
   }
-  markPostLlm(database, post.id, {
-    status: "running",
-    route,
-    lastAttemptAt: new Date().toISOString(),
-    lastError: null,
-    reprocessRequested: false,
-  })
   const modelPost = {
     ...post,
     publishedAt: post.publishedAt || post.published_at,
@@ -1474,6 +1521,8 @@ export async function extractSchedulePost(
       detectionType,
       inputMode,
       text: modelPost.text,
+      publishedAt: modelPost.publishedAt,
+      url: modelPost.url,
       images: media.images.map((image) => image.sha256),
     }),
   )
@@ -1500,7 +1549,11 @@ export async function extractSchedulePost(
       result.status === "cached" ||
       result.status === "uncertain"
     )
-      return { ...result, attempts }
+      return {
+        ...result,
+        attempts,
+        budgetUsed: attempts.some((attempt) => attempt.status !== "cached"),
+      }
   }
   const last = attempts.at(-1)
   return {
@@ -1551,7 +1604,7 @@ export async function extractPendingSchedules(
   ] as [boolean, string][]) {
     if (!enabled) continue
     for (const post of listScheduleCandidatePosts(database, {
-      limit,
+      limit: null,
       keywords: options.keywords || scheduleConfig.keywords,
       detectionType,
     })) {
@@ -1573,11 +1626,24 @@ export async function extractPendingSchedules(
   const requestedIds = new Set(requested.map(({ post }) => String(post.id)))
   const publishedAt = ({ post }: { post: any }) =>
     Date.parse(post.publishedAt || post.published_at || 0)
+  const lastAttempts = new Map(
+    [...keywordCandidates.values()].map(({ post }) => [
+      String(post.id),
+      Date.parse(getPostLlmState(database, post.id)?.lastAttemptAt || "") || 0,
+    ]),
+  )
   const uniqueCandidates = [
     ...requested,
     ...[...keywordCandidates.values()]
       .filter(({ post }) => !requestedIds.has(String(post.id)))
-      .sort((left, right) => publishedAt(right) - publishedAt(left)),
+      .sort((left, right) => {
+        const attemptedAt = (candidate) =>
+          lastAttempts.get(String(candidate.post.id)) || 0
+        return (
+          attemptedAt(left) - attemptedAt(right) ||
+          publishedAt(right) - publishedAt(left)
+        )
+      }),
   ]
   const summary = {
     attempted: 0,
@@ -1592,17 +1658,17 @@ export async function extractPendingSchedules(
     providers: scheduleConfig.providerOrder,
     providerOrders: scheduleConfig.providerOrders,
   }
-  for (const { post, detectionType, force } of uniqueCandidates.slice(
-    0,
-    limit,
-  )) {
+  for (const { post, detectionType, force } of uniqueCandidates) {
+    if (summary.attempted >= limit) break
     const result = await extractSchedulePost(database, post, {
       ...options,
       detectionType,
       force,
     })
-    summary.attempted += 1
-    summary[`${detectionType}Attempted`] += 1
+    if (result.status !== "cached" || result.budgetUsed) {
+      summary.attempted += 1
+      summary[`${detectionType}Attempted`] += 1
+    }
     summary[result.status] = (summary[result.status] || 0) + 1
   }
   const assetSummary = boardEnabled

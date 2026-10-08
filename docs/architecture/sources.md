@@ -51,7 +51,13 @@ entries (six by default). Later runs store only entries before the prior cursor,
 or entries newer than its timestamp when that cursor has fallen out of the RSS
 window. It separately inspects the streams page and keeps rechecking active or
 recent reservations for `scheduledStartTime`, writing them to both `videos` and
-`events`. When no schedule time is available, the script does not invent one.
+`events`. When no schedule time is available, the script does not invent one. RSS insertion
+does not count as a reservation detail check. Successful stream-page detail
+checks are recorded in incremental `sync_state.metadata.streamDetailsCheckedIds`
+for currently discovered/active videos. Unchecked discoveries precede known
+reservation refreshes within the detail budget; failed checks remain eligible,
+and failed refreshes retain existing video/event snapshots. Historical windows
+do not write this incremental metadata.
 
 Video thumbnails are registered and linked to their rows, then the bounded media
 stage downloads pending files from YouTube's `*.ytimg.com` thumbnail CDN
@@ -71,7 +77,10 @@ Schedule extraction has two independent candidate paths:
    `uncertain` before extracting events.
 
 The two candidate lists are merged, de-duplicated by X post ID, sorted by
-publication time, and limited by one shared scan limit. A post selected by the
+least recent attempt (unattempted posts first), with publication time as a tie
+breaker. The shared limit counts candidates requiring work; unchanged fingerprint
+cache hits do not consume it. Failures and blocked candidates move behind older
+unattempted work on later scans. Manual reprocess requests still run first. A post selected by the
 board path is not sent a second time through the message path in the same scan.
 The legacy `schedule_vision` route remains available for older API clients and
 is used as the compatibility fallback when a new route has no explicit order.
@@ -113,18 +122,26 @@ Model discovery follows `has_more`/`last_id` with 100 models per page and a
 20-page cap under one timeout. Extraction uses a forced tool with the existing
 JSON schema and validates its `tool_use.input` locally; cached images are sent
 as base64 image blocks. Model and inference responses are bounded to 4 MiB of
-streamed bytes, and redirects are rejected.
+streamed bytes, and redirects are rejected. Connection tests and inference share
+the protocol-specific output limit: `max_output_tokens` for Responses,
+`max_completion_tokens` for Chat Completions, and `max_tokens` for Anthropic.
 
 A local validator rejects invalid calendar dates, time formats, enumerations,
 or confidence values before any event write. `schedule` results update automatic
 events. A model never deletes or definitively cancels an event: `action=cancel`
 matches the clearest existing event and writes an `llm_suspected` cancellation
 overlay containing the reason, source evidence, confidence, and post ID. The
-overlay applies to manually locked events too, so a manually entered event can
+overlay also handles cancellation-like event status strings on add/update
+results. Such entries never create a definitively cancelled event or retire
+existing source evidence; mixed results still update their scheduled entries.
+Cancellation-only entries without an unambiguous existing target remain in
+extraction metadata. The overlay applies to manually locked events too, so a manually entered event can
 remain visible with the model's cancellation evidence. `not_schedule` and
 `uncertain` results only record the extraction outcome and leave existing events
-untouched. Input fingerprints and the extractor version make these outcomes
-idempotent. Date-only events store `starts_on`, a null `starts_at`, and
+untouched. Input fingerprints (including text, publication time, URL, and cached image
+hashes), provider endpoint/model identity, and the extractor version make these
+outcomes idempotent. Successful/uncertain posts stay eligible for cache checks
+and can run again when their input or provider configuration changes. Date-only events store `starts_on`, a null `starts_at`, and
 `time_precision = unknown`; the model must not invent a specific time.
 
 Every stored post has an LLM processing state. Failed, skipped, and uncertain
@@ -188,6 +205,17 @@ reason and are set in the `/admin` schedule-images view. Sync reuses the
 `schedule-<week>` IDs and the `weekly-schedule` alias, so a review belongs to
 the image URL it judged: when an asset ID receives a different URL, its model
 verdict and manual label reset to `pending` / `unreviewed`.
+
+Source HTML/XML/JSON reads have a 4 MiB response-byte limit, reject redirects,
+and keep the configured timeout active through body consumption. A timed-out or
+oversized stream is cancelled and releases its reader so the single-flight queue
+can run a subsequent job.
+
+Image review budgets apply after cache checks and manual-label filtering across
+all stored candidates, rather than only the newest page. Retry order follows
+the least recent check/review attempt. Reviews persist an input fingerprint
+including image hash, source gate input, and ordered provider/model targets;
+changed content or configuration can invalidate a successful verdict.
 
 ## Related Docs
 

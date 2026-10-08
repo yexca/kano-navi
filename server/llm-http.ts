@@ -36,3 +36,10 @@ export async function readLlmJson(
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"))
 }
+
+export function outputTokenLimit(protocol: string, limit: number) {
+  if (protocol === "anthropic-messages") return { max_tokens: limit }
+  if (protocol === "openai-chat-completions")
+    return { max_completion_tokens: limit }
+  return { max_output_tokens: limit }
+}

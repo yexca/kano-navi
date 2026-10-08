@@ -1,4 +1,5 @@
-import { cleanVideoTitle, scheduleSortTime } from "./format.ts"
+import { cleanVideoTitle, scheduleSortTime, eventIsUpcoming } from "./format.ts"
+import { eventIsLive, LIVE_GRACE_MS } from "./derive-dashboard.ts"
 
 export function pickSpotlight(summary, now) {
   const candidates = []
@@ -33,8 +34,12 @@ export function pickSpotlight(summary, now) {
   const upcoming = candidates
     .filter((candidate) => {
       const time = Date.parse(candidate.time || "")
-      // A stream that started up to three hours ago is probably still live.
-      return Number.isNaN(time) || time > now - 3 * 3600 * 1000
+      if (candidate.event)
+        return (
+          eventIsUpcoming(candidate.event, now) ||
+          eventIsLive(candidate.event, now)
+        )
+      return Number.isFinite(time) && time > now - LIVE_GRACE_MS
     })
     .sort(
       (a, b) =>

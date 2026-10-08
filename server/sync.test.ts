@@ -19,6 +19,7 @@ import {
 import { encryptSecret } from "./secret-store.ts"
 
 process.env.SYNC_REQUEST_DELAY_MS = "0"
+process.env.SYNC_TIMEOUT_MS = "1000"
 const { mapTweet, runSync, snowflakeDate, syncX, syncYoutube } =
   await import("../scripts/sync.ts")
 
@@ -906,7 +907,7 @@ test("YouTube bootstraps six videos, then adds only newer RSS entries and rechec
   }
 })
 
-test("a failed OpenAI stage marks an otherwise skipped sync as partial", async () => {
+test("an entirely failed schedule stage marks an otherwise skipped sync as failed", async () => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
   const originalFetch = globalThis.fetch
   const names = [
@@ -952,8 +953,12 @@ test("a failed OpenAI stage marks an otherwise skipped sync as partial", async (
     globalThis.fetch = async () =>
       new Response("synthetic failure", { status: 500 })
 
-    const result = await runSync({ database, closeDatabase: false })
-    assert.equal(result.status, "partial")
+    const result = await runSync({
+      database,
+      closeDatabase: false,
+      setExitCode: false,
+    })
+    assert.equal(result.status, "failed")
     assert.equal(result.results.schedules.failed, 1)
   } finally {
     globalThis.fetch = originalFetch
@@ -963,4 +968,131 @@ test("a failed OpenAI stage marks an otherwise skipped sync as partial", async (
     }
     database.close()
   }
+})
+
+test("RSS/streams overlap recovers reservation details under budget and preserves them after failure", async (t) => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  t.after(() => database.close())
+  const originalFetch = globalThis.fetch
+  const originalBudget = process.env.YOUTUBE_MAX_DETAIL_REQUESTS
+  t.after(() => {
+    globalThis.fetch = originalFetch
+    if (originalBudget == null) delete process.env.YOUTUBE_MAX_DETAIL_REQUESTS
+    else process.env.YOUTUBE_MAX_DETAIL_REQUESTS = originalBudget
+  })
+  process.env.YOUTUBE_MAX_DETAIL_REQUESTS = "1"
+  const id = "overlap0001"
+  let watchCalls = 0
+  let fail = true
+  globalThis.fetch = async (url) => {
+    const value = String(url)
+    if (value.includes("/feeds/videos.xml"))
+      return response(
+        feedXml([
+          { id, title: "RSS reservation", publishedAt: "2098-01-01T00:00:00Z" },
+        ]),
+      )
+    if (value.endsWith("/streams"))
+      return response(
+        `<a href="/watch?v=${id}">reservation</a><a href="/watch?v=overflow001">other</a>`,
+      )
+    assert.equal(value, `https://www.youtube.com/watch?v=${id}`)
+    watchCalls++
+    if (fail) return response(null, { status: 503 })
+    return response(
+      '<meta property="og:title" content="Detailed reservation"/><script>{"scheduledStartTime":"2099-01-01T11:00:00Z","isUpcoming":true}</script>',
+    )
+  }
+  const first = await syncYoutube(database)
+  assert.equal(first.inspected, 0)
+  assert.equal(watchCalls, 1)
+  assert.equal(getVideoRecord(database, id).scheduledAt, null)
+  fail = false
+  // The failed detail remains eligible despite its RSS row and cursor.
+  const second = await syncYoutube(database)
+  assert.equal(second.inspected, 1)
+  assert.equal(watchCalls, 2)
+  const known = getVideoRecord(database, id)
+  assert.equal(known.isUpcoming, 1)
+  assert.equal(known.scheduledAt, "2099-01-01T11:00:00.000Z")
+  assert.equal(
+    database
+      .prepare<unknown[], { count: number }>(
+        "SELECT COUNT(*) AS count FROM events WHERE id=?",
+      )
+      .get(`youtube-${id}`).count,
+    1,
+  )
+  // Budget prioritizes unchecked discoveries before rechecking known reservations.
+  globalThis.fetch = async (url) => {
+    const value = String(url)
+    if (value.includes("/feeds/videos.xml"))
+      return response(
+        feedXml([
+          { id, title: "RSS reservation", publishedAt: "2098-01-01T00:00:00Z" },
+        ]),
+      )
+    if (value.endsWith("/streams"))
+      return response(`<a href="/watch?v=${id}">reservation</a>`)
+    watchCalls++
+    return response(null, { status: 503 })
+  }
+  await syncYoutube(database)
+  assert.deepEqual(getVideoRecord(database, id), known)
+  assert.equal(watchCalls, 3)
+})
+
+test("source deadline covers delayed RSS bodies and failed jobs release the single-flight queue", async (t) => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  t.after(() => database.close())
+  const originalFetch = globalThis.fetch
+  t.after(() => {
+    globalThis.fetch = originalFetch
+  })
+  let cancelled = false
+  let signal: AbortSignal
+  globalThis.fetch = async (_url, options) => {
+    signal = options.signal
+    return response(
+      new ReadableStream({
+        pull() {
+          return new Promise(() => {})
+        },
+        cancel() {
+          cancelled = true
+        },
+      }),
+    )
+  }
+  const { createSyncJobManager } = await import("./sync-jobs.ts")
+  const manager = createSyncJobManager({ database })
+  const first = manager.start("workflow", "admin", { steps: ["youtube"] })
+  const wait = async (id) => {
+    for (let i = 0; i < 400; i++) {
+      const job = manager.get(id)
+      if (["failed", "completed"].includes(job.status)) return job
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    throw new Error("job failed to respect source timeout")
+  }
+  const failed = await wait(first.job.id)
+  assert.equal(failed.run.status, "failed")
+  assert.equal(signal.aborted, true)
+  assert.equal(cancelled, true)
+  globalThis.fetch = async (url) =>
+    String(url).includes("feeds/videos.xml")
+      ? response(
+          feedXml([
+            {
+              id: "afterstall1",
+              title: "Recovered",
+              publishedAt: "2098-01-01T00:00:00Z",
+            },
+          ]),
+        )
+      : response("")
+  const next = manager.start("workflow", "admin", { steps: ["youtube"] })
+  assert.equal(next.accepted, true)
+  const completed = await wait(next.job.id)
+  assert.equal(completed.run.status, "success")
 })

@@ -46,6 +46,14 @@ beside their source as server/*.test.ts and scanner tests live under scripts/.
 Do not add tests for prose or a purely visual change without a documented
 interaction or responsive contract. Do not mirror internal implementation.
 
+`server/logic-regression.test.ts` covers anonymous HTTP/MCP white lists,
+cancellation-status bypasses, protocol-specific request bodies, fair backlog
+processing, image-review failure aggregation, and snapshot time transitions.
+`server/http-fetch.test.ts` uses delayed/never-ending synthetic streams for body
+timeout and byte-limit checks; source-job tests verify queue recovery. Profile
+redownload tests use a disposable SQLite fixture, restore existing selected
+files, and check actual response bytes, URL versions, and ETags.
+
 `server/schedule-regression.test.ts` protects same-day event coexistence,
 re-extraction through changing event counts, legacy identities and collisions, manual locks and
 tombstones, transaction rollback, X/YouTube merging, confirmed stream

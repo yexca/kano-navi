@@ -9,6 +9,7 @@ import {
   startSyncRun,
 } from "./database.ts"
 import { extractPendingSchedules } from "./schedule-extractor.ts"
+import { scheduleScanStatus } from "./scan-outcome.ts"
 import { runSync } from "../scripts/sync.ts"
 import {
   normalizeWorkflowSteps,
@@ -88,15 +89,17 @@ export function createSyncJobManager({
         state.runId = runId
         try {
           const result = await scanImpl(database)
+          const status = scheduleScanStatus(result)
           finishSyncRun(database, runId, {
-            status: Number(result?.failed || 0) > 0 ? "partial" : "success",
+            status,
             message:
-              Number(result?.failed || 0) > 0
+              status !== "success"
                 ? "自动扫描完成，但部分候选失败"
                 : "自动扫描完成",
             counts: result || {},
           })
           state.result = result || {}
+          if (status === "failed") state.status = "failed"
         } catch (error) {
           finishSyncRun(database, runId, {
             status: "failed",
@@ -127,8 +130,10 @@ export function createSyncJobManager({
             : {}),
         })
         state.result = result || {}
+        state.runId = getSyncRun(database, state.id)?.id || null
+        if (result?.status === "failed") state.status = "failed"
       }
-      state.status = "completed"
+      if (state.status !== "failed") state.status = "completed"
     } catch (error) {
       state.status = "failed"
       state.error = String(error?.message || error)

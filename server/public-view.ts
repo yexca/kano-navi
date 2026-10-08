@@ -41,6 +41,34 @@ export function publicSyncRun(run) {
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     status: run.status,
-    message: run.message || null,
+    message:
+      {
+        success: "同步完成",
+        partial: "部分数据源不可用或存在警告，保留已有快照",
+        failed: "同步失败，保留已有快照",
+        running: "同步进行中",
+      }[run.status] || null,
+  }
+}
+
+export function publicProfileMedia(asset) {
+  if (!asset) return null
+  return Object.fromEntries(
+    [
+      "id",
+      "slot",
+      "source",
+      "sourceUrl",
+      "status",
+      "isActive",
+      "publicUrl",
+    ].map((field) => [field, asset[field]]),
+  )
+}
+
+export function publicProfileMediaSlots(slots) {
+  return {
+    avatar: publicProfileMedia(slots?.avatar),
+    banner: publicProfileMedia(slots?.banner),
   }
 }

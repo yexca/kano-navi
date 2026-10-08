@@ -21,7 +21,11 @@ import {
   resolveMediaCachePath,
 } from "./media-cache.ts"
 import { createMcpRouter } from "./mcp-api.ts"
-import { publicEvent, publicSyncRun } from "./public-view.ts"
+import {
+  publicEvent,
+  publicSyncRun,
+  publicProfileMediaSlots,
+} from "./public-view.ts"
 import { createSyncJobManager } from "./sync-jobs.ts"
 import { createWorkflowScheduler } from "./workflow-scheduler.ts"
 
@@ -180,7 +184,7 @@ function createCachedMediaHandler(database: DatabaseConnection) {
 
 export function createApp({
   database,
-  databaseLabel = "data/database/kano.sqlite",
+  databaseLabel: _databaseLabel = "data/database/kano.sqlite",
   staticDirectory = null,
   adminMode = "development",
   adminPassword = "",
@@ -221,9 +225,8 @@ export function createApp({
     response.json({
       ok: true,
       service: "kano-status-board",
-      database: databaseLabel,
       now: new Date().toISOString(),
-      lastSync: getLatestSync(database),
+      lastSync: publicSyncRun(getLatestSync(database)),
     })
   })
 
@@ -238,6 +241,7 @@ export function createApp({
     response.set("Cache-Control", "no-store")
     response.json({
       ...dashboard,
+      profileMedia: publicProfileMediaSlots(dashboard.profileMedia),
       events: dashboard.events.map(visitorEvent),
       summary: {
         ...dashboard.summary,

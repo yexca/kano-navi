@@ -89,6 +89,14 @@ reservation with `manual_confirmed` cancellation is excluded from `nextStream`,
 including after source refresh. An `llm_suspected` overlay remains review evidence
 and does not definitively cancel its video.
 
+Selected profile-media rows have additive `active_sha256` and
+`active_mime_type` columns describing the selected file independently of the
+latest candidate download. `download_status` and `last_download_at` record the
+latest attempt; `last_error` remains diagnostic. Migration copies existing
+selected metadata into the active columns without changing files or snapshots.
+Schedule image reviews add `llm_input_fingerprint` for content/configuration
+cache validation; legacy reviews are rechecked when next scanned.
+
 ## Schema Changes
 
 server/database.ts owns the schema and additive upgrade behavior. Update this

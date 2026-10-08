@@ -74,7 +74,7 @@ import { defaultScheduleModel } from "./schedule-extractor.ts"
 import { decryptSecret, encryptSecret } from "./secret-store.ts"
 import { fetchRemoteModels, inferModelTags } from "./llm-catalog.ts"
 import { inferenceEndpoint } from "../src/lib/llm-endpoints.ts"
-import { providerHeaders, readLlmJson } from "./llm-http.ts"
+import { providerHeaders, readLlmJson, outputTokenLimit } from "./llm-http.ts"
 import {
   WORKFLOW_MAX_INTERVAL_MINUTES,
   WORKFLOW_MIN_INTERVAL_MINUTES,
@@ -606,13 +606,13 @@ async function testProviderConnection(
         ? {
             model: testModel,
             messages: [{ role: "user", content: "ping" }],
-            max_tokens: 1,
+            ...outputTokenLimit(provider.protocol, 1),
           }
         : {
             model: testModel,
             store: false,
             input: "ping",
-            max_output_tokens: 1,
+            ...outputTokenLimit(provider.protocol, 1),
           }
     const response = await fetchImpl(endpoint, {
       method: "POST",

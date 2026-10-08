@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { fallbackProfile, POST_WINDOW_DAYS } from "./content"
 import type { Dashboard } from "@/types"
+import { deriveDashboardAt } from "./derive-dashboard"
 
 const emptyDashboard: Dashboard = {
   profile: fallbackProfile,
@@ -36,7 +37,7 @@ const REVISION_POLL_MS = 8000
  * counter, so MCP or admin changes appear without a manual reload. Nothing
  * here reaches an external platform.
  */
-export function useDashboard() {
+export function useDashboard(now = Date.now()) {
   const [dashboard, setDashboard] = useState(emptyDashboard)
   const [status, setStatus] = useState<{
     isLoading: boolean
@@ -112,15 +113,26 @@ export function useDashboard() {
     }
   }, [load])
 
-  return { dashboard, ...status, reload: load }
+  const currentDashboard = useMemo(
+    () => deriveDashboardAt(dashboard, now),
+    [dashboard, now],
+  )
+  return { dashboard: currentDashboard, ...status, reload: load }
 }
 
 /** Re-renders on an interval so countdowns and relative times stay honest. */
 export function useNow(intervalMs = 30000) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), intervalMs)
-    return () => window.clearInterval(timer)
+    const update = () => setNow(Date.now())
+    const timer = window.setInterval(update, intervalMs)
+    document.addEventListener("visibilitychange", update)
+    window.addEventListener("focus", update)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", update)
+      window.removeEventListener("focus", update)
+    }
   }, [intervalMs])
   return now
 }

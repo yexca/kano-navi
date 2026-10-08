@@ -1,3 +1,5 @@
+import { scheduleScanStatus } from "../server/scan-outcome.ts"
+import { fetchBounded } from "../server/http-fetch.ts"
 import type { Database as DatabaseConnection } from "better-sqlite3"
 
 interface SourceSyncResult {
@@ -170,38 +172,24 @@ function decodeHtml(value = "") {
     .replace(/&#39;/g, "'")
 }
 
-async function fetchResponse(url, options: Record<string, any> = {}) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        "user-agent": userAgent,
-        accept:
-          "text/html,application/xhtml+xml,application/xml,application/json;q=0.9,*/*;q=0.8",
-        ...(options.headers || {}),
-      },
-    })
-    if (!response.ok) {
-      const retryAfter = response.headers.get("retry-after")
-      throw new Error(
-        `${response.status} ${response.statusText}${retryAfter ? `; retry after ${retryAfter}` : ""}`,
-      )
-    }
-    return response
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 async function fetchText(url, options: Record<string, any> = {}) {
-  return fetchResponse(url, options).then((response) => response.text())
+  const { response, body } = await fetchBounded(url, {
+    ...options,
+    timeoutMs,
+    maxBytes: 4 * 1024 * 1024,
+    redirect: "error",
+    headers: {
+      "user-agent": userAgent,
+      accept: "text/html,application/xml,application/json",
+      ...(options.headers || {}),
+    },
+  })
+  if (!response.ok) throw new Error(`source returned HTTP ${response.status}`)
+  return body.toString("utf8")
 }
 
 async function fetchJson(url, options: Record<string, any> = {}) {
-  return fetchResponse(url, options).then((response) => response.json())
+  return JSON.parse(await fetchText(url, options))
 }
 
 function inferPostType(text = "") {
@@ -951,6 +939,7 @@ export async function syncYoutube(
 
   const now = Date.now()
   const streamIds = extractYoutubeIds(streamHtml)
+  const checkedIds = new Set(state?.metadata?.streamDetailsCheckedIds || [])
   const activeIds = listActiveVideoIds(database, { limit: 30 }).filter((id) => {
     const existing = getVideoRecord(database, id)
     if (!existing) return false
@@ -969,13 +958,18 @@ export async function syncYoutube(
   const detailIds = [...new Set([...streamIds, ...activeIds])]
     .filter((id) => {
       const existing = getVideoRecord(database, id)
-      if (!existing) return true
+      if (!existing || (streamIds.includes(id) && !checkedIds.has(id)))
+        return true
       const scheduled = Date.parse(existing.scheduledAt || "")
       return (
         Boolean(existing.isUpcoming) ||
         (Number.isFinite(scheduled) && scheduled >= now - 86_400_000)
       )
     })
+    .sort(
+      (left, right) =>
+        Number(checkedIds.has(left)) - Number(checkedIds.has(right)),
+    )
     .slice(0, detailLimit)
 
   const inspectedVideos = []
@@ -1061,6 +1055,15 @@ export async function syncYoutube(
         bootstrap: !state,
         streamIds: streamIds.length,
         inspected: detailIds.length,
+        streamDetailsCheckedIds: [
+          ...new Set([
+            ...checkedIds,
+            ...inspectedVideos.map((video) => video.id),
+          ]),
+        ].filter(
+          (id) =>
+            streamIds.includes(String(id)) || activeIds.includes(String(id)),
+        ),
       },
     })
   return {
@@ -1217,18 +1220,21 @@ export async function runSync({
           report(step.id, "failed")
         }
       } else {
+        attempted += 1
         try {
           results[runner.resultKey] = await runner.run(activeDatabase)
         } catch (error) {
           report(step.id, "failed")
           throw error
         }
-        report(
-          step.id,
-          Number(results[runner.resultKey]?.failed || 0) > 0
-            ? "partial"
-            : "completed",
-        )
+        const outcome =
+          step.id === "schedule"
+            ? scheduleScanStatus(results[runner.resultKey])
+            : Number(results[runner.resultKey]?.failed || 0) > 0
+              ? "partial"
+              : "success"
+        if (outcome !== "failed") successCount += 1
+        report(step.id, outcome === "success" ? "completed" : outcome)
       }
     }
 
@@ -1237,7 +1243,7 @@ export async function runSync({
         (result) => Array.isArray(result?.errors) && result.errors.length > 0,
       ) ||
       Number(results.media?.failed || 0) > 0 ||
-      Number(results.schedules?.failed || 0) > 0
+      scheduleScanStatus(results.schedules) !== "success"
     const status =
       attempted === 0 || successCount === attempted
         ? hasWarnings
