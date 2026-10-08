@@ -18,8 +18,13 @@ candidates as long as they have a publication time and a media URL.
 
 Normal incremental runs persist admitted but unfinished status IDs in the
 account's `sync_state.metadata_json.pendingStatusIds` before detail requests.
-Pending work runs before newly discovered IDs and remains retryable when it
-falls out of the profile or ages beyond the bootstrap window. Successful posts,
+The array's order is the per-account retry order. Newly admitted IDs join after
+existing pending work; IDs selected within the account's request allocation move
+behind unattempted work, with that rotation persisted before detail requests.
+Thus a repeatedly failing ID cannot keep blocking other admitted work, even
+after a process restart. Retries use each run's existing budget without time
+backoff or discarding failures. Pending work remains retryable when it falls out
+of the profile or ages beyond the bootstrap window. Successful posts,
 pending-work removal, and the latest successful cursor commit atomically.
 Budget exhaustion and failed/invalid detail responses retain unfinished IDs;
 an all-failed run does not record a successful cursor or timestamp. Date-window

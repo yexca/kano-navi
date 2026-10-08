@@ -52,7 +52,9 @@ tombstones, transaction rollback, X/YouTube merging, confirmed stream
 cancellation, and mixed-offset ordering in API/admin/board/spotlight consumers.
 `server/sync.test.ts` covers budget-limited and failed X details, durable pending
 work beyond profile/bootstrap coverage, account isolation, and date-window
-separation. These fixtures use synthetic records, in-memory/temporary SQLite and mocked
+separation. It also guards against persistent 404 retry starvation, verifies
+503 recovery, and checks fair rotation with new arrivals under one- and
+two-request budgets. These fixtures use synthetic records, in-memory/temporary SQLite and mocked
 platform/model responses.
 
 Use manually authored synthetic records, example.invalid URLs, fixed neutral

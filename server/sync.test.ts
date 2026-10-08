@@ -14,6 +14,7 @@ import {
   upsertLlmProvider,
   upsertAssets,
   upsertPosts,
+  upsertSyncState,
 } from "./database.ts"
 import { encryptSecret } from "./secret-store.ts"
 
@@ -143,6 +144,222 @@ for (const failure of ["budget", "503", "all-failed"]) {
       }
       database.close()
       fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const failureStatus of [404, 503]) {
+  test(`X rotates a persistent ${failureStatus} so a newer post gets the one-request budget`, async (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kano-x-retry-"))
+    const filename = path.join(directory, "snapshot.sqlite")
+    let database = initializeDatabase({ seed: false, filename })
+    const originalFetch = globalThis.fetch
+    const originalEnvironment = Object.fromEntries(
+      [
+        "X_HANDLES",
+        "X_MAX_STATUS_REQUESTS",
+        "X_REFRESH_KNOWN",
+        "X_BOOTSTRAP_DAYS",
+        "X_SCHEDULE_REFRESH_LIMIT",
+        "X_API_BEARER_TOKEN",
+        "SKIP_X",
+      ].map((key) => [key, process.env[key]]),
+    )
+    const fixedNow = Date.parse("2026-09-16T00:00:00Z")
+    t.mock.method(Date, "now", () => fixedNow)
+    const failedId = snowflakeFor(new Date(fixedNow - 7200_000))
+    const newerId = snowflakeFor(new Date(fixedNow - 3600_000))
+    let profileIds = [failedId]
+    let recovered = false
+    const requested: string[] = []
+    const run = () => runSync({ database, steps: ["x"], setExitCode: false })
+    try {
+      process.env.X_HANDLES = "kano_2525"
+      process.env.X_MAX_STATUS_REQUESTS = "1"
+      process.env.X_REFRESH_KNOWN = "0"
+      process.env.X_BOOTSTRAP_DAYS = "7"
+      process.env.X_SCHEDULE_REFRESH_LIMIT = "0"
+      delete process.env.X_API_BEARER_TOKEN
+      delete process.env.SKIP_X
+      globalThis.fetch = async (url) => {
+        const value = String(url)
+        if (value === "https://x.com/kano_2525")
+          return response(
+            profileIds
+              .map((id) => `<a href="/kano_2525/status/${id}">post</a>`)
+              .join(""),
+          )
+        const id = value.match(
+          /^https:\/\/api\.vxtwitter\.com\/kano_2525\/status\/(\d+)$/u,
+        )?.[1]
+        assert.ok(id)
+        requested.push(id)
+        if (id === failedId && !recovered)
+          return response("unavailable", { status: failureStatus })
+        return response(
+          JSON.stringify({
+            tweetID: id,
+            text: "synthetic",
+            date: snowflakeDate(id).toISOString(),
+            author: { screenName: "kano_2525" },
+          }),
+        )
+      }
+
+      assert.equal((await run()).status, "failed")
+      profileIds = [newerId]
+      const statuses = []
+      let successfulState: Record<string, any>
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const before = requested.length
+        if (attempt === 2 && failureStatus === 503) recovered = true
+        statuses.push((await run()).status)
+        assert.equal(requested.length - before, 1)
+        if (attempt === 0) {
+          const state = getSyncState(database, "x", "kano_2525")
+          assert.equal(state.cursorId, null)
+          assert.equal(state.cursorTime, null)
+          assert.equal(state.lastSuccessAt, null)
+          assert.deepEqual(state.metadata.pendingStatusIds, [newerId, failedId])
+          database.close()
+          database = initializeDatabase({ seed: false, filename })
+          assert.deepEqual(getSyncState(database, "x", "kano_2525"), state)
+        }
+        if (attempt === 1) {
+          assert.ok(
+            database.prepare("SELECT id FROM posts WHERE id=?").get(newerId),
+          )
+          successfulState = getSyncState(database, "x", "kano_2525")
+        }
+      }
+      assert.deepEqual(requested, [failedId, failedId, newerId, failedId])
+      assert.deepEqual(statuses, [
+        "failed",
+        "success",
+        failureStatus === 503 ? "success" : "failed",
+      ])
+      const state = getSyncState(database, "x", "kano_2525")
+      assert.equal(state.cursorId, newerId)
+      assert.equal(state.cursorTime, snowflakeDate(newerId).toISOString())
+      if (failureStatus === 404)
+        assert.equal(state.lastSuccessAt, successfulState.lastSuccessAt)
+      assert.deepEqual(
+        state.metadata.pendingStatusIds,
+        failureStatus === 503 ? [] : [failedId],
+      )
+      assert.deepEqual(
+        database
+          .prepare<unknown[], { status: string }>(
+            "SELECT status FROM sync_runs ORDER BY id",
+          )
+          .all()
+          .map((row) => row.status),
+        ["failed", ...statuses],
+      )
+    } finally {
+      globalThis.fetch = originalFetch
+      for (const [key, value] of Object.entries(originalEnvironment)) {
+        if (value == null) delete process.env[key]
+        else process.env[key] = value
+      }
+      database.close()
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
+}
+
+for (const budget of [1, 2]) {
+  test(`X retries every admitted ID fairly with a ${budget}-request budget and new arrivals`, async (t) => {
+    const database = initializeDatabase({ seed: false, filename: ":memory:" })
+    const originalFetch = globalThis.fetch
+    const originalEnvironment = Object.fromEntries(
+      [
+        "X_HANDLES",
+        "X_MAX_STATUS_REQUESTS",
+        "X_REFRESH_KNOWN",
+        "X_BOOTSTRAP_DAYS",
+        "X_SCHEDULE_REFRESH_LIMIT",
+        "X_API_BEARER_TOKEN",
+      ].map((key) => [key, process.env[key]]),
+    )
+    const fixedNow = Date.parse("2026-09-16T00:00:00Z")
+    t.mock.method(Date, "now", () => fixedNow)
+    const ids = Array.from({ length: 4 }, (_, index) =>
+      snowflakeFor(new Date(fixedNow - (10 + index) * 86400_000)),
+    )
+    const requested: string[] = []
+    let profileId = ""
+    // Existing metadata needs no migration; queue order survives an empty profile.
+    upsertSyncState(database, {
+      source: "x",
+      accountId: "kano_2525",
+      metadata: { pendingStatusIds: ids, retained: { value: "synthetic" } },
+      recordSuccess: false,
+    })
+    try {
+      process.env.X_HANDLES = "kano_2525"
+      process.env.X_MAX_STATUS_REQUESTS = String(budget)
+      process.env.X_REFRESH_KNOWN = "0"
+      process.env.X_BOOTSTRAP_DAYS = "7"
+      process.env.X_SCHEDULE_REFRESH_LIMIT = "0"
+      delete process.env.X_API_BEARER_TOKEN
+      globalThis.fetch = async (url) => {
+        const value = String(url)
+        if (value === "https://x.com/kano_2525")
+          return response(
+            profileId
+              ? `<a href="/kano_2525/status/${profileId}">post</a>`
+              : "",
+          )
+        const id = value.match(
+          /^https:\/\/api\.vxtwitter\.com\/kano_2525\/status\/(\d+)$/u,
+        )?.[1]
+        assert.ok(id)
+        requested.push(id)
+        return response("unavailable", { status: 404 })
+      }
+
+      const admittedIds = [...ids]
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        // Newer profile IDs join at the tail without overtaking admitted work.
+        profileId = snowflakeFor(new Date(fixedNow - (8 - attempt) * 3600_000))
+        admittedIds.push(profileId)
+        const before = requested.length
+        await assert.rejects(syncX(database))
+        assert.equal(requested.length - before, budget)
+        assert.equal(new Set(requested.slice(before)).size, budget)
+        const state = getSyncState(database, "x", "kano_2525")
+        assert.deepEqual(
+          [...state.metadata.pendingStatusIds].sort(),
+          [...admittedIds].sort(),
+        )
+        assert.deepEqual(state.metadata.retained, { value: "synthetic" })
+        assert.equal(state.cursorId, null)
+        assert.equal(state.cursorTime, null)
+        assert.equal(state.lastSuccessAt, null)
+      }
+      assert.deepEqual(requested.slice(0, ids.length), ids)
+      assert.ok(requested.includes(admittedIds[4]))
+      // Once arrivals stop, every queued ID receives exactly one request per round.
+      profileId = ""
+      requested.length = 0
+      for (
+        let attempt = 0;
+        attempt < admittedIds.length / budget;
+        attempt += 1
+      ) {
+        const before = requested.length
+        await assert.rejects(syncX(database))
+        assert.equal(requested.length - before, budget)
+      }
+      assert.deepEqual([...requested].sort(), [...admittedIds].sort())
+    } finally {
+      globalThis.fetch = originalFetch
+      for (const [key, value] of Object.entries(originalEnvironment)) {
+        if (value == null) delete process.env[key]
+        else process.env[key] = value
+      }
+      database.close()
     }
   })
 }

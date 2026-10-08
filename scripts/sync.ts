@@ -549,7 +549,14 @@ async function syncXAccount(
     return false
   })
   const candidates = eligibleIds.slice(0, Math.max(0, requestLimit))
-  const pendingStatusIds = eligibleIds.filter((id) => !knownIds.has(id))
+  const selectedIds = new Set(candidates)
+  const unfinishedIds = eligibleIds.filter((id) => !knownIds.has(id))
+  // Rotate selected work behind unattempted work before requesting details.
+  // Persisted order prevents failures or restarts from pinning an ID at the head.
+  const pendingStatusIds = [
+    ...unfinishedIds.filter((id) => !selectedIds.has(id)),
+    ...unfinishedIds.filter((id) => selectedIds.has(id)),
+  ]
   const metadata = {
     ...state?.metadata,
     handle,
