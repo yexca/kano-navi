@@ -28,7 +28,7 @@ import {
   listActiveVideoIds,
   startSyncRun,
   setAppSetting,
-  upsertAssets,
+  upsertScheduleAssetsFromPosts,
   upsertEvents,
   upsertPosts,
   upsertProfile,
@@ -37,7 +37,6 @@ import {
 } from "../server/database.ts"
 import { downloadPendingMedia } from "../server/media-downloader.ts"
 import { extractPendingSchedules } from "../server/schedule-extractor.ts"
-import { isLikelyScheduleBoardPost } from "../server/schedule-asset.ts"
 import { fetchSourceWindow } from "./source-history.ts"
 import {
   isInFetchWindow,
@@ -82,28 +81,6 @@ const japanDateFormatter = new Intl.DateTimeFormat("en-CA", {
   month: "2-digit",
   day: "2-digit",
 })
-
-function japanDateKey(value) {
-  const date = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  const parts = japanDateFormatter
-    .formatToParts(date)
-    .reduce<Record<string, string>>((result, part) => {
-      result[part.type] = part.value
-      return result
-    }, {})
-  return `${parts.year}-${parts.month}-${parts.day}`
-}
-
-function weekStartInJapan(value) {
-  const key = japanDateKey(value)
-  if (!key) return null
-  const [year, month, day] = key.split("-").map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day))
-  const daysSinceMonday = (date.getUTCDay() + 6) % 7
-  date.setUTCDate(date.getUTCDate() - daysSinceMonday)
-  return date.toISOString().slice(0, 10)
-}
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value ?? ""), 10)
@@ -510,7 +487,6 @@ async function syncXAccount(
       supplemented: scheduleIds.length,
       requested: 0,
       scheduleAssets: 0,
-      scheduleAsset: null,
       errors: ["X 状态请求预算已耗尽"],
     }
   }
@@ -611,22 +587,6 @@ async function syncXAccount(
     throw error
   }
 
-  const schedulePost = posts
-    .filter((post) => post.media_url && isLikelyScheduleBoardPost(post))
-    .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))[0]
-  const scheduleAsset = schedulePost
-    ? {
-        id: `schedule-${weekStartInJapan(schedulePost.published_at) || schedulePost.id}`,
-        kind: "schedule",
-        url: schedulePost.media_url,
-        source_url: schedulePost.url,
-        alt: schedulePost.media_alt || "Kano Mahoro weekly schedule",
-        week_start: weekStartInJapan(schedulePost.published_at),
-        source_account: handle,
-        updated_at: schedulePost.published_at,
-      }
-    : null
-
   const newestPost = [...posts].sort(
     (left, right) =>
       Date.parse(right.published_at) - Date.parse(left.published_at),
@@ -635,8 +595,14 @@ async function syncXAccount(
   const nextCursorTime = newestPost?.published_at || state?.cursorTime || null
   const shouldAdvanceCursor =
     Boolean(newestPost) && (!hasCursor || isAfterCursor(nextCursorId))
+  let scheduleAssets = 0
   database.transaction(() => {
     if (posts.length) upsertPosts(database, posts)
+    scheduleAssets = upsertScheduleAssetsFromPosts(
+      database,
+      posts,
+      handle,
+    ).length
     if (!selectedWindow)
       upsertSyncState(database, {
         source: "x",
@@ -659,8 +625,7 @@ async function syncXAccount(
     requested: candidates.length,
     supplemented: scheduleIds.length,
     scheduleCandidates: scheduleIds.length,
-    scheduleAssets: scheduleAsset ? 1 : 0,
-    scheduleAsset,
+    scheduleAssets,
     errors,
     ...(selectedWindow
       ? {
@@ -740,7 +705,6 @@ export async function syncX(
           ? {
               handle,
               supplemented: 0,
-              scheduleAsset: null,
               ...(await fetchSourceWindow(database, {
                 source: "x",
                 account: handle,
@@ -782,18 +746,6 @@ export async function syncX(
       `X 所有账号同步失败${errors.length ? ` (${errors[0]})` : ""}`,
     )
   }
-  const scheduleAssets = accounts
-    .map((account) => account.scheduleAsset)
-    .filter(Boolean)
-  const scheduleAsset = [...scheduleAssets].sort(
-    (a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at),
-  )[0]
-  if (scheduleAssets.length) upsertAssets(database, scheduleAssets)
-  // Keep the old well-known ID as a compatibility alias for older snapshots;
-  // the dashboard prefers the week-qualified records when both exist.
-  if (scheduleAsset) {
-    upsertAssets(database, [{ ...scheduleAsset, id: "weekly-schedule" }])
-  }
   setAppSetting(database, "x_accounts", JSON.stringify(handles))
   return {
     count: accounts.reduce((sum, account) => sum + account.count, 0),
@@ -803,10 +755,11 @@ export async function syncX(
       0,
     ),
     requested: requestedTotal,
-    scheduleAssets: scheduleAssets.length,
-    accounts: accounts.map(
-      ({ scheduleAsset: _scheduleAsset, ...account }) => account,
+    scheduleAssets: accounts.reduce(
+      (sum, account) => sum + (account.scheduleAssets || 0),
+      0,
     ),
+    accounts,
     errors: [
       ...errors,
       ...accounts.flatMap((account) =>

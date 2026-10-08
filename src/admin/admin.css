@@ -514,6 +514,7 @@ button.adm-tag.is-inactive:not(:disabled):hover {
   position: sticky;
   top: 0;
   display: flex;
+  min-width: 0;
   height: 100vh;
   flex-direction: column;
   gap: 18px;
@@ -869,6 +870,7 @@ button.adm-tag.is-inactive:not(:disabled):hover {
 .adm-card {
   position: relative;
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 16px;
   padding: 20px;
@@ -3142,7 +3144,8 @@ body.adm-dialog-open {
 
 @media (max-width: 960px) {
   .adm-shell {
-    grid-template-columns: 1fr;
+    /* Allow the scrolling navigation to shrink inside the viewport. */
+    grid-template-columns: minmax(0, 1fr);
     background: hsl(var(--background));
   }
 
@@ -3175,6 +3178,7 @@ body.adm-dialog-open {
   }
 
   .adm-nav-group {
+    flex: 0 0 auto;
     flex-direction: row;
   }
 
@@ -3198,7 +3202,7 @@ body.adm-dialog-open {
   .adm-grid-2,
   .adm-provider-layout,
   .adm-profile-slots {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .adm-provider-list {
@@ -3267,7 +3271,11 @@ body.adm-dialog-open {
   .adm-form-3,
   .adm-check-grid,
   .adm-featured {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-featured-form .adm-field {
+    min-width: 0;
   }
 
   .adm-runner-foot {

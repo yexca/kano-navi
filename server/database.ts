@@ -23,7 +23,10 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import Database from "better-sqlite3"
-import { isLikelyScheduleBoardText } from "./schedule-asset.ts"
+import {
+  isLikelyScheduleBoardText,
+  scheduleAssetsFromPosts,
+} from "./schedule-asset.ts"
 import { fileURLToPath } from "node:url"
 import { seedData } from "./seed-data.ts"
 import { normalizeSourceLookback } from "./fetch-window.ts"
@@ -2636,6 +2639,32 @@ export function upsertAssets(database: DatabaseConnection, assets = []) {
   })
   run(assets)
   registerMediaCandidates(database, assets.flatMap(mediaCandidatesFromAsset))
+}
+
+export function upsertScheduleAssetsFromPosts(
+  database: DatabaseConnection,
+  posts,
+  handle,
+) {
+  const previous = database.prepare<
+    unknown[],
+    { updated_at: string; source_url: string }
+  >("SELECT updated_at, source_url FROM assets WHERE id = ?")
+  const isCurrent = (asset) => {
+    const before = previous.get(asset.id)
+    // Older historical pages/accounts must not replace a newer board or alias.
+    return (
+      !before ||
+      before.source_url === asset.source_url ||
+      !(Date.parse(before.updated_at) > Date.parse(asset.updated_at))
+    )
+  }
+  const assets = scheduleAssetsFromPosts(posts, handle).filter(isCurrent)
+  upsertAssets(database, assets)
+  const latest = assets[0]
+  if (latest && isCurrent({ ...latest, id: "weekly-schedule" }))
+    upsertAssets(database, [{ ...latest, id: "weekly-schedule" }])
+  return assets
 }
 
 const eventAdminColumns = `

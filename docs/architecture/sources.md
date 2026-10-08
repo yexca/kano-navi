@@ -149,6 +149,13 @@ even when it falls outside the most recent 30 rows.
 
 ### Schedule Images
 
+Public-profile synchronization and official X date-window pages share the same
+candidate builder. Each page registers its newest matching image per Japan
+Monday week, together with its source account. Candidates, post/media records,
+and historical continuation checkpoints commit atomically. Older pages or
+accounts cannot replace a newer image for that week or the `weekly-schedule`
+compatibility alias. Registration does not run extraction or approve an image.
+
 A schedule image (`assets.kind = schedule`) is public only after two gates:
 
 1. Sync promotes a post's image only when the author's own wording, including

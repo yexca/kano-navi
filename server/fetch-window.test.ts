@@ -10,10 +10,16 @@ import { createApp } from "./app.ts"
 import {
   getSyncState,
   getVideoRecord,
+  getDashboard,
+  getScheduleAssetReview,
   initializeDatabase,
+  listScheduleAssets,
   listWorkflows,
   upsertPosts,
   upsertSyncState,
+  upsertScheduleAssetReview,
+  upsertMediaAsset,
+  upsertAssets,
   upsertVideos,
   upsertWorkflow,
 } from "./database.ts"
@@ -26,6 +32,7 @@ import {
 } from "./fetch-window.ts"
 import { createSyncJobManager } from "./sync-jobs.ts"
 import { createWorkflowScheduler } from "./workflow-scheduler.ts"
+import { resolveMediaCachePath, writeMediaFileAtomic } from "./media-cache.ts"
 
 process.env.SYNC_REQUEST_DELAY_MS = "0"
 const { mapTweet, syncX, syncYoutube, runSync } =
@@ -462,6 +469,446 @@ test("official X fetches share the request budget even when an account fails", a
     }
     await assert.rejects(syncX(database, window))
     assert.equal(requests, 1)
+  })
+})
+
+test("official recent X pages register weekly boards, exclude stream notices and retain same-image reviews", async (t) => {
+  t.mock.method(Date, "now", () => now)
+  await withSourceEnvironment(async (database: DatabaseConnection) => {
+    upsertSyncState(database, {
+      source: "x",
+      accountId: account,
+      cursorId: "incremental-kept",
+      metadata: { pendingStatusIds: ["unfinished"] },
+    })
+    const incremental = getSyncState(database, "x", account)
+    let imageUrl = "https://media.example.invalid/weekly.png"
+    globalThis.fetch = async (value, options) => {
+      assert.equal(new URL(value).origin, "https://api.x.com")
+      assert.equal(options.redirect, "error")
+      assert.ok(options.signal instanceof AbortSignal)
+      return json({
+        data: [
+          {
+            ...xEntry("101", "2026-10-05T00:00:00Z"),
+            text: "This week schedule board",
+            attachments: { media_keys: ["board"] },
+          },
+          {
+            ...xEntry("102", "2026-10-06T00:00:00Z"),
+            text: "今日は22時から配信予定です",
+            attachments: { media_keys: ["stream"] },
+          },
+        ],
+        includes: {
+          media: [
+            { media_key: "board", url: imageUrl },
+            {
+              media_key: "stream",
+              url: "https://media.example.invalid/stream.png",
+            },
+          ],
+        },
+        meta: {},
+      })
+    }
+    const input = { mode: "recent", days: 7 }
+    assert.equal((await syncX(database, input)).scheduleAssets, 1)
+    const assets = listScheduleAssets(database)
+    assert.deepEqual(getDashboard(database).scheduleImages, [])
+    assert.deepEqual(assets.map((asset) => asset.id).sort(), [
+      "schedule-2026-10-05",
+      "weekly-schedule",
+    ])
+    for (const asset of assets) {
+      assert.equal(asset.sourceAccount, account)
+      assert.equal(asset.weekStart, "2026-10-05")
+      assert.equal(asset.sourceUrl, `https://x.com/${account}/status/101`)
+      assert.equal(
+        getScheduleAssetReview(database, asset.id).llmStatus,
+        "pending",
+      )
+      upsertScheduleAssetReview(database, {
+        assetId: asset.id,
+        llmStatus: "schedule",
+        llmConfidence: 0.9,
+        manualStatus: "schedule",
+        manualReason: "Synthetic manual review",
+      })
+    }
+    // Even an approved candidate cannot expose an uncached remote image.
+    assert.ok(
+      getDashboard(database).assets.every((asset) => asset.url === null),
+    )
+    const cached = await writeMediaFileAtomic({
+      source: "x",
+      content: Buffer.concat([
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN4sAAAAASUVORK5CYII=",
+          "base64",
+        ),
+        Buffer.from("synthetic-official-board-cache"),
+      ]),
+      extension: "png",
+    })
+    t.after(() =>
+      fs.rmSync(resolveMediaCachePath(cached.relativePath), { force: true }),
+    )
+    upsertMediaAsset(database, {
+      source: "x",
+      sourceUrl: imageUrl,
+      status: "ready",
+      cachePath: cached.relativePath,
+      mimeType: "image/png",
+      sha256: cached.sha256,
+      byteSize: cached.byteSize,
+    })
+    assert.deepEqual(
+      getDashboard(database)
+        .scheduleImages.map((asset) => asset.id)
+        .sort(),
+      assets.map((asset) => asset.id).sort(),
+    )
+    assert.ok(
+      getDashboard(database).scheduleImages.every((asset) =>
+        asset.url.startsWith("/media/"),
+      ),
+    )
+    const reviews = assets.map((asset) =>
+      getScheduleAssetReview(database, asset.id),
+    )
+    await syncX(database, input)
+    assert.deepEqual(listScheduleAssets(database), assets)
+    assert.deepEqual(
+      assets.map((asset) => getScheduleAssetReview(database, asset.id)),
+      reviews,
+    )
+    imageUrl = "https://media.example.invalid/replacement.png"
+    await syncX(database, input)
+    for (const asset of assets) {
+      const review = getScheduleAssetReview(database, asset.id)
+      assert.equal(review.llmStatus, "pending")
+      assert.equal(review.manualStatus, "unreviewed")
+      assert.equal(review.manualReason, null)
+    }
+    assert.deepEqual(getDashboard(database).scheduleImages, [])
+    assert.deepEqual(getSyncState(database, "x", account), incremental)
+    assert.equal(
+      database
+        .prepare<unknown[], { count: number }>(
+          "SELECT COUNT(*) AS count FROM schedule_extractions",
+        )
+        .get().count,
+      0,
+    )
+    assert.equal(
+      database
+        .prepare<unknown[], { count: number }>(
+          "SELECT COUNT(*) AS count FROM posts",
+        )
+        .get().count,
+      2,
+    )
+    assert.ok(
+      database
+        .prepare("SELECT id FROM media_assets WHERE source_url = ?")
+        .get(imageUrl),
+    )
+  })
+})
+
+test("historical X boards retain Japan weeks across pages and accounts without regressing the alias", async () => {
+  await withSourceEnvironment(async (database: DatabaseConnection) => {
+    process.env.X_HANDLES = `${account},other_test`
+    let page = 0
+    globalThis.fetch = async (value) => {
+      const url = new URL(value)
+      const otherAccount = url.searchParams.get("query") === "from:other_test"
+      const continued = Boolean(url.searchParams.get("next_token"))
+      page += 1
+      const date = otherAccount
+        ? "2026-09-20T20:00:00Z"
+        : continued
+          ? "2026-09-20T18:00:00Z"
+          : "2026-09-20T23:00:00Z"
+      return json({
+        data: [
+          {
+            ...xEntry(String(page), date),
+            text: "今週の予定表",
+            attachments: { media_keys: ["board"] },
+          },
+          ...(!otherAccount && !continued
+            ? [
+                {
+                  ...xEntry("older-week", "2026-09-13T20:00:00Z"),
+                  text: "Weekly schedule",
+                  attachments: { media_keys: ["older"] },
+                },
+              ]
+            : []),
+        ],
+        includes: {
+          media: [
+            {
+              media_key: "board",
+              url: `https://media.example.invalid/board-${page}.png`,
+            },
+            {
+              media_key: "older",
+              url: "https://media.example.invalid/older.png",
+            },
+          ],
+        },
+        meta:
+          !otherAccount && !continued
+            ? { next_token: "synthetic-second-page" }
+            : {},
+      })
+    }
+    await syncX(database, window)
+    const assets = listScheduleAssets(database)
+    assert.deepEqual(assets.map((asset) => asset.id).sort(), [
+      "schedule-2026-09-14",
+      "schedule-2026-09-21",
+      "weekly-schedule",
+    ])
+    const latest = assets.find((asset) => asset.id === "schedule-2026-09-21")
+    assert.equal(latest.sourceAccount, account)
+    assert.equal(latest.url, "https://media.example.invalid/board-1.png")
+    assert.equal(
+      assets.find((asset) => asset.id === "weekly-schedule").url,
+      latest.url,
+    )
+    assert.equal(getSyncState(database, "x", account), null)
+    assert.equal(getSyncState(database, "x", "other_test"), null)
+  })
+})
+
+test("official X refresh fills a same-source schedule placeholder even with a newer metadata timestamp", async () => {
+  await withSourceEnvironment(async (database: DatabaseConnection) => {
+    upsertAssets(database, [
+      {
+        id: "weekly-schedule",
+        kind: "schedule",
+        url: null,
+        source_url: `https://x.com/${account}/status/101`,
+        updated_at: "2026-10-01T00:00:00Z",
+      },
+    ])
+    globalThis.fetch = async () =>
+      json({
+        data: [
+          {
+            ...xEntry("101", "2026-09-20T00:00:00Z"),
+            text: "Weekly schedule board",
+            attachments: { media_keys: ["board"] },
+          },
+        ],
+        includes: {
+          media: [
+            {
+              media_key: "board",
+              url: "https://media.example.invalid/board.png",
+            },
+          ],
+        },
+        meta: {},
+      })
+    await fetchSourceWindow(database, {
+      source: "x",
+      account,
+      window,
+      mapTweet,
+      now,
+    })
+    assert.equal(
+      listScheduleAssets(database).find(
+        (asset) => asset.id === "weekly-schedule",
+      ).url,
+      "https://media.example.invalid/board.png",
+    )
+  })
+})
+
+test("historical X posts, board candidates, media and checkpoint roll back together", async () => {
+  await withSourceEnvironment(async (database: DatabaseConnection) => {
+    globalThis.fetch = async () =>
+      json({
+        data: [
+          {
+            ...xEntry("101", "2026-09-20T00:00:00Z"),
+            text: "Weekly schedule board",
+            attachments: { media_keys: ["board"] },
+          },
+        ],
+        includes: {
+          media: [
+            {
+              media_key: "board",
+              url: "https://media.example.invalid/board.png",
+            },
+          ],
+        },
+        meta: {},
+      })
+    database.exec(
+      "CREATE TRIGGER reject_checkpoint BEFORE INSERT ON sync_state BEGIN SELECT RAISE(ABORT, 'synthetic checkpoint failure'); END",
+    )
+    await assert.rejects(
+      fetchSourceWindow(database, {
+        source: "x",
+        account,
+        window,
+        mapTweet,
+        now,
+      }),
+    )
+    for (const table of [
+      "posts",
+      "assets",
+      "media_assets",
+      "media_links",
+      "schedule_asset_reviews",
+      "sync_state",
+    ])
+      assert.equal(
+        database
+          .prepare<unknown[], { count: number }>(
+            `SELECT COUNT(*) AS count FROM ${table}`,
+          )
+          .get().count,
+        0,
+      )
+  })
+})
+
+for (const source of ["x", "youtube"]) {
+  for (const sizeHeader of ["declared", "missing", "understated"]) {
+    test(`${source} history cancels ${sizeHeader} oversized responses and preserves snapshots and continuation`, async () => {
+      await withSourceEnvironment(async (database: DatabaseConnection) => {
+        const input = {
+          source,
+          account: source === "x" ? account : channel,
+          window,
+          mapTweet,
+          now,
+          pageLimit: 1,
+        }
+        const normal =
+          source === "x"
+            ? {
+                data: [xEntry("kept", "2026-09-10T00:00:00Z")],
+                meta: { next_token: "synthetic-kept-page" },
+              }
+            : {
+                items: [videoEntry("kept", "2026-09-10T00:00:00Z")],
+                nextPageToken: "synthetic-kept-page",
+              }
+        globalThis.fetch = async () => json(normal)
+        await fetchSourceWindow(database, input)
+        const savedState = database.prepare("SELECT * FROM sync_state").all()
+        const savedRecords = database
+          .prepare(`SELECT * FROM ${source === "x" ? "posts" : "videos"}`)
+          .all()
+        let cancelled = false
+        let pulls = 0
+        // UTF-8 byte count exceeds the cap while the character count does not.
+        const chunk = Buffer.from("界".repeat(256 * 1024))
+        const oversized = () =>
+          new Response(
+            new ReadableStream({
+              pull(controller) {
+                pulls += 1
+                if (pulls === 1) controller.enqueue(Buffer.from('{"unused":"'))
+                else if (pulls < 16) controller.enqueue(chunk)
+                else {
+                  controller.enqueue(Buffer.from('"}'))
+                  controller.close()
+                }
+              },
+              cancel() {
+                cancelled = true
+              },
+            }),
+            {
+              headers:
+                sizeHeader === "missing"
+                  ? {}
+                  : {
+                      "content-length":
+                        sizeHeader === "declared"
+                          ? String(8 * 1024 * 1024 + 1)
+                          : "1",
+                    },
+            },
+          )
+        globalThis.fetch = async (value, options) => {
+          const url = new URL(value)
+          assert.equal(
+            url.searchParams.get(source === "x" ? "next_token" : "pageToken"),
+            "synthetic-kept-page",
+          )
+          assert.equal(options.redirect, "error")
+          assert.ok(options.signal instanceof AbortSignal)
+          return oversized()
+        }
+        await assert.rejects(fetchSourceWindow(database, input), {
+          message: "source_api_response_too_large",
+          requested: 1,
+        })
+        assert.equal(cancelled, true)
+        assert.ok(pulls < 16)
+        if (sizeHeader === "declared") assert.ok(pulls <= 1)
+        assert.deepEqual(
+          database.prepare("SELECT * FROM sync_state").all(),
+          savedState,
+        )
+        assert.deepEqual(
+          database
+            .prepare(`SELECT * FROM ${source === "x" ? "posts" : "videos"}`)
+            .all(),
+          savedRecords,
+        )
+        globalThis.fetch = async () =>
+          json(source === "x" ? { data: [], meta: {} } : { items: [] })
+        assert.equal((await fetchSourceWindow(database, input)).hasMore, false)
+      })
+    })
+  }
+}
+
+test("an oversized later history page reports a controlled error and retains the committed first page", async () => {
+  await withSourceEnvironment(async (database: DatabaseConnection) => {
+    let calls = 0
+    globalThis.fetch = async () =>
+      ++calls === 1
+        ? json({
+            data: [xEntry("kept", "2026-09-10T00:00:00Z")],
+            meta: { next_token: "synthetic-kept-page" },
+          })
+        : new Response(credential, {
+            headers: { "content-length": String(8 * 1024 * 1024 + 1) },
+          })
+    const result = await fetchSourceWindow(database, {
+      source: "x",
+      account,
+      window,
+      mapTweet,
+      now,
+    })
+    assert.equal(result.count, 1)
+    assert.equal(result.hasMore, true)
+    assert.deepEqual(result.errors, ["source_api_response_too_large"])
+    assert.ok(!JSON.stringify(result).includes(credential))
+    assert.equal(
+      database
+        .prepare<unknown[], { cursor_id: string }>(
+          "SELECT cursor_id FROM sync_state WHERE source = 'x-window'",
+        )
+        .get().cursor_id,
+      "synthetic-kept-page",
+    )
   })
 })
 

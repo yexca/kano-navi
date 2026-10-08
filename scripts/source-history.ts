@@ -6,6 +6,7 @@ import {
   getVideoRecord,
   upsertSyncState,
   upsertPosts,
+  upsertScheduleAssetsFromPosts,
   upsertVideos,
 } from "../server/database.ts"
 import {
@@ -22,9 +23,40 @@ function bounded(value, fallback, maximum) {
     : fallback
 }
 
+// At most 100 X posts or 50 YouTube entries per page, including expansions.
+const MAX_SOURCE_API_BYTES = 4 * 1024 * 1024
+
+async function readApiJson(response: Response) {
+  const declaredSize = Number(response.headers.get("content-length"))
+  if (declaredSize > MAX_SOURCE_API_BYTES) {
+    await response.body?.cancel()
+    throw new Error("source_api_response_too_large")
+  }
+  if (!response.body) throw new Error("source_api_invalid_response")
+  const reader = response.body.getReader()
+  const chunks: Buffer[] = []
+  let size = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > MAX_SOURCE_API_BYTES) {
+        await reader.cancel()
+        throw new Error("source_api_response_too_large")
+      }
+      chunks.push(Buffer.from(value))
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return JSON.parse(Buffer.concat(chunks, size).toString("utf8"))
+}
+
 // Credentials stay in headers. Response bodies and fetch exception messages
 // can echo credentials, so only a controlled error goes into runs/logs.
 async function apiJson(url, headers) {
+  let controlledError = "source_api_request_failed"
   try {
     const response = await fetch(url, {
       headers: { accept: "application/json", ...headers },
@@ -33,11 +65,20 @@ async function apiJson(url, headers) {
       ),
       redirect: "error",
     })
-    if (!response.ok) throw new Error(`source_api_http_${response.status}`)
-    return await response.json()
-  } catch (error) {
-    if (/^source_api_http_\d{3}$/u.test(error.message)) throw error
-    throw new Error("source_api_request_failed")
+    if (!response.ok) {
+      controlledError = `source_api_http_${response.status}`
+      await response.body?.cancel()
+      throw new Error(controlledError)
+    }
+    try {
+      return await readApiJson(response)
+    } catch (error) {
+      if (error?.message === "source_api_response_too_large")
+        controlledError = "source_api_response_too_large"
+      throw error
+    }
+  } catch {
+    throw new Error(controlledError)
   }
 }
 
@@ -119,6 +160,7 @@ export async function fetchSourceWindow(
   let requested = 0
   let count = 0
   let discovered = 0
+  let scheduleAssets = 0
   const previousDiscovered = nextToken ? checkpoint.metadata.discovered || 0 : 0
   const errors = []
   do {
@@ -267,8 +309,14 @@ export async function fetchSourceWindow(
     }
     // Persist the page and continuation together, so retries cannot skip it.
     database.transaction(() => {
-      if (source === "x") upsertPosts(database, records)
-      else upsertVideos(database, records)
+      if (source === "x") {
+        upsertPosts(database, records)
+        scheduleAssets += upsertScheduleAssetsFromPosts(
+          database,
+          records,
+          account,
+        ).length
+      } else upsertVideos(database, records)
       upsertSyncState(database, {
         source: `${source}-window`,
         accountId: key,
@@ -310,6 +358,7 @@ export async function fetchSourceWindow(
     count,
     discovered,
     requested,
+    ...(source === "x" ? { scheduleAssets } : {}),
     window,
     hasMore: Boolean(nextToken),
     errors,

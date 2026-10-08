@@ -45,6 +45,9 @@ interval. `before` runs finish pending pages before moving farther back, using
 also moves this boundary backward, preventing an endless retry over the same
 empty month. Failures retain all records and the last successful checkpoint;
 request errors expose only controlled codes, not upstream bodies or credentials.
+Each official API response has a fixed 4 MiB byte limit. The adapter checks
+`Content-Length` and counts streamed bytes, cancelling an oversized body before
+parsing or writing its page. Timeouts and redirect blocking apply throughout.
 
 Saved workflows have `sourceLookbackDays: { x: 7, youtube: 14 }`, persisted in
 the additive `workflows.source_lookback_json` column. Existing workflows receive
