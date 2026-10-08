@@ -73,6 +73,8 @@ import { createAdminAuth } from "./admin-auth.ts"
 import { defaultScheduleModel } from "./schedule-extractor.ts"
 import { decryptSecret, encryptSecret } from "./secret-store.ts"
 import { fetchRemoteModels, inferModelTags } from "./llm-catalog.ts"
+import { inferenceEndpoint } from "../src/lib/llm-endpoints.ts"
+import { providerHeaders, readLlmJson } from "./llm-http.ts"
 import {
   WORKFLOW_MAX_INTERVAL_MINUTES,
   WORKFLOW_MIN_INTERVAL_MINUTES,
@@ -342,14 +344,6 @@ function providerBaseUrl(
   return url.toString().replace(/\/+$/u, "")
 }
 
-function providerEndpoint(baseUrl, protocol) {
-  const base = String(baseUrl).replace(/\/+$/u, "")
-  if (/(?:\/responses|\/chat\/completions)$/u.test(base)) return base
-  return protocol === "openai-chat-completions"
-    ? `${base}/chat/completions`
-    : `${base}/responses`
-}
-
 function modelId(
   value,
   {
@@ -564,7 +558,12 @@ async function discoverProviderModels(
   if (!apiKey) throw new AdminInputError("provider API key is not configured")
   try {
     const remote = await fetchRemoteModels(
-      { baseUrl: provider.baseUrl, apiKey, timeoutMs: provider.timeoutMs },
+      {
+        baseUrl: provider.baseUrl,
+        apiKey,
+        timeoutMs: provider.timeoutMs,
+        protocol: provider.protocol,
+      },
       { fetchImpl },
     )
     updateLlmProviderStatus(database, provider.id, { status: "success" })
@@ -601,9 +600,9 @@ async function testProviderConnection(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), provider.timeoutMs)
   try {
-    const endpoint = providerEndpoint(provider.baseUrl, provider.protocol)
+    const endpoint = inferenceEndpoint(provider.baseUrl, provider.protocol)
     const body =
-      provider.protocol === "openai-chat-completions"
+      provider.protocol !== "openai-responses"
         ? {
             model: testModel,
             messages: [{ role: "user", content: "ping" }],
@@ -619,14 +618,12 @@ async function testProviderConnection(
       method: "POST",
       redirect: "error",
       signal: controller.signal,
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
+      headers: providerHeaders(provider.protocol, apiKey),
       body: JSON.stringify(body),
     })
     if (!response.ok)
       throw new Error(`provider returned HTTP ${response.status}`)
+    await readLlmJson(response)
     updateLlmProviderStatus(database, provider.id, { status: "success" })
     return {
       ok: true,

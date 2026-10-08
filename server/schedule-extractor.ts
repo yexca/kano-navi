@@ -50,6 +50,8 @@ import {
 } from "./database.ts"
 import { mediaIdForSourceUrl, resolveMediaCachePath } from "./media-cache.ts"
 import { decryptSecret } from "./secret-store.ts"
+import { inferenceEndpoint } from "../src/lib/llm-endpoints.ts"
+import { providerHeaders, readLlmJson } from "./llm-http.ts"
 
 export const scheduleExtractorVersion = "openai-schedule-v3"
 export const defaultScheduleModel = "gpt-4o-mini"
@@ -457,14 +459,10 @@ function normalizeExtractionResult(result, post) {
 }
 
 function providerEndpoint(provider) {
-  const base = String(provider.baseUrl || defaultOpenAiBaseUrl).replace(
-    /\/+$/u,
-    "",
+  return inferenceEndpoint(
+    provider.baseUrl || defaultOpenAiBaseUrl,
+    provider.protocol,
   )
-  if (/(?:\/responses|\/chat\/completions)$/u.test(base)) return base
-  return provider.protocol === "openai-chat-completions"
-    ? `${base}/chat/completions`
-    : `${base}/responses`
 }
 
 function imageDataUrl(image) {
@@ -508,34 +506,85 @@ async function requestLlm(
     apiKey,
     fetchImpl = fetch,
     timeoutMs,
-  }: { apiKey: any; fetchImpl?: any; timeoutMs: any },
+    protocol = "openai-responses",
+  }: { apiKey: any; fetchImpl?: any; timeoutMs: any; protocol?: string },
 ) {
   const timeout = timeoutValue(timeoutMs)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
-  let response
   try {
-    response = await fetchImpl(endpoint, {
+    const response = await fetchImpl(endpoint, {
       method: "POST",
+      redirect: "error",
       signal: controller.signal,
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
+      headers: providerHeaders(protocol, apiKey),
       body: JSON.stringify(body),
     })
+    if (!response.ok) {
+      throw new Error(`LLM request failed (HTTP ${response.status})`)
+    }
+    return await readLlmJson(response)
   } catch (error) {
-    if (controller.signal.aborted) throw new Error("OpenAI request timed out")
-    throw error
+    throw new Error(
+      controller.signal.aborted
+        ? "LLM request timed out"
+        : /^LLM request failed \(HTTP \d+\)$/u.test(error?.message)
+          ? error.message
+          : "LLM request failed",
+    )
   } finally {
     clearTimeout(timer)
   }
-  if (!response.ok) {
-    // Do not persist or log an upstream response body: providers sometimes
-    // echo authorization material or other sensitive request fields.
-    throw new Error(`LLM request failed (HTTP ${response.status})`)
+}
+
+function anthropicImage(image) {
+  return {
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: image.mimeType,
+      data: fs.readFileSync(image.filePath).toString("base64"),
+    },
   }
-  return response.json()
+}
+
+async function callAnthropicStructured({
+  endpoint,
+  model,
+  instructions,
+  content,
+  schema,
+  name,
+  maxTokens,
+  apiKey,
+  fetchImpl,
+  timeoutMs,
+}) {
+  const payload = await requestLlm(
+    endpoint,
+    {
+      model,
+      max_tokens: Math.min(4000, Math.max(1, Number(maxTokens))),
+      system: instructions,
+      messages: [{ role: "user", content }],
+      tools: [
+        {
+          name,
+          description: "Return the structured classification result.",
+          input_schema: schema,
+        },
+      ],
+      tool_choice: { type: "tool", name },
+    },
+    { apiKey, fetchImpl, timeoutMs, protocol: "anthropic-messages" },
+  )
+  const result = payload?.content?.find(
+    (part) => part?.type === "tool_use" && part.name === name,
+  )
+  if (!result?.input || typeof result.input !== "object") {
+    throw new Error("LLM response did not contain structured output")
+  }
+  return result.input
 }
 
 async function callOpenAiScheduleExtraction(
@@ -572,6 +621,23 @@ async function callOpenAiScheduleExtraction(
   const provider = { protocol, baseUrl: baseUrl || defaultOpenAiBaseUrl }
   const resolvedEndpoint = endpoint || providerEndpoint(provider)
   const sourceText = `Source post published at ${post.publishedAt}. Source URL: ${post.url || ""}\n\n${post.text || ""}`
+  if (protocol === "anthropic-messages") {
+    return callAnthropicStructured({
+      endpoint: resolvedEndpoint,
+      model,
+      instructions: scheduleInstructions,
+      content: [
+        ...(includeImages ? normalizedImages.map(anthropicImage) : []),
+        ...(includeText ? [{ type: "text", text: sourceText }] : []),
+      ],
+      schema: scheduleSchema,
+      name: "kano_schedule_extraction",
+      maxTokens: 4000,
+      apiKey,
+      fetchImpl,
+      timeoutMs,
+    })
+  }
   const content = []
   if (includeText) {
     content.push({
@@ -694,6 +760,20 @@ async function callOpenAiScheduleAssetVerification(
   const provider = { protocol, baseUrl: baseUrl || defaultOpenAiBaseUrl }
   const resolvedEndpoint = endpoint || providerEndpoint(provider)
   const sourceText = `Candidate schedule image. Source URL: ${asset.sourceUrl || ""}`
+  if (protocol === "anthropic-messages") {
+    return callAnthropicStructured({
+      endpoint: resolvedEndpoint,
+      model,
+      instructions: scheduleAssetVerificationInstructions,
+      content: [anthropicImage(image), { type: "text", text: sourceText }],
+      schema: scheduleAssetVerificationSchema,
+      name: "kano_schedule_asset_verification",
+      maxTokens: 800,
+      apiKey,
+      fetchImpl,
+      timeoutMs,
+    })
+  }
   if (protocol === "openai-chat-completions") {
     const payload = await requestLlm(
       resolvedEndpoint,

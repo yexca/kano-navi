@@ -15,6 +15,7 @@ services:
       NODE_ENV: development
       APP_MODE: development
       PORT: 7657
+      LLM_SECRETS_KEY: ${LLM_SECRETS_KEY:?Set LLM_SECRETS_KEY before starting}
       WORKFLOW_SCHEDULER_ENABLED: 0
     volumes:
       - .:/app

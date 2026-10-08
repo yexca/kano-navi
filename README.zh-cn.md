@@ -54,7 +54,9 @@ Kano Navi 是为 **鹿乃まほろ（Kano Mahoro）** 的粉丝制作的非官�
 1. 将 [docker-compose.yml](docker-compose.yml) 和 [.env.example](.env.example)
    保存到同一目录，将 `.env.example` 复制为 `.env`。
 2. 编辑 `.env`：保持 `APP_MODE=production`，配置去掉首尾空白后
-   **至少 12 个字符**的 `ADMIN_PASSWORD`。
+   **至少 12 个字符**的 `ADMIN_PASSWORD`。将 `LLM_SECRETS_KEY` 设置为随机的非空白值，
+   并在重启后保留。即使不使用 AI 服务也必须配置；缺失或纯空白时，服务会在打开 SQLite
+   前拒绝启动。
 3. 启动应用：
 
    ```bash
@@ -77,8 +79,8 @@ X 动态、YouTube 视频、日程与 AI 服务配置初始为空。
 
 - 在 `/admin` 中运行包含 X、YouTube 和媒体缓存步骤的工作流，填充看板内容。
 - 如需定期更新，为保存的工作流启用定时器。
-- 如需 AI 日程识别，在 `.env` 中配置 `LLM_SECRETS_KEY`，再在后台添加服务商、
-  模型与识别路由。设置方法见[配置说明](docs/operations/configuration.md)。
+- 如需 AI 日程识别，在后台添加 OpenAI 兼容服务或 Anthropic、模型与识别路由。
+  API 地址可省略 `/v1`。设置方法见[配置说明](docs/operations/configuration.md)。
 
 ## 内容如何更新
 
@@ -103,7 +105,8 @@ cp .env.example .env
 ```
 
 本地开发时，在 `.env` 中设置 `APP_MODE=development`，启用免密码管理后台；
-设置 `WORKFLOW_SCHEDULER_ENABLED=0`，关闭定时工作流。然后启动：
+设置 `WORKFLOW_SCHEDULER_ENABLED=0`，关闭定时工作流。开发与预览模式也必须在启动前
+配置非空白的 `LLM_SECRETS_KEY`。然后启动：
 
 ```bash
 npm run dev

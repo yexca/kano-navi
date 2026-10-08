@@ -66,7 +66,8 @@ operator actions, and share the bounded single-flight synchronization queue.
 ## LLM Secrets and Dependencies
 
 LLM_SECRETS_KEY stays in the environment; provider keys are encrypted before
-storage. Plaintext and ciphertext must never appear in API responses, logs,
+storage. All runtime entry points, including development, reject an unset,
+empty, or whitespace-only master key before opening SQLite. Plaintext and ciphertext must never appear in API responses, logs,
 raw_json, or extraction payloads. Rotate the master key together with stored
 provider keys when compromised. Historical source credentials and the MCP
 control token remain environment-only. See [Secure development](../development/security.md).

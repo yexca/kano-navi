@@ -1,5 +1,7 @@
 import { Brain, Eye, Layers, Type, Wrench } from "lucide-react"
 
+export { inferenceEndpoint, modelsEndpoint } from "../lib/llm-endpoints.ts"
+
 // Display metadata for catalog tags. `text` and `image` are the routing
 // capabilities enforced by the server; the others are descriptive.
 export const modelTags = [
@@ -29,7 +31,7 @@ export const scheduleRoutes = [
 ]
 
 /*
- * OpenAI-compatible presets. They only pre-fill the connection form; nothing
+ * Provider presets. They only pre-fill the connection form; nothing
  * is requested until an operator saves a key and fetches models. Every host
  * here is documented in scripts/privacy-allowlist.json.
  */
@@ -39,6 +41,12 @@ export const providerPresets = [
     name: "OpenAI",
     baseUrl: "https://api.openai.com/v1",
     protocol: "openai-responses",
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    baseUrl: "https://api.anthropic.com",
+    protocol: "anthropic-messages",
   },
   {
     id: "deepseek",
@@ -56,24 +64,6 @@ export const providerPresets = [
     id: "gemini",
     name: "Gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    protocol: "openai-chat-completions",
-  },
-  {
-    id: "siliconflow",
-    name: "SiliconFlow",
-    baseUrl: "https://api.siliconflow.cn/v1",
-    protocol: "openai-chat-completions",
-  },
-  {
-    id: "dashscope",
-    name: "DashScope",
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    protocol: "openai-chat-completions",
-  },
-  {
-    id: "moonshot",
-    name: "Moonshot",
-    baseUrl: "https://api.moonshot.cn/v1",
     protocol: "openai-chat-completions",
   },
   {
@@ -99,22 +89,6 @@ export function providerSlug(name, existingIds = []) {
     suffix += 1
   }
   return candidate
-}
-
-export function inferenceEndpoint(baseUrl, protocol) {
-  const base = String(baseUrl || "").replace(/\/+$/u, "")
-  if (!base) return ""
-  if (/(?:\/responses|\/chat\/completions)$/u.test(base)) return base
-  return protocol === "openai-chat-completions"
-    ? `${base}/chat/completions`
-    : `${base}/responses`
-}
-
-export function modelsEndpoint(baseUrl) {
-  const base = String(baseUrl || "")
-    .replace(/\/+$/u, "")
-    .replace(/\/(?:responses|chat\/completions)$/u, "")
-  return base ? `${base}/models` : ""
 }
 
 /**

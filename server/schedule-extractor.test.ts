@@ -716,6 +716,6 @@ test("OpenAI extraction aborts after its configured timeout", async () => {
           }),
       },
     ),
-    /OpenAI request timed out/u,
+    /LLM request timed out/u,
   )
 })

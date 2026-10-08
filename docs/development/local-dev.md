@@ -30,6 +30,7 @@ projections remain the runtime boundary.
 make install
 cp .env.example .env
 # Configure ADMIN_PASSWORD, or explicitly set APP_MODE=development locally.
+# Configure LLM_SECRETS_KEY in every mode before starting.
 make dev
 ```
 
@@ -52,6 +53,9 @@ or explicitly set `APP_MODE=development` in the ignored `.env` for password-free
 local work. An unset `APP_MODE` never enables the development bypass, even when
 `NODE_ENV=development`. Missing, whitespace-only, and shorter-than-12-character
 passwords are rejected before the runtime database is opened or seeded.
+All modes also require a non-blank `LLM_SECRETS_KEY` before SQLite opens.
+See [Configuration](../operations/configuration.md) for generating and retaining
+the encryption key.
 The console opens on Workflows: pick modules, run them now, or enable a timer
 for a saved workflow. LLM providers are configured once (API host, format, and
 key), their model list is fetched from `<baseUrl>/models`, and each model is

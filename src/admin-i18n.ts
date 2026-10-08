@@ -215,14 +215,14 @@ export const adminMessages = {
 
     "admin.provider.title": "LLM providers",
     "admin.provider.description":
-      "Connect OpenAI-compatible services once, fetch their model lists, and tag models by what they can do. Detection rules then route work to tagged models.",
+      "Connect OpenAI-compatible or Anthropic services, fetch their model lists, and tag models by what they can do. Detection rules then route work to tagged models.",
     "admin.provider.list": "Providers",
     "admin.provider.search": "Search providers",
     "admin.provider.none": "No providers match.",
     "admin.provider.add": "Add provider",
     "admin.provider.newTitle": "Add a provider",
     "admin.provider.newDescription":
-      "Choose a preset or a custom OpenAI-compatible endpoint. With a key, the model list opens right after saving.",
+      "Choose a preset or a custom endpoint and API format. With a key, the model list opens right after saving.",
     "admin.provider.preset": "Preset",
     "admin.provider.custom": "Custom",
     "admin.provider.create": "Add provider",
@@ -231,11 +231,12 @@ export const adminMessages = {
     "admin.provider.protocol": "API format",
     "admin.provider.protocol.chat": "OpenAI Chat Completions",
     "admin.provider.protocol.responses": "OpenAI Responses",
+    "admin.provider.protocol.anthropic": "Anthropic Messages",
     "admin.provider.baseUrl": "API host",
     "admin.provider.baseUrlHint":
-      "The API root, usually ending in /v1. Production requires HTTPS.",
+      "You can omit /v1 from the API host. Production requires HTTPS.",
     "admin.provider.endpointPreview": ({ models }: { models: any }) =>
-      `Model list: ${models}`,
+      `You can omit /v1. Model list: ${models}`,
     "admin.provider.endpointDetail": ({
       models,
       inference,
@@ -818,14 +819,14 @@ export const adminMessages = {
 
     "admin.provider.title": "模型服务",
     "admin.provider.description":
-      "集中接入 OpenAI 兼容服务：填写地址和 API Key 后获取模型列表，并按能力给模型打标签。识别规则再把任务路由到带标签的模型。",
+      "集中接入 OpenAI 兼容服务或 Anthropic：填写地址和 API Key 后获取模型列表，并按能力给模型打标签。识别规则再把任务路由到带标签的模型。",
     "admin.provider.list": "服务商",
     "admin.provider.search": "搜索服务商",
     "admin.provider.none": "没有匹配的服务商。",
     "admin.provider.add": "添加服务商",
     "admin.provider.newTitle": "添加服务商",
     "admin.provider.newDescription":
-      "选择预设或自定义 OpenAI 兼容地址。填写 Key 后，保存即自动打开模型列表。",
+      "选择预设或自定义地址和接口格式。填写 Key 后，保存即自动打开模型列表。",
     "admin.provider.preset": "预设",
     "admin.provider.custom": "自定义",
     "admin.provider.create": "添加服务商",
@@ -834,11 +835,11 @@ export const adminMessages = {
     "admin.provider.protocol": "接口格式",
     "admin.provider.protocol.chat": "OpenAI Chat Completions",
     "admin.provider.protocol.responses": "OpenAI Responses",
+    "admin.provider.protocol.anthropic": "Anthropic Messages",
     "admin.provider.baseUrl": "API 地址",
-    "admin.provider.baseUrlHint":
-      "API 根地址，通常以 /v1 结尾；生产环境要求 HTTPS。",
+    "admin.provider.baseUrlHint": "API 地址可省略 /v1；生产环境要求 HTTPS。",
     "admin.provider.endpointPreview": ({ models }: { models: any }) =>
-      `模型列表：${models}`,
+      `可省略 /v1。模型列表：${models}`,
     "admin.provider.endpointDetail": ({
       models,
       inference,

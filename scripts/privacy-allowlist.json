@@ -66,6 +66,10 @@
       "reason": "OpenAI Responses API used server-side to extract structured schedules from matching public posts."
     },
     {
+      "host": "api.anthropic.com",
+      "reason": "Optional Anthropic provider preset; operator-configured server-side model discovery and structured schedule extraction through the Messages API."
+    },
+    {
       "host": "youtube.com",
       "reason": "Public YouTube channel, video, RSS, and stream links."
     },

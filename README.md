@@ -55,7 +55,10 @@ Requires **Docker with Linux containers and Docker Compose**.
 1. Save [docker-compose.yml](docker-compose.yml) and [.env.example](.env.example)
    in the same directory. Copy `.env.example` to `.env`.
 2. Edit `.env`: keep `APP_MODE=production` and set `ADMIN_PASSWORD` to a password
-   with at least **12 characters after trimming surrounding whitespace**.
+   with at least **12 characters after trimming surrounding whitespace**. Set
+   `LLM_SECRETS_KEY` to a random, non-blank value and retain it across restarts.
+   The key is required even without AI providers; missing or whitespace-only
+   values refuse startup before SQLite opens.
 3. Start the application:
 
    ```bash
@@ -80,9 +83,9 @@ X posts, YouTube videos, schedules, and AI providers start empty.
 
 - Open `/admin` and run a workflow with X, YouTube, and media cache steps to populate the board.
 - Enable a timer on a saved workflow if you want regular updates.
-- For optional AI schedule extraction, configure `LLM_SECRETS_KEY` in `.env`,
-  then add providers, models, and detection routes in the console. See
-  [configuration](docs/operations/configuration.md) for setup.
+- For optional AI schedule extraction, add OpenAI-compatible or Anthropic
+  providers, models, and detection routes in the console. API hosts can omit
+  `/v1`. See [configuration](docs/operations/configuration.md) for setup.
 
 ## How updates work
 
@@ -108,7 +111,9 @@ cp .env.example .env
 ```
 
 For local development, set `APP_MODE=development` in `.env` to enable password-free
-admin access, and `WORKFLOW_SCHEDULER_ENABLED=0` to disable timed workflows. Then run:
+admin access, and `WORKFLOW_SCHEDULER_ENABLED=0` to disable timed workflows.
+Set a non-blank `LLM_SECRETS_KEY` before starting; development and preview also
+require it. Then run:
 
 ```bash
 npm run dev

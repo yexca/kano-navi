@@ -44,6 +44,7 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/server ./server
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/src/history/media.ts /app/src/history/media-catalog.json ./src/history/
+COPY --from=build /app/src/lib/llm-endpoints.ts ./src/lib/
 
 RUN mkdir -p /app/data
 

@@ -32,6 +32,15 @@ Shared primitives must remain independent of dashboard, history, and admin
 features. Extract cohesive helpers when needed; avoid a repository-wide move
 for a small change.
 
+## Provider Company Icons
+
+The provider presets are OpenAI, Anthropic, DeepSeek, OpenRouter, Gemini, and
+Custom. Company marks are bundled local SVGs from Lobe Icons 1.90.0 (MIT);
+they never require a browser CDN request. The license ships in
+`public/assets/providers/LICENSE.txt`. Configured providers use the API host,
+name, or stable ID to identify a mark; unknown custom providers retain their
+initial. Removing a preset does not delete saved providers.
+
 ## Related Docs
 
 - [Design and interaction](../development/design.md)
