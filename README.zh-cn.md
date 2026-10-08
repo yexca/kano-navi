@@ -21,10 +21,9 @@ cp .env.example .env
 npm run dev
 ```
 
-开发环境会同时启动：
-
-- Vite 前端：`http://localhost:5173`
-- Express API：`http://localhost:7657`
+开发环境的 Vite 前端和 Express API 共用 `http://localhost:7657`，管理页为
+`http://localhost:7657/admin`。开发、构建预览和生产均默认使用 `7657`，可通过
+`PORT` 修改；开发和预览在端口被占用时会报错。
 
 使用 Docker 构建并启动开发环境：
 
@@ -32,9 +31,9 @@ npm run dev
 docker compose -f docker-compose.dev.yml up -d --build --renew-anon-volumes
 ```
 
-打开 `http://localhost:5173` 查看页面，`http://localhost:5173/admin` 查看免登录的
+打开 `http://localhost:7657` 查看页面，`http://localhost:7657/admin` 查看免登录的
 开发管理页。源码挂载支持前端热更新，Linux 依赖保存在独立卷中，SQLite 和媒体
-仍保存在 `./data`。API 通过 Vite 代理访问，不占用宿主机的 7657 端口。
+仍保存在 `./data`。前端与 API 共用容器的 7657 端口，宿主机端口可通过 `KANO_PORT` 修改。
 修改服务端源码后执行 `docker compose -f docker-compose.dev.yml restart`；停止
 开发容器使用 `docker compose -f docker-compose.dev.yml down`。更多细节见
 [本地开发指南](docs/development/local-dev.md)。

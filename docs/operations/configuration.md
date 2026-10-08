@@ -7,7 +7,7 @@
 | `APP_MODE`                    | `production`         | Explicit `development` bypasses login; production requires it      |
 | `ADMIN_PASSWORD`              | Empty                | Production startup requires at least 12 non-padding characters     |
 | `LLM_SECRETS_KEY`             | Empty                | Environment-only master key for encrypted provider API keys        |
-| `PORT`                        | `7657`               | Express listening port                                             |
+| `PORT`                        | `7657`               | Shared frontend/API port for development, preview, and production  |
 | `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Initial legacy default for independent schedule stages             |
 | `SCHEDULE_KEYWORD_ENABLED`    | `1`                  | Enable keyword candidate selection                                 |
 | `SCHEDULE_VISION_ENABLED`     | `1`                  | Enable schedule-board LLM extraction                               |

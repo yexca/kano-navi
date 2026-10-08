@@ -5,6 +5,11 @@
 `server/app.ts` builds an Express app around an injected database, while
 `server/index.ts` opens the runtime database and listener. Express exposes the
 health and dashboard read endpoints and serves `dist/` in production.
+Development and bundle preview mount this same Express app through
+`server/local-api.ts` in Vite's HTTP server. `/api`, `/media`, and `/mcp` are
+handled before the frontend middleware, keeping authentication, media access,
+and MCP control on the same origin. All entry points default to port `7657`;
+development and preview refuse to switch ports when it is occupied.
 Responses should remain stable and sanitized; do not expose
 `raw_json`, stack traces, credentials, or absolute local paths to the browser.
 Ready runtime media is served only through the opaque-ID `/media/:id` route.

@@ -15,12 +15,12 @@ ENV NODE_ENV=development \
     PORT=7657
 
 COPY . .
-EXPOSE 5173
+EXPOSE 7657
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:5173/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:7657/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-CMD ["npm", "exec", "concurrently", "--", "-k", "npm run dev:server", "npm run dev:client -- --host 0.0.0.0 --port 5173 --strictPort"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
 FROM dependencies AS build
 

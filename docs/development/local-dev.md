@@ -33,10 +33,17 @@ cp .env.example .env
 make dev
 ```
 
-Development mode starts Vite (default `http://localhost:5173`) and the Express
-API (default `http://localhost:7657`). Vite proxies `/api`, `/media`, and `/mcp`
-to Express, so the browser and MCP clients use the same origin in development
-and production.
+Development mode serves Vite and the Express API on one HTTP listener at
+`http://localhost:7657`. `server/local-api.ts` mounts `/api`, `/media`, and
+`/mcp` before Vite's frontend middleware. `npm run preview` mounts the same API
+alongside the built frontend and also defaults to `7657`, as does production.
+Set `PORT` in the environment or `.env` to override the default. Development
+and preview use `strictPort` and fail if that port is occupied.
+
+`make dev-client` remains an alias for the shared development server.
+`make dev-server` starts the standalone Express server on the same default
+port; run one of these entry points at a time. Restart the development or
+preview server after changing backend source.
 
 The public dashboard is `/`. The admin interface is available only by entering
 `/admin`; no public navigation links to it. The example environment and server

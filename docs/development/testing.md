@@ -60,6 +60,11 @@ unready media and unauthenticated admin access, then removes the fixture.
 It never opens the operator database or imports .env. Initialization may create
 the standard empty cache directories; it does not download media.
 
+`server/local-api.test.ts` checks the shared development and preview listener
+with an injected in-memory snapshot and temporary frontend. It verifies page
+routes, API reads, media and MCP boundaries, and same-origin admin login without
+opening the runtime entry point or loading operator credentials.
+
 Production smoke creates a disposable container from the built image, uses
 synthetic production authentication, disables workflow timers, and publishes a
 random loopback-only port. Its anonymous data volume is removed in cleanup.

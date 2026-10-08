@@ -1,11 +1,11 @@
 const groups = {
   Development: {
     install: "Install locked npm dependencies",
-    dev: "Start Vite and Express",
-    "dev-client": "Start Vite only",
+    dev: "Start Vite and Express on one port (default 7657)",
+    "dev-client": "Alias for the shared Vite and Express development server",
     "dev-server": "Start Express only",
     build: "Build the production frontend",
-    preview: "Preview the Vite bundle",
+    preview: "Preview the Vite bundle with the API (default 7657)",
     start: "Start the API and serve dist (configure production auth first)",
     seed: "Add missing static seed records to the runtime database",
     sync: "Fetch configured external sources and update runtime snapshots",

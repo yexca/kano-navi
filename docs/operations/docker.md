@@ -50,11 +50,11 @@ For Docker development, use the separate Compose file:
 docker compose -f docker-compose.dev.yml up -d --build --renew-anon-volumes
 ```
 
-Open `http://localhost:5173` for the dashboard or
-`http://localhost:5173/admin` for the password-free development console.
-The development image starts Vite and Express together. Only the Vite port is
-published, on loopback; `/api`, `/media`, and `/mcp` are proxied to the API
-inside the container. The repository is mounted for frontend hot reload,
+Open `http://localhost:7657` for the dashboard or
+`http://localhost:7657/admin` for the password-free development console.
+The development image mounts Express routes in Vite's HTTP server. Frontend,
+`/api`, `/media`, and `/mcp` share container port `7657`, published on loopback.
+Set `KANO_PORT` to change the host port. The repository is mounted for frontend hot reload,
 while an anonymous volume keeps Linux dependencies separate from any host
 `node_modules`. Rebuild after dependency changes; `--renew-anon-volumes`
 refreshes that dependency volume. API source changes require

@@ -25,10 +25,10 @@ cp .env.example .env
 npm run dev
 ```
 
-Development mode starts both services:
-
-- Vite frontend: `http://localhost:5173`
-- Express API: `http://localhost:7657`
+Development mode serves the Vite frontend and Express API together at
+`http://localhost:7657`. The hidden admin page is `/admin`. Development,
+bundle preview, and production all default to port `7657`; set `PORT` to
+override it. Development and preview fail if the selected port is occupied.
 
 For a production build and server:
 
