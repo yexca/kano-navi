@@ -24,7 +24,7 @@ rotated together with the stored provider keys when compromised.
 
 ## Sensitive-Information Scan
 
-`scripts/check-sensitive.mjs` checks the workspace and CI for:
+`scripts/check-sensitive.ts` checks the workspace and CI for:
 
 - common platform tokens, cloud keys, private-key headers, and `Bearer` credentials;
 - literals assigned to sensitive keys such as `password`, `secret`, `token`, or `apiKey`;

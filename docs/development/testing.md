@@ -12,6 +12,7 @@ CI/tooling work, and pre-commit validation.
 | Documentation links                                   | make docs-check       | Node.js                        |
 | Formatting, docs, scanner behavior and source privacy | make ci-style         | Locked dependencies            |
 | SQLite, API, sync, media or extraction                | make ci-backend       | Locked dependencies            |
+| TypeScript source, scripts, tests, and config         | make typecheck        | Locked dependencies            |
 | Public or admin UI                                    | make ci-frontend      | Locked dependencies            |
 | Seed and HTTP snapshot integration                    | make smoke            | Locked dependencies            |
 | Production image                                      | make docker-build     | Docker with Linux containers   |
@@ -41,7 +42,7 @@ this does not widen the privacy scanner's exclusions.
 
 Tests should guard an observable contract, state transition, security boundary,
 or previous regression. Choose the lowest sufficient layer. Server tests live
-beside their source as server/*.test.mjs and scanner tests live under scripts/.
+beside their source as server/*.test.ts and scanner tests live under scripts/.
 Do not add tests for prose or a purely visual change without a documented
 interaction or responsive contract. Do not mirror internal implementation.
 
@@ -62,7 +63,7 @@ the standard empty cache directories; it does not download media.
 Production smoke creates a disposable container from the built image, uses
 synthetic production authentication, disables workflow timers, and publishes a
 random loopback-only port. Its anonymous data volume is removed in cleanup.
-It validates server/index.js startup, fresh SQLite, public API, SPA page routes,
+It validates server/index.ts startup, fresh SQLite, public API, SPA page routes,
 and the protected admin API. It does not mount host data or pass host secrets.
 This HTTP check does not claim to verify browser interaction.
 
@@ -82,6 +83,11 @@ Every runner has a timeout, locked installation, and read-only repository
 permissions. Checkout does not persist credentials. Caches speed installation
 and image layers but never skip validation targets. Actions are pinned to
 reviewed commit SHAs; Node 24.19.0 matches the Docker build toolchain.
+
+`make ci-backend` checks all TypeScript files before the server tests.
+`make ci-frontend` runs the same type check before Vite builds the browser bundle.
+Node executes server and test `.ts` files directly; runtime execution alone does
+not check types. No source files are excluded with `@ts-nocheck`.
 
 Validate always evaluates all five job results and fails on failure,
 cancellation, or a skipped job. There is no path-based job selection; even

@@ -8,11 +8,11 @@ DOCKER_BUILD_ARGS ?=
 DOCKER_IMAGE ?= kano-navi:ci
 
 .PHONY: help install dev dev-client dev-server build preview start seed sync
-.PHONY: format format-check docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
+.PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
 .PHONY: smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
 help:
-	@$(NODE) scripts/make-help.mjs
+	@$(NODE) scripts/make-help.ts
 
 install:
 	$(NPM) ci
@@ -34,7 +34,7 @@ preview:
 
 start: export NODE_ENV := production
 start:
-	$(NODE) server/index.js
+	$(NODE) server/index.ts
 
 seed:
 	$(NPM) run seed
@@ -47,6 +47,9 @@ format:
 
 format-check:
 	$(NPM) run format:check
+
+typecheck:
+	$(NPM) run typecheck
 
 docs-check:
 	$(NPM) run docs:check-links
@@ -65,18 +68,18 @@ test-server:
 	$(NPM) run test:server
 
 smoke:
-	$(NODE) scripts/smoke.mjs
+	$(NODE) scripts/smoke.ts
 
 docker-build:
 	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -t $(DOCKER_IMAGE) .
 
 production-smoke:
-	$(NODE) scripts/production-smoke.mjs $(DOCKER_IMAGE)
+	$(NODE) scripts/production-smoke.ts $(DOCKER_IMAGE)
 
 # Narrow checks use the existing locked installation and never fetch source data.
 ci-style: format-check docs-check test-sensitive sensitive-check
 
-ci-backend: test-server
+ci-backend: typecheck test-server
 
 ci-frontend: build
 

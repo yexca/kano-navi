@@ -48,7 +48,7 @@ Restore into a stopped deployment and verify health and the public snapshot
 before enabling workflow timers. Avoid simultaneous Windows/Linux access to
 the same SQLite file.
 
-Use additive schema upgrades in server/database.js. Seeding fills missing
+Use additive schema upgrades in server/database.ts. Seeding fills missing
 static IDs; it is not a database restore. The --overwrite option intentionally
 replaces matching seed records and should only be used for reviewed maintenance.
 

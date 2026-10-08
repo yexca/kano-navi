@@ -44,7 +44,7 @@ boundary.
 
 ## Seed versus Synchronization
 
-`server/seed-data.js` initializes the static profile, milestone timeline, and
+`server/seed-data.ts` initializes the static profile, milestone timeline, and
 resource directory. New environments have no X posts, events, YouTube videos,
 Featured item, schedule assets, or LLM providers/models/routes. `npm run seed`
 only fills missing static IDs by default; it does not recreate deleted providers.
@@ -73,14 +73,14 @@ their reason/evidence, and labels visible automatic/manual events.
 
 ## Schema Changes
 
-server/database.js owns the schema and additive upgrade behavior. Update this
+server/database.ts owns the schema and additive upgrade behavior. Update this
 contract, seed behavior, and relevant tests together. Never silently drop
 columns, rebuild an existing database from seed data, clear snapshots, or
 recreate deleted providers. See [Database operations](../operations/database.md).
 
 ## Implementation Ownership
 
-### Persistence: `server/database.js`
+### Persistence: `server/database.ts`
 
 This module creates the SQLite schema, provides seed/upsert/query functions, and
 keeps the database at `data/database/kano.sqlite`. Raw source data may be retained in
@@ -101,8 +101,8 @@ LLM providers store an explicit `text`/`image` capability array in
 clients. The provider routes `schedule_board`, `schedule_message`, and legacy
 `schedule_vision` each have their own priority order.
 
-`server/media-cache.js` owns cache-root path validation, source URL identities,
-content hashes, and atomic file writes. `server/media-downloader.js` performs
+`server/media-cache.ts` owns cache-root path validation, source URL identities,
+content hashes, and atomic file writes. `server/media-downloader.ts` performs
 bounded downloads from the X and YouTube image hosts and promotes verified
 files to ready cache rows.
 

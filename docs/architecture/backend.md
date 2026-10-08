@@ -1,15 +1,15 @@
 # Backend and HTTP
 
-## API: `server/app.js` and `server/index.js`
+## API: `server/app.ts` and `server/index.ts`
 
-`server/app.js` builds an Express app around an injected database, while
-`server/index.js` opens the runtime database and listener. Express exposes the
+`server/app.ts` builds an Express app around an injected database, while
+`server/index.ts` opens the runtime database and listener. Express exposes the
 health and dashboard read endpoints and serves `dist/` in production.
 Responses should remain stable and sanitized; do not expose
 `raw_json`, stack traces, credentials, or absolute local paths to the browser.
 Ready runtime media is served only through the opaque-ID `/media/:id` route.
 
-`server/admin-api.js` exposes session, model/schedule/video settings, provider
+`server/admin-api.ts` exposes session, model/schedule/video settings, provider
 management, the model catalog (`/providers/:id/models`, `/models/discover`,
 `/models/remove`), route targets (`/routes/:route`), saved workflows
 (`/workflows`, `/workflows/:id/run`), paginated event queries, asynchronous
@@ -47,7 +47,7 @@ The summary contains nextEvent, nextStream, latestVideo, latestPost, and counts;
 latestPost survives an empty requested window. Metadata includes configured
 X accounts and the Featured video ID.
 
-server/public-view.js owns shared public event and synchronization projections.
+server/public-view.ts owns shared public event and synchronization projections.
 Per-source counters, raw fetch errors, job IDs, and internal source item IDs
 stay in the guarded admin API. GET /api/dashboard/revision reports a small
 revision hint without external work. Timestamps are parseable ISO 8601 strings;

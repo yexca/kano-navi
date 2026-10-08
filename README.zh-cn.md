@@ -93,7 +93,7 @@ npm run history:package -- --from /path/to/kano_official
 静态图片位于 `public/assets/history/`，原始来源和署名保持不变。详情见
 [历程与图片图鉴说明](docs/product/history.md)。
 
-SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并补充 `server/seed-data.js` 中的静态个人资料、历程和资源链接。X 动态、日程、YouTube 视频、Featured 内容及 LLM provider、模型和路由默认均为空；通过后台工作流抓取来源，并在 `/admin` 手动配置 provider。升级保留已有快照和配置。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers`、`llm_models`、`llm_route_targets`（以及已迁移的旧表 `llm_route_providers`）和 `workflows`。
+SQLite 文件位于 `data/database/kano.sqlite`。服务端启动时会自动建表，并补充 `server/seed-data.ts` 中的静态个人资料、历程和资源链接。X 动态、日程、YouTube 视频、Featured 内容及 LLM provider、模型和路由默认均为空；通过后台工作流抓取来源，并在 `/admin` 手动配置 provider。升级保留已有快照和配置。主要表包括 `profiles`、`posts`、`events`、`videos`、`focus`、`timeline`、`resources`、`assets`、`media_assets`、`media_links`、`sync_runs`、`sync_state`、`event_sources`、`app_settings`、`schedule_extractions`、`llm_providers`、`llm_models`、`llm_route_targets`（以及已迁移的旧表 `llm_route_providers`）和 `workflows`。
 
 看板接口：
 

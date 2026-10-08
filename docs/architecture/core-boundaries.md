@@ -10,7 +10,7 @@ external reads.
 Public X / YouTube pages          OpenAI-compatible LLM APIs
           |                                ^
           v                                |
-scripts/sync.mjs ---- media download / schedule extraction
+scripts/sync.ts ---- media download / schedule extraction
           |
           v
 data/database/kano.sqlite  -- snapshot, cursors, settings, and media metadata
@@ -20,13 +20,13 @@ data/database/kano.sqlite  -- snapshot, cursors, settings, and media metadata
           +--> data/avatar/  -- ignored selected profile media
           |
           v
-server/index.js   -- dashboard, admin API, health, /media/<id>, and /mcp
+server/index.ts   -- dashboard, admin API, health, /media/<id>, and /mcp
           |
           +--> src/dashboard/ -- public dashboard
           +--> src/admin/ -- hidden operator console
           |
-          +--> server/sync-jobs.js -- single-flight asynchronous jobs
-          +--> server/workflow-scheduler.js -- timed saved workflows
+          +--> server/sync-jobs.ts -- single-flight asynchronous jobs
+          +--> server/workflow-scheduler.ts -- timed saved workflows
 ```
 
 Synchronization and page reads are separate paths. The browser reads the local
@@ -39,7 +39,7 @@ successful snapshot while a source is unavailable.
 1. The browser requests `/api/dashboard?days=3` after loading.
 2. The API reads SQLite, calculates each event's `isUpcoming`, resolves ready
    media to `/media/<id>`, derives the `summary` block, and returns the snapshot
-   plus public synchronization metadata (`server/public-view.js`).
+   plus public synchronization metadata (`server/public-view.ts`).
 3. The page shows the snapshot time. If the API is unavailable after a load, it keeps the known state and shows a retry affordance.
 4. A maintainer or an authorized MCP client starts an asynchronous job. The
    single-flight job manager writes a `sync_runs` row with `job_id` and

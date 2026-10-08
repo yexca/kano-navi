@@ -46,7 +46,7 @@ YouTube, or any other original source.
 
 A separate `/history` page lists Kano's public milestones from the first 2010
 covers to joining Milpro SONA in 2026. It is static, curated content in
-`src/history/milestones.js`: every entry keeps its original date precision
+`src/history/milestones.ts`: every entry keeps its original date precision
 (year, month, day, or range), names its activity identity (singer, Hanayori
 Joshiryo, Kano Mahoro, MKLNtic, Milpro SONA), and links the strongest public
 source. Visitors can filter by identity and jump to a year. A visual archive

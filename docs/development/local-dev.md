@@ -2,12 +2,27 @@
 
 ## Prerequisites
 
-- Node.js 24 LTS (the same major version used by CI and Docker)
+- Node.js 24.19.0 or newer in the 24 LTS line (matching CI and Docker)
 - npm 10+
 - Git
 
 SQLite uses `better-sqlite3`; installation may require a prebuilt package or a
 local compiler toolchain on the current platform.
+
+Source, configuration, maintenance scripts, and tests use TypeScript. Node 24
+runs the backend and scripts through native type stripping; Vite transforms
+React `.tsx` files. Runtime imports in the Node layer use explicit `.ts`
+extensions and type-only imports use `import type`. Avoid enums, parameter
+properties, and other syntax requiring runtime transformation.
+
+`tsconfig.json` checks the browser with bundler module resolution;
+`tsconfig.server.json` checks the backend, scripts, and tests with NodeNext.
+Both use `noEmit`, `verbatimModuleSyntax`, and `erasableSyntaxOnly`.
+Run `make typecheck` for a standalone check. The shared
+public snapshot and UI primitive props have explicit types; existing dynamic
+JSON and SQLite mapping code retains permissive types during this migration.
+Strict mode is not enabled globally. API input validation and sanitized
+projections remain the runtime boundary.
 
 ## Start and Build
 
@@ -50,7 +65,7 @@ fetches retain the finite public profile/RSS coverage and report that limitation
 See [Fetch windows](../architecture/workflows.md#fetch-windows-and-historical-backfill).
 
 Tailwind CSS 4 runs through `@tailwindcss/vite`; `src/index.css` loads the
-existing `tailwind.config.js` with `@config`. The CSS runtime requires Safari
+existing `tailwind.config.ts` with `@config`. The CSS runtime requires Safari
 16.4+, Chromium 111+, or Firefox 128+. `tailwind-merge` uses its Tailwind 4
 compatible major version. `concurrently` is development-only; its scoped
 `shell-quote` override selects a patched version because the current upstream

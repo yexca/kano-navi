@@ -24,8 +24,8 @@ External reads belong to server-side synchronization and its helpers.
 
 - Page loads, refreshes, and revision requests never fetch X, YouTube, or model
   providers. A failed source retains known snapshots and records its outcome.
-- src/main.jsx composes /, /history, /about, and /admin. Keep board requests in
-  src/dashboard/use-dashboard.js and admin requests in src/admin/use-admin-data.js.
+- src/main.tsx composes /, /history, /about, and /admin. Keep board requests in
+  src/dashboard/use-dashboard.ts and admin requests in src/admin/use-admin-data.ts.
   Reuse React, semantic Tailwind tokens, and the existing UI primitives.
 - Manual event edits, confirmations, and deletions create durable locks or
   tombstones. Automatic sync/extraction must not replace or resurrect them.
@@ -39,7 +39,7 @@ External reads belong to server-side synchronization and its helpers.
 - Timed workflows run only in the API process and share the single-flight queue.
   Fresh initialization keeps source snapshots and LLM providers/models/routes
   empty. Seeding preserves existing snapshots and operator configuration.
-- server/database.js owns additive schema upgrades, seed/upsert/query behavior.
+- server/database.ts owns additive schema upgrades, seed/upsert/query behavior.
   Update the data contract and verification with schema changes; never silently
   drop columns or clear snapshots. Store parseable ISO timestamps and display
   Asia/Tokyo times.
@@ -78,14 +78,14 @@ External reads belong to server-side synchronization and its helpers.
 | Area                             | Main paths                                                                                            |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Public UI and history            | src/dashboard/, src/history/, src/about/, src/components/ui/                                          |
-| Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.js                                             |
-| API, authentication, projections | server/app.js, server/admin-api.js, server/admin-auth.js, server/mcp-api.js, server/public-view.js    |
-| SQLite and static initialization | server/database.js, server/seed-data.js, scripts/seed.mjs                                             |
-| Sources and historical windows   | scripts/sync.mjs, scripts/source-history.mjs, server/fetch-window.js                                  |
-| Jobs, steps, timers              | server/sync-jobs.js, server/workflow-catalog.js, server/workflow-scheduler.js                         |
-| Model routing and extraction     | server/schedule-extractor.js, server/schedule-asset.js, server/llm-catalog.js, server/secret-store.js |
-| Dynamic media                    | server/media-cache.js, server/media-downloader.js                                                     |
-| Fixed history packaging          | scripts/package-history-media.mjs, scripts/import-history-media.mjs, public/assets/history/           |
+| Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                                             |
+| API, authentication, projections | server/app.ts, server/admin-api.ts, server/admin-auth.ts, server/mcp-api.ts, server/public-view.ts    |
+| SQLite and static initialization | server/database.ts, server/seed-data.ts, scripts/seed.ts                                              |
+| Sources and historical windows   | scripts/sync.ts, scripts/source-history.ts, server/fetch-window.ts                                    |
+| Jobs, steps, timers              | server/sync-jobs.ts, server/workflow-catalog.ts, server/workflow-scheduler.ts                         |
+| Model routing and extraction     | server/schedule-extractor.ts, server/schedule-asset.ts, server/llm-catalog.ts, server/secret-store.ts |
+| Dynamic media                    | server/media-cache.ts, server/media-downloader.ts                                                     |
+| Fixed history packaging          | scripts/package-history-media.ts, scripts/import-history-media.ts, public/assets/history/             |
 
 ## Validation and Handoff
 

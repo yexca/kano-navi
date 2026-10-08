@@ -81,7 +81,7 @@ profile-media selection.
 
 The SQLite file is `data/database/kano.sqlite`. When the server starts, it creates the
 schema and adds the static profile, milestones, and resource directory from
-`server/seed-data.js`. X posts, events, YouTube videos, Featured content, and
+`server/seed-data.ts`. X posts, events, YouTube videos, Featured content, and
 LLM providers/models/routes start empty. Run a workflow to populate source
 snapshots and configure providers explicitly in `/admin`. Existing snapshots
 and provider settings are preserved on upgrade. The main tables are `profiles`, `posts`, `events`,

@@ -26,7 +26,7 @@ date window cannot enlarge these public sources' finite coverage, so the run
 is marked partial and reports the limitation. Historical controls require
 environment-only `X_API_BEARER_TOKEN` (with full-archive access) or
 `YOUTUBE_API_KEY`. These credentials are sent in HTTP headers, never URLs or
-SQLite. The optional adapter in `scripts/source-history.mjs` uses
+SQLite. The optional adapter in `scripts/source-history.ts` uses
 [X full-archive search](https://docs.x.com/x-api/posts/search/quickstart/full-archive-search)
 and [YouTube date-window search](https://developers.google.com/youtube/v3/docs/search/list).
 Source access, quota, and search coverage still depend on the platform. YouTube
@@ -56,7 +56,7 @@ without fetch windows retains the existing incremental behavior described above.
 ## Modular Steps and Timers
 
 Synchronization is split into modular steps declared in
-`server/workflow-catalog.js`, executed in this order: `x`, `youtube`, `media`,
+`server/workflow-catalog.ts`, executed in this order: `x`, `youtube`, `media`,
 `schedule`. `npm run sync` still runs every step not disabled by `SKIP_*`.
 A saved workflow chooses a subset; its run records `sync_runs.source =
 workflow` and exposes per-step progress (`pending`, `running`, `completed`,
@@ -74,11 +74,11 @@ recreate them. Set `WORKFLOW_SCHEDULER_ENABLED=0` to disable timers.
 
 ## Implementation Ownership
 
-server/workflow-catalog.js owns the ordered step catalog. scripts/sync.mjs maps
+server/workflow-catalog.ts owns the ordered step catalog. scripts/sync.ts maps
 steps to runners and runSync({ steps }) reports progress for a chosen subset.
 A new module needs one catalog entry and one runner; the console reads the
-catalog rather than maintaining another step list. server/sync-jobs.js owns
-the single-flight asynchronous queue, and server/workflow-scheduler.js starts
+catalog rather than maintaining another step list. server/sync-jobs.ts owns
+the single-flight asynchronous queue, and server/workflow-scheduler.ts starts
 due saved workflows through that same manager.
 
 Adapters, candidate selection, model routes, modality, retries, and per-post

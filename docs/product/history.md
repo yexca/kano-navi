@@ -10,17 +10,17 @@ recorded credit, and original-source links.
 
 ## Content and Provenance
 
-- `src/history/milestones.js` owns milestone copy, dates, identity, and evidence
+- `src/history/milestones.ts` owns milestone copy, dates, identity, and evidence
   links. Year, month, day, and range precision is preserved.
 - `src/history/media-catalog.json` contains public titles in three languages,
   related milestones, identities, image type, source page and file URLs,
   dimensions, MIME type, size, SHA-256, source identity, and date basis.
   Original local paths are excluded.
-- `src/history/media.js` groups images and supplies versioned local
+- `src/history/media.ts` groups images and supplies versioned local
   `/assets/history/<filename>?v=<sha256>` URLs.
 - `public/assets/history/` contains the 59 verified original image files,
   copied by Vite into `dist/` and included in production Docker images.
-- `src/history/history-i18n.js` supplies image and provenance translations.
+- `src/history/history-i18n.ts` supplies image and provenance translations.
 
 Release dates, Japan-time post dates, stream dates, depicted outfit reveals,
 and acquisition dates are distinct. Unknown dates remain unknown. Mahoro's

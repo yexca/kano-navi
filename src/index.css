@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@config "../tailwind.config.js";
+@config "../tailwind.config.ts";
 
 /*
  * Global tokens shared by the public board and /admin.

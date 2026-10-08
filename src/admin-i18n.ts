@@ -1,0 +1,1211 @@
+// Messages for the hidden /admin console. Japanese falls back to English.
+export const adminMessages = {
+  en: {
+    "admin.fetch.title": ({ source }: { source: any }) =>
+      `Fetch ${source} records`,
+    "admin.fetch.description":
+      "Choose a recent window or backfill older records.",
+    "admin.fetch.mode": "Fetch mode",
+    "admin.fetch.recent": "Recent period",
+    "admin.fetch.before": "Continue before the oldest record",
+    "admin.fetch.range": "Date range",
+    "admin.fetch.start": "Start date",
+    "admin.fetch.end": "End date",
+    "admin.fetch.days": "Recent days",
+    "admin.fetch.backfillDays": "Days to backfill per interval",
+    "admin.fetch.oldest": ({ time }: { time: any }) =>
+      `Oldest stored record: ${time}`,
+    "admin.fetch.noRecords": "No records",
+    "admin.fetch.timezone":
+      "Dates include both selected days in Asia/Tokyo. Maximum: 365 days.",
+    "admin.fetch.beforeHint":
+      "X continues per account. Interrupted pages resume first; completed empty intervals also advance the backfill boundary.",
+    "admin.fetch.youtubeBeforeHint":
+      "Continue before the oldest published video. Interrupted pages resume first; completed empty intervals also advance the backfill boundary.",
+    "admin.fetch.emptyHint":
+      "Fetch a date range first when no records are stored.",
+    "admin.fetch.xKeyHint":
+      "Recent fetching covers only the public profile. Historical search requires the server's X_API_BEARER_TOKEN with full-archive access.",
+    "admin.fetch.youtubeKeyHint":
+      "Recent fetching covers only the RSS feed. Historical search requires the server's YOUTUBE_API_KEY.",
+    "admin.fetch.run": "Start fetch",
+    "admin.fetch.result": ({ count }: { count: any }) =>
+      `Stored or refreshed ${count} records`,
+    "admin.fetch.partialHint":
+      "This run has incomplete coverage or a source warning. See workflow run details; repeat an interrupted range to continue.",
+    "admin.fetch.workflowDays": ({ source }: { source: any }) =>
+      `${source}: recent days`,
+    "admin.fetch.workflowHint":
+      "Each manual or timed workflow run uses this rolling period. Without API credentials, only publicly visible recent records are available.",
+    "admin.meta.title": "Admin console / Kano status board",
+    "admin.loading": "Loading admin state",
+    "admin.brand.kanoStatusBoard": "KANO STATUS BOARD",
+    "admin.brand.console": "Operator console",
+    "admin.auth.title": "Admin console",
+    "admin.auth.password": "Access password",
+    "admin.auth.login": "Log in",
+
+    "admin.nav.aria": "Admin sections",
+    "admin.nav.group.operate": "Operate",
+    "admin.nav.group.automation": "Automation",
+    "admin.nav.group.content": "Content",
+    "admin.nav.workflow": "Workflows",
+    "admin.nav.schedules": "Schedules",
+    "admin.nav.detection": "Detection rules",
+    "admin.nav.posts": "Posts",
+    "admin.nav.schedule-images": "Schedule images",
+    "admin.nav.providers": "LLM providers",
+    "admin.nav.content": "Content & media",
+    "admin.sidebar.schedulerOn": ({ count }: { count: any }) =>
+      `Scheduler on · ${count} timed`,
+    "admin.sidebar.schedulerOff": "Scheduler off",
+    "admin.sidebar.backToPublic": "Back to public page",
+    "admin.mode.production": "Production",
+    "admin.mode.development": "Development",
+
+    "admin.action.close": "Close",
+    "admin.action.closeNotice": "Close notification",
+    "admin.action.cancel": "Cancel",
+    "admin.action.save": "Save",
+    "admin.action.confirm": "Confirm",
+    "admin.action.delete": "Delete",
+    "admin.action.remove": "Remove",
+    "admin.action.logout": "Log out",
+    "admin.action.moveUp": "Move up",
+    "admin.action.moveDown": "Move down",
+    "admin.action.upload": "Upload",
+    "admin.action.select": "Select",
+    "admin.action.download": "Download candidate",
+    "admin.action.addImageUrl": "Add image URL",
+
+    "admin.status.running": "Running",
+    "admin.status.queued": "Queued",
+    "admin.status.completed": "Completed",
+    "admin.status.partial": "Partial",
+    "admin.status.failed": "Failed",
+    "admin.status.skipped": "Skipped",
+    "admin.status.cancelled": "Cancelled",
+    "admin.status.pending": "Waiting",
+    "admin.status.unknown": "Unknown",
+    "admin.trigger.admin": "Admin",
+    "admin.trigger.scheduler": "Scheduler",
+    "admin.trigger.mcp": "MCP",
+    "admin.trigger.cli": "Command line",
+    "admin.trigger.other": "Other",
+
+    "admin.workflow.title": "Workflows",
+    "admin.workflow.description":
+      "Pick the modules to update, run them in one click, or let the server run them on a timer. Every run keeps the existing snapshot when a source fails.",
+    "admin.workflow.list": "Saved workflows",
+    "admin.workflow.new": "New workflow",
+    "admin.workflow.newTitle": "New workflow",
+    "admin.workflow.newDescription":
+      "A workflow is a reusable selection of modules with an optional timer.",
+    "admin.workflow.name": "Name",
+    "admin.workflow.namePlaceholder": "e.g. Evening refresh",
+    "admin.workflow.modules": "Modules",
+    "admin.workflow.modulesHint":
+      "Click a module to include or skip it. Modules always run in pipeline order.",
+    "admin.workflow.create": "Create workflow",
+    "admin.workflow.created": "Workflow created",
+    "admin.workflow.deleted": "Workflow deleted",
+    "admin.workflow.deleteConfirm": ({ name }: { name: any }) =>
+      `Delete workflow “${name}”?`,
+    "admin.workflow.rename": "Rename",
+    "admin.workflow.empty": "No workflows yet",
+    "admin.workflow.keepOneStep": "Keep at least one module in a workflow.",
+    "admin.workflow.schedule": "Run on a timer",
+    "admin.workflow.scheduled": "Timed",
+    "admin.workflow.interval": "Interval",
+    "admin.workflow.every": ({ interval }: { interval: any }) =>
+      `Every ${interval}`,
+    "admin.workflow.interval.minutes": ({ count }: { count: any }) =>
+      `${count} min`,
+    "admin.workflow.interval.hours": ({ count }: { count: any }) =>
+      `${count} ${count === 1 ? "hour" : "hours"}`,
+    "admin.workflow.interval.days": ({ count }: { count: any }) =>
+      `${count} ${count === 1 ? "day" : "days"}`,
+    "admin.workflow.nextRun": ({
+      time,
+      relative,
+    }: {
+      time: any
+      relative: any
+    }) => `Next run ${time} JST (${relative})`,
+    "admin.workflow.manualOnly": "Runs only when started manually",
+    "admin.workflow.schedulerOff":
+      "The in-process scheduler is disabled (WORKFLOW_SCHEDULER_ENABLED=0), so timers will not fire.",
+    "admin.workflow.lastRun": ({ time }: { time: any }) => `Last run ${time}`,
+    "admin.workflow.runNow": "Run now",
+    "admin.workflow.running": "A job is running",
+    "admin.workflow.scanOnly": "Scan only",
+    "admin.workflow.liveTitle": "Live progress",
+    "admin.workflow.lastJob": "Latest job",
+    "admin.workflow.liveDescription":
+      "Per-module status of the current or most recent job.",
+    "admin.workflow.progress": "Module progress",
+    "admin.workflow.noJob": "No job has run in this server session",
+    "admin.workflow.noJobHint":
+      "Run a workflow to see per-module progress here.",
+    "admin.workflow.allSteps": ({ count }: { count: any }) =>
+      `All ${count} modules`,
+    "admin.workflow.kind.workflow": "Workflow",
+    "admin.workflow.kind.sync": "Full sync",
+    "admin.workflow.kind.scan": "Schedule scan",
+    "admin.workflow.warn.envSkipped": "Skipped by a SKIP_* environment flag",
+    "admin.workflow.warn.detectionOff": "All detection stages are off",
+    "admin.workflow.warn.noModel": "No usable model is routed yet",
+
+    "admin.step.x": "X posts",
+    "admin.step.xDescription":
+      "Fetch new posts from the configured public X accounts.",
+    "admin.step.youtube": "YouTube",
+    "admin.step.youtubeDescription":
+      "Read the RSS feed and recheck stream reservations.",
+    "admin.step.media": "Media cache",
+    "admin.step.mediaDescription":
+      "Download pending images into the local cache.",
+    "admin.step.schedule": "AI schedule scan",
+    "admin.step.scheduleDescription":
+      "Detect schedules in posts with the routed LLM models.",
+    "admin.step.group.source": "Source",
+    "admin.step.group.process": "Process",
+
+    "admin.metric.schedules": "Schedules",
+    "admin.metric.schedulesNote": ({ count }: { count: any }) =>
+      `${count} manually locked on the first page`,
+    "admin.metric.models": "Usable models",
+    "admin.metric.modelsNote": ({ count }: { count: any }) =>
+      `${count} ${count === 1 ? "provider" : "providers"} configured`,
+    "admin.metric.scheduled": "Timed workflows",
+    "admin.metric.scheduledNote": ({ count }: { count: any }) =>
+      `${count} saved`,
+    "admin.metric.lastSync": "Last run",
+
+    "admin.run.title": "Recent runs",
+    "admin.run.description":
+      "Recorded synchronization and scan results, newest first.",
+    "admin.run.empty": "No runs recorded",
+    "admin.run.emptyHint": "Results appear here after the first run.",
+    "admin.run.syncComplete": "Sync completed",
+    "admin.run.syncPartial": "Partially completed; snapshots retained",
+    "admin.run.syncFailed": "Stopped unexpectedly; snapshots retained",
+    "admin.run.scanComplete": "Schedule scan completed",
+    "admin.run.scanPartial": "Scan completed with some failures",
+    "admin.run.scanFailed": "Scan stopped unexpectedly",
+    "admin.run.syncRecorded": "Sync recorded",
+    "admin.run.scanRecorded": "Scan recorded",
+    "admin.run.countX": ({ count }: { count: any }) => `X +${count}`,
+    "admin.run.countYoutube": ({ count }: { count: any }) =>
+      `YouTube +${count}`,
+    "admin.run.countMedia": ({ count }: { count: any }) => `${count} images`,
+    "admin.run.countSchedules": ({ count }: { count: any }) =>
+      `${count} candidates`,
+
+    "admin.guard.title": "Guardrails",
+    "admin.guard.description":
+      "What automation can and cannot change on the public board.",
+    "admin.guard.providers": "Manage models",
+    "admin.guard.one":
+      "Automatic detection only writes schedules that are not manually locked.",
+    "admin.guard.two":
+      "Confirmation, editing, deletion, and media selection stay human-only.",
+    "admin.guard.three":
+      "Opening or refreshing the public page never starts an external fetch.",
+
+    "admin.provider.title": "LLM providers",
+    "admin.provider.description":
+      "Connect OpenAI-compatible services once, fetch their model lists, and tag models by what they can do. Detection rules then route work to tagged models.",
+    "admin.provider.list": "Providers",
+    "admin.provider.search": "Search providers",
+    "admin.provider.none": "No providers match.",
+    "admin.provider.add": "Add provider",
+    "admin.provider.newTitle": "Add a provider",
+    "admin.provider.newDescription":
+      "Choose a preset or a custom OpenAI-compatible endpoint. With a key, the model list opens right after saving.",
+    "admin.provider.preset": "Preset",
+    "admin.provider.custom": "Custom",
+    "admin.provider.create": "Add provider",
+    "admin.provider.created": ({ name }: { name: any }) => `${name} added`,
+    "admin.provider.name": "Display name",
+    "admin.provider.protocol": "API format",
+    "admin.provider.protocol.chat": "OpenAI Chat Completions",
+    "admin.provider.protocol.responses": "OpenAI Responses",
+    "admin.provider.baseUrl": "API host",
+    "admin.provider.baseUrlHint":
+      "The API root, usually ending in /v1. Production requires HTTPS.",
+    "admin.provider.endpointPreview": ({ models }: { models: any }) =>
+      `Model list: ${models}`,
+    "admin.provider.endpointDetail": ({
+      models,
+      inference,
+    }: {
+      models: any
+      inference: any
+    }) => `Model list: ${models} · Inference: ${inference}`,
+    "admin.provider.apiKey": "API key",
+    "admin.provider.apiKeyHint":
+      "Encrypted with LLM_SECRETS_KEY before it is stored; never shown again.",
+    "admin.provider.apiKeyKeep":
+      "Leave empty to keep the stored key. Enter a new one to replace it.",
+    "admin.provider.apiKeyPlaceholder": "sk-…",
+    "admin.provider.apiKeySaved": "Stored key (hidden)",
+    "admin.provider.keyStored": "Key stored",
+    "admin.provider.keyPending": "Key entered · save required",
+    "admin.provider.clearApiKey": "Remove the stored API key",
+    "admin.provider.timeout": "Timeout (ms)",
+    "admin.provider.testModel": "Check with",
+    "admin.provider.testListOnly": "Model list only",
+    "admin.provider.test": "Check connection",
+    "admin.provider.saveFirst": "Save changes first",
+    "admin.provider.testSuccess": ({ model }: { model: any }) =>
+      `${model} answered the check`,
+    "admin.provider.testModels": ({ count }: { count: any }) =>
+      `Connected · ${count} models available`,
+    "admin.provider.saved": "Provider saved",
+    "admin.provider.deleted": "Provider deleted",
+    "admin.provider.deleteConfirm": ({ name }: { name: any }) =>
+      `Delete “${name}”? Its models and route entries are removed too.`,
+    "admin.provider.delete": "Delete provider",
+    "admin.provider.enable": "Enable provider",
+    "admin.provider.enabled": "Enabled",
+    "admin.provider.disabled": "Disabled",
+    "admin.provider.connection": "Connection",
+    "admin.provider.connectionDescription":
+      "Endpoint and credential shared by every model of this provider.",
+    "admin.provider.modelCount": ({ count }: { count: any }) =>
+      `${count} ${count === 1 ? "model" : "models"}`,
+    "admin.provider.health.ok": "Connected",
+    "admin.provider.health.failed": "Last check failed",
+    "admin.provider.health.keyMissing": "Key missing",
+    "admin.provider.health.pending": "Key entered · save required",
+    "admin.provider.health.disabled": "Disabled",
+    "admin.provider.health.unchecked": "Not checked",
+    "admin.provider.emptyTitle": "No provider selected",
+    "admin.provider.emptyHint":
+      "Add a provider to fetch models and route schedule detection.",
+    "admin.provider.securityNote":
+      "Keys are encrypted server-side and never returned to the browser, logs, or MCP. Provider requests are made by the server only.",
+
+    "admin.model.title": ({ count }: { count: any }) => `Models (${count})`,
+    "admin.model.description":
+      "Tags decide routing: Text and Image are the input capabilities a model must have; the rest are labels.",
+    "admin.model.fetch": "Fetch models",
+    "admin.model.manual": "Add manually",
+    "admin.model.search": "Filter models",
+    "admin.model.tags": "Tags",
+    "admin.model.noTags": "No tags",
+    "admin.model.enabled": "Enable model",
+    "admin.model.default": "Default model",
+    "admin.model.defaultHint":
+      "Use as the default model (connection checks and legacy routes)",
+    "admin.model.defaultNeedsCapability":
+      "Tag Text or Image before making this the default",
+    "admin.model.defaultSet": ({ model }: { model: any }) =>
+      `${model} is now the default`,
+    "admin.model.remove": ({ model }: { model: any }) => `Remove ${model}`,
+    "admin.model.removeConfirm": ({ model }: { model: any }) =>
+      `Remove ${model}? Route entries that use it are removed too.`,
+    "admin.model.removed": "Model removed",
+    "admin.model.addedNotice": ({ count }: { count: any }) =>
+      `${count} ${count === 1 ? "model" : "models"} added`,
+    "admin.model.empty": "No models yet",
+    "admin.model.emptyHint":
+      "Fetch the provider's model list, or add a model ID manually.",
+    "admin.model.noMatch": "No models match the filter",
+    "admin.model.routeHint": "Models are put to work from",
+    "admin.model.routeLink": "Detection rules",
+    "admin.model.manualTitle": "Add a model manually",
+    "admin.model.manualDescription":
+      "For endpoints without a model list, or models that are not listed.",
+    "admin.model.id": "Model ID",
+    "admin.model.add": "Add model",
+    "admin.model.origin.remote": "Fetched",
+    "admin.model.origin.manual": "Manual",
+    "admin.model.origin.legacy": "Migrated",
+    "admin.model.tag.text": "Text",
+    "admin.model.tag.image": "Image",
+    "admin.model.tag.reasoning": "Reasoning",
+    "admin.model.tag.tools": "Tools",
+    "admin.model.tag.embedding": "Embedding",
+    "admin.model.tag.textHint": "Accepts text input (routing capability)",
+    "admin.model.tag.imageHint":
+      "Accepts image input (routing capability for schedule images)",
+    "admin.model.tag.reasoningHint": "Reasoning model (label)",
+    "admin.model.tag.toolsHint": "Supports tool calling (label)",
+    "admin.model.tag.embeddingHint": "Embedding model, not for chat (label)",
+
+    "admin.discover.title": ({ name }: { name: any }) => `Models from ${name}`,
+    "admin.discover.description":
+      "Tags are suggested from the model ID and can be changed after adding.",
+    "admin.discover.loading": "Fetching the model list…",
+    "admin.discover.search": ({ count }: { count: any }) =>
+      `Search ${count} models`,
+    "admin.discover.hideAdded": "Hide added",
+    "admin.discover.selectVisible": "Select visible",
+    "admin.discover.clearVisible": "Clear visible",
+    "admin.discover.selected": ({ count }: { count: any }) =>
+      `${count} selected`,
+    "admin.discover.add": ({ count }: { count: any }) =>
+      count ? `Add ${count}` : "Add models",
+    "admin.discover.added": "Added",
+    "admin.discover.none": "No models match",
+    "admin.discover.truncated": ({
+      shown,
+      total,
+    }: {
+      shown: any
+      total: any
+    }) => `Showing ${shown} of ${total}. Refine the search to see more.`,
+
+    "admin.detection.title": "Detection rules",
+    "admin.detection.description":
+      "Choose how posts become schedule candidates and which models read them. Each route tries its models in order, three attempts each.",
+    "admin.detection.save": "Save rules",
+    "admin.detection.runScan": "Run scan now",
+    "admin.detection.unsaved":
+      "Stage switches or keywords have unsaved changes.",
+    "admin.detection.keywordTitle": "Keyword candidates",
+    "admin.detection.keywordDescription":
+      "Select stored posts that look like a schedule board, without calling a model.",
+    "admin.detection.keywords": "Keywords",
+    "admin.detection.keywordsPlaceholder": "One keyword per line",
+    "admin.detection.keywordsHint": "Up to 30 keywords, 80 characters each.",
+    "admin.detection.boardTitle": "Schedule boards",
+    "admin.detection.boardDescription":
+      "Send keyword-matched posts and their cached images to the board route.",
+    "admin.detection.boardNeedsKeywords":
+      "Schedule boards need keyword candidates enabled to find posts.",
+    "admin.detection.messageTitle": "Single messages",
+    "admin.detection.messageDescription":
+      "Check ordinary posts that mention a date or stream with the message route.",
+    "admin.detection.modalityNote":
+      "Text posts need a Text model, image posts an Image model, and mixed posts both.",
+    "admin.detection.manageModels": "Manage models",
+    "admin.posts.status.never": "Not processed",
+    "admin.posts.status.queued": "Queued",
+    "admin.posts.status.running": "Running",
+    "admin.posts.status.success": "Processed",
+    "admin.posts.status.uncertain": "Uncertain",
+    "admin.posts.status.failed": "Failed",
+    "admin.posts.status.skipped": "Skipped",
+    "admin.posts.title": "Post processing",
+    "admin.posts.description":
+      "Review saved posts, their LLM processing state, and retry individual posts.",
+    "admin.posts.runScan": "Run scan now",
+    "admin.posts.search": "Search posts",
+    "admin.posts.searchPlaceholder": "Search text, URL, or ID",
+    "admin.posts.statusFilter": "Processing status",
+    "admin.posts.allStatuses": "All statuses",
+    "admin.posts.total": ({ count }: { count: any }) => `${count} posts`,
+    "admin.posts.openSource": "Open source post",
+    "admin.posts.reprocess": "Process again",
+    "admin.posts.empty": "No posts match the current filter",
+
+    "admin.scheduleImages.title": "Schedule images",
+    "admin.scheduleImages.description":
+      "Only images that pass LLM verification are shown publicly. Manual labels can override the LLM result.",
+    "admin.scheduleImages.runVerification": "Run image verification",
+    "admin.scheduleImages.total": ({ count }: { count: any }) =>
+      `${count} candidates`,
+    "admin.scheduleImages.approvalHint":
+      "LLM verification is required; manual review is optional and can override it.",
+    "admin.scheduleImages.previewAlt": "Schedule image candidate",
+    "admin.scheduleImages.effective": ({ status }: { status: any }) =>
+      `Effective: ${status}`,
+    "admin.scheduleImages.llmLabel": ({
+      status,
+      confidence,
+    }: {
+      status: any
+      confidence: any
+    }) => `LLM: ${status} · confidence ${confidence}`,
+    "admin.scheduleImages.manualLabel": ({ status }: { status: any }) =>
+      `Manual: ${status}`,
+    "admin.scheduleImages.status.pending": "Pending",
+    "admin.scheduleImages.status.running": "Checking",
+    "admin.scheduleImages.status.schedule": "Schedule board",
+    "admin.scheduleImages.status.not_schedule": "Not a schedule board",
+    "admin.scheduleImages.status.uncertain": "Uncertain",
+    "admin.scheduleImages.status.failed": "Verification failed",
+    "admin.scheduleImages.status.skipped": "Skipped",
+    "admin.scheduleImages.status.unreviewed": "Unreviewed",
+    "admin.scheduleImages.manual.unreviewed": "Unreviewed",
+    "admin.scheduleImages.manual.schedule": "Marked schedule",
+    "admin.scheduleImages.manual.not_schedule": "Marked not schedule",
+    "admin.scheduleImages.openSource": "Open source post",
+    "admin.scheduleImages.manualReason": "Manual reason",
+    "admin.scheduleImages.manualReasonPlaceholder":
+      "Explain why this is or is not a schedule board",
+    "admin.scheduleImages.markSchedule": "Mark as schedule",
+    "admin.scheduleImages.markNotSchedule": "Mark as not schedule",
+    "admin.scheduleImages.clearManual": "Clear manual label",
+    "admin.scheduleImages.empty": "No schedule image candidates",
+    "admin.scheduleImages.public": "Public",
+    "admin.scheduleImages.hidden": "Hidden",
+    "admin.scheduleImages.sourceNotBoard":
+      "The source post does not read as a schedule board notice; only a manual label can publish this image.",
+    "admin.scheduleImages.reason.source_not_board":
+      "Skipped: the source post is not a schedule board notice",
+    "admin.scheduleImages.reason.media_pending":
+      "Skipped: the image is not cached yet",
+    "admin.scheduleImages.reason.missing_api_key":
+      "Skipped: no keyed image provider",
+    "admin.scheduleImages.reason.no_compatible_provider":
+      "Skipped: no provider with Image capability",
+
+    "admin.route.board": "Schedule board",
+    "admin.route.boardHint": "Image-heavy weekly schedules",
+    "admin.route.message": "Single message",
+    "admin.route.messageHint": "Text announcements",
+    "admin.route.legacy": "Fallback route",
+    "admin.route.legacyHint":
+      "Used by a stage whose own route is empty, and by older API clients.",
+    "admin.route.usesFallback":
+      "This route is empty, so it currently uses the fallback route below. Add a model to give it its own order.",
+    "admin.route.empty": "No models routed",
+    "admin.route.emptyHint":
+      "Add a tagged model below. Without one, this stage reports a safe skip.",
+    "admin.route.addLabel": "Model to add",
+    "admin.route.choose": "Choose a model…",
+    "admin.route.noModels": "No more tagged models — add some in LLM providers",
+    "admin.route.add": "Add to route",
+    "admin.route.saved": "Route updated",
+    "admin.route.followsDefault": "Provider default",
+    "admin.route.needsImage":
+      "No usable model here has the Image tag, so image-only boards will be skipped.",
+    "admin.route.issue.providerMissing": "Provider missing",
+    "admin.route.issue.providerDisabled": "Provider disabled",
+    "admin.route.issue.keyMissing": "Key missing",
+    "admin.route.issue.modelMissing": "Model missing",
+    "admin.route.issue.modelDisabled": "Model disabled",
+
+    "admin.schedule.title": "Schedules",
+    "admin.schedule.description":
+      "Review detected schedules. Confirming, editing, or deleting a record locks it against automation.",
+    "admin.schedule.new": "Add schedule",
+    "admin.schedule.search": "Search",
+    "admin.schedule.searchPlaceholder": "Title, details, or status",
+    "admin.schedule.source": "Source",
+    "admin.schedule.allSources": "All sources",
+    "admin.schedule.automatic": "Automatic",
+    "admin.schedule.manual": "Manual lock",
+    "admin.schedule.startDate": "From",
+    "admin.schedule.endDate": "To",
+    "admin.schedule.includeDeleted": "Show deleted",
+    "admin.schedule.filter": "Filter",
+    "admin.schedule.reset": "Reset filters",
+    "admin.schedule.total": ({ count }: { count: any }) =>
+      `${count} ${count === 1 ? "record" : "records"}`,
+    "admin.schedule.page": ({
+      page,
+      totalPages,
+    }: {
+      page: any
+      totalPages: any
+    }) => `Page ${page} of ${totalPages}`,
+    "admin.schedule.noDetails": "No details",
+    "admin.schedule.manualSource": "Manual lock",
+    "admin.schedule.automaticSource": "Automatic",
+    "admin.schedule.status.deleted": "Deleted",
+    "admin.schedule.status.pending": "Needs review",
+    "admin.schedule.status.upcoming": "Upcoming",
+    "admin.schedule.status.recorded": "Recorded",
+    "admin.schedule.status.cancelled": "Cancelled",
+    "admin.schedule.status.cancellation_review": "LLM review",
+    "admin.schedule.status.unknown": "Unknown",
+    "admin.schedule.noRecords": "No schedules match the current filters",
+    "admin.schedule.openSource": "Open public source",
+    "admin.schedule.editLabel": ({ title }: { title: any }) => `Edit ${title}`,
+    "admin.schedule.deleteLabel": ({ title }: { title: any }) =>
+      `Delete ${title}`,
+    "admin.schedule.deleteConfirm": ({ title }: { title: any }) =>
+      `Delete “${title}”? It stays as a locked deletion marker so automation cannot recreate it.`,
+    "admin.schedule.pagePrevious": "Previous page",
+    "admin.schedule.pageNext": "Next page",
+
+    "admin.event.editTitle": "Edit schedule",
+    "admin.event.newTitle": "New schedule",
+    "admin.event.lockNote":
+      "Saving manually confirms the schedule and locks it against automation.",
+    "admin.event.title": "Title",
+    "admin.event.detail": "Details",
+    "admin.event.date": "Date (JST)",
+    "admin.event.startTime": "Start time",
+    "admin.event.endTime": "End time",
+    "admin.event.timePrecision": "Time precision",
+    "admin.event.precision.exact": "Exact",
+    "admin.event.precision.approximate": "Approximate",
+    "admin.event.precision.unknown": "Unknown",
+    "admin.event.type": "Type",
+    "admin.event.type.event": "Event",
+    "admin.event.type.stream": "Stream",
+    "admin.event.type.member": "Members only",
+    "admin.event.type.release": "Release",
+    "admin.event.type.appearance": "Appearance",
+    "admin.event.status": "Status",
+    "admin.event.cancellationStatus": "Cancellation decision",
+    "admin.event.cancellation.none": "No cancellation",
+    "admin.event.cancellation.keepLlm": "Keep LLM review (undecided)",
+    "admin.event.cancellation.manual": "Cancelled by operator",
+    "admin.event.cancellationReason": "Cancellation reason",
+    "admin.event.llmCancellationEvidence": "LLM review evidence",
+    "admin.event.noCancellationReason": "No reason recorded",
+    "admin.event.publicUrl": "Public URL",
+    "admin.event.saveAndConfirm": "Save and confirm",
+    "admin.event.timeUnknown": "Time not set",
+
+    "admin.content.title": "Content & media",
+    "admin.content.description":
+      "Curate what the public board highlights. Synchronization never changes these choices.",
+    "admin.content.featuredTitle": "Featured video",
+    "admin.content.featuredDescription":
+      "Shown first in the public YouTube section. Leave empty to use the default order.",
+    "admin.content.featuredVideo": "Video",
+    "admin.content.notSet": "Not set",
+    "admin.content.featuredSaved": "Featured video saved",
+
+    "admin.profile.title": "Avatar and banner",
+    "admin.profile.help":
+      "Discover, add, or upload candidates, then select one. Regular sync never replaces the active media.",
+    "admin.profile.avatar": "Avatar",
+    "admin.profile.banner": "Banner",
+    "admin.profile.source.x": "X",
+    "admin.profile.source.youtube": "YouTube",
+    "admin.profile.source.upload": "Upload",
+    "admin.profile.discover": "Discover",
+    "admin.profile.current": "Active",
+    "admin.profile.notSelected": "Not selected",
+    "admin.profile.sourceLabel": ({ slot }: { slot: any }) => `${slot} source`,
+    "admin.profile.imageUrl.placeholder": "Paste an image URL",
+    "admin.profile.imageUrl.aria": ({ slot }: { slot: any }) =>
+      `${slot} image URL`,
+    "admin.profile.candidateUpdated": ({
+      source,
+      slot,
+    }: {
+      source: any
+      slot: any
+    }) => `${source} ${slot} candidates updated`,
+    "admin.profile.candidateAdded": "Image candidate added",
+    "admin.profile.candidateUploaded": ({ slot }: { slot: any }) =>
+      `${slot} candidate uploaded. Select it to activate.`,
+    "admin.profile.switched": ({ slot }: { slot: any }) => `${slot} switched`,
+    "admin.profile.downloaded": "Image candidate downloaded",
+    "admin.profile.status.ready": "Downloaded",
+    "admin.profile.status.failed": "Download failed",
+    "admin.profile.status.pending": "Pending download",
+    "admin.profile.noCandidates": "No candidates",
+    "admin.profile.footnote":
+      "Candidates are cached in data/x or data/youtube; uploads and active media live in data/avatar.",
+
+    "admin.notice.configSaved": "Detection rules saved",
+    "admin.notice.queued": "Job started",
+    "admin.notice.alreadyRunning": "Another job is already running",
+    "admin.notice.scheduleSaved": "Schedule saved and locked",
+    "admin.notice.scheduleConfirmed": "Schedule confirmed",
+    "admin.notice.scheduleDeleted": "Schedule deleted; lock retained",
+    "admin.notice.postQueued": "Post queued for the next scan",
+
+    "errors.requestFailed": "The request failed. Please try again.",
+    "errors.network": "The local API is unavailable. Please try again.",
+    "errors.authRequired":
+      "Your admin session has expired. Please log in again.",
+    "errors.invalidCredentials": "Incorrect password.",
+    "errors.tooManyAttempts": "Too many attempts. Try again later.",
+    "errors.notFound": "The requested record was not found.",
+    "errors.syncUnavailable": "The job service is unavailable.",
+    "errors.csrf": "This request was rejected. Reload the page and try again.",
+  },
+  "zh-CN": {
+    "admin.fetch.title": ({ source }: { source: any }) => `抓取 ${source} 记录`,
+    "admin.fetch.description": "选择最近时间段，或向前补抓历史记录。",
+    "admin.fetch.mode": "抓取方式",
+    "admin.fetch.recent": "最近时间段",
+    "admin.fetch.before": "从当前最旧记录继续向前",
+    "admin.fetch.range": "指定日期区间",
+    "admin.fetch.start": "开始日期",
+    "admin.fetch.end": "结束日期",
+    "admin.fetch.days": "最近天数",
+    "admin.fetch.backfillDays": "每个区间向前抓取的天数",
+    "admin.fetch.oldest": ({ time }: { time: any }) =>
+      `已存储的最旧记录：${time}`,
+    "admin.fetch.noRecords": "暂无记录",
+    "admin.fetch.timezone":
+      "日期按日本时间计算，包含所选首尾两天；最多 365 天。",
+    "admin.fetch.beforeHint":
+      "X 按各账号分别向前抓取。未完成的分页会优先续抓；已查完的空区间也会推进补抓边界。",
+    "admin.fetch.youtubeBeforeHint":
+      "从最旧的已发布视频继续向前抓取。未完成的分页会优先续抓；已查完的空区间也会推进补抓边界。",
+    "admin.fetch.emptyHint": "暂无记录时，请先抓取一个指定日期区间。",
+    "admin.fetch.xKeyHint":
+      "最近抓取仅覆盖公开主页可见记录。历史查询需要在服务端配置具有完整历史搜索权限的 X_API_BEARER_TOKEN。",
+    "admin.fetch.youtubeKeyHint":
+      "最近抓取仅覆盖 RSS 可见记录。历史查询需要在服务端配置 YOUTUBE_API_KEY。",
+    "admin.fetch.run": "开始抓取",
+    "admin.fetch.result": ({ count }: { count: any }) =>
+      `本次存储或更新 ${count} 条记录`,
+    "admin.fetch.partialHint":
+      "本次覆盖不完整或数据源有警告，请在工作流运行详情查看；未完成的日期区间可再次抓取以继续。",
+    "admin.fetch.workflowDays": ({ source }: { source: any }) =>
+      `${source} 最近抓取天数`,
+    "admin.fetch.workflowHint":
+      "工作流手动运行与定时运行均使用此滚动时间段。未配置 API 凭据时，仅能获取公开页面或 RSS 可见的近期记录。",
+    "admin.meta.title": "管理后台 / Kano 状态板",
+    "admin.loading": "正在加载后台状态",
+    "admin.brand.kanoStatusBoard": "KANO STATUS BOARD",
+    "admin.brand.console": "运维控制台",
+    "admin.auth.title": "管理后台",
+    "admin.auth.password": "访问密码",
+    "admin.auth.login": "登录",
+
+    "admin.nav.aria": "后台分区",
+    "admin.nav.group.operate": "运营",
+    "admin.nav.group.automation": "自动化",
+    "admin.nav.group.content": "内容",
+    "admin.nav.workflow": "工作流",
+    "admin.nav.schedules": "日程",
+    "admin.nav.detection": "识别规则",
+    "admin.nav.posts": "贴文",
+    "admin.nav.schedule-images": "日程图片",
+    "admin.nav.providers": "模型服务",
+    "admin.nav.content": "内容与媒体",
+    "admin.sidebar.schedulerOn": ({ count }: { count: any }) =>
+      `调度器运行中 · ${count} 个定时`,
+    "admin.sidebar.schedulerOff": "调度器未启用",
+    "admin.sidebar.backToPublic": "返回公开页面",
+    "admin.mode.production": "生产模式",
+    "admin.mode.development": "开发模式",
+
+    "admin.action.close": "关闭",
+    "admin.action.closeNotice": "关闭通知",
+    "admin.action.cancel": "取消",
+    "admin.action.save": "保存",
+    "admin.action.confirm": "确认",
+    "admin.action.delete": "删除",
+    "admin.action.remove": "移除",
+    "admin.action.logout": "退出登录",
+    "admin.action.moveUp": "上移",
+    "admin.action.moveDown": "下移",
+    "admin.action.upload": "上传",
+    "admin.action.select": "选用",
+    "admin.action.download": "下载候选",
+    "admin.action.addImageUrl": "添加图片地址",
+
+    "admin.status.running": "运行中",
+    "admin.status.queued": "排队中",
+    "admin.status.completed": "已完成",
+    "admin.status.partial": "部分完成",
+    "admin.status.failed": "失败",
+    "admin.status.skipped": "已跳过",
+    "admin.status.cancelled": "已取消",
+    "admin.status.pending": "等待中",
+    "admin.status.unknown": "未知",
+    "admin.trigger.admin": "后台",
+    "admin.trigger.scheduler": "定时",
+    "admin.trigger.mcp": "MCP",
+    "admin.trigger.cli": "命令行",
+    "admin.trigger.other": "其他",
+
+    "admin.workflow.title": "工作流",
+    "admin.workflow.description":
+      "选择要更新的模块，一键运行，或交给服务端定时执行。任一来源失败都会保留已有快照。",
+    "admin.workflow.list": "已保存的工作流",
+    "admin.workflow.new": "新建工作流",
+    "admin.workflow.newTitle": "新建工作流",
+    "admin.workflow.newDescription":
+      "工作流是一组可复用的模块选择，可选择是否定时。",
+    "admin.workflow.name": "名称",
+    "admin.workflow.namePlaceholder": "例如：晚间更新",
+    "admin.workflow.modules": "模块",
+    "admin.workflow.modulesHint":
+      "点击模块即可加入或跳过；模块始终按流水线顺序执行。",
+    "admin.workflow.create": "创建工作流",
+    "admin.workflow.created": "工作流已创建",
+    "admin.workflow.deleted": "工作流已删除",
+    "admin.workflow.deleteConfirm": ({ name }: { name: any }) =>
+      `删除工作流“${name}”？`,
+    "admin.workflow.rename": "重命名",
+    "admin.workflow.empty": "还没有工作流",
+    "admin.workflow.keepOneStep": "工作流至少需要保留一个模块。",
+    "admin.workflow.schedule": "定时运行",
+    "admin.workflow.scheduled": "已定时",
+    "admin.workflow.interval": "间隔",
+    "admin.workflow.every": ({ interval }: { interval: any }) =>
+      `每 ${interval}`,
+    "admin.workflow.interval.minutes": ({ count }: { count: any }) =>
+      `${count} 分钟`,
+    "admin.workflow.interval.hours": ({ count }: { count: any }) =>
+      `${count} 小时`,
+    "admin.workflow.interval.days": ({ count }: { count: any }) =>
+      `${count} 天`,
+    "admin.workflow.nextRun": ({
+      time,
+      relative,
+    }: {
+      time: any
+      relative: any
+    }) => `下次运行 ${time} JST（${relative}）`,
+    "admin.workflow.manualOnly": "仅在手动启动时运行",
+    "admin.workflow.schedulerOff":
+      "进程内调度器已关闭（WORKFLOW_SCHEDULER_ENABLED=0），定时不会触发。",
+    "admin.workflow.lastRun": ({ time }: { time: any }) => `上次运行 ${time}`,
+    "admin.workflow.runNow": "立即运行",
+    "admin.workflow.running": "已有任务在运行",
+    "admin.workflow.scanOnly": "仅扫描",
+    "admin.workflow.liveTitle": "实时进度",
+    "admin.workflow.lastJob": "最近任务",
+    "admin.workflow.liveDescription": "当前或最近一次任务中各模块的状态。",
+    "admin.workflow.progress": "模块进度",
+    "admin.workflow.noJob": "本次服务启动后还没有运行过任务",
+    "admin.workflow.noJobHint": "运行一个工作流后，这里会显示各模块进度。",
+    "admin.workflow.allSteps": ({ count }: { count: any }) =>
+      `全部 ${count} 个模块`,
+    "admin.workflow.kind.workflow": "工作流",
+    "admin.workflow.kind.sync": "完整同步",
+    "admin.workflow.kind.scan": "日程扫描",
+    "admin.workflow.warn.envSkipped": "已被 SKIP_* 环境变量跳过",
+    "admin.workflow.warn.detectionOff": "所有识别阶段均已关闭",
+    "admin.workflow.warn.noModel": "尚未配置可用的路由模型",
+
+    "admin.step.x": "X 动态",
+    "admin.step.xDescription": "抓取已配置公开 X 账号的新动态。",
+    "admin.step.youtube": "YouTube",
+    "admin.step.youtubeDescription": "读取 RSS 并复查直播预约。",
+    "admin.step.media": "媒体缓存",
+    "admin.step.mediaDescription": "把待下载图片缓存到本地。",
+    "admin.step.schedule": "AI 日程识别",
+    "admin.step.scheduleDescription": "用已路由的 LLM 模型识别动态中的日程。",
+    "admin.step.group.source": "来源",
+    "admin.step.group.process": "处理",
+
+    "admin.metric.schedules": "日程",
+    "admin.metric.schedulesNote": ({ count }: { count: any }) =>
+      `首页中 ${count} 条已人工锁定`,
+    "admin.metric.models": "可用模型",
+    "admin.metric.modelsNote": ({ count }: { count: any }) =>
+      `已配置 ${count} 个服务商`,
+    "admin.metric.scheduled": "定时工作流",
+    "admin.metric.scheduledNote": ({ count }: { count: any }) =>
+      `共 ${count} 个`,
+    "admin.metric.lastSync": "最近运行",
+
+    "admin.run.title": "运行记录",
+    "admin.run.description": "已记录的同步与扫描结果，最新在前。",
+    "admin.run.empty": "暂无运行记录",
+    "admin.run.emptyHint": "第一次运行后，结果会显示在这里。",
+    "admin.run.syncComplete": "同步完成",
+    "admin.run.syncPartial": "部分完成，已保留快照",
+    "admin.run.syncFailed": "异常终止，已保留快照",
+    "admin.run.scanComplete": "日程扫描完成",
+    "admin.run.scanPartial": "扫描完成，但部分候选失败",
+    "admin.run.scanFailed": "扫描异常终止",
+    "admin.run.syncRecorded": "已记录同步",
+    "admin.run.scanRecorded": "已记录扫描",
+    "admin.run.countX": ({ count }: { count: any }) => `X +${count}`,
+    "admin.run.countYoutube": ({ count }: { count: any }) =>
+      `YouTube +${count}`,
+    "admin.run.countMedia": ({ count }: { count: any }) => `${count} 张图片`,
+    "admin.run.countSchedules": ({ count }: { count: any }) =>
+      `${count} 个候选`,
+
+    "admin.guard.title": "安全边界",
+    "admin.guard.description": "自动化能改动和不能改动公开页面的范围。",
+    "admin.guard.providers": "管理模型",
+    "admin.guard.one": "自动识别只会写入未被人工锁定的日程。",
+    "admin.guard.two": "确认、编辑、删除和媒体选用只能由人工操作。",
+    "admin.guard.three": "打开或刷新公开页面绝不会触发外部抓取。",
+
+    "admin.provider.title": "模型服务",
+    "admin.provider.description":
+      "集中接入 OpenAI 兼容服务：填写地址和 API Key 后获取模型列表，并按能力给模型打标签。识别规则再把任务路由到带标签的模型。",
+    "admin.provider.list": "服务商",
+    "admin.provider.search": "搜索服务商",
+    "admin.provider.none": "没有匹配的服务商。",
+    "admin.provider.add": "添加服务商",
+    "admin.provider.newTitle": "添加服务商",
+    "admin.provider.newDescription":
+      "选择预设或自定义 OpenAI 兼容地址。填写 Key 后，保存即自动打开模型列表。",
+    "admin.provider.preset": "预设",
+    "admin.provider.custom": "自定义",
+    "admin.provider.create": "添加服务商",
+    "admin.provider.created": ({ name }: { name: any }) => `已添加 ${name}`,
+    "admin.provider.name": "显示名称",
+    "admin.provider.protocol": "接口格式",
+    "admin.provider.protocol.chat": "OpenAI Chat Completions",
+    "admin.provider.protocol.responses": "OpenAI Responses",
+    "admin.provider.baseUrl": "API 地址",
+    "admin.provider.baseUrlHint":
+      "API 根地址，通常以 /v1 结尾；生产环境要求 HTTPS。",
+    "admin.provider.endpointPreview": ({ models }: { models: any }) =>
+      `模型列表：${models}`,
+    "admin.provider.endpointDetail": ({
+      models,
+      inference,
+    }: {
+      models: any
+      inference: any
+    }) => `模型列表：${models} · 推理：${inference}`,
+    "admin.provider.apiKey": "API Key",
+    "admin.provider.apiKeyHint":
+      "保存前会用 LLM_SECRETS_KEY 加密，之后不会再显示。",
+    "admin.provider.apiKeyKeep": "留空则保留已保存的 Key；输入新 Key 即替换。",
+    "admin.provider.apiKeyPlaceholder": "sk-…",
+    "admin.provider.apiKeySaved": "已保存的 Key（已隐藏）",
+    "admin.provider.keyStored": "已保存 Key",
+    "admin.provider.keyPending": "已输入 Key · 请保存",
+    "admin.provider.clearApiKey": "清除已保存的 API Key",
+    "admin.provider.timeout": "超时（毫秒）",
+    "admin.provider.testModel": "检查方式",
+    "admin.provider.testListOnly": "仅获取模型列表",
+    "admin.provider.test": "检查连接",
+    "admin.provider.saveFirst": "请先保存修改",
+    "admin.provider.testSuccess": ({ model }: { model: any }) =>
+      `${model} 已响应检查`,
+    "admin.provider.testModels": ({ count }: { count: any }) =>
+      `连接成功 · 可用 ${count} 个模型`,
+    "admin.provider.saved": "服务商已保存",
+    "admin.provider.deleted": "服务商已删除",
+    "admin.provider.deleteConfirm": ({ name }: { name: any }) =>
+      `删除“${name}”？它的模型和路由条目也会一并移除。`,
+    "admin.provider.delete": "删除服务商",
+    "admin.provider.enable": "启用服务商",
+    "admin.provider.enabled": "已启用",
+    "admin.provider.disabled": "已停用",
+    "admin.provider.connection": "连接",
+    "admin.provider.connectionDescription":
+      "该服务商所有模型共用的地址与凭据。",
+    "admin.provider.modelCount": ({ count }: { count: any }) =>
+      `${count} 个模型`,
+    "admin.provider.health.ok": "已连接",
+    "admin.provider.health.failed": "上次检查失败",
+    "admin.provider.health.keyMissing": "缺少 Key",
+    "admin.provider.health.pending": "已输入 Key · 请保存",
+    "admin.provider.health.disabled": "已停用",
+    "admin.provider.health.unchecked": "未检查",
+    "admin.provider.emptyTitle": "未选择服务商",
+    "admin.provider.emptyHint": "添加服务商后即可获取模型并用于日程识别。",
+    "admin.provider.securityNote":
+      "Key 在服务端加密，绝不会返回给浏览器、日志或 MCP；所有模型请求都由服务端发起。",
+
+    "admin.model.title": ({ count }: { count: any }) => `模型（${count}）`,
+    "admin.model.description":
+      "标签决定路由：Text 和 Image 是模型必须具备的输入能力，其余标签仅作标注。",
+    "admin.model.fetch": "获取模型列表",
+    "admin.model.manual": "手动添加",
+    "admin.model.search": "筛选模型",
+    "admin.model.tags": "标签",
+    "admin.model.noTags": "无标签",
+    "admin.model.enabled": "启用模型",
+    "admin.model.default": "默认模型",
+    "admin.model.defaultHint": "设为默认模型（用于连接检查和旧版路由）",
+    "admin.model.defaultNeedsCapability": "请先标记 Text 或 Image 再设为默认",
+    "admin.model.defaultSet": ({ model }: { model: any }) =>
+      `${model} 已设为默认`,
+    "admin.model.remove": ({ model }: { model: any }) => `移除 ${model}`,
+    "admin.model.removeConfirm": ({ model }: { model: any }) =>
+      `移除 ${model}？使用它的路由条目也会一并移除。`,
+    "admin.model.removed": "模型已移除",
+    "admin.model.addedNotice": ({ count }: { count: any }) =>
+      `已添加 ${count} 个模型`,
+    "admin.model.empty": "还没有模型",
+    "admin.model.emptyHint": "获取服务商的模型列表，或手动填写模型 ID。",
+    "admin.model.noMatch": "没有匹配的模型",
+    "admin.model.routeHint": "模型需要在此处加入路由才会被使用：",
+    "admin.model.routeLink": "识别规则",
+    "admin.model.manualTitle": "手动添加模型",
+    "admin.model.manualDescription":
+      "适用于没有模型列表接口或列表中未出现的模型。",
+    "admin.model.id": "模型 ID",
+    "admin.model.add": "添加模型",
+    "admin.model.origin.remote": "已获取",
+    "admin.model.origin.manual": "手动",
+    "admin.model.origin.legacy": "迁移",
+    "admin.model.tag.text": "Text",
+    "admin.model.tag.image": "Image",
+    "admin.model.tag.reasoning": "推理",
+    "admin.model.tag.tools": "工具",
+    "admin.model.tag.embedding": "嵌入",
+    "admin.model.tag.textHint": "支持文本输入（路由能力）",
+    "admin.model.tag.imageHint": "支持图片输入（识别日程图片的路由能力）",
+    "admin.model.tag.reasoningHint": "推理模型（标注）",
+    "admin.model.tag.toolsHint": "支持工具调用（标注）",
+    "admin.model.tag.embeddingHint": "嵌入模型，不用于对话（标注）",
+
+    "admin.discover.title": ({ name }: { name: any }) => `${name} 的模型`,
+    "admin.discover.description": "标签根据模型 ID 自动建议，添加后仍可修改。",
+    "admin.discover.loading": "正在获取模型列表…",
+    "admin.discover.search": ({ count }: { count: any }) =>
+      `在 ${count} 个模型中搜索`,
+    "admin.discover.hideAdded": "隐藏已添加",
+    "admin.discover.selectVisible": "全选可见",
+    "admin.discover.clearVisible": "取消可见",
+    "admin.discover.selected": ({ count }: { count: any }) =>
+      `已选 ${count} 个`,
+    "admin.discover.add": ({ count }: { count: any }) =>
+      count ? `添加 ${count} 个` : "添加模型",
+    "admin.discover.added": "已添加",
+    "admin.discover.none": "没有匹配的模型",
+    "admin.discover.truncated": ({
+      shown,
+      total,
+    }: {
+      shown: any
+      total: any
+    }) => `显示 ${total} 个中的 ${shown} 个，请缩小搜索范围查看更多。`,
+
+    "admin.detection.title": "识别规则",
+    "admin.detection.description":
+      "决定哪些动态会成为日程候选，以及由哪些模型读取。每条路由按顺序尝试模型，每个模型最多 3 次。",
+    "admin.detection.save": "保存规则",
+    "admin.detection.runScan": "立即扫描",
+    "admin.detection.unsaved": "阶段开关或关键词有未保存的修改。",
+    "admin.detection.keywordTitle": "关键词候选",
+    "admin.detection.keywordDescription":
+      "从已保存的动态中筛选疑似日程表，不调用模型。",
+    "admin.detection.keywords": "关键词",
+    "admin.detection.keywordsPlaceholder": "每行一个关键词",
+    "admin.detection.keywordsHint": "最多 30 个，每个不超过 80 个字符。",
+    "admin.detection.boardTitle": "日程表识别",
+    "admin.detection.boardDescription":
+      "把命中关键词的动态及其缓存图片发送到日程表路由。",
+    "admin.detection.boardNeedsKeywords":
+      "日程表识别需要开启关键词候选才能找到动态。",
+    "admin.detection.messageTitle": "单条消息识别",
+    "admin.detection.messageDescription":
+      "用消息路由检查提到日期或直播的普通动态。",
+    "admin.detection.modalityNote":
+      "纯文本动态需要 Text 模型，纯图片需要 Image 模型，图文混合需要两者兼具。",
+    "admin.detection.manageModels": "管理模型",
+    "admin.posts.status.never": "未处理",
+    "admin.posts.status.queued": "已排队",
+    "admin.posts.status.running": "处理中",
+    "admin.posts.status.success": "已处理",
+    "admin.posts.status.uncertain": "不确定",
+    "admin.posts.status.failed": "失败",
+    "admin.posts.status.skipped": "已跳过",
+    "admin.posts.title": "贴文处理",
+    "admin.posts.description":
+      "查看已存贴文、LLM 处理状态，并单独重新处理贴文。",
+    "admin.posts.runScan": "立即扫描",
+    "admin.posts.search": "搜索贴文",
+    "admin.posts.searchPlaceholder": "搜索正文、链接或 ID",
+    "admin.posts.statusFilter": "处理状态",
+    "admin.posts.allStatuses": "全部状态",
+    "admin.posts.total": ({ count }: { count: any }) => `${count} 条贴文`,
+    "admin.posts.openSource": "打开原贴文",
+    "admin.posts.reprocess": "再次处理",
+    "admin.posts.empty": "没有符合当前筛选条件的贴文",
+
+    "admin.scheduleImages.title": "日程图片",
+    "admin.scheduleImages.description":
+      "只有通过 LLM 核验的图片才会展示在公开页面；人工标注可以覆盖 LLM 结果。",
+    "admin.scheduleImages.runVerification": "核验日程图片",
+    "admin.scheduleImages.total": ({ count }: { count: any }) =>
+      `共 ${count} 个候选`,
+    "admin.scheduleImages.approvalHint":
+      "必须先通过 LLM 核验；人工复核可选，也可以覆盖 LLM 判断。",
+    "admin.scheduleImages.previewAlt": "日程图片候选",
+    "admin.scheduleImages.effective": ({ status }: { status: any }) =>
+      `最终状态：${status}`,
+    "admin.scheduleImages.llmLabel": ({
+      status,
+      confidence,
+    }: {
+      status: any
+      confidence: any
+    }) => `LLM：${status} · 置信度 ${confidence}`,
+    "admin.scheduleImages.manualLabel": ({ status }: { status: any }) =>
+      `人工：${status}`,
+    "admin.scheduleImages.status.pending": "待核验",
+    "admin.scheduleImages.status.running": "核验中",
+    "admin.scheduleImages.status.schedule": "日程表",
+    "admin.scheduleImages.status.not_schedule": "不是日程表",
+    "admin.scheduleImages.status.uncertain": "不确定",
+    "admin.scheduleImages.status.failed": "核验失败",
+    "admin.scheduleImages.status.skipped": "已跳过",
+    "admin.scheduleImages.status.unreviewed": "未人工复核",
+    "admin.scheduleImages.manual.unreviewed": "未人工复核",
+    "admin.scheduleImages.manual.schedule": "人工标记为日程表",
+    "admin.scheduleImages.manual.not_schedule": "人工标记为非日程表",
+    "admin.scheduleImages.openSource": "打开原贴文",
+    "admin.scheduleImages.manualReason": "人工理由",
+    "admin.scheduleImages.manualReasonPlaceholder": "说明为什么是或不是日程表",
+    "admin.scheduleImages.markSchedule": "标记为日程表",
+    "admin.scheduleImages.markNotSchedule": "标记为非日程表",
+    "admin.scheduleImages.clearManual": "清除人工标注",
+    "admin.scheduleImages.empty": "暂无日程图片候选",
+    "admin.scheduleImages.public": "已公开",
+    "admin.scheduleImages.hidden": "未公开",
+    "admin.scheduleImages.sourceNotBoard":
+      "原贴文不像日程表公告，只有人工标注才能公开这张图片。",
+    "admin.scheduleImages.reason.source_not_board":
+      "已跳过：原贴文不是日程表公告",
+    "admin.scheduleImages.reason.media_pending": "已跳过：图片尚未缓存",
+    "admin.scheduleImages.reason.missing_api_key":
+      "已跳过：没有配置密钥的图片模型服务",
+    "admin.scheduleImages.reason.no_compatible_provider":
+      "已跳过：没有具备 Image 能力的模型服务",
+
+    "admin.route.board": "日程表",
+    "admin.route.boardHint": "以图片为主的周日程",
+    "admin.route.message": "单条消息",
+    "admin.route.messageHint": "文字公告",
+    "admin.route.legacy": "后备路由",
+    "admin.route.legacyHint":
+      "当某阶段自己的路由为空时使用，也供旧版 API 客户端使用。",
+    "admin.route.usesFallback":
+      "此路由为空，当前使用下方的后备路由。添加模型即可为它设定独立顺序。",
+    "admin.route.empty": "尚未路由任何模型",
+    "admin.route.emptyHint":
+      "在下方添加带标签的模型；没有模型时该阶段会安全跳过。",
+    "admin.route.addLabel": "要添加的模型",
+    "admin.route.choose": "选择模型…",
+    "admin.route.noModels": "没有更多带标签的模型，请先在模型服务中添加",
+    "admin.route.add": "加入路由",
+    "admin.route.saved": "路由已更新",
+    "admin.route.followsDefault": "跟随默认模型",
+    "admin.route.needsImage":
+      "此处没有带 Image 标签的可用模型，纯图片日程表将被跳过。",
+    "admin.route.issue.providerMissing": "服务商不存在",
+    "admin.route.issue.providerDisabled": "服务商已停用",
+    "admin.route.issue.keyMissing": "缺少 Key",
+    "admin.route.issue.modelMissing": "模型不存在",
+    "admin.route.issue.modelDisabled": "模型已停用",
+
+    "admin.schedule.title": "日程",
+    "admin.schedule.description":
+      "审核自动识别的日程。确认、编辑或删除都会锁定该记录，自动化不会再覆盖。",
+    "admin.schedule.new": "新增日程",
+    "admin.schedule.search": "搜索",
+    "admin.schedule.searchPlaceholder": "标题、详情或状态",
+    "admin.schedule.source": "来源",
+    "admin.schedule.allSources": "全部来源",
+    "admin.schedule.automatic": "自动识别",
+    "admin.schedule.manual": "人工锁定",
+    "admin.schedule.startDate": "开始日期",
+    "admin.schedule.endDate": "结束日期",
+    "admin.schedule.includeDeleted": "显示已删除",
+    "admin.schedule.filter": "筛选",
+    "admin.schedule.reset": "重置筛选",
+    "admin.schedule.total": ({ count }: { count: any }) => `共 ${count} 条`,
+    "admin.schedule.page": ({
+      page,
+      totalPages,
+    }: {
+      page: any
+      totalPages: any
+    }) => `第 ${page} / ${totalPages} 页`,
+    "admin.schedule.noDetails": "暂无详情",
+    "admin.schedule.manualSource": "人工锁定",
+    "admin.schedule.automaticSource": "自动识别",
+    "admin.schedule.status.deleted": "已删除",
+    "admin.schedule.status.pending": "待确认",
+    "admin.schedule.status.upcoming": "即将进行",
+    "admin.schedule.status.recorded": "已记录",
+    "admin.schedule.status.cancelled": "已取消",
+    "admin.schedule.status.cancellation_review": "LLM 待复核",
+    "admin.schedule.status.unknown": "未知",
+    "admin.schedule.noRecords": "没有符合当前筛选条件的日程",
+    "admin.schedule.openSource": "打开公开来源",
+    "admin.schedule.editLabel": ({ title }: { title: any }) => `编辑 ${title}`,
+    "admin.schedule.deleteLabel": ({ title }: { title: any }) =>
+      `删除 ${title}`,
+    "admin.schedule.deleteConfirm": ({ title }: { title: any }) =>
+      `删除“${title}”？记录会保留为人工锁定的删除标记，自动化不会重新创建。`,
+    "admin.schedule.pagePrevious": "上一页",
+    "admin.schedule.pageNext": "下一页",
+
+    "admin.event.editTitle": "编辑日程",
+    "admin.event.newTitle": "新增日程",
+    "admin.event.lockNote": "保存即视为人工确认，并锁定该日程不被自动化覆盖。",
+    "admin.event.title": "标题",
+    "admin.event.detail": "详情",
+    "admin.event.date": "日期（JST）",
+    "admin.event.startTime": "开始时间",
+    "admin.event.endTime": "结束时间",
+    "admin.event.timePrecision": "时间精度",
+    "admin.event.precision.exact": "精确",
+    "admin.event.precision.approximate": "大约",
+    "admin.event.precision.unknown": "未知",
+    "admin.event.type": "类型",
+    "admin.event.type.event": "活动",
+    "admin.event.type.stream": "直播",
+    "admin.event.type.member": "会员限定",
+    "admin.event.type.release": "发布",
+    "admin.event.type.appearance": "出演",
+    "admin.event.status": "状态",
+    "admin.event.cancellationStatus": "取消状态",
+    "admin.event.cancellation.none": "未取消",
+    "admin.event.cancellation.keepLlm": "保留 LLM 判断（待决定）",
+    "admin.event.cancellation.manual": "人工标记取消",
+    "admin.event.cancellationReason": "取消理由",
+    "admin.event.llmCancellationEvidence": "LLM 判断证据",
+    "admin.event.noCancellationReason": "未记录理由",
+    "admin.event.publicUrl": "公开链接",
+    "admin.event.saveAndConfirm": "保存并确认",
+    "admin.event.timeUnknown": "未设置时间",
+
+    "admin.content.title": "内容与媒体",
+    "admin.content.description":
+      "管理公开页面的重点内容；同步永远不会修改这些选择。",
+    "admin.content.featuredTitle": "精选视频",
+    "admin.content.featuredDescription":
+      "显示在公开页面 YouTube 区块的首位；留空则使用默认顺序。",
+    "admin.content.featuredVideo": "视频",
+    "admin.content.notSet": "未设置",
+    "admin.content.featuredSaved": "精选视频已保存",
+
+    "admin.profile.title": "头像与横幅",
+    "admin.profile.help":
+      "发现、添加或上传候选图片后再选用。常规同步不会替换当前使用的媒体。",
+    "admin.profile.avatar": "头像",
+    "admin.profile.banner": "横幅",
+    "admin.profile.source.x": "X",
+    "admin.profile.source.youtube": "YouTube",
+    "admin.profile.source.upload": "上传",
+    "admin.profile.discover": "发现",
+    "admin.profile.current": "使用中",
+    "admin.profile.notSelected": "未选择",
+    "admin.profile.sourceLabel": ({ slot }: { slot: any }) => `${slot}来源`,
+    "admin.profile.imageUrl.placeholder": "粘贴图片地址",
+    "admin.profile.imageUrl.aria": ({ slot }: { slot: any }) =>
+      `${slot}图片地址`,
+    "admin.profile.candidateUpdated": ({
+      source,
+      slot,
+    }: {
+      source: any
+      slot: any
+    }) => `${source} ${slot}候选已更新`,
+    "admin.profile.candidateAdded": "已添加图片候选",
+    "admin.profile.candidateUploaded": ({ slot }: { slot: any }) =>
+      `${slot}候选已上传，选用后生效。`,
+    "admin.profile.switched": ({ slot }: { slot: any }) => `${slot}已切换`,
+    "admin.profile.downloaded": "图片候选已下载",
+    "admin.profile.status.ready": "已下载",
+    "admin.profile.status.failed": "下载失败",
+    "admin.profile.status.pending": "待下载",
+    "admin.profile.noCandidates": "暂无候选",
+    "admin.profile.footnote":
+      "候选图片缓存在 data/x 或 data/youtube；上传的图片和当前使用的媒体存放在 data/avatar。",
+
+    "admin.notice.configSaved": "识别规则已保存",
+    "admin.notice.queued": "任务已启动",
+    "admin.notice.alreadyRunning": "已有其他任务在运行",
+    "admin.notice.scheduleSaved": "日程已保存并锁定",
+    "admin.notice.scheduleConfirmed": "日程已确认",
+    "admin.notice.scheduleDeleted": "日程已删除，锁定已保留",
+    "admin.notice.postQueued": "贴文已排队，将在下次扫描时处理",
+
+    "errors.requestFailed": "请求失败，请重试。",
+    "errors.network": "本地 API 暂不可用，请稍后重试。",
+    "errors.authRequired": "后台会话已过期，请重新登录。",
+    "errors.invalidCredentials": "密码错误。",
+    "errors.tooManyAttempts": "尝试次数过多，请稍后再试。",
+    "errors.notFound": "未找到请求的记录。",
+    "errors.syncUnavailable": "任务服务暂不可用。",
+    "errors.csrf": "请求被拒绝，请刷新页面后重试。",
+  },
+  ja: {},
+}

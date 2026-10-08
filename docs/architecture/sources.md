@@ -139,7 +139,7 @@ A schedule image (`assets.kind = schedule`) is public only after two gates:
 
 1. Sync promotes a post's image only when the author's own wording, including
    quoted text, explicitly reads as a weekly or multi-day board notice
-   (`server/schedule-asset.js`). The stored post `label` is not part of that
+   (`server/schedule-asset.ts`). The stored post `label` is not part of that
    input, because the looser post classifier labels any `配信予定` post as
    `SCHEDULE / 日程`. The configurable extraction keywords do not promote images.
 2. The automatic scan sends each unreviewed candidate's ready cached image,

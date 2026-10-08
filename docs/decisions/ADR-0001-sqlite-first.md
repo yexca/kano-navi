@@ -14,9 +14,9 @@ hard for maintainers to tell when data was last refreshed.
 
 Use server-side synchronization, a SQLite snapshot, and a read-only frontend API:
 
-1. `scripts/sync.mjs` reads and normalizes public data source by source.
-2. `server/database.js` stores snapshots and synchronization results with transactions and upserts.
-3. `server/index.js` returns stable dashboard and health data only.
+1. `scripts/sync.ts` reads and normalizes public data source by source.
+2. `server/database.ts` stores snapshots and synchronization results with transactions and upserts.
+3. `server/index.ts` returns stable dashboard and health data only.
 4. The React page never calls external platforms directly; when synchronization fails, it continues to show the last usable snapshot.
 
 ## Consequences
