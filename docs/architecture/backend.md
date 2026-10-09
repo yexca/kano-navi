@@ -73,3 +73,29 @@ Selected profile media uses /media/profile/avatar and /media/profile/banner.
 - [Workflows](workflows.md)
 - [Deployment security](../operations/security.md)
 - [Secure development](../development/security.md)
+
+## Bounded Public Calendar
+
+`GET /api/calendar?from=2026-10-05&to=2026-10-11&page=1&pageSize=100`
+reads an inclusive range of at most seven Japan dates, with 1–100 events per
+page in stable chronological order. It returns sanitized `items` / `events`,
+`total`, `totalPages`, `hasNext`, `dayCounts`, `revision`, matching approved
+schedule images and `adjacent.previous` / `adjacent.next` event dates. Invalid
+ranges return 400. Every read uses the same public event projection as the
+board; it does not fetch platforms or models. MCP `schedule_list` remains the
+bounded, paginated history reader; `dashboard_read` shares the bounded snapshot.
+
+Dashboard SQL selects up to 100 recent post previews plus the latest-post
+fallback, up to 100 current-week event previews plus 30 upcoming and 30 live
+focus candidates and at most one linked event per returned video, and bounded
+video candidates plus Featured selection and the latest completed video.
+Known end times remove finished streams before limiting focus candidates and
+retain streams with explicit longer durations. Media is resolved only for returned owners. Historical
+event and media growth therefore does not enlarge a homepage response.
+Full event totals and upcoming counts are separate SQL aggregates; calendar
+pagination preserves access to every activity instead of dropping later rows.
+
+JSON parser failures return `invalid_json` (400), excessive bodies return
+`request_too_large` (413), and unsupported encodings return 415. The global
+handler logs only a fixed event/code/status object, including unexpected errors;
+it never serializes error messages, stacks, raw bodies, headers or keys.

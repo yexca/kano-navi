@@ -54,8 +54,8 @@ recent reservations for `scheduledStartTime`, writing them to both `videos` and
 `events`. When no schedule time is available, the script does not invent one. RSS insertion
 does not count as a reservation detail check. Successful stream-page detail
 checks are recorded in incremental `sync_state.metadata.streamDetailsCheckedIds`
-for currently discovered/active videos. Unchecked discoveries precede known
-reservation refreshes within the detail budget; failed checks remain eligible,
+for currently discovered/active videos. Eligible discoveries and reservation
+refreshes share the durable rotating detail queue; failed checks remain eligible,
 and failed refreshes retain existing video/event snapshots. HTTP 200 alone is
 not success: a reservation needs a parsed timestamp and page title; an ordinary
 video without a reservation needs a complete, playable player response with a
@@ -183,11 +183,27 @@ existing local `videos` row (or an empty value for no Featured item), and source
 synchronization never changes it. The dashboard includes the selected video
 even when it falls outside the most recent 30 rows.
 
+Image extraction requires every declared image to have a linked ready cache
+file. Missing links, partially ready images, absent files or unsafe paths keep
+`media_pending`, preserve a forced reprocess request, and cannot replace an
+existing complete extraction or retire its events. Text-only overrides do not
+bypass that readiness gate.
+
 ### Schedule Images
 
 Public-profile synchronization and official X date-window pages share the same
-candidate builder. Each page registers its newest matching image per Japan
-Monday week, together with its source account. Candidates, post/media records,
+candidate builder. Each page registers its newest matching image per applicable
+Japan Monday week, together with its source account. Explicit source dates win
+over relative wording. An omitted year uses the nearest valid year to publication;
+December-to-January ranges roll forward across the year. `今週` / `本周` /
+`this week` and `来週` / `下周` / `next week` anchor to the Japan publication
+week, with next week starting seven days later, including Sunday publication.
+Multi-day ranges retain both inclusive ends, even across multiple weeks.
+An explicit connected range is selected independently of other date mentions;
+multiple ranges or disconnected date lists are ambiguous. Ambiguous, invalid or
+absent dates produce a null period, never a publication-week
+guess. Operators can correct a period with a required reason independently of
+image approval; unknown and legacy periods are labelled in the console. Candidates, post/media records,
 and historical continuation checkpoints commit atomically. Older pages or
 accounts cannot replace a newer image for that week or the `weekly-schedule`
 compatibility alias. Registration does not run extraction or approve an image.
@@ -211,7 +227,7 @@ A schedule image (`assets.kind = schedule`) is public only after two gates:
 returned `schedule`. A manual `not_schedule` always hides it. Labels require a
 reason and are set in the `/admin` schedule-images view. Sync reuses the
 `schedule-<week>` IDs and the `weekly-schedule` alias, so a review belongs to
-the image URL it judged: when an asset ID receives a different URL, its model
+the image URL and version it judged: when an asset ID receives a different URL, its model
 verdict and manual label reset to `pending` / `unreviewed`.
 
 Source HTML/XML/JSON reads have a 4 MiB response-byte limit, reject redirects,
@@ -231,3 +247,15 @@ changed content or configuration can invalidate a successful verdict.
 - [Event precedence](data-model.md#event-precedence)
 - [Configuration](../operations/configuration.md)
 - [Secure development](../development/security.md)
+
+## Budget Fairness
+
+Incremental X rotates the first account across runs using independent
+`x-budget` state, so a one-request budget also serves later accounts. Failed
+requests consume their turn and budget. Each account retains its own durable
+pending-ID queue and incremental cursor. YouTube detail work uses an independent
+`youtube-details` durable queue: new discoveries join the tail, attempted work
+rotates before its request, failed work remains retryable, and completed ordinary
+videos leave the queue. Reservations continue to rotate for refresh. Reopening
+SQLite preserves those turns. Date-window work uses separate rotation/queue
+identities and never rewrites incremental cursors or their check metadata.

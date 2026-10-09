@@ -143,3 +143,26 @@ publication is serialized per tag.
 - [Design](design.md)
 - [Secure development](security.md)
 - [Commit and release](commit-and-release.md)
+
+## Concurrent and Bounded-read Regressions
+
+`server/repair-regression.test.ts` covers deferred image responses during manual
+accept/reject, image replacement/restoration/content changes, credential-bearing
+parser and unexpected errors with captured log assertions, complete media-list
+reconciliation and rollback, partial/missing image caches, applicable periods,
+manual correction and additive migration. A 10,000-record synthetic history
+checks bounded snapshots, full calendar pagination, counts and public projection.
+`server/sync.test.ts` also reopens temporary SQLite during one-request X/account
+and YouTube/detail rotation, including persistent 404 and recovery.
+`server/polling.test.ts` uses controlled timers to check retry cadence, its cap,
+deadlines, overlapping-work prevention, stale responses and disposal.
+
+For the real hooks and responsive UI, run `node scripts/ui-regression.ts` and
+open its printed loopback URL. The fixture uses in-memory synthetic state,
+injected inert jobs, no runtime entry point or .env, and no external requests.
+The browser regression button advances a controlled clock through initial
+failure, one 503, sustained failures/recovery, 401, stalled requests, superseded
+responses and unmount for both hooks. It also checks hidden-page polling and
+calendar pagination/navigation. Review `/` and `/admin` at desktop and mobile widths, including
+calendar navigation and the period correction fields. Stop the fixture after
+verification; it does not write an operator snapshot.

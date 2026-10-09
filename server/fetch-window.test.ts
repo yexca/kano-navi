@@ -642,7 +642,7 @@ test("historical X boards retain Japan weeks across pages and accounts without r
             ? [
                 {
                   ...xEntry("older-week", "2026-09-13T20:00:00Z"),
-                  text: "Weekly schedule",
+                  text: "Weekly schedule 9/14–9/20",
                   attachments: { media_keys: ["older"] },
                 },
               ]

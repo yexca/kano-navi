@@ -137,7 +137,9 @@ test("OpenAI structured extraction uses cached vision input and caches results",
     assert.equal(content[0].type, "input_text")
     assert.equal(content[1].type, "input_image")
     assert.match(content[1].image_url, /^data:image\/png;base64,/u)
-    const event = getDashboard(database).events[0]
+    const event = getDashboard(database, {
+      now: new Date("2026-09-06T00:00:00Z"),
+    }).events[0]
     assert.equal(event.startsOn, "2026-09-06")
     assert.equal(event.startsAt, null)
     assert.equal(event.timePrecision, "unknown")

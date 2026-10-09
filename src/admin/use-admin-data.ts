@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+
+import { createRequestScope, startPolling } from "../lib/polling"
 
 import { adminMessage, formatAdminError, jsonBody, request } from "@/admin/api"
 
@@ -53,14 +55,31 @@ export function useAdminData() {
   const filtersRef = useRef(emptyFilters)
   const pageRef = useRef(1)
   const wasActiveRef = useRef(false)
+  const workflowReadRef = useRef(0)
+  const scope = useMemo(() => createRequestScope(), [])
+  const scopedRequest = useCallback(
+    (path, options: Record<string, any> = {}) =>
+      scope.run(path.split("?")[0], (signal) =>
+        request(path, { ...options, signal }),
+      ),
+    [scope],
+  )
+  useEffect(() => {
+    scope.activate()
+    return () => scope.dispose()
+  }, [scope])
 
-  const dismissToast = useCallback((id) => {
-    setToasts((current) => current.filter((toast) => toast.id !== id))
-  }, [])
+  const dismissToast = useCallback(
+    (id) => {
+      if (scope.active)
+        setToasts((current) => current.filter((toast) => toast.id !== id))
+    },
+    [scope],
+  )
 
   const pushToast = useCallback(
     (message, tone = "success") => {
-      if (!message) return
+      if (!message || !scope.active) return
       toastId.current += 1
       const id = toastId.current
       setToasts((current) => [...current.slice(-3), { id, message, tone }])
@@ -85,63 +104,71 @@ export function useAdminData() {
     async (query: Record<string, any> = {}) => {
       const filters = query.filters || filtersRef.current
       const page = query.page || 1
-      const payload = await request(
+      const payload = await scopedRequest(
         `/events?${eventsQuery({ ...filters, page })}`,
       )
       pageRef.current = payload.page || page
       setEventsPage(payload)
       return payload
     },
-    [],
+    [scopedRequest],
   )
 
   const loadConfig = useCallback(async () => {
-    const payload = await request("/config")
+    const payload = await scopedRequest("/config")
     setConfig(payload)
     return payload
-  }, [])
+  }, [scopedRequest])
 
   const loadWorkflows = useCallback(async () => {
-    const payload = await request("/workflows")
-    setWorkflowState(payload)
+    const read = ++workflowReadRef.current
+    const payload = await scopedRequest("/workflows")
+    if (read === workflowReadRef.current) setWorkflowState(payload)
     return payload
-  }, [])
+  }, [scopedRequest])
 
   const loadActivity = useCallback(async () => {
-    const [jobPayload, runPayload, workflowPayload] = await Promise.all([
-      request("/sync/jobs?limit=10"),
-      request("/sync/runs?limit=12"),
-      request("/workflows"),
-    ])
+    const workflowRead = ++workflowReadRef.current
+    const [jobPayload, runPayload, workflowPayload] = await scope.run(
+      "activity",
+      (signal) =>
+        Promise.all([
+          request("/sync/jobs?limit=10", { signal }),
+          request("/sync/runs?limit=12", { signal }),
+          request("/workflows", { signal }),
+        ]),
+    )
+    if (!scope.active) return []
     setJobs(jobPayload.jobs || [])
     setRuns(runPayload.runs || [])
-    setWorkflowState(workflowPayload)
+    if (workflowRead === workflowReadRef.current)
+      setWorkflowState(workflowPayload)
     return jobPayload.jobs || []
-  }, [])
+  }, [scopedRequest])
 
   const loadVideos = useCallback(async () => {
-    const payload = await request("/videos")
+    const payload = await scopedRequest("/videos")
     setVideos(payload.videos || [])
-  }, [])
+  }, [scopedRequest])
   const loadSourceFetch = useCallback(async () => {
-    setSourceFetch(await request("/sources/fetch"))
-  }, [])
+    setSourceFetch(await scopedRequest("/sources/fetch"))
+  }, [scopedRequest])
 
   const loadPostLlm = useCallback(async () => {
-    const payload = await request("/posts/llm?limit=60")
+    const payload = await scopedRequest("/posts/llm?limit=60")
     setPostLlm(payload.posts || [])
     return payload.posts || []
-  }, [])
+  }, [scopedRequest])
 
   const loadScheduleAssets = useCallback(async () => {
-    const payload = await request("/schedule-assets?limit=100")
+    const payload = await scopedRequest("/schedule-assets?limit=100")
     setScheduleAssets(payload.assets || [])
     return payload.assets || []
-  }, [])
+  }, [scopedRequest])
 
   const loadProfileMedia = useCallback(async () => {
-    setProfileMedia(await request("/profile-media"))
-  }, [])
+    setProfileMedia(await scopedRequest("/profile-media"))
+  }, [scopedRequest])
 
   const loadAll = useCallback(async () => {
     await Promise.all([
@@ -166,29 +193,58 @@ export function useAdminData() {
   ])
 
   useEffect(() => {
-    let active = true
-    request("/session")
-      .then(async (payload) => {
+    let active = true,
+      loaded = false,
+      initialInFlight = false
+    const initialLoad = async () => {
+      if (initialInFlight) return
+      initialInFlight = true
+      try {
+        const payload = await scopedRequest("/session")
         if (!active) return
         setSession(payload)
         if (payload.authenticated) await loadAll()
+        loaded = true
+      } finally {
+        initialInFlight = false
+      }
+    }
+    void initialLoad()
+      .catch((error) => {
+        if (active && error.name !== "AbortError") fail(error)
       })
-      .catch((error) => active && fail(error))
       .finally(() => active && setIsLoading(false))
+    const stop = startPolling(
+      async () => {
+        if (!loaded) await initialLoad()
+      },
+      {
+        delay: () => 6000,
+        onError: (error) => {
+          if (error?.status === 401) {
+            loaded = true
+            scope.cancel()
+            setSession((current) => ({ ...current, authenticated: false }))
+          }
+        },
+      },
+    )
     return () => {
       active = false
+      stop()
     }
-  }, [fail, loadAll])
+  }, [fail, loadAll, scopedRequest, scope])
 
   const activeJob = jobs.find(isActiveJob) || null
 
-  // Poll job state; poll faster while a job is running and refresh the
-  // records that a finished job may have changed.
+  const activeJobRef = useRef(false)
+  activeJobRef.current = Boolean(activeJob)
+  // The loop owns its timer, independent of successful React state updates.
   useEffect(() => {
     if (!session?.authenticated) return undefined
-    const delay = activeJob ? 1500 : 6000
-    const timer = window.setTimeout(async () => {
-      try {
+    return startPolling(
+      async () => {
+        if (scope.busy("activity")) return
         const latestJobs = await loadActivity()
         const stillActive = latestJobs.some(isActiveJob)
         if (wasActiveRef.current && !stillActive) {
@@ -202,17 +258,20 @@ export function useAdminData() {
           ])
         }
         wasActiveRef.current = stillActive
-      } catch (error) {
-        if (error?.status === 401) {
-          setSession((current) => ({ ...current, authenticated: false }))
-        }
-      }
-    }, delay)
-    return () => window.clearTimeout(timer)
+      },
+      {
+        delay: () => (activeJobRef.current ? 1500 : 6000),
+        onError: (error) => {
+          if (error?.status === 401) {
+            scope.cancel()
+            setSession((current) => ({ ...current, authenticated: false }))
+          }
+        },
+      },
+    )
   }, [
     session?.authenticated,
-    activeJob,
-    jobs,
+    scope,
     loadActivity,
     loadConfig,
     loadEventsPage,
@@ -224,7 +283,7 @@ export function useAdminData() {
 
   const login = useCallback(
     async (password) => {
-      const payload = await request("/login", {
+      const payload = await scopedRequest("/login", {
         method: "POST",
         body: jsonBody({ password }),
       })
@@ -236,7 +295,7 @@ export function useAdminData() {
 
   const logout = useCallback(async () => {
     try {
-      await request("/logout", { method: "POST" })
+      await scopedRequest("/logout", { method: "POST" })
       setSession((current) => ({ ...current, authenticated: false }))
       setConfig(null)
     } catch (error) {
@@ -244,24 +303,27 @@ export function useAdminData() {
     }
   }, [fail])
 
-  const updateFilters = useCallback((name, value) => {
-    setEventFilters((current) => {
-      const next = { ...current, [name]: value }
-      filtersRef.current = next
-      return next
-    })
-  }, [])
+  const updateFilters = useCallback(
+    (name, value) => {
+      setEventFilters((current) => {
+        const next = { ...current, [name]: value }
+        filtersRef.current = next
+        return next
+      })
+    },
+    [scopedRequest],
+  )
 
   const resetFilters = useCallback(() => {
     filtersRef.current = emptyFilters
     setEventFilters(emptyFilters)
-  }, [])
+  }, [scopedRequest])
 
   /** Start a job and report whether it was accepted. */
   const startJob = useCallback(
     async (path, body = null) => {
       try {
-        const payload = await request(path, {
+        const payload = await scopedRequest(path, {
           method: "POST",
           ...(body ? { body: jsonBody(body) } : {}),
         })
@@ -284,7 +346,7 @@ export function useAdminData() {
 
   const reprocessPostLlm = useCallback(
     async (postId, route = null) => {
-      const payload = await request(
+      const payload = await scopedRequest(
         `/posts/${encodeURIComponent(postId)}/llm/reprocess`,
         { method: "POST", body: jsonBody(route ? { route } : {}) },
       )
@@ -296,7 +358,7 @@ export function useAdminData() {
 
   const reviewScheduleAsset = useCallback(
     async (assetId, status, reason) => {
-      const payload = await request(
+      const payload = await scopedRequest(
         `/schedule-assets/${encodeURIComponent(assetId)}/manual-review`,
         {
           method: "POST",
@@ -307,6 +369,18 @@ export function useAdminData() {
       return payload.asset
     },
     [loadScheduleAssets],
+  )
+
+  const correctSchedulePeriod = useCallback(
+    async (assetId, start, end, reason) => {
+      const payload = await scopedRequest(
+        `/schedule-assets/${encodeURIComponent(assetId)}/period`,
+        { method: "POST", body: jsonBody({ start, end, reason }) },
+      )
+      await loadScheduleAssets()
+      return payload.asset
+    },
+    [scopedRequest, loadScheduleAssets],
   )
 
   return {
@@ -345,5 +419,6 @@ export function useAdminData() {
     loadScheduleAssets,
     reprocessPostLlm,
     reviewScheduleAsset,
+    correctSchedulePeriod,
   }
 }

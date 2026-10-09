@@ -46,7 +46,6 @@ for (const failure of ["budget", "503", "all-failed"]) {
         "X_REFRESH_KNOWN",
         "X_BOOTSTRAP_DAYS",
         "X_SCHEDULE_REFRESH_LIMIT",
-        "X_API_BEARER_TOKEN",
       ].map((key) => [key, process.env[key]]),
     )
     const fixedNow = Date.parse("2026-09-16T00:00:00Z")
@@ -982,11 +981,10 @@ for (const failure of [
     t.after(() => database.close())
     const originalFetch = globalThis.fetch
     const savedEnvironment = Object.fromEntries(
-      [
-        "YOUTUBE_MAX_DETAIL_REQUESTS",
-        "YOUTUBE_CHANNEL_ID",
-        "YOUTUBE_API_KEY",
-      ].map((key) => [key, process.env[key]]),
+      ["YOUTUBE_MAX_DETAIL_REQUESTS", "YOUTUBE_CHANNEL_ID"].map((key) => [
+        key,
+        process.env[key],
+      ]),
     )
     t.after(() => {
       globalThis.fetch = originalFetch
@@ -1002,6 +1000,7 @@ for (const failure of [
     let watchCalls = 0
     let fail = true
     let includeOverflow = true
+    let overflowCalls = 0
     globalThis.fetch = async (url) => {
       const value = String(url)
       if (value.includes("/feeds/videos.xml"))
@@ -1018,6 +1017,12 @@ for (const failure of [
         return response(
           `<a href="/watch?v=${id}">reservation</a>${includeOverflow ? '<a href="/watch?v=overflow001">other</a>' : ""}`,
         )
+      if (value === "https://www.youtube.com/watch?v=overflow001") {
+        overflowCalls++
+        return response(
+          `<script>var ytInitialPlayerResponse = ${JSON.stringify({ videoDetails: { videoId: "overflow001", title: "Ordinary video", isUpcoming: false }, playabilityStatus: { status: "OK" } })};</script>`,
+        )
+      }
       assert.equal(value, `https://www.youtube.com/watch?v=${id}`)
       watchCalls++
       if (fail) {
@@ -1061,6 +1066,12 @@ for (const failure of [
     )
     const rssSnapshot = getVideoRecord(database, id)
     fail = false
+    // An unattempted discovery gets a turn before the failed detail retries.
+    const rotated = await syncYoutube(database)
+    assert.equal(rotated.inspected, 1)
+    assert.equal(overflowCalls, 1)
+    assert.equal(watchCalls, 1)
+    includeOverflow = false
     // The failed detail remains eligible despite its RSS row and cursor.
     const second = await syncYoutube(database)
     assert.equal(second.inspected, 1)
@@ -1226,3 +1237,132 @@ test("source deadline covers delayed RSS bodies and failed jobs release the sing
   const completed = await wait(next.job.id)
   assert.equal(completed.run.status, "success")
 })
+
+for (const source of ["x", "youtube"])
+  test(`${source} rotates failing work fairly across rounds and a SQLite restart with budget one`, async (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "kano-budget-")),
+      filename = path.join(directory, "snapshot.sqlite")
+    let database = initializeDatabase({ seed: false, filename })
+    t.after(() => {
+      database.close()
+      fs.rmSync(directory, { recursive: true, force: true })
+    })
+    const saved = Object.fromEntries(
+      [
+        "X_HANDLES",
+        "X_MAX_STATUS_REQUESTS",
+        "X_REFRESH_KNOWN",
+        "X_SCHEDULE_REFRESH_LIMIT",
+        "X_API_BEARER_TOKEN",
+        "YOUTUBE_CHANNEL_ID",
+        "YOUTUBE_MAX_DETAIL_REQUESTS",
+        "YOUTUBE_API_KEY",
+      ].map((key) => [key, process.env[key]]),
+    )
+    t.after(() => {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value == null) delete process.env[key]
+        else process.env[key] = value
+      }
+    })
+    process.env.X_HANDLES = "example,other_test"
+    process.env.X_MAX_STATUS_REQUESTS = "1"
+    process.env.X_REFRESH_KNOWN = "1"
+    process.env.X_SCHEDULE_REFRESH_LIMIT = "0"
+    process.env.YOUTUBE_CHANNEL_ID = "synthetic-budget-channel"
+    process.env.YOUTUBE_MAX_DETAIL_REQUESTS = "1"
+    delete process.env.X_API_BEARER_TOKEN
+    delete process.env.YOUTUBE_API_KEY
+    const fixedNow = Date.parse("2026-10-09T00:00:00Z")
+    t.mock.method(Date, "now", () => fixedNow)
+    const ids = [
+      snowflakeFor(new Date(fixedNow - 3600000)),
+      snowflakeFor(new Date(fixedNow - 7200000)),
+    ]
+    let recovered = false
+    const attempts = []
+    t.mock.method(globalThis, "fetch", async (value) => {
+      const url = String(value)
+      if (url.startsWith("https://x.com/")) {
+        const handle = url.split("/").at(-1),
+          id = handle === "example" ? ids[0] : ids[1]
+        return response(`<a href="/${handle}/status/${id}">synthetic</a>`)
+      }
+      if (url.includes("api.vxtwitter.com")) {
+        const handle = url.split("/")[3],
+          id = url.split("/").at(-1)
+        attempts.push(handle)
+        if (handle === "example" && !recovered)
+          return response("synthetic missing", { status: 404 })
+        return response(
+          JSON.stringify({
+            tweetID: id,
+            text: "synthetic",
+            date: snowflakeDate(id).toISOString(),
+            author: { screenName: handle },
+          }),
+        )
+      }
+      if (url.includes("/feeds/videos.xml"))
+        return response(
+          feedXml([
+            {
+              id: "rssbudget01",
+              title: "Synthetic feed",
+              publishedAt: "2026-10-08T00:00:00Z",
+            },
+          ]),
+        )
+      if (url.endsWith("/streams"))
+        return response(
+          '<a href="/watch?v=failed00001">first</a><a href="/watch?v=valid000001">second</a>',
+        )
+      const id = new URL(url).searchParams.get("v")
+      attempts.push(id)
+      if (id === "failed00001" && !recovered)
+        return response("synthetic missing", { status: 404 })
+      return response(
+        `<meta property="og:title" content="Synthetic reservation"/><script>{"scheduledStartTime":"2099-01-01T11:00:00Z","isUpcoming":true}</script>`,
+      )
+    })
+    const run = async () => {
+      const before = attempts.length
+      try {
+        const result =
+          source === "x" ? await syncX(database) : await syncYoutube(database)
+        if (source === "x") assert.equal(result.requested, 1)
+      } catch (error) {
+        assert.equal(source, "x")
+        assert.match(error.message, /同步失败/u)
+      }
+      assert.equal(attempts.length - before, 1)
+    }
+    await run()
+    database.close()
+    database = initializeDatabase({ seed: false, filename })
+    await run()
+    await run()
+    assert.deepEqual(
+      attempts,
+      source === "x"
+        ? ["example", "other_test", "example"]
+        : ["failed00001", "valid000001", "failed00001"],
+    )
+    if (source === "x")
+      assert.ok(
+        database
+          .prepare("SELECT id FROM posts WHERE account_handle='other_test'")
+          .get(),
+      )
+    else assert.ok(getVideoRecord(database, "valid000001").scheduledAt)
+    recovered = true
+    await run()
+    await run()
+    if (source === "x")
+      assert.ok(
+        database
+          .prepare("SELECT id FROM posts WHERE account_handle='example'")
+          .get(),
+      )
+    else assert.ok(getVideoRecord(database, "failed00001").scheduledAt)
+  })

@@ -86,10 +86,24 @@ export interface ScheduleAsset {
   label: string | null
   alt?: string
   weekStart: string | null
+  periodStart?: string | null
+  periodEnd?: string | null
+  periodBasis?: string
   updatedAt: string | null
   url: string | null
   sourceUrl: string | null
   mediaStatus: string
+}
+
+export interface CalendarSnapshot {
+  events: ScheduleEvent[]
+  scheduleImages: ScheduleAsset[]
+  adjacent: { previous: string | null; next: string | null }
+  dayCounts: Record<string, number>
+  total: number
+  page: number
+  hasNext: boolean
+  revision: number
 }
 
 export interface Dashboard {
@@ -130,6 +144,7 @@ export interface Dashboard {
     postWindowDays: number
     xAccounts: string[]
     featuredVideoId: string | null
+    eventWindow?: { from: string; to: string; paginated: boolean }
     revision?: number
   }
 }

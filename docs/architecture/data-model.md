@@ -103,7 +103,35 @@ once in the same transaction as all selected metadata updates. An unchanged
 startup does not increment it. Existing revision polling therefore reloads the
 repaired public profile snapshot, including its versioned avatar URL.
 Schedule image reviews add `llm_input_fingerprint` for content/configuration
-cache validation; legacy reviews are rechecked when next scanned.
+cache validation; legacy reviews are rechecked when next scanned. Automatic
+review writes update LLM columns only. Image responses compare the captured
+`assets.asset_version`, URL and media hash inside a transaction; replacement,
+including replacing and restoring the same URL, invalidates a waiting response.
+Manual verdicts, reasons and decision timestamps survive concurrent model work.
+
+Schedule assets keep publication in `updated_at` separately from inclusive
+`period_start` / `period_end`, with `period_basis` (`explicit`, `relative`,
+`unknown`, or `legacy`). `week_start` is the Monday of the applicable start,
+not the publication week. Additive migration copies existing week values to a
+seven-day `legacy` period without asserting that those old dates were verified.
+Manual correction stores separate `manual_period_start`, `manual_period_end`,
+and `manual_period_reason`; it preserves the inferred values, source and review.
+Registration of the same image retains that correction. A different image URL
+resets its review and correction. Unknown periods stay null until corrected and
+are not assigned to a calendar week.
+
+Complete post `media_urls` snapshots reconcile `post-image` ownership in the
+same transaction as the post write. An empty list removes all display links;
+omitted media fields preserve the known declaration. Failed source reads never
+call this writer. Cache rows/files may remain after a link is removed.
+
+The dashboard reads a bounded current-week/focus selection, not all history.
+Event totals and upcoming counts use SQL aggregates over all visible records;
+post counts describe the requested date window, even if its preview exceeds
+100 posts. Media cache totals aggregate recorded statuses; each displayed asset
+is independently checked for file availability. Calendar pages contain at most
+100 events in an inclusive seven-day range, total/day counts, the snapshot
+revision and adjacent dates. Tombstones are excluded on every public path.
 
 ## Schema Changes
 

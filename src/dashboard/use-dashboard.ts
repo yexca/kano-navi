@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { fallbackProfile, POST_WINDOW_DAYS } from "./content"
-import type { Dashboard } from "@/types"
+import type { Dashboard, CalendarSnapshot } from "@/types"
+import { createRequestScope, startPolling } from "../lib/polling"
+import { startOfWeek, japanToday, localDateKey, addDays } from "./format"
 import { deriveDashboardAt } from "./derive-dashboard"
 
 const emptyDashboard: Dashboard = {
@@ -51,6 +53,92 @@ export function useDashboard(now = Date.now()) {
   const revisionRef = useRef<number | null>(null)
   const hasLoadedRef = useRef(false)
 
+  const scope = useMemo(() => createRequestScope(), [])
+  const loadedAtRef = useRef(0)
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(japanToday()))
+  const [calendar, setCalendar] = useState<CalendarSnapshot>({
+    events: [],
+    scheduleImages: [],
+    adjacent: { previous: null, next: null },
+    total: 0,
+    page: 1,
+    hasNext: false,
+    revision: 0,
+    dayCounts: {},
+  })
+  const [calendarLoading, setCalendarLoading] = useState(true)
+  const [calendarError, setCalendarError] = useState<Error | null>(null)
+  const weekRef = useRef(weekStart)
+  weekRef.current = weekStart
+  const readJson = async (url: string, signal: AbortSignal) => {
+    const response = await fetch(url, {
+      signal,
+      headers: { accept: "application/json" },
+    })
+    if (!response.ok) throw new Error(`API ${response.status}`)
+    return response.json()
+  }
+  const loadCalendar = useCallback(async () => {
+    const from = localDateKey(weekRef.current),
+      to = localDateKey(addDays(weekRef.current, 6))
+    setCalendarLoading(true)
+    try {
+      const payload = await scope.run("calendar", (signal) =>
+        readJson(`/api/calendar?from=${from}&to=${to}&page=1`, signal),
+      )
+      if (from !== localDateKey(weekRef.current)) return
+      if (
+        !Array.isArray(payload.events) ||
+        !payload.adjacent ||
+        !Number.isInteger(payload.total)
+      )
+        throw new Error("Invalid calendar snapshot")
+      setCalendar(payload)
+      setCalendarError(null)
+      setCalendarLoading(false)
+      return { ok: true }
+    } catch (error) {
+      if (
+        scope.active &&
+        from === localDateKey(weekRef.current) &&
+        error.name !== "AbortError"
+      ) {
+        setCalendarError(error)
+        setCalendarLoading(false)
+      }
+      return { ok: false }
+    }
+  }, [scope])
+  const calendarRef = useRef(calendar)
+  calendarRef.current = calendar
+  const loadMoreCalendar = useCallback(async () => {
+    const current = calendarRef.current
+    if (!current.hasNext || scope.busy("calendar")) return
+    const from = localDateKey(weekRef.current),
+      to = localDateKey(addDays(weekRef.current, 6))
+    try {
+      const next = await scope.run("calendar", (signal) =>
+        readJson(
+          `/api/calendar?from=${from}&to=${to}&page=${current.page + 1}`,
+          signal,
+        ),
+      )
+      if (from !== localDateKey(weekRef.current)) return
+      if (next.revision !== current.revision) {
+        await loadCalendar()
+        return
+      }
+      setCalendar({ ...next, events: [...current.events, ...next.events] })
+      setCalendarError(null)
+    } catch (error) {
+      if (
+        scope.active &&
+        from === localDateKey(weekRef.current) &&
+        error.name !== "AbortError"
+      )
+        setCalendarError(error)
+    }
+  }, [scope, loadCalendar])
   const load = useCallback(async () => {
     setStatus((current) => ({
       ...current,
@@ -58,11 +146,9 @@ export function useDashboard(now = Date.now()) {
       isRefreshing: true,
     }))
     try {
-      const response = await fetch(`/api/dashboard?days=${POST_WINDOW_DAYS}`, {
-        headers: { accept: "application/json" },
-      })
-      if (!response.ok) throw new Error(`API ${response.status}`)
-      const payload: Dashboard = await response.json()
+      const payload: Dashboard = await scope.run("snapshot", (signal) =>
+        readJson(`/api/dashboard?days=${POST_WINDOW_DAYS}`, signal),
+      )
       setDashboard({
         ...emptyDashboard,
         ...payload,
@@ -72,52 +158,90 @@ export function useDashboard(now = Date.now()) {
       })
       revisionRef.current = payload.meta?.revision ?? null
       hasLoadedRef.current = true
+      loadedAtRef.current = Date.now()
       setStatus({ isLoading: false, isRefreshing: false, error: null })
       return { ok: true }
     } catch (caught) {
       const error = caught instanceof Error ? caught : new Error(String(caught))
-      setStatus({ isLoading: false, isRefreshing: false, error })
+      if (scope.active && error.name !== "AbortError")
+        setStatus({ isLoading: false, isRefreshing: false, error })
       return { ok: false, error }
     }
-  }, [])
-
+  }, [scope])
   useEffect(() => {
-    load()
-  }, [load])
-
-  useEffect(() => {
-    let active = true
-    const checkRevision = async () => {
-      if (document.visibilityState === "hidden") return
-      try {
-        const since = encodeURIComponent(String(revisionRef.current ?? ""))
-        const response = await fetch(`/api/dashboard/revision?since=${since}`, {
-          headers: { accept: "application/json" },
-        })
-        if (!response.ok || !active) return
-        const payload = await response.json()
+    scope.activate()
+    void load()
+    const stop = startPolling(
+      async () => {
+        if (document.visibilityState === "hidden" || scope.busy("snapshot"))
+          return
+        const payload = await scope.run("revision", (signal) =>
+          readJson(
+            `/api/dashboard/revision?since=${revisionRef.current ?? ""}`,
+            signal,
+          ),
+        )
         if (
-          revisionRef.current != null &&
-          Number(payload.revision) !== Number(revisionRef.current)
+          !hasLoadedRef.current ||
+          payload.revision !== revisionRef.current ||
+          Date.now() - loadedAtRef.current >= 60000
         ) {
-          await load()
+          const result = await load()
+          if (!result.ok) throw result.error
+          await loadCalendar()
         }
-      } catch {
-        // The regular dashboard request owns the visible error state.
-      }
-    }
-    const timer = window.setInterval(checkRevision, REVISION_POLL_MS)
+      },
+      { delay: () => REVISION_POLL_MS },
+    )
     return () => {
-      active = false
-      window.clearInterval(timer)
+      stop()
+      scope.dispose()
     }
-  }, [load])
+  }, [scope, load, loadCalendar])
+  useEffect(() => {
+    void loadCalendar()
+    const stop = startPolling(
+      async () => {
+        if (
+          document.visibilityState === "hidden" ||
+          scope.busy("calendar") ||
+          !calendarRetryRef.current
+        )
+          return
+        const result = await loadCalendar()
+        if (!result?.ok) throw new Error("calendar_unavailable")
+      },
+      { delay: () => REVISION_POLL_MS },
+    )
+    return () => {
+      stop()
+      scope.cancelKey("calendar")
+    }
+  }, [weekStart, loadCalendar, scope])
+  const calendarRetryRef = useRef(false)
+  calendarRetryRef.current = Boolean(calendarError)
+  const reload = useCallback(async () => {
+    const result = await load()
+    await loadCalendar()
+    return result
+  }, [load, loadCalendar])
 
   const currentDashboard = useMemo(
     () => deriveDashboardAt(dashboard, now),
     [dashboard, now],
   )
-  return { dashboard: currentDashboard, ...status, reload: load }
+  return {
+    dashboard: currentDashboard,
+    ...status,
+    reload,
+    calendar,
+    calendarLoading,
+    calendarError,
+    reloadCalendar: loadCalendar,
+    loadMoreCalendar,
+    weekStart,
+    setWeekStart,
+  }
 }
 
 /** Re-renders on an interval so countdowns and relative times stay honest. */

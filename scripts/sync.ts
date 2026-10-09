@@ -658,7 +658,21 @@ export async function syncX(
   const errors = []
   let remainingRequests = requestLimit
   let requestedTotal = 0
-  for (const [index, handle] of handles.entries()) {
+  const rotationId = fetchWindow ? `window-${fetchWindow.mode}` : "incremental"
+  const rotation = getSyncState(database, "x-budget", rotationId)
+  const nextIndex =
+    (handles.indexOf(rotation?.metadata?.lastAccount) + 1) % handles.length
+  const orderedHandles = [
+    ...handles.slice(nextIndex),
+    ...handles.slice(0, nextIndex),
+  ]
+  upsertSyncState(database, {
+    source: "x-budget",
+    accountId: rotationId,
+    metadata: { lastAccount: orderedHandles[0] },
+    recordSuccess: false,
+  })
+  for (const [index, handle] of orderedHandles.entries()) {
     if (
       fetchWindow?.mode === "before" &&
       !oldestSourceTimestamp(database, "x", handle)
@@ -716,7 +730,7 @@ export async function syncX(
               refreshKnown,
               scheduleKeywords,
               scheduleRefreshLimit,
-              isPrimary: index === 0,
+              isPrimary: handle === handles[0],
               fetchWindow,
             })
       accounts.push(result)
@@ -1011,8 +1025,12 @@ export async function syncYoutube(
     1,
     50,
   )
-  const detailIds = [...new Set([...streamIds, ...activeIds])]
-    .filter((id) => {
+  const detailStateId = selectedWindow
+    ? `${channelId}:window:${selectedWindow.mode}:${selectedWindow.days ?? `${selectedWindow.startDate}:${selectedWindow.endDate}`}`
+    : channelId
+  const detailState = getSyncState(database, "youtube-details", detailStateId)
+  const eligibleIds = [...new Set([...streamIds, ...activeIds])].filter(
+    (id) => {
       const existing = getVideoRecord(database, id)
       if (!existing || (streamIds.includes(id) && !checkedIds.has(id)))
         return true
@@ -1021,16 +1039,26 @@ export async function syncYoutube(
         Boolean(existing.isUpcoming) ||
         (Number.isFinite(scheduled) && scheduled >= now - 86_400_000)
       )
+    },
+  )
+  let detailQueue: string[] = [
+    ...new Set([...(detailState?.metadata?.queue || []), ...eligibleIds]),
+  ]
+  const detailIds = detailQueue.slice(0, detailLimit)
+  const saveQueue = () =>
+    upsertSyncState(database, {
+      source: "youtube-details",
+      accountId: detailStateId,
+      metadata: { queue: detailQueue },
+      recordSuccess: false,
     })
-    .sort(
-      (left, right) =>
-        Number(checkedIds.has(left)) - Number(checkedIds.has(right)),
-    )
-    .slice(0, detailLimit)
+  saveQueue()
 
   const inspectedVideos = []
   const reservationEvents = []
   for (const [index, id] of detailIds.entries()) {
+    detailQueue = [...detailQueue.filter((queued) => queued !== id), id]
+    saveQueue()
     try {
       const html = await fetchText(`https://www.youtube.com/watch?v=${id}`)
       const details = parseYoutubeDetails(html, id)
@@ -1060,6 +1088,16 @@ export async function syncYoutube(
         is_upcoming: upcoming,
       }
       inspectedVideos.push(video)
+      if (
+        !upcoming &&
+        !(
+          effectiveScheduledAt &&
+          Date.parse(effectiveScheduledAt) >= now - 86_400_000
+        )
+      ) {
+        detailQueue = detailQueue.filter((queued) => queued !== id)
+        saveQueue()
+      }
       if (effectiveScheduledAt) {
         const memberOnly = /メンバー|membership|限定/i.test(title)
         reservationEvents.push({

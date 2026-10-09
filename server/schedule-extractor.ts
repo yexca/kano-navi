@@ -1,3 +1,4 @@
+import path from "node:path"
 import type { Database as DatabaseConnection } from "better-sqlite3"
 
 interface SchedulePostResult {
@@ -49,7 +50,11 @@ import {
   upsertScheduleAssetReview,
   upsertScheduleExtraction,
 } from "./database.ts"
-import { mediaIdForSourceUrl, resolveMediaCachePath } from "./media-cache.ts"
+import {
+  mediaIdForSourceUrl,
+  resolveMediaCachePath,
+  mediaCacheDirectory,
+} from "./media-cache.ts"
 import { decryptSecret } from "./secret-store.ts"
 import { inferenceEndpoint } from "../src/lib/llm-endpoints.ts"
 import { providerHeaders, readLlmJson, outputTokenLimit } from "./llm-http.ts"
@@ -302,15 +307,21 @@ function postImageState(database: DatabaseConnection, post) {
     "image/png",
     "image/webp",
   ])
+  const declared = declaredPostMediaUrls(post)
   const links = listMediaLinks(database, {
     ownerType: "post",
     ownerId: String(post.id),
   })
     .filter((link) => link.role === "post-image")
     .sort((a, b) => a.position - b.position)
-  const images = links
-    .map((link) => {
-      const asset = getMediaAsset(database, link.mediaId)
+  const expected = declared.length
+    ? declared.map((url) => mediaIdForSourceUrl(url))
+    : links.map((link) => link.mediaId)
+  const images = expected
+    .map((id, position) => {
+      const asset = links.some((link) => link.mediaId === id)
+        ? getMediaAsset(database, id)
+        : null
       const filePath = asset?.cachePath
         ? resolveMediaCachePath(asset.cachePath)
         : null
@@ -318,19 +329,26 @@ function postImageState(database: DatabaseConnection, post) {
         asset?.status !== "ready" ||
         !asset.sha256 ||
         !supportedMimeTypes.has(asset.mimeType) ||
-        !filePath ||
-        !fs.existsSync(filePath)
-      ) {
+        !filePath
+      )
+        return null
+      try {
+        const real = fs.realpathSync(filePath)
+        const root = fs.realpathSync(mediaCacheDirectory)
+        if (
+          !real.startsWith(`${root}${path.sep}`) ||
+          !fs.statSync(real).isFile()
+        )
+          return null
+      } catch {
         return null
       }
-      return { ...asset, filePath, position: link.position } as Record<
-        string,
-        any
-      >
+      return { ...asset, filePath, position } as Record<string, any>
     })
     .filter(Boolean)
   return {
-    hasImages: declaredPostMediaUrls(post).length > 0 || links.length > 0,
+    hasImages: expected.length > 0,
+    complete: images.length === expected.length,
     images,
   }
 }
@@ -880,19 +898,22 @@ export async function verifyScheduleAsset(
 ) {
   const review = getScheduleAssetReview(database, assetId)
   if (!review) return { status: "missing", assetId: String(assetId) }
+  const expectedAsset = {
+    url: review.url,
+    version: review.assetVersion,
+    sha256: null as string | null,
+  }
   if (!review.sourceMatchesBoard) {
     // Older snapshots promoted any keyword post; such an image can only be
     // published by a manual label, so it is not worth an image-model call.
     upsertScheduleAssetReview(database, {
       assetId: review.id,
+      expectedAsset,
       llmStatus: "skipped",
       llmReason: "source_not_board",
       llmEvidence: null,
       llmModel: null,
       llmCheckedAt: null,
-      manualStatus: review.manualStatus,
-      manualReason: review.manualReason,
-      manualCheckedAt: review.manualCheckedAt,
     })
     return { status: "skipped", assetId: review.id, reason: "source_not_board" }
   }
@@ -900,29 +921,26 @@ export async function verifyScheduleAsset(
   if (!image) {
     upsertScheduleAssetReview(database, {
       assetId: review.id,
+      expectedAsset,
       llmStatus: "skipped",
       llmReason: "media_pending",
       llmEvidence: null,
       llmModel: null,
       llmCheckedAt: null,
-      manualStatus: review.manualStatus,
-      manualReason: review.manualReason,
-      manualCheckedAt: review.manualCheckedAt,
     })
     return { status: "skipped", assetId: review.id, reason: "media_pending" }
   }
+  expectedAsset.sha256 = image.sha256
   const configured = configuredProviders(database, {}, "image", "board")
   if (!configured.providers.length) {
     upsertScheduleAssetReview(database, {
       assetId: review.id,
+      expectedAsset,
       llmStatus: "skipped",
       llmReason: configured.reason,
       llmEvidence: null,
       llmModel: null,
       llmCheckedAt: null,
-      manualStatus: review.manualStatus,
-      manualReason: review.manualReason,
-      manualCheckedAt: review.manualCheckedAt,
     })
     return { status: "skipped", assetId: review.id, reason: configured.reason }
   }
@@ -954,14 +972,12 @@ export async function verifyScheduleAsset(
   }
   upsertScheduleAssetReview(database, {
     assetId: review.id,
+    expectedAsset,
     llmStatus: "running",
     llmReason: null,
     llmEvidence: null,
     llmModel: null,
     llmCheckedAt: null,
-    manualStatus: review.manualStatus,
-    manualReason: review.manualReason,
-    manualCheckedAt: review.manualCheckedAt,
   })
   let lastError = null
   for (const provider of configured.providers) {
@@ -978,8 +994,9 @@ export async function verifyScheduleAsset(
             timeoutMs: provider.timeoutMs,
           }),
         )
-        upsertScheduleAssetReview(database, {
+        const applied = upsertScheduleAssetReview(database, {
           assetId: review.id,
+          expectedAsset,
           llmStatus: result.classification,
           llmConfidence: result.confidence,
           llmReason: result.reason,
@@ -987,10 +1004,8 @@ export async function verifyScheduleAsset(
           llmModel: provider.model,
           llmCheckedAt: new Date().toISOString(),
           llmInputFingerprint: fingerprint,
-          manualStatus: review.manualStatus,
-          manualReason: review.manualReason,
-          manualCheckedAt: review.manualCheckedAt,
         })
+        if (!applied) return { status: "stale", assetId: review.id }
         if (provider.persisted)
           updateLlmProviderStatus(database, provider.id, { status: "success" })
         return {
@@ -1009,14 +1024,12 @@ export async function verifyScheduleAsset(
   const message = lastError?.message || "all configured LLM providers failed"
   upsertScheduleAssetReview(database, {
     assetId: review.id,
+    expectedAsset,
     llmStatus: "failed",
     llmReason: message,
     llmEvidence: null,
     llmModel: null,
     llmCheckedAt: new Date().toISOString(),
-    manualStatus: review.manualStatus,
-    manualReason: review.manualReason,
-    manualCheckedAt: review.manualCheckedAt,
   })
   return { status: "failed", assetId: review.id, error: message }
 }
@@ -1071,9 +1084,12 @@ export async function verifyPendingScheduleAssets(
           candidate.url &&
           candidate.url === asset.url,
       )) {
-        const current = getScheduleAssetReview(database, duplicate.id)
         upsertScheduleAssetReview(database, {
           assetId: duplicate.id,
+          expectedAsset: {
+            url: duplicate.url,
+            version: duplicate.assetVersion,
+          },
           llmStatus: result.classification,
           llmConfidence: result.confidence,
           llmReason: verified?.llmReason,
@@ -1081,9 +1097,6 @@ export async function verifyPendingScheduleAssets(
           llmModel: verified?.llmModel,
           llmInputFingerprint: verified?.llmInputFingerprint,
           llmCheckedAt: verified?.llmCheckedAt || new Date().toISOString(),
-          manualStatus: current?.manualStatus,
-          manualReason: current?.manualReason,
-          manualCheckedAt: current?.manualCheckedAt,
         })
       }
     }
@@ -1474,7 +1487,9 @@ export async function extractSchedulePost(
     // asset is pending. This prevents image posts from bypassing media_pending.
     mediaUrls: media.hasImages ? ["linked-image"] : [],
   }
-  const inputMode = options.inputMode || inputModeForPost(modalityPost)
+  const inputMode = media.hasImages
+    ? inputModeForPost(modalityPost)
+    : options.inputMode || inputModeForPost(modalityPost)
   if (!inputMode) {
     markPostLlm(database, post.id, {
       status: "skipped",
@@ -1485,7 +1500,7 @@ export async function extractSchedulePost(
     })
     return { status: "skipped", reason: "no_content" }
   }
-  if (inputMode !== "text" && !media.images.length) {
+  if (media.hasImages && !media.complete) {
     markPostLlm(database, post.id, {
       status: "skipped",
       lastAttemptAt: new Date().toISOString(),

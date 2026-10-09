@@ -69,3 +69,23 @@ initial. Removing a preset does not delete saved providers.
 - [Testing](../development/testing.md)
 - [Product overview](../overview.md)
 - [History and visual archive](../product/history.md)
+
+## Polling and Calendar Recovery
+
+Both request-owning hooks use a shared lifecycle/deadline helper. Requests have
+a 12-second deadline including body consumption, are cancelled on unmount, and
+reject superseded responses. Automatic polls wait for an active request rather
+than starting overlapping work. Their timer is scheduled after settlement,
+including failure, with exponential backoff capped at 60 seconds. Public polls
+continue to pause while hidden. A failed initial snapshot retries even before
+any revision has been recorded; manual retry remains available. Admin 401 stops
+polling and requires login. Failed initial admin loads also retry.
+
+The calendar's selected week lives in `use-dashboard.ts`. It reads one bounded
+page, shows the complete week/day counts, and offers more-event pagination.
+Changing weeks cancels old work, errors keep a retry control, and a revision
+change between pages reloads the first page instead of combining generations.
+Adjacent-date hints support jumping to stored activity in either direction.
+Images match their applicable inclusive period, without an updated-at fallback.
+The bounded focus snapshot refreshes at least once per minute while visible to
+advance its shortlist as time passes, even when the durable revision is unchanged.

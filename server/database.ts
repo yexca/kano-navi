@@ -19,6 +19,7 @@ interface MediaReference {
   width?: number
   height?: number
 }
+import { streamIdentity } from "../src/lib/stream-identity.ts"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
@@ -966,6 +967,32 @@ function migrateSchema(database: DatabaseConnection) {
     database.exec("ALTER TABLE assets ADD COLUMN source_account TEXT")
   }
 
+  if (!assetColumns.has("asset_version")) {
+    database.exec(
+      "ALTER TABLE assets ADD COLUMN asset_version INTEGER NOT NULL DEFAULT 1",
+    )
+  }
+
+  for (const [column, definition] of Object.entries({
+    period_start: "TEXT",
+    period_end: "TEXT",
+    period_basis: "TEXT NOT NULL DEFAULT 'legacy'",
+    manual_period_start: "TEXT",
+    manual_period_end: "TEXT",
+    manual_period_reason: "TEXT",
+  })) {
+    if (!assetColumns.has(column))
+      database.exec(`ALTER TABLE assets ADD COLUMN ${column} ${definition}`)
+  }
+  if (!assetColumns.has("period_start"))
+    database.exec(
+      "UPDATE assets SET period_start=week_start, period_end=date(week_start, '+6 days') WHERE kind='schedule'",
+    )
+
+  database.exec(`CREATE INDEX IF NOT EXISTS posts_instant_idx ON posts (julianday(published_at) DESC, id);
+    CREATE INDEX IF NOT EXISTS events_instant_idx ON events (COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')), id) WHERE deleted_at IS NULL;
+    CREATE INDEX IF NOT EXISTS videos_instant_idx ON videos (julianday(COALESCE(scheduled_at, published_at)) DESC, id);
+    CREATE INDEX IF NOT EXISTS videos_schedule_instant_idx ON videos (julianday(scheduled_at), id);`)
   const syncRunColumns = tableColumns(database, "sync_runs")
   if (!syncRunColumns.has("triggered_by")) {
     database.exec("ALTER TABLE sync_runs ADD COLUMN triggered_by TEXT")
@@ -1246,6 +1273,9 @@ export function openDatabase({
   const database = new Database(filename)
   database.pragma("journal_mode = WAL")
   database.pragma("foreign_keys = ON")
+  database.function("stream_identity", { deterministic: true }, (value) =>
+    streamIdentity(String(value || "")),
+  )
   database.exec(schema)
   migrateSchema(database)
   return database
@@ -1593,13 +1623,15 @@ function insertResource(database: DatabaseConnection, resource, overwrite) {
 
 function insertAsset(database: DatabaseConnection, asset, overwrite) {
   const sql = overwrite
-    ? `INSERT INTO assets (id, kind, url, source_url, alt, week_start, source_account, updated_at, raw_json)
-       VALUES (@id, @kind, @url, @source_url, @alt, @week_start, @source_account, @updated_at, @raw_json)
+    ? `INSERT INTO assets (id, kind, url, source_url, alt, week_start, period_start, period_end, period_basis, source_account, updated_at, raw_json)
+       VALUES (@id, @kind, @url, @source_url, @alt, @week_start, @period_start, @period_end, @period_basis, @source_account, @updated_at, @raw_json)
        ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, url=excluded.url, source_url=excluded.source_url,
+       asset_version=assets.asset_version + CASE WHEN assets.url IS NOT excluded.url OR assets.source_url IS NOT excluded.source_url THEN 1 ELSE 0 END,
        alt=excluded.alt, week_start=excluded.week_start, source_account=excluded.source_account,
+       period_start=excluded.period_start, period_end=excluded.period_end, period_basis=excluded.period_basis,
        updated_at=excluded.updated_at, raw_json=excluded.raw_json`
-    : `INSERT OR IGNORE INTO assets (id, kind, url, source_url, alt, week_start, source_account, updated_at, raw_json)
-       VALUES (@id, @kind, @url, @source_url, @alt, @week_start, @source_account, @updated_at, @raw_json)`
+    : `INSERT OR IGNORE INTO assets (id, kind, url, source_url, alt, week_start, period_start, period_end, period_basis, source_account, updated_at, raw_json)
+       VALUES (@id, @kind, @url, @source_url, @alt, @week_start, @period_start, @period_end, @period_basis, @source_account, @updated_at, @raw_json)`
   database.prepare<unknown[], Record<string, any>>(sql).run({
     id: String(asset.id),
     kind: asset.kind || "image",
@@ -1607,6 +1639,25 @@ function insertAsset(database: DatabaseConnection, asset, overwrite) {
     source_url: nullable(asset.source_url),
     alt: nullable(asset.alt),
     week_start: nullable(asset.week_start ?? asset.weekStart),
+    period_start: nullable(
+      asset.period_start ??
+        asset.periodStart ??
+        asset.week_start ??
+        asset.weekStart,
+    ),
+    period_end: nullable(
+      asset.period_end ??
+        asset.periodEnd ??
+        (asset.week_start || asset.weekStart
+          ? new Date(
+              Date.parse(`${asset.week_start || asset.weekStart}T00:00:00Z`) +
+                6 * 86400000,
+            )
+              .toISOString()
+              .slice(0, 10)
+          : null),
+    ),
+    period_basis: asset.period_basis || asset.periodBasis || "legacy",
     source_account: nullable(asset.source_account ?? asset.sourceAccount),
     updated_at: nullable(asset.updated_at),
     raw_json: json(asset),
@@ -1678,8 +1729,13 @@ function scheduleAssetReviewRow(row) {
 // way it did when sync promoted the image (see scheduleBoardSourceText).
 const scheduleAssetReviewColumns = `
   a.id, a.kind, a.url, a.source_url AS sourceUrl,
-  a.alt, a.week_start AS weekStart, a.source_account AS sourceAccount,
-  a.updated_at AS assetUpdatedAt,
+  a.alt, COALESCE(date(a.manual_period_start, 'weekday 0', '-6 days'), a.week_start) AS weekStart,
+  COALESCE(a.manual_period_start, a.period_start) AS periodStart,
+  COALESCE(a.manual_period_end, a.period_end) AS periodEnd,
+  CASE WHEN a.manual_period_start IS NOT NULL THEN 'manual' ELSE a.period_basis END AS periodBasis,
+  a.period_start AS inferredPeriodStart, a.period_end AS inferredPeriodEnd,
+  a.manual_period_reason AS periodReason, a.source_account AS sourceAccount,
+  a.updated_at AS assetUpdatedAt, a.asset_version AS assetVersion,
   (SELECT COALESCE(json_extract(p.raw_json, '$.search_text'), p.text)
      FROM posts p WHERE p.url = a.source_url
      ORDER BY p.published_at DESC LIMIT 1) AS sourceText,
@@ -1724,8 +1780,30 @@ export function upsertScheduleAssetReview(
   database: DatabaseConnection,
   review: Record<string, any> = {},
 ) {
+  return database.transaction(() =>
+    writeScheduleAssetReview(database, review),
+  )()
+}
+
+function writeScheduleAssetReview(
+  database: DatabaseConnection,
+  review: Record<string, any> = {},
+) {
   const assetId = String(review.assetId || review.asset_id || "").trim()
-  if (!assetId || !getScheduleAssetReview(database, assetId)) return null
+  const current = assetId ? getScheduleAssetReview(database, assetId) : null
+  if (!current) return null
+  // This synchronous check and write form one SQLite operation boundary. The
+  // version also rejects an A -> B -> A replacement while a model is waiting.
+  const expected = review.expectedAsset
+  if (
+    expected &&
+    (current.url !== expected.url ||
+      current.assetVersion !== expected.version ||
+      (expected.sha256 != null &&
+        getMediaAsset(database, mediaIdForSourceUrl(current.url))?.sha256 !==
+          expected.sha256))
+  )
+    return null
   const timestamp = nowIso()
   database
     .prepare<unknown[], Record<string, any>>(
@@ -1742,9 +1820,6 @@ export function upsertScheduleAssetReview(
          llm_model=excluded.llm_model,
          llm_checked_at=excluded.llm_checked_at,
          llm_input_fingerprint=excluded.llm_input_fingerprint,
-         manual_status=excluded.manual_status,
-         manual_reason=excluded.manual_reason,
-         manual_checked_at=excluded.manual_checked_at,
          updated_at=excluded.updated_at`,
     )
     .run(
@@ -1759,9 +1834,9 @@ export function upsertScheduleAssetReview(
       nullable(review.llmModel),
       nullable(review.llmCheckedAt),
       nullable(review.llmInputFingerprint),
-      normalizedScheduleAssetManualStatus(review.manualStatus),
-      nullable(review.manualReason),
-      nullable(review.manualCheckedAt),
+      "unreviewed",
+      null,
+      null,
       timestamp,
     )
   return getScheduleAssetReview(database, assetId)
@@ -1802,6 +1877,32 @@ export function updateScheduleAssetManualReview(
   return getScheduleAssetReview(database, assetId)
 }
 
+export function updateScheduleAssetPeriod(
+  database: DatabaseConnection,
+  assetId,
+  { start, end, reason },
+) {
+  const valid = (value) =>
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/u.test(value) &&
+    Number.isFinite(Date.parse(value)) &&
+    new Date(value).toISOString().slice(0, 10) === value
+  if (
+    !valid(start) ||
+    !valid(end) ||
+    end < start ||
+    Date.parse(end) - Date.parse(start) > 366 * 86400000 ||
+    !String(reason || "").trim()
+  )
+    throw new Error("valid period and reason are required")
+  database
+    .prepare(
+      "UPDATE assets SET manual_period_start=?, manual_period_end=?, manual_period_reason=? WHERE id=? AND kind='schedule'",
+    )
+    .run(start, end, String(reason).trim().slice(0, 500), String(assetId))
+  return getScheduleAssetReview(database, assetId)
+}
+
 function ensureScheduleAssetReview(database: DatabaseConnection, assetId) {
   database
     .prepare<unknown[], Record<string, any>>(
@@ -1820,7 +1921,7 @@ function resetScheduleAssetReview(database: DatabaseConnection, assetId) {
        ) VALUES (?, 'pending', 'unreviewed', ?)
        ON CONFLICT(asset_id) DO UPDATE SET
          llm_status='pending', llm_confidence=NULL, llm_reason=NULL,
-         llm_evidence=NULL, llm_model=NULL, llm_checked_at=NULL,
+         llm_evidence=NULL, llm_model=NULL, llm_checked_at=NULL, llm_input_fingerprint=NULL,
          manual_status='unreviewed', manual_reason=NULL,
          manual_checked_at=NULL, updated_at=excluded.updated_at`,
     )
@@ -2668,11 +2769,37 @@ export function upsertProfile(database: DatabaseConnection, profile) {
 }
 
 export function upsertPosts(database: DatabaseConnection, posts = []) {
-  const run = database.transaction((rows) =>
-    rows.forEach((post) => insertPost(database, post, true)),
-  )
+  const run = database.transaction((rows) => {
+    for (const post of rows) {
+      // Only successful complete snapshots reach this writer. Omitted fields
+      // mean "unknown"; an explicit empty array means the source removed media.
+      const before = database
+        .prepare(
+          "SELECT media_url, media_alt, raw_json FROM posts WHERE id = ?",
+        )
+        .get(String(post.id)) as Record<string, any> | undefined
+      const declared =
+        Array.isArray(post.media_urls) || Object.hasOwn(post, "media_url")
+      const saved = { ...post }
+      if (!declared && before) {
+        const raw = JSON.parse(before.raw_json || "{}")
+        saved.media_url = before.media_url
+        saved.media_alt = before.media_alt
+        if (Array.isArray(raw.media_urls)) saved.media_urls = raw.media_urls
+      } else if (Array.isArray(saved.media_urls)) {
+        saved.media_url = saved.media_urls[0] ?? null
+      }
+      insertPost(database, saved, true)
+      if (declared)
+        database
+          .prepare(
+            "DELETE FROM media_links WHERE owner_type = 'post' AND owner_id = ? AND role = 'post-image'",
+          )
+          .run(String(post.id))
+      registerMediaCandidates(database, mediaCandidatesFromPost(saved))
+    }
+  })
   run(posts)
-  registerMediaCandidates(database, posts.flatMap(mediaCandidatesFromPost))
 }
 
 export function upsertEvents(database: DatabaseConnection, events = []) {
@@ -2707,6 +2834,11 @@ export function upsertAssets(database: DatabaseConnection, assets = []) {
       // review belongs to the image URL it judged, not just to the asset ID.
       if (before && String(before.url || "") !== String(asset.url || "")) {
         resetScheduleAssetReview(database, asset.id)
+        database
+          .prepare(
+            "UPDATE assets SET manual_period_start=NULL, manual_period_end=NULL, manual_period_reason=NULL WHERE id=?",
+          )
+          .run(String(asset.id))
       } else {
         ensureScheduleAssetReview(database, asset.id)
       }
@@ -3102,6 +3234,7 @@ export function listAdminEventsPage(
   database: DatabaseConnection,
   {
     page = 1,
+    ascending = false,
     pageSize = 25,
     includeDeleted = false,
     search = "",
@@ -3110,6 +3243,7 @@ export function listAdminEventsPage(
     from = "",
     to = "",
   }: {
+    ascending?: boolean
     page?: number | string
     pageSize?: number | string
     includeDeleted?: boolean
@@ -3169,7 +3303,7 @@ export function listAdminEventsPage(
   const rows = database
     .prepare<unknown[], Record<string, any>>(
       `SELECT ${eventAdminColumns} FROM events ${where}
-       ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) DESC, id ASC
+       ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) ${ascending ? "ASC" : "DESC"}, id ASC
        LIMIT ? OFFSET ?`,
     )
     .all(...values, boundedPageSize, (safePage - 1) * boundedPageSize)
@@ -4873,33 +5007,129 @@ export function isCancelledEventStatus(status) {
   return cancelledEventStatuses.has(value) || value.startsWith("cancel")
 }
 
+function getCalendarImages(database: DatabaseConnection, from, to) {
+  const ids = database
+    .prepare<unknown[], Record<string, any>>(
+      `SELECT a.id FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id=a.id
+    WHERE a.kind='schedule' AND COALESCE(a.manual_period_start, a.period_start) <= ?
+      AND COALESCE(a.manual_period_end, a.period_end) >= ?
+      AND (r.manual_status='schedule' OR (COALESCE(r.manual_status, 'unreviewed')='unreviewed' AND r.llm_status='schedule'))
+    ORDER BY a.updated_at DESC, a.id ASC LIMIT 100`,
+    )
+    .all(to, from)
+  return ids
+    .map(({ id }) => getScheduleAssetReview(database, id))
+    .filter((review) => review?.approved)
+    .map((review) => {
+      const media = resolveMediaReference(database, review.url)
+      return {
+        id: review.id,
+        kind: review.kind,
+        alt: review.alt,
+        weekStart: review.weekStart,
+        periodStart: review.periodStart,
+        periodEnd: review.periodEnd,
+        periodBasis: review.periodBasis,
+        sourceAccount: review.sourceAccount,
+        updatedAt: review.assetUpdatedAt,
+        url: media.publicUrl,
+        sourceUrl: review.sourceUrl || media.sourceUrl,
+        mediaId: media.id,
+        mediaStatus: media.status,
+        mediaSourceUrl: media.sourceUrl,
+      }
+    })
+}
+
+/** A complete week is available through pages, independently of snapshot size. */
+export function getCalendarPage(
+  database: DatabaseConnection,
+  {
+    from,
+    to,
+    page = 1,
+    pageSize = 100,
+  }: { from: string; to: string; page?: number; pageSize?: number },
+) {
+  const valid = (key) =>
+    /^\d{4}-\d{2}-\d{2}$/u.test(key) &&
+    Number.isFinite(Date.parse(key)) &&
+    new Date(key).toISOString().slice(0, 10) === key
+  if (
+    !valid(from) ||
+    !valid(to) ||
+    to < from ||
+    Date.parse(to) - Date.parse(from) > 6 * 86400000
+  )
+    throw new RangeError("calendar range must be at most seven days")
+  const result = listAdminEventsPage(database, {
+    from,
+    to,
+    page,
+    pageSize,
+    includeDeleted: false,
+    ascending: true,
+  })
+  const next =
+    database
+      .prepare<unknown[], Record<string, any>>(
+        "SELECT MIN(starts_on) AS date FROM events WHERE deleted_at IS NULL AND starts_on > ?",
+      )
+      .get(to)?.date || null
+  const previous =
+    database
+      .prepare<unknown[], Record<string, any>>(
+        "SELECT MAX(starts_on) AS date FROM events WHERE deleted_at IS NULL AND starts_on < ?",
+      )
+      .get(from)?.date || null
+  const dayCounts = Object.fromEntries(
+    database
+      .prepare<unknown[], Record<string, any>>(
+        "SELECT starts_on AS day, COUNT(*) AS count FROM events WHERE deleted_at IS NULL AND starts_on BETWEEN ? AND ? GROUP BY starts_on",
+      )
+      .all(from, to)
+      .map((row) => [row.day, row.count]),
+  )
+  return {
+    ...result,
+    revision: getDashboardRevision(database),
+    dayCounts,
+    scheduleImages: getCalendarImages(database, from, to),
+    adjacent: { previous, next },
+  }
+}
+
 export function getDashboard(
   database: DatabaseConnection,
   { days = 3, now = new Date() }: { days?: number; now?: any } = {},
 ) {
   const windowStart = now.getTime() - days * 24 * 60 * 60 * 1000
-  const mediaRows = listMediaAssets(database)
-  const mediaBySourceUrl = new Map(
-    mediaRows.map((asset) => [asset.sourceUrl, asset]),
-  )
-  const mediaById = new Map(mediaRows.map((asset) => [asset.id, asset]))
-  const postMediaLinks = listMediaLinks(database, { ownerType: "post" }).filter(
-    (link) => link.role === "post-image",
-  )
+  const mediaBySourceUrl = new Map()
+  const mediaById = new Map()
   const postMediaByOwner = new Map()
-  for (const link of postMediaLinks) {
-    if (!postMediaByOwner.has(link.ownerId))
-      postMediaByOwner.set(link.ownerId, [])
-    postMediaByOwner.get(link.ownerId).push(link)
-  }
+  const postColumns = `id, source, account_handle AS accountHandle, type, label, text,
+    published_at AS publishedAt, url, likes, reposts, replies, media_url AS mediaUrl, media_alt AS mediaAlt`
   const postRows = database
     .prepare<unknown[], Record<string, any>>(
-      `SELECT id, source, account_handle AS accountHandle, type, label, text,
-       published_at AS publishedAt, url, likes, reposts, replies,
-       media_url AS mediaUrl, media_alt AS mediaAlt
-    FROM posts ORDER BY published_at DESC`,
+      `SELECT ${postColumns}
+    FROM posts WHERE julianday(published_at) >= julianday(?) ORDER BY julianday(published_at) DESC, id ASC LIMIT 100`,
     )
-    .all()
+    .all(new Date(windowStart).toISOString())
+  const latestPostRow = database
+    .prepare<unknown[], Record<string, any>>(
+      `SELECT ${postColumns} FROM posts ORDER BY julianday(published_at) DESC, id ASC LIMIT 1`,
+    )
+    .get()
+  for (const post of [...postRows, ...(latestPostRow ? [latestPostRow] : [])]) {
+    const links = listMediaLinks(database, {
+      ownerType: "post",
+      ownerId: post.id,
+    }).filter((link) => link.role === "post-image")
+    postMediaByOwner.set(post.id, links)
+    for (const link of links)
+      if (!mediaById.has(link.mediaId))
+        mediaById.set(link.mediaId, getMediaAsset(database, link.mediaId))
+  }
   const mapPost = (post): Record<string, any> => {
     const accountHandle =
       post.accountHandle ||
@@ -4957,46 +5187,60 @@ export function getDashboard(
       mediaSourceUrl: primaryMedia.sourceUrl,
     }
   }
-  const posts = postRows
-    .filter((post) => {
-      const timestamp = Date.parse(post.publishedAt)
-      return Number.isNaN(timestamp) || timestamp >= windowStart
-    })
-    .map(mapPost)
-
+  const posts = postRows.map(mapPost)
   const todayKey = dateKeyInJapan(now)
+  const monday = new Date(`${todayKey}T00:00:00Z`)
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7))
+  const from = monday.toISOString().slice(0, 10)
+  const to = new Date(monday.getTime() + 6 * 86400000)
+    .toISOString()
+    .slice(0, 10)
+  const eligibleSql = `deleted_at IS NULL AND lower(COALESCE(status, '')) NOT LIKE 'cancel%'
+    AND COALESCE(status, '') NOT IN ('取消', '已取消', '中止', 'キャンセル')
+    AND cancellation_status NOT IN ('llm_suspected', 'manual_confirmed')`
+  const upcomingSql = `(julianday(starts_at) >= julianday(@now) OR (starts_at IS NULL AND starts_on >= @today))`
   const events = database
     .prepare<unknown[], Record<string, any>>(
-      `SELECT id, source, source_item_id AS sourceItemId, title, detail,
-       starts_on AS startsOn, starts_at AS startsAt, ends_at AS endsAt,
-       timezone, time_precision AS timePrecision, status,
-       event_type AS eventType, url, provenance, manual_locked AS manualLocked,
-       cancellation_status AS cancellationStatus,
-       cancellation_source AS cancellationSource,
-       cancellation_reason AS cancellationReason,
-       cancellation_evidence AS cancellationEvidence,
-       cancellation_at AS cancellationAt
-       FROM events WHERE deleted_at IS NULL
-       ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) ASC, id ASC`,
+      `SELECT ${eventAdminColumns} FROM events WHERE deleted_at IS NULL AND id IN (
+    SELECT id FROM (SELECT id FROM events WHERE deleted_at IS NULL AND starts_on BETWEEN @from AND @to ORDER BY julianday(COALESCE(starts_at, starts_on)) ASC, id ASC LIMIT 100)
+    UNION SELECT id FROM (SELECT id FROM events WHERE ${eligibleSql} AND ${upcomingSql} ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) ASC, id ASC LIMIT 30)
+    UNION SELECT id FROM (SELECT id FROM events WHERE deleted_at IS NULL AND (julianday(starts_at) BETWEEN julianday(@now, '-3 hours') AND julianday(@now) OR (julianday(starts_at) <= julianday(@now) AND julianday(ends_at) > julianday(@now))) ORDER BY julianday(starts_at) DESC, id ASC LIMIT 30)
+  ) ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) ASC, id ASC`,
     )
-    .all()
+    .all({ from, to, now: now.toISOString(), today: todayKey })
     .map((event): Record<string, any> => ({
       ...event,
       manualLocked: Boolean(event.manualLocked),
-      isUpcoming:
-        event.startsAt && !Number.isNaN(Date.parse(event.startsAt))
-          ? Date.parse(event.startsAt) >= now.getTime()
-          : Boolean(event.startsOn && todayKey && event.startsOn >= todayKey),
+      isUpcoming: event.startsAt
+        ? Date.parse(event.startsAt) >= now.getTime()
+        : event.startsOn >= todayKey,
     }))
-
+  const eventCounts = database
+    .prepare<unknown[], Record<string, any>>(
+      `SELECT
+    (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL) AS total,
+    (SELECT COUNT(*) FROM events WHERE ${eligibleSql} AND ${upcomingSql}) AS upcoming`,
+    )
+    .get({ now: now.toISOString(), today: todayKey })
   const featuredVideoId = getFeaturedVideoId(database)
+  const videoEventMatch = `(e.id='youtube-' || v.id OR (e.source='youtube' AND e.source_item_id=v.id)
+    OR e.url=v.url OR (e.url LIKE '%' || v.id || '%' AND stream_identity(e.url)=stream_identity(v.url))
+    OR EXISTS (SELECT 1 FROM event_sources s WHERE s.event_id=e.id AND s.source='youtube' AND s.source_item_id=v.id))`
   const videos = database
     .prepare<unknown[], Record<string, any>>(
       `SELECT id, source, title, published_at AS publishedAt, scheduled_at AS scheduledAt, url,
     thumbnail_url AS thumbnailUrl, kind, is_upcoming AS isUpcoming FROM videos
-    ORDER BY julianday(COALESCE(scheduled_at, published_at)) DESC, id ASC LIMIT 30`,
+    WHERE id IN (
+      SELECT id FROM (SELECT id FROM videos ORDER BY julianday(COALESCE(scheduled_at, published_at)) DESC, id ASC LIMIT 30)
+      UNION SELECT id FROM (SELECT v.id FROM videos v WHERE (julianday(v.scheduled_at) >= julianday(@now, '-3 hours') OR (v.scheduled_at IS NULL AND v.is_upcoming=1)
+        OR EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(v.scheduled_at) <= julianday(@now) AND julianday(e.ends_at) > julianday(@now) AND ${videoEventMatch}))
+        AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-' || v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources s WHERE s.event_id=e.id AND s.source='youtube' AND s.source_item_id=v.id)))
+        AND NOT EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at) <= julianday(@now) AND ${videoEventMatch})
+        ORDER BY julianday(v.scheduled_at) ASC, v.id ASC LIMIT 30)
+      UNION SELECT id FROM (SELECT id FROM videos WHERE scheduled_at IS NULL OR julianday(scheduled_at) < julianday(@now) ORDER BY julianday(COALESCE(scheduled_at, published_at)) DESC, id ASC LIMIT 1)
+    ) ORDER BY julianday(COALESCE(scheduled_at, published_at)) DESC, id ASC`,
     )
-    .all()
+    .all({ now: now.toISOString() })
   if (
     featuredVideoId &&
     !videos.some((video) => video.id === featuredVideoId)
@@ -5004,6 +5248,47 @@ export function getDashboard(
     const featuredRow = getVideoRecord(database, featuredVideoId)
     if (featuredRow) videos.push(featuredRow)
   }
+  // Keep one matching event per returned video so explicit ends/cancellation
+  // evidence cannot fall out of the bounded week or upcoming shortlist.
+  const linkedEvent = database.prepare<
+    unknown[],
+    Record<string, any>
+  >(`SELECT ${eventAdminColumns} FROM events e
+    WHERE e.deleted_at IS NULL AND ((e.url LIKE @hint AND stream_identity(e.url)=@identity) OR e.url=@url
+      OR e.id='youtube-' || @id OR (e.source='youtube' AND e.source_item_id=@id)
+      OR EXISTS (SELECT 1 FROM event_sources s WHERE s.event_id=e.id AND s.source='youtube' AND s.source_item_id=@id))
+    ORDER BY ABS(julianday(e.starts_at) - julianday(@scheduled)), e.id ASC LIMIT 1`)
+  for (const video of videos) {
+    const identity = streamIdentity(video.url)
+    const row = linkedEvent.get({
+      identity,
+      hint: identity.startsWith("youtube:")
+        ? `%${identity.slice(8)}%`
+        : video.url,
+      url: video.url,
+      id: video.id,
+      scheduled: video.scheduledAt,
+    })
+    video.endsAt = row?.endsAt || null
+    if (row && !events.some((event) => event.id === row.id))
+      events.push({
+        ...row,
+        manualLocked: Boolean(row.manualLocked),
+        isUpcoming: row.startsAt
+          ? Date.parse(row.startsAt) >= now.getTime()
+          : row.startsOn >= todayKey,
+      })
+  }
+  events.sort(
+    (a, b) =>
+      (a.startsAt
+        ? Date.parse(a.startsAt)
+        : Date.parse(`${a.startsOn}T23:59:59.999+09:00`)) -
+        (b.startsAt
+          ? Date.parse(b.startsAt)
+          : Date.parse(`${b.startsOn}T23:59:59.999+09:00`)) ||
+      String(a.id).localeCompare(String(b.id)),
+  )
   const mappedVideos = videos
     .map((video): Record<string, any> => ({
       ...video,
@@ -5059,46 +5344,24 @@ export function getDashboard(
       `SELECT id, title, detail, icon, tone, url, sort_order AS sortOrder FROM resources ORDER BY sort_order ASC, id ASC`,
     )
     .all()
-  const assets = database
+  const calendarAssets = getCalendarImages(database, from, to)
+  const scheduleImages = calendarAssets.filter((asset) => asset.url)
+  const otherAssets = database
     .prepare<unknown[], Record<string, any>>(
-      `SELECT id, kind, url, source_url AS sourceUrl, alt,
-       week_start AS weekStart, source_account AS sourceAccount,
-       updated_at AS updatedAt FROM assets ORDER BY id ASC`,
+      `SELECT id, kind, url, source_url AS sourceUrl, alt, updated_at AS updatedAt FROM assets WHERE kind != 'schedule' ORDER BY id LIMIT 100`,
     )
     .all()
     .map((asset): Record<string, any> => {
-      const media = resolveMediaReference(database, asset.url, mediaBySourceUrl)
+      const media = resolveMediaReference(database, asset.url)
       return {
         ...asset,
         url: media.publicUrl,
-        sourceUrl: asset.sourceUrl || media.sourceUrl,
         mediaId: media.id,
         mediaStatus: media.status,
         mediaSourceUrl: media.sourceUrl,
       }
     })
-  const scheduleReviewsById = new Map(
-    listScheduleAssetReviews(database, { limit: 200 }).map((review) => [
-      review.id,
-      review,
-    ]),
-  )
-  const validAssets = assets.filter(
-    (asset) =>
-      asset.kind !== "schedule" ||
-      Boolean(scheduleReviewsById.get(asset.id)?.approved),
-  )
-  const scheduleImages = validAssets
-    .filter((asset) => asset.kind === "schedule" && asset.url)
-    .sort((a, b) => {
-      const weekDelta = String(b.weekStart || "").localeCompare(
-        String(a.weekStart || ""),
-      )
-      return (
-        weekDelta ||
-        String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
-      )
-    })
+  const validAssets = [...otherAssets, ...calendarAssets]
   const profileRow = mapProfile(
     database
       .prepare<unknown[], Record<string, any>>(
@@ -5137,16 +5400,15 @@ export function getDashboard(
       })()
     : null
   const latestSync = getLatestSync(database)
-  const mediaCache = mediaRows.reduce(
-    (summary, asset) => {
-      const media = mediaReferenceForAsset(asset)
-      const status = media?.status || asset.status
-      summary.total += 1
-      summary[status] = (summary[status] || 0) + 1
-      return summary
-    },
-    { total: 0 },
-  )
+  const mediaCache = { total: 0 }
+  for (const row of database
+    .prepare<unknown[], Record<string, any>>(
+      "SELECT status, COUNT(*) AS count FROM media_assets GROUP BY status",
+    )
+    .all()) {
+    mediaCache.total += row.count
+    mediaCache[row.status] = row.count
+  }
 
   // Snapshot freshness belongs to completed synchronization, not profile
   // metadata, publication dates, page reads, or failed attempts.
@@ -5172,15 +5434,16 @@ export function getDashboard(
   const cancelledVideoIds = new Set(
     database
       .prepare<unknown[], Record<string, any>>(
-        `SELECT source_item_id AS videoId FROM events
+        `SELECT videoId FROM (SELECT source_item_id AS videoId FROM events
        WHERE source='youtube' AND cancellation_status='manual_confirmed'
        UNION SELECT substr(id, 9) AS videoId FROM events
        WHERE id LIKE 'youtube-%' AND cancellation_status='manual_confirmed'
        UNION SELECT s.source_item_id AS videoId FROM event_sources s
        JOIN events e ON e.id=s.event_id
-       WHERE s.source='youtube' AND e.cancellation_status='manual_confirmed'`,
+       WHERE s.source='youtube' AND e.cancellation_status='manual_confirmed'
+       ) WHERE videoId IN (${mappedVideos.map(() => "?").join(",") || "NULL"})`,
       )
-      .all()
+      .all(...mappedVideos.map((video) => video.id))
       .map((row) => row.videoId),
   )
   for (const video of mappedVideos)
@@ -5200,11 +5463,17 @@ export function getDashboard(
     nextEvent: upcomingEvents[0] || null,
     nextStream: upcomingVideos[0] || null,
     latestVideo: mappedVideos.find((video) => !video.isUpcoming) || null,
-    latestPost: posts[0] || (postRows[0] ? mapPost(postRows[0]) : null),
+    latestPost: posts[0] || (latestPostRow ? mapPost(latestPostRow) : null),
     counts: {
-      posts: posts.length,
-      events: events.length,
-      upcomingEvents: upcomingEvents.length,
+      posts: Number(
+        database
+          .prepare<unknown[], Record<string, any>>(
+            "SELECT COUNT(*) AS count FROM posts WHERE julianday(published_at) >= julianday(?)",
+          )
+          .get(new Date(windowStart).toISOString()).count,
+      ),
+      events: eventCounts.total,
+      upcomingEvents: eventCounts.upcoming,
       videos: mappedVideos.length,
       resources: resources.length,
     },
@@ -5226,6 +5495,7 @@ export function getDashboard(
       fetchedAt,
       lastSync: latestSync,
       postWindowDays: days,
+      eventWindow: { from, to, paginated: true },
       generatedAt: now.toISOString(),
       mediaCache,
       revision: getDashboardRevision(database),
