@@ -3,6 +3,8 @@ import type { Database as DatabaseConnection } from "better-sqlite3"
 import fs from "node:fs"
 import path from "node:path"
 import express from "express"
+import compression from "compression"
+import { constants as zlibConstants } from "node:zlib"
 
 import { createAdminRouter } from "./admin-api.ts"
 import {
@@ -191,6 +193,51 @@ export function createApp({
   app.disable("x-powered-by")
   app.use(express.json({ limit: "32kb" }))
 
+  const publicReadPaths = new Set([
+    "/api/dashboard",
+    "/api/dashboard/revision",
+    "/api/health",
+  ])
+  app.use((request, response, next) => {
+    if (publicReadPaths.has(request.path)) response.vary("Accept-Encoding")
+    next()
+  })
+
+  // Only credential-independent public reads and build text pass this filter.
+  // Admin/auth, reflected errors, MCP streams and runtime media stay outside
+  // compression to avoid secret + attacker input compression side channels.
+  app.use(
+    compression({
+      threshold: 1024,
+      brotli: { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 } },
+      filter: (request, response) => {
+        if (
+          !["GET", "HEAD"].includes(request.method) ||
+          response.statusCode !== 200 ||
+          response.hasHeader("Set-Cookie")
+        )
+          return false
+        const type = String(response.getHeader("Content-Type") || "").split(
+          ";",
+          1,
+        )[0]
+        const publicRead = publicReadPaths.has(request.path)
+        const buildText =
+          !/^\/(?:api|media|mcp)(?:\/|$)/u.test(request.path) &&
+          [
+            "text/html",
+            "text/css",
+            "text/javascript",
+            "application/javascript",
+          ].includes(type)
+        return (
+          ((publicRead && type === "application/json") || buildText) &&
+          compression.filter(request, response)
+        )
+      },
+    }),
+  )
+
   // Profile slots are stable public URLs while their selected files remain
   // replaceable under the ignored runtime directory.
   app.get("/media/profile/:slot", createProfileMediaHandler(database))
@@ -286,8 +333,51 @@ export function createApp({
   )
 
   if (staticDirectory && fs.existsSync(staticDirectory)) {
-    app.use(express.static(staticDirectory, { index: "index.html" }))
+    // Only manifest-listed, content-hashed JS/CSS filenames are immutable.
+    // Curated /assets/history and replaceable icons keep revalidation.
+    const buildFiles = new Set<string>()
+    try {
+      const manifest = JSON.parse(
+        fs.readFileSync(
+          path.join(staticDirectory, ".vite/manifest.json"),
+          "utf8",
+        ),
+      )
+      for (const entry of Object.values(manifest) as {
+        file?: string
+        css?: string[]
+      }[]) {
+        if (entry.file) buildFiles.add(entry.file)
+        for (const css of entry.css || []) buildFiles.add(css)
+      }
+    } catch {
+      // Older builds without a manifest remain safe to revalidate.
+    }
+    const setStaticHeaders = (response, filename: string) => {
+      const relative = path
+        .relative(staticDirectory, filename)
+        .split(path.sep)
+        .join("/")
+      const hashedBuild =
+        buildFiles.has(relative) &&
+        /^assets\/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$/u.test(relative)
+      if (/\.(?:html|js|css)$/u.test(filename)) response.vary("Accept-Encoding")
+      response.setHeader(
+        "Cache-Control",
+        hashedBuild
+          ? "public, max-age=31536000, immutable"
+          : "public, max-age=0, must-revalidate",
+      )
+    }
+    app.use(
+      express.static(staticDirectory, {
+        index: "index.html",
+        setHeaders: setStaticHeaders,
+      }),
+    )
     app.get(/^(?!\/(?:api|media|mcp)(?:\/|$)).*/, (_request, response) => {
+      response.set("Cache-Control", "public, max-age=0, must-revalidate")
+      response.vary("Accept-Encoding")
       response.sendFile("index.html", { root: staticDirectory })
     })
   }

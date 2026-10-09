@@ -992,7 +992,7 @@ export function createAdminRouter({
   const router = express.Router()
   const auth = createAdminAuth({ mode, adminPassword })
   router.use((_request, response, next) => {
-    response.set("Cache-Control", "no-store")
+    response.set("Cache-Control", "no-store, no-transform")
     next()
   })
 

@@ -31,6 +31,17 @@ Same-origin browser mutations work even if the proxy rewrites Host. Clients
 without Fetch Metadata need the original public Host and forwarded protocol
 to match any supplied `Origin`.
 
+The production Express listener compresses public JSON and build text directly;
+a proxy is not required for gzip/Brotli. Preserve `Content-Encoding`, `Vary` and
+validators and avoid recompressing an already encoded response. Exclude admin,
+authentication, MCP and runtime media from any additional proxy compression.
+Preserve the admin/MCP `no-transform` directive.
+Deploy `dist/` together with its `.vite/manifest.json`: manifest-listed hashed
+JS/CSS is immutable for one year, while HTML and fixed assets revalidate.
+Keep earlier hashed files available during a rolling deployment when possible;
+an already open page can request its old lazy chunks. If a chunk is unavailable,
+the page's reload action obtains the latest revalidated HTML.
+
 To build the production image from the local checkout:
 
 ```bash

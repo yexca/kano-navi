@@ -353,7 +353,7 @@ export function createMcpRouter({
 } = {}) {
   const router = express.Router()
   router.use((request, response, next) => {
-    response.set("Cache-Control", "no-store")
+    response.set("Cache-Control", "no-store, no-transform")
     response.set("X-Content-Type-Options", "nosniff")
     response.set("Vary", "Authorization")
     if (!enabled) {

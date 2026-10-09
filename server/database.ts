@@ -957,6 +957,11 @@ function migrateSchema(database: DatabaseConnection) {
   database.exec(
     "CREATE INDEX IF NOT EXISTS posts_account_handle_idx ON posts (account_handle, published_at DESC)",
   )
+  // Schedule image reviews resolve the latest source wording by URL. Apply on
+  // every startup so existing snapshots receive this additive index too.
+  database.exec(
+    "CREATE INDEX IF NOT EXISTS posts_url_published_at_idx ON posts (url, published_at DESC)",
+  )
 
   const assetColumns = tableColumns(database, "assets")
   if (!assetColumns.has("week_start")) {

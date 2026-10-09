@@ -41,6 +41,8 @@ import {
   upsertScheduleAssetReview,
   updateScheduleAssetManualReview,
   getScheduleAssetReview,
+  listScheduleAssetReviews,
+  setAppSetting,
   upsertEvents,
   upsertPosts,
   upsertVideos,
@@ -50,6 +52,129 @@ import {
   resolveMediaCachePath,
   writeMediaFileAtomic,
 } from "./media-cache.ts"
+
+test("existing snapshots gain an indexed source lookup without changing reviews or configuration", () => {
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "kano-index-upgrade-"),
+  )
+  const filename = path.join(directory, "snapshot.sqlite")
+  let database = initializeDatabase({ filename, seed: false })
+  try {
+    const sourceUrl = "https://example.invalid/posts/board"
+    upsertPosts(database, [
+      {
+        id: "older",
+        source: "x",
+        text: "今週のスケジュール",
+        published_at: "2025-01-01T00:00:00Z",
+        url: sourceUrl,
+      },
+      {
+        id: "newer",
+        source: "x",
+        text: "ordinary announcement",
+        published_at: "2025-01-02T00:00:00Z",
+        url: sourceUrl,
+        search_text: "今週のスケジュール",
+      },
+    ])
+    upsertAssets(database, [
+      {
+        id: "board",
+        kind: "schedule",
+        url: "https://cdn.example.invalid/board.png",
+        source_url: sourceUrl,
+      },
+    ])
+    upsertScheduleAssetReview(database, {
+      assetId: "board",
+      llmStatus: "schedule",
+    })
+    updateScheduleAssetManualReview(database, "board", {
+      status: "not_schedule",
+      reason: "Synthetic manual decision",
+    })
+    const locked = createManualEvent(database, {
+      title: "Preserved lock",
+      startsOn: "2025-01-01",
+    })
+    const removed = createManualEvent(database, {
+      title: "Preserved tombstone",
+      startsOn: "2025-01-02",
+    })
+    deleteManualEvent(database, removed.id)
+    upsertLlmProvider(database, {
+      id: "operator",
+      name: "Configured provider",
+      baseUrl: "https://provider.example.invalid/v1",
+      model: "configured-model",
+      enabled: false,
+    })
+    setAppSetting(database, "featured_video_id", "preserved-selection")
+    setAppSetting(database, "dashboard_revision", "17")
+    database.exec("DROP INDEX posts_url_published_at_idx")
+    const tables = [
+      "posts",
+      "events",
+      "assets",
+      "schedule_asset_reviews",
+      "media_assets",
+      "media_links",
+      "app_settings",
+      "llm_providers",
+      "llm_route_targets",
+    ]
+    const before = tables.map((table) =>
+      database.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all(),
+    )
+    database.close()
+    database = openDatabase({ filename })
+    assert.deepEqual(
+      tables.map((table) =>
+        database.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all(),
+      ),
+      before,
+    )
+    const plan = database
+      .prepare(
+        "EXPLAIN QUERY PLAN SELECT COALESCE(json_extract(raw_json, '$.search_text'), text) FROM posts WHERE url = ? ORDER BY published_at DESC LIMIT 1",
+      )
+      .all(sourceUrl) as { detail: string }[]
+    assert.ok(
+      plan.some((step) =>
+        /SEARCH posts USING INDEX posts_url_published_at_idx/.test(step.detail),
+      ),
+    )
+    assert.ok(plan.every((step) => !/SCAN posts|TEMP B-TREE/.test(step.detail)))
+    const review = listScheduleAssetReviews(database)[0]
+    assert.equal(review.sourceMatchesBoard, true)
+    assert.equal(review.manualStatus, "not_schedule")
+    assert.equal(review.approved, false)
+    assert.equal(getEvent(database, locked.id).manualLocked, 1)
+    assert.ok(getEvent(database, removed.id).deletedAt)
+    // The latest source wording, image verdict and manual label remain distinct gates.
+    database.prepare("UPDATE posts SET raw_json=NULL WHERE id='newer'").run()
+    updateScheduleAssetManualReview(database, "board", {
+      status: "unreviewed",
+      reason: "Synthetic reset",
+    })
+    assert.equal(getScheduleAssetReview(database, "board").approved, false)
+    updateScheduleAssetManualReview(database, "board", {
+      status: "schedule",
+      reason: "Synthetic approval",
+    })
+    assert.equal(getScheduleAssetReview(database, "board").approved, true)
+    database.close()
+    database = openDatabase({ filename })
+    assert.equal(
+      getScheduleAssetReview(database, "board").manualStatus,
+      "schedule",
+    )
+  } finally {
+    database.close()
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 test("fresh initialization leaves source snapshots and LLM providers empty", () => {
   const database = initializeDatabase({ filename: ":memory:" })

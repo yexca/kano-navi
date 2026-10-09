@@ -67,6 +67,33 @@ display and date-window boundaries use Asia/Tokyo.
 Media responses follow the [media HTTP contract](media-cache.md#http-contract).
 Selected profile media uses /media/profile/avatar and /media/profile/banner.
 
+## Text Transfer and Static Caching
+
+Express compression precedes the response handlers. Successful GET/HEAD public
+dashboard, revision and health JSON, plus build HTML/JavaScript/CSS, negotiate
+gzip, deflate or Brotli through `Accept-Encoding`. Bodies below 1 KiB remain
+uncompressed; Brotli uses quality 4. `Vary: Accept-Encoding` also accompanies
+eligible identity and conditional responses. Existing weak ETags validate the
+uncompressed representation across encodings; 304 and HEAD have no compressed
+body. Range responses, non-success responses, already encoded bodies and
+`no-transform` responses are not compressed.
+
+Admin/authentication responses, MCP (including streams and reflected protocol
+inputs), runtime media and images are excluded. Public JSON compression is
+credential-independent and contains no secrets or reflected free-text request
+input. Do not extend this allowlist to secret-bearing/reflected responses or
+apply unconditional compression at a reverse proxy.
+Admin and MCP additionally send `Cache-Control: no-store, no-transform` so
+intermediaries also have an explicit transformation prohibition.
+
+Only content-hashed JS/CSS in `dist/assets` listed in Vite's
+`dist/.vite/manifest.json` receive `public, max-age=31536000, immutable`.
+HTML (including SPA fallback routes), fixed history images, icons and other
+files receive `public, max-age=0, must-revalidate`. A missing/invalid manifest
+falls back to revalidation. Dynamic media retains its independent version/hash
+validation and caching. Dashboard/revision remain `no-store`; this does not
+introduce a dashboard response cache.
+
 ## Related Docs
 
 - [Data model](data-model.md)

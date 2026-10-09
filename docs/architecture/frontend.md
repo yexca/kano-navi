@@ -17,8 +17,7 @@ in `src/dashboard/dashboard.css` on top of the shared tokens in `src/index.css`.
 lives in `src/admin/`: `index.tsx` registers the views and renders the shell,
 `use-admin-data.ts` owns every admin request and job polling, `views/` holds
 the workflow, schedule, detection-rule, LLM-provider, and content views, and
-`admin.css` styles them with `adm-` prefixed selectors because it ships in the
-same bundle as the board. `src/components/ui/` contains
+`admin.css` styles them with `adm-` prefixed selectors. `src/components/ui/` contains
 basic UI primitives, while the CSS files contain layout and design tokens. The
 presentation layer must not import `better-sqlite3` or call X, YouTube, OpenAI,
 or a third-party proxy directly.
@@ -31,6 +30,26 @@ src/admin/use-admin-data.ts. Reuse the existing state and request patterns.
 Shared primitives must remain independent of dashboard, history, and admin
 features. Extract cohesive helpers when needed; avoid a repository-wide move
 for a small change.
+
+`/admin`, `/history`, and `/about` use React lazy imports with independent page
+CSS and translation chunks. The shared settings provider owns persistent theme
+and language; page message providers extend its translator without duplicating
+preferences. Shared navigation labels remain in the base dictionary. Suspense
+shows a localized loading status, and a page error boundary offers a full-page
+reload when a chunk fails (including after a deployment). Direct visits and
+trailing-slash routes work through the existing SPA fallback. History/about
+remain static and never mount the dashboard hook or request its API.
+
+The dashboard hook coordinates one current request. Snapshot refreshes share an
+in-flight promise; a manual refresh cancels an older revision read, and stale
+completions cannot install state. A 15-second deadline covers headers and JSON
+consumption. Polling uses a completion-scheduled timer, normally every 8 seconds,
+with failed requests backing off through 8/16/32/60 seconds. Failed first loads
+and failed reloads retry snapshots, preserving a previously loaded snapshot.
+Hidden pages pause polling; visibility/focus events coalesce into a prompt
+revision check while respecting failure backoff and a one-second minimum gap.
+Unmount aborts requests and removes deadlines, polling and wake listeners.
+The separate 30-second local time derivation remains unchanged.
 
 ## Time-dependent Snapshot State
 

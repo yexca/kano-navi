@@ -49,7 +49,7 @@ export function DashboardApp() {
   const refresh = useCallback(async () => {
     const result = await reload()
     setToast(
-      result.ok
+      result.ok === true
         ? { key: "toast.reloaded" }
         : { key: "toast.failed", values: { message: result.error.message } },
     )

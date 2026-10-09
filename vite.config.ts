@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), "")
   const port = Number(environment.PORT || 7657)
   return {
+    build: { manifest: true },
     plugins: [react(), tailwindcss(), localApiPlugin()],
     server: { port, strictPort: true },
     preview: { port, strictPort: true },

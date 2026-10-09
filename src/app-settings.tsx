@@ -7,7 +7,7 @@ import {
   useState,
 } from "react"
 
-import { createTranslator, localeOptions } from "@/i18n"
+import { createTranslator, localeOptions, type PageMessages } from "@/i18n"
 import type { Dispatch, SetStateAction, ReactNode } from "react"
 import type { Locale, Translator } from "@/types"
 
@@ -84,4 +84,24 @@ export function useAppSettings() {
     throw new Error("useAppSettings must be used inside AppSettingsProvider")
   }
   return settings
+}
+
+/** Page copy travels with its lazy chunk; preferences remain in one provider. */
+export function PageMessagesProvider({
+  messages,
+  children,
+}: {
+  messages: PageMessages
+  children: ReactNode
+}) {
+  const settings = useAppSettings()
+  const t = useMemo(
+    () => createTranslator(settings.locale, messages),
+    [settings.locale, messages],
+  )
+  return (
+    <settingsContext.Provider value={{ ...settings, t }}>
+      {children}
+    </settingsContext.Provider>
+  )
 }

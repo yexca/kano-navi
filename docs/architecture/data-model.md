@@ -107,6 +107,14 @@ cache validation; legacy reviews are rechecked when next scanned.
 
 ## Schema Changes
 
+Startup additively creates `posts_url_published_at_idx` on
+`posts(url, published_at DESC)` for the correlated schedule-image source-text
+lookup. Existing rows, reviews, manual labels, locks/tombstones, provider routes,
+and settings remain in place. The lookup still chooses the latest stored source
+wording (including `raw_json.search_text`) and applies the existing text/image
+and manual-review gates. The index is non-unique because multiple stored records
+can share a source URL.
+
 server/database.ts owns the schema and additive upgrade behavior. Update this
 contract, seed behavior, and relevant tests together. Never silently drop
 columns, rebuild an existing database from seed data, clear snapshots, or

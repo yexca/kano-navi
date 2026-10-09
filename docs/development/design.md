@@ -12,8 +12,9 @@ for a single page.
   state when a request fails.
 - /history is static, sourced content with local fixed images and original links.
 - /about is a static project, attribution, and code-license page.
-- /admin is the hidden operator console. Its styles use adm- prefixed selectors
-  because all pages share a bundle. Do not add it to public navigation.
+- /admin is the hidden operator console. Its styles use adm- prefixed selectors.
+  Do not add it to public navigation. Lazy page loads show a localized status
+  and offer a full reload on failure, using the shared theme tokens.
 
 Keep loading, empty, stale, error, and unavailable-media states explicit. Never
 replace an unready local media URL with a remote CDN URL. Preserve event date

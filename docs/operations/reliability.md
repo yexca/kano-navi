@@ -14,6 +14,12 @@
   This is synchronization freshness, not the latest message's publication time;
   original platform pages remain authoritative.
 - CI never performs live synchronization, so builds do not depend on platform networks, login walls, or rate limits.
+- The board retries even when its first API read fails, and retains a known
+  snapshot after subsequent failures. Requests time out after 15 seconds;
+  completion-based polling backs off to at most 60 seconds during an outage.
+  Hidden pages pause polling and check promptly on return without bypassing
+  outage backoff. Refresh and revision checks only read local SQLite.
+  See [Frontend request ownership](../architecture/frontend.md#request-and-ui-ownership).
 
 ## Process Lifetime
 

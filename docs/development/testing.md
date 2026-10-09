@@ -100,6 +100,26 @@ with an injected in-memory snapshot and temporary frontend. It verifies page
 routes, API reads, media and MCP boundaries, and same-origin admin login without
 opening the runtime entry point or loading operator credentials.
 
+`server/http-performance.test.ts` checks wire-level compression negotiation,
+decoded content, weak ETags, conditional/HEAD/range responses, static cache
+boundaries and exclusions for authentication/admin, MCP and media. Upgrade
+tests verify indexed source lookups and unchanged synthetic records/configuration.
+`server/dashboard-requests.test.ts` loads the actual hook through Vite without
+the runtime plugin or environment files and uses fake time and controlled
+responses to exercise recovery, stalled JSON deadlines, deduplication, races,
+visibility and unmount. Its lightweight React renderer is test-only; browser
+review covers the production React DOM bundle. No timing thresholds enter CI.
+
+For repeatable latency/transfer measurements, run
+`node scripts/benchmark-api.ts measurement` after building. It uses two fixed
+in-memory synthetic SQLite snapshots and separate server/client processes,
+includes historical schedule images/source posts, and reports median/P95,
+identity/gzip wire bytes and headers at concurrency 1 and 4. It does not load
+`.env`, enable timers or perform source synchronization. Run measurements without
+concurrent builds/tests. `--browser small` serves a disposable UI fixture with
+stdin-only failure/delay controls. See [Performance measurements](performance.md)
+for the recorded before/after conditions, results and limitations.
+
 Production smoke creates a disposable container from the built image, uses
 synthetic production authentication, disables workflow timers, and publishes a
 random loopback-only port. Its anonymous data volume is removed in cleanup.

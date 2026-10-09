@@ -52,7 +52,10 @@ test("SPA routes serve a build inside a hidden parent directory", async () => {
 
 test("media route serves only ready opaque-ID assets", async () => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
-  const body = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const body = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.alloc(4096, 1),
+  ])
   const sourceUrl = "https://cdn.example.invalid/route.png"
   const id = mediaIdForSourceUrl(sourceUrl)
   const written = await writeMediaFileAtomic({
@@ -82,12 +85,32 @@ test("media route serves only ready opaque-ID assets", async () => {
     const address = server.address()
     const origin = `http://127.0.0.1:${address.port}`
 
-    const response = await fetch(`${origin}/media/${id}?v=${written.sha256}`)
+    const response = await fetch(`${origin}/media/${id}?v=${written.sha256}`, {
+      headers: { "accept-encoding": "gzip" },
+    })
     assert.equal(response.status, 200)
     assert.equal(response.headers.get("content-type"), "image/png")
+    assert.equal(response.headers.get("content-encoding"), null)
     assert.equal(response.headers.get("x-content-type-options"), "nosniff")
     assert.match(response.headers.get("cache-control"), /immutable/u)
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), body)
+    const conditional = await fetch(
+      `${origin}/media/${id}?v=${written.sha256}`,
+      {
+        headers: {
+          "accept-encoding": "gzip",
+          "if-none-match": response.headers.get("etag"),
+          "cache-control": "max-age=0",
+        },
+      },
+    )
+    assert.equal(conditional.status, 304)
+    assert.equal(conditional.headers.get("content-encoding"), null)
+    const unversioned = await fetch(`${origin}/media/${id}`)
+    assert.equal(
+      unversioned.headers.get("cache-control"),
+      "public, max-age=0, must-revalidate",
+    )
 
     const staleResponse = await fetch(
       `${origin}/media/${id}?v=${"0".repeat(64)}`,

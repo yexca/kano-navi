@@ -1,6 +1,9 @@
-import { adminMessages } from "./admin-i18n"
-import { aboutMessages } from "./about/about-i18n"
-import { historyMessages } from "./history/history-i18n"
+export type PageMessages = Partial<
+  Record<
+    import("./types").Locale,
+    Record<string, string | ((values: any) => string)>
+  >
+>
 
 export const localeOptions = [
   { value: "en", label: "English", htmlLang: "en" },
@@ -53,6 +56,10 @@ const messages = {
     "toast.failed": ({ message }: { message: any }) => `读取失败 · ${message}`,
     "error.api": "暂时无法连接本地 API，页面保留当前内容。",
     "common.loading": "正在读取快照…",
+    "page.loading": "正在加载页面…",
+    "page.error": "页面暂时无法加载。请重试。",
+    "page.retry": "重新加载页面",
+    "about.label": "关于本站",
     "common.retry": "重试",
     "common.close": "关闭",
     "common.refresh": "重新读取",
@@ -218,6 +225,10 @@ const messages = {
     "error.api":
       "ローカル API に接続できません。現在の表示内容はそのまま残ります。",
     "common.loading": "スナップショットを読み込み中…",
+    "page.loading": "ページを読み込み中…",
+    "page.error": "ページを読み込めませんでした。もう一度お試しください。",
+    "page.retry": "ページを再読み込み",
+    "about.label": "このサイトについて",
     "common.retry": "再試行",
     "common.close": "閉じる",
     "common.refresh": "再読み込み",
@@ -385,6 +396,10 @@ const messages = {
     "error.api":
       "The local API is unreachable. The page keeps what it already shows.",
     "common.loading": "Loading the snapshot…",
+    "page.loading": "Loading the page…",
+    "page.error": "This page could not be loaded. Please try again.",
+    "page.retry": "Reload page",
+    "about.label": "About this site",
     "common.retry": "Retry",
     "common.close": "Close",
     "common.refresh": "Reload",
@@ -525,18 +540,15 @@ export function detectLocale(languages = []) {
 
 export function createTranslator(
   locale: import("./types").Locale,
+  pageMessages: PageMessages = {},
 ): import("./types").Translator {
   const selectedMessages = {
     ...messages[locale],
-    ...(adminMessages[locale] || {}),
-    ...(historyMessages[locale] || {}),
-    ...(aboutMessages[locale] || {}),
+    ...(pageMessages[locale] || {}),
   }
   const fallbackMessages = {
     ...messages.en,
-    ...adminMessages.en,
-    ...historyMessages.en,
-    ...aboutMessages.en,
+    ...pageMessages.en,
   }
 
   return (key, values: Record<string, any> = {}) => {
