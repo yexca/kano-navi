@@ -70,6 +70,9 @@ export function useDashboard(now = Date.now()) {
   const [calendarError, setCalendarError] = useState<Error | null>(null)
   const weekRef = useRef(weekStart)
   weekRef.current = weekStart
+  const calendarRef = useRef(calendar)
+  calendarRef.current = calendar
+  const calendarWeekRef = useRef<string | null>(null)
   const readJson = async (url: string, signal: AbortSignal) => {
     const response = await fetch(url, {
       signal,
@@ -81,18 +84,50 @@ export function useDashboard(now = Date.now()) {
   const loadCalendar = useCallback(async () => {
     const from = localDateKey(weekRef.current),
       to = localDateKey(addDays(weekRef.current, 6))
+    const current =
+      calendarWeekRef.current === from ? calendarRef.current : null
     setCalendarLoading(true)
     try {
-      const payload = await scope.run("calendar", (signal) =>
-        readJson(`/api/calendar?from=${from}&to=${to}&page=1`, signal),
-      )
+      const payload = await scope.run("calendar", async (signal) => {
+        const readPage = async (page: number): Promise<CalendarSnapshot> => {
+          signal.throwIfAborted()
+          const result = await readJson(
+            `/api/calendar?from=${from}&to=${to}&page=${page}`,
+            signal,
+          )
+          signal.throwIfAborted()
+          if (
+            !Array.isArray(result.events) ||
+            !result.adjacent ||
+            !Number.isInteger(result.total) ||
+            !Number.isInteger(result.revision) ||
+            result.page !== page
+          )
+            throw new Error("Invalid calendar snapshot")
+          return result
+        }
+        // Replace the loaded prefix atomically. If a write lands between pages,
+        // restart under this request's deadline; never append mixed revisions.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          let next = await readPage(1)
+          if (current && next.revision === current.revision) return current
+          const revision = next.revision
+          let consistent = true
+          while (next.hasNext && next.page < (current?.page || 1)) {
+            const page = await readPage(next.page + 1)
+            if (page.revision !== revision) {
+              consistent = false
+              break
+            }
+            next = { ...page, events: [...next.events, ...page.events] }
+          }
+          if (consistent) return next
+        }
+        throw new Error("Calendar changed during refresh")
+      })
       if (from !== localDateKey(weekRef.current)) return
-      if (
-        !Array.isArray(payload.events) ||
-        !payload.adjacent ||
-        !Number.isInteger(payload.total)
-      )
-        throw new Error("Invalid calendar snapshot")
+      calendarWeekRef.current = from
+      calendarRef.current = payload
       setCalendar(payload)
       setCalendarError(null)
       setCalendarLoading(false)
@@ -109,13 +144,12 @@ export function useDashboard(now = Date.now()) {
       return { ok: false }
     }
   }, [scope])
-  const calendarRef = useRef(calendar)
-  calendarRef.current = calendar
   const loadMoreCalendar = useCallback(async () => {
     const current = calendarRef.current
     if (!current.hasNext || scope.busy("calendar")) return
     const from = localDateKey(weekRef.current),
       to = localDateKey(addDays(weekRef.current, 6))
+    if (calendarWeekRef.current !== from) return
     try {
       const next = await scope.run("calendar", (signal) =>
         readJson(
@@ -128,7 +162,9 @@ export function useDashboard(now = Date.now()) {
         await loadCalendar()
         return
       }
-      setCalendar({ ...next, events: [...current.events, ...next.events] })
+      const combined = { ...next, events: [...current.events, ...next.events] }
+      calendarRef.current = combined
+      setCalendar(combined)
       setCalendarError(null)
     } catch (error) {
       if (
@@ -181,13 +217,19 @@ export function useDashboard(now = Date.now()) {
             signal,
           ),
         )
-        if (
+        const refreshSnapshot =
           !hasLoadedRef.current ||
           payload.revision !== revisionRef.current ||
           Date.now() - loadedAtRef.current >= 60000
-        ) {
+        if (refreshSnapshot) {
           const result = await load()
           if (!result.ok) throw result.error
+        }
+        if (
+          !scope.busy("calendar") &&
+          !calendarRetryRef.current &&
+          (refreshSnapshot || payload.revision !== calendarRef.current.revision)
+        ) {
           await loadCalendar()
         }
       },

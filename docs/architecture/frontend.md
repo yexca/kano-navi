@@ -83,8 +83,14 @@ polling and requires login. Failed initial admin loads also retry.
 
 The calendar's selected week lives in `use-dashboard.ts`. It reads one bounded
 page, shows the complete week/day counts, and offers more-event pagination.
-Changing weeks cancels old work, errors keep a retry control, and a revision
-change between pages reloads the first page instead of combining generations.
+Changing weeks cancels old work and begins at page one; errors keep a retry control.
+Same-week refreshes with an unchanged revision retain every already loaded page.
+A revision change rereads the loaded page range and replaces it atomically, stopping
+at the new last page if the week shrank. A change while reading that range restarts
+from page one, with at most three attempts under the shared request deadline.
+Failed or repeatedly changing reads retain the complete known generation for retry;
+they never append pages from different revisions. Automatic snapshot refresh waits
+for active calendar work, and a pending calendar revision is checked on later polls.
 Adjacent-date hints support jumping to stored activity in either direction.
 Images match their applicable inclusive period, without an updated-at fallback.
 The bounded focus snapshot refreshes at least once per minute while visible to

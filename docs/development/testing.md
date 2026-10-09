@@ -166,3 +166,13 @@ responses and unmount for both hooks. It also checks hidden-page polling and
 calendar pagination/navigation. Review `/` and `/admin` at desktop and mobile widths, including
 calendar navigation and the period correction fields. Stop the fixture after
 verification; it does not write an operator snapshot.
+
+The calendar scenario advances past the minute refresh after loading 101 events,
+verifies unchanged revisions preserve both pages, replaces both pages on a revision
+change, retains them after a failed second-page refresh and retries a revision
+change between pages. A separate race scenario rejects a delayed previous-week
+response after navigation. The historical video regression checks the first
+10,000-event/10,000-video snapshot and its actual SQLite query plans, ensuring
+associations use indexes rather than per-video event scans. Live-focus fixtures
+cover qualification before truncation, cross-week streams, chronological selection,
+explicit ends and the three-hour boundary.

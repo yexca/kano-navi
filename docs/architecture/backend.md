@@ -89,8 +89,15 @@ Dashboard SQL selects up to 100 recent post previews plus the latest-post
 fallback, up to 100 current-week event previews plus 30 upcoming and 30 live
 focus candidates and at most one linked event per returned video, and bounded
 video candidates plus Featured selection and the latest completed video.
+Live event eligibility is applied before the 30-row limit: cancelled and suspected
+cancellations, tombstones, non-stream activities and expired streams do not consume
+the shortlist. Eligible live events use ascending start instants and stable ID ties,
+matching the frontend focus ordering, including streams spanning earlier weeks.
 Known end times remove finished streams before limiting focus candidates and
-retain streams with explicit longer durations. Media is resolved only for returned owners. Historical
+retain streams with explicit longer durations; an absent end uses the strictly
+less-than-three-hour grace period. Video/event association uses indexed primary,
+source-evidence and normalized URL identities, rather than scanning events for each
+historical video. Media is resolved only for returned owners. Historical
 event and media growth therefore does not enlarge a homepage response.
 Full event totals and upcoming counts are separate SQL aggregates; calendar
 pagination preserves access to every activity instead of dropping later rows.

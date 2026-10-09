@@ -991,6 +991,8 @@ function migrateSchema(database: DatabaseConnection) {
 
   database.exec(`CREATE INDEX IF NOT EXISTS posts_instant_idx ON posts (julianday(published_at) DESC, id);
     CREATE INDEX IF NOT EXISTS events_instant_idx ON events (COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')), id) WHERE deleted_at IS NULL;
+    CREATE INDEX IF NOT EXISTS events_source_item_idx ON events (source, source_item_id, id);
+    CREATE INDEX IF NOT EXISTS events_stream_identity_idx ON events (stream_identity(url), id) WHERE url IS NOT NULL;
     CREATE INDEX IF NOT EXISTS videos_instant_idx ON videos (julianday(COALESCE(scheduled_at, published_at)) DESC, id);
     CREATE INDEX IF NOT EXISTS videos_schedule_instant_idx ON videos (julianday(scheduled_at), id);`)
   const syncRunColumns = tableColumns(database, "sync_runs")
@@ -5195,16 +5197,20 @@ export function getDashboard(
   const to = new Date(monday.getTime() + 6 * 86400000)
     .toISOString()
     .slice(0, 10)
-  const eligibleSql = `deleted_at IS NULL AND lower(COALESCE(status, '')) NOT LIKE 'cancel%'
-    AND COALESCE(status, '') NOT IN ('取消', '已取消', '中止', 'キャンセル')
+  const eligibleSql = `deleted_at IS NULL AND lower(trim(COALESCE(status, ''))) NOT LIKE 'cancel%'
+    AND trim(COALESCE(status, '')) NOT IN ('取消', '已取消', '中止', 'キャンセル')
     AND cancellation_status NOT IN ('llm_suspected', 'manual_confirmed')`
   const upcomingSql = `(julianday(starts_at) >= julianday(@now) OR (starts_at IS NULL AND starts_on >= @today))`
+  const liveSql = `(event_type IN ('stream', 'member') OR source='youtube')
+    AND julianday(starts_at) <= julianday(@now)
+    AND (julianday(ends_at) > julianday(@now)
+      OR (julianday(ends_at) IS NULL AND julianday(starts_at) > julianday(@now, '-3 hours')))`
   const events = database
     .prepare<unknown[], Record<string, any>>(
       `SELECT ${eventAdminColumns} FROM events WHERE deleted_at IS NULL AND id IN (
     SELECT id FROM (SELECT id FROM events WHERE deleted_at IS NULL AND starts_on BETWEEN @from AND @to ORDER BY julianday(COALESCE(starts_at, starts_on)) ASC, id ASC LIMIT 100)
     UNION SELECT id FROM (SELECT id FROM events WHERE ${eligibleSql} AND ${upcomingSql} ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) ASC, id ASC LIMIT 30)
-    UNION SELECT id FROM (SELECT id FROM events WHERE deleted_at IS NULL AND (julianday(starts_at) BETWEEN julianday(@now, '-3 hours') AND julianday(@now) OR (julianday(starts_at) <= julianday(@now) AND julianday(ends_at) > julianday(@now))) ORDER BY julianday(starts_at) DESC, id ASC LIMIT 30)
+    UNION SELECT id FROM (SELECT id FROM events WHERE ${eligibleSql} AND ${liveSql} ORDER BY julianday(starts_at) ASC, id ASC LIMIT 30)
   ) ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) ASC, id ASC`,
     )
     .all({ from, to, now: now.toISOString(), today: todayKey })
@@ -5223,18 +5229,23 @@ export function getDashboard(
     )
     .get({ now: now.toISOString(), today: todayKey })
   const featuredVideoId = getFeaturedVideoId(database)
-  const videoEventMatch = `(e.id='youtube-' || v.id OR (e.source='youtube' AND e.source_item_id=v.id)
-    OR e.url=v.url OR (e.url LIKE '%' || v.id || '%' AND stream_identity(e.url)=stream_identity(v.url))
-    OR EXISTS (SELECT 1 FROM event_sources s WHERE s.event_id=e.id AND s.source='youtube' AND s.source_item_id=v.id))`
+  // Each branch uses a primary/source/URL identity index. An OR with a
+  // correlated evidence EXISTS would scan all events for every historical video.
+  const videoEvidenceIds = (id: string) => `SELECT 'youtube-' || ${id}
+    UNION SELECT id FROM events WHERE source='youtube' AND source_item_id=${id}
+    UNION SELECT event_id FROM event_sources WHERE source='youtube' AND source_item_id=${id}`
+  const videoEventIds = (id: string, url: string) => `${videoEvidenceIds(id)}
+    UNION SELECT id FROM events WHERE url IS NOT NULL AND stream_identity(url)=stream_identity(${url})`
+  const videoEventMatch = `e.id IN (${videoEventIds("v.id", "v.url")})`
   const videos = database
     .prepare<unknown[], Record<string, any>>(
       `SELECT id, source, title, published_at AS publishedAt, scheduled_at AS scheduledAt, url,
     thumbnail_url AS thumbnailUrl, kind, is_upcoming AS isUpcoming FROM videos
     WHERE id IN (
       SELECT id FROM (SELECT id FROM videos ORDER BY julianday(COALESCE(scheduled_at, published_at)) DESC, id ASC LIMIT 30)
-      UNION SELECT id FROM (SELECT v.id FROM videos v WHERE (julianday(v.scheduled_at) >= julianday(@now, '-3 hours') OR (v.scheduled_at IS NULL AND v.is_upcoming=1)
+      UNION SELECT id FROM (SELECT v.id FROM videos v WHERE (julianday(v.scheduled_at) > julianday(@now, '-3 hours') OR (v.scheduled_at IS NULL AND v.is_upcoming=1)
         OR EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(v.scheduled_at) <= julianday(@now) AND julianday(e.ends_at) > julianday(@now) AND ${videoEventMatch}))
-        AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-' || v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources s WHERE s.event_id=e.id AND s.source='youtube' AND s.source_item_id=v.id)))
+        AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND e.id IN (${videoEvidenceIds("v.id")}))
         AND NOT EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at) <= julianday(@now) AND ${videoEventMatch})
         ORDER BY julianday(v.scheduled_at) ASC, v.id ASC LIMIT 30)
       UNION SELECT id FROM (SELECT id FROM videos WHERE scheduled_at IS NULL OR julianday(scheduled_at) < julianday(@now) ORDER BY julianday(COALESCE(scheduled_at, published_at)) DESC, id ASC LIMIT 1)
@@ -5254,17 +5265,10 @@ export function getDashboard(
     unknown[],
     Record<string, any>
   >(`SELECT ${eventAdminColumns} FROM events e
-    WHERE e.deleted_at IS NULL AND ((e.url LIKE @hint AND stream_identity(e.url)=@identity) OR e.url=@url
-      OR e.id='youtube-' || @id OR (e.source='youtube' AND e.source_item_id=@id)
-      OR EXISTS (SELECT 1 FROM event_sources s WHERE s.event_id=e.id AND s.source='youtube' AND s.source_item_id=@id))
+    WHERE e.deleted_at IS NULL AND e.id IN (${videoEventIds("@id", "@url")})
     ORDER BY ABS(julianday(e.starts_at) - julianday(@scheduled)), e.id ASC LIMIT 1`)
   for (const video of videos) {
-    const identity = streamIdentity(video.url)
     const row = linkedEvent.get({
-      identity,
-      hint: identity.startsWith("youtube:")
-        ? `%${identity.slice(8)}%`
-        : video.url,
       url: video.url,
       id: video.id,
       scheduled: video.scheduledAt,
@@ -5434,14 +5438,10 @@ export function getDashboard(
   const cancelledVideoIds = new Set(
     database
       .prepare<unknown[], Record<string, any>>(
-        `SELECT videoId FROM (SELECT source_item_id AS videoId FROM events
-       WHERE source='youtube' AND cancellation_status='manual_confirmed'
-       UNION SELECT substr(id, 9) AS videoId FROM events
-       WHERE id LIKE 'youtube-%' AND cancellation_status='manual_confirmed'
-       UNION SELECT s.source_item_id AS videoId FROM event_sources s
-       JOIN events e ON e.id=s.event_id
-       WHERE s.source='youtube' AND e.cancellation_status='manual_confirmed'
-       ) WHERE videoId IN (${mappedVideos.map(() => "?").join(",") || "NULL"})`,
+        `SELECT v.id AS videoId FROM videos v
+       WHERE v.id IN (${mappedVideos.map(() => "?").join(",") || "NULL"})
+       AND EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed'
+         AND e.id IN (${videoEvidenceIds("v.id")}))`,
       )
       .all(...mappedVideos.map((video) => video.id))
       .map((row) => row.videoId),

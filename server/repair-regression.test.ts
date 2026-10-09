@@ -853,3 +853,278 @@ test("bounded focus retains a video end even when its event falls beyond week an
   assert.equal(derived.summary.nextStream, null)
   assert.ok(snapshot.events.length < 181)
 })
+
+test("first dashboard query uses indexed video associations with 10000 historical events and videos", (t) => {
+  const database = fixture(t)
+  const records = Array.from({ length: 10000 }, (_, index) => ({
+    id: `history-${index}`,
+    title: "Synthetic historical stream",
+    source: "x",
+    starts_on: "2020-01-06",
+    starts_at: "2020-01-06T00:00:00Z",
+    url: `https://youtu.be/history-${index}`,
+  }))
+  upsertEvents(database, records)
+  upsertVideos(
+    database,
+    records.map((record) => ({
+      ...record,
+      published_at: record.starts_at,
+      scheduled_at: record.starts_at,
+      url: `https://www.youtube.com/watch?v=${record.id}`,
+    })),
+  )
+  setFeaturedVideoId(database, "history-9999")
+  const prepare = database.prepare.bind(database)
+  const plans: string[] = []
+  database.prepare = ((sql) => {
+    const statement = prepare(sql)
+    if (sql.includes("FROM events e") && sql.includes("UNION SELECT")) {
+      const explain = prepare(`EXPLAIN QUERY PLAN ${sql}`)
+      const all = statement.all.bind(statement)
+      statement.all = (...args) => {
+        plans.push(...explain.all(...args).map((row: any) => row.detail))
+        return all(...args)
+      }
+      const get = statement.get.bind(statement)
+      statement.get = (...args) => {
+        plans.push(...explain.all(...args).map((row: any) => row.detail))
+        return get(...args)
+      }
+    }
+    return statement
+  }) as typeof database.prepare
+  const start = performance.now()
+  const snapshot = getDashboard(database, { now })
+  t.diagnostic(`First snapshot: ${(performance.now() - start).toFixed(1)} ms`)
+  assert.ok(plans.length > 0)
+  assert.ok(plans.some((plan) => plan.includes("events_stream_identity_idx")))
+  assert.ok(plans.some((plan) => plan.includes("events_source_item_idx")))
+  assert.ok(plans.some((plan) => plan.includes("event_sources_identity_idx")))
+  assert.ok(
+    !plans.some((plan) => /^SCAN (?:e|events|event_sources)\b/u.test(plan)),
+  )
+  assert.ok(snapshot.videos.some((video) => video.id === "history-9999"))
+  assert.equal(snapshot.summary.counts.events, 10000)
+  assert.equal(snapshot.summary.nextStream, null)
+  assert.ok(Buffer.byteLength(JSON.stringify(snapshot)) < 100000)
+})
+
+test("video grace eligibility precedes truncation at the three-hour boundary", (t) => {
+  const database = fixture(t)
+  upsertVideos(database, [
+    ...Array.from({ length: 35 }, (_, index) => ({
+      id: `boundary-${index}`,
+      title: "Synthetic grace-boundary stream",
+      scheduled_at: "2026-10-08T21:00:00Z",
+      url: `https://www.youtube.com/watch?v=boundary-${index}`,
+    })),
+    ...Array.from({ length: 100 }, (_, index) => ({
+      id: `upcoming-${index}`,
+      title: "Synthetic upcoming stream",
+      scheduled_at: new Date(
+        now.getTime() + (index + 1) * 86400000,
+      ).toISOString(),
+      url: `https://www.youtube.com/watch?v=upcoming-${index}`,
+    })),
+  ])
+  for (const offset of [-1, 0, 1]) {
+    const instant = new Date(now.getTime() + offset)
+    const snapshot = getDashboard(database, { now: instant })
+    const derived = deriveDashboardAt(snapshot as any, instant.getTime())
+    assert.equal(
+      derived.summary.nextStream.id,
+      offset < 0 ? "boundary-0" : "upcoming-0",
+    )
+    assert.ok(snapshot.videos.length <= 61)
+  }
+})
+
+test("additive association indexes preserve existing locks, tombstones and Featured settings", (t) => {
+  const database = fixture(t)
+  upsertEvents(database, [
+    {
+      id: "locked",
+      source: "x",
+      title: "Synthetic locked stream",
+      starts_on: "2026-10-09",
+      manual_locked: true,
+      provenance: "manual",
+      cancellation_status: "llm_suspected",
+      cancellation_evidence: "Synthetic review evidence",
+    },
+    {
+      id: "tombstone",
+      source: "x",
+      title: "Synthetic deleted stream",
+      starts_on: "2026-10-09",
+      manual_locked: true,
+      deleted_at: now.toISOString(),
+    },
+  ])
+  upsertVideos(database, [
+    {
+      id: "retained-featured",
+      title: "Synthetic Featured",
+      url: "https://www.youtube.com/watch?v=retained-featured",
+    },
+  ])
+  setFeaturedVideoId(database, "retained-featured")
+  const originalEvents = database
+    .prepare("SELECT * FROM events ORDER BY id")
+    .all()
+  const originalSettings = database
+    .prepare("SELECT * FROM app_settings ORDER BY key")
+    .all()
+  database.exec(
+    "DROP INDEX events_source_item_idx; DROP INDEX events_stream_identity_idx",
+  )
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "kano-index-upgrade-"),
+  )
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const filename = path.join(directory, "snapshot.sqlite")
+  fs.writeFileSync(filename, database.serialize())
+  for (let startup = 0; startup < 2; startup++) {
+    const upgraded = initializeDatabase({ seed: false, filename })
+    try {
+      assert.deepEqual(
+        upgraded.prepare("SELECT * FROM events ORDER BY id").all(),
+        originalEvents,
+      )
+      assert.deepEqual(
+        upgraded.prepare("SELECT * FROM app_settings ORDER BY key").all(),
+        originalSettings,
+      )
+      const indexes = upgraded
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='index' AND name IN ('events_source_item_idx', 'events_stream_identity_idx')",
+        )
+        .all()
+      assert.equal(indexes.length, 2)
+      const snapshot = getDashboard(upgraded, { now })
+      assert.equal(snapshot.meta.featuredVideoId, "retained-featured")
+      assert.ok(!snapshot.events.some((event) => event.id === "tombstone"))
+    } finally {
+      upgraded.close()
+    }
+  }
+})
+
+test("live event eligibility precedes truncation and retains the earliest cross-week focus", (t) => {
+  const database = fixture(t)
+  const noise = [
+    { status: " Cancelled " },
+    { cancellation_status: "manual_confirmed" },
+    { cancellation_status: "llm_suspected" },
+    { ends_at: "2026-10-08T23:45:00Z" },
+    { ends_at: now.toISOString() },
+    { event_type: "event" },
+    { event_type: "release" },
+    { event_type: "video" },
+    { deleted_at: "2026-10-08T23:45:00Z" },
+  ].flatMap((override, kind) =>
+    Array.from({ length: 35 }, (_, index) => ({
+      id: `ineligible-${kind}-${index}`,
+      source: "x",
+      title: "Synthetic ineligible focus",
+      starts_on: "2026-10-09",
+      starts_at: "2026-10-08T23:00:00Z",
+      ends_at: "2026-10-09T03:00:00Z",
+      event_type: "stream",
+      ...override,
+    })),
+  )
+  upsertEvents(database, noise)
+  upsertEvents(
+    database,
+    [
+      { status: " Cancelled " },
+      { cancellation_status: "manual_confirmed" },
+      { cancellation_status: "llm_suspected" },
+      { event_type: "event" },
+    ].flatMap((override, kind) =>
+      Array.from({ length: 35 }, (_, index) => ({
+        id: `old-ineligible-${kind}-${index}`,
+        source: "x",
+        title: "Synthetic old ineligible focus",
+        starts_on: "2026-10-03",
+        starts_at: "2026-10-03T00:00:00Z",
+        ends_at: "2026-10-10T00:00:00Z",
+        event_type: "stream",
+        ...override,
+      })),
+    ),
+  )
+  upsertEvents(
+    database,
+    Array.from({ length: 40 }, (_, index) => ({
+      id: `later-live-${index}`,
+      source: "x",
+      title: "Synthetic later live stream",
+      starts_on: "2026-10-08",
+      starts_at: "2026-10-08T00:00:00Z",
+      ends_at: "2026-10-10T00:00:00Z",
+      event_type: "member",
+    })),
+  )
+  upsertEvents(database, [
+    {
+      id: "cross-week-live",
+      source: "x",
+      title: "Synthetic cross-week stream",
+      starts_on: "2026-10-04",
+      starts_at: "2026-10-04T00:00:00Z",
+      ends_at: "2026-10-09T01:00:00Z",
+      event_type: "stream",
+    },
+    ...["20:59:59.999", "21:00:00", "21:00:00.001"].map((time, index) => ({
+      id: `grace-${index}`,
+      source: "youtube",
+      title: "Synthetic grace boundary",
+      starts_on: "2026-10-08",
+      starts_at: `2026-10-08T${time}Z`,
+      event_type: "event",
+    })),
+  ])
+  const snapshot = getDashboard(database, { now })
+  const derived = deriveDashboardAt(snapshot as any, now.getTime())
+  assert.equal(derived.summary.nextEvent.id, "cross-week-live")
+  assert.ok(snapshot.events.length <= 130)
+  // Current-week previews still show cancellation evidence, while the focus
+  // shortlist includes only the earliest 30 eligible streams before limiting.
+  assert.ok(
+    snapshot.events.some(
+      (event) => event.cancellationStatus === "manual_confirmed",
+    ),
+  )
+  assert.ok(
+    !snapshot.events.some((event) => event.id.startsWith("old-ineligible-")),
+  )
+  const afterEnd = new Date("2026-10-09T01:00:00Z")
+  assert.equal(
+    deriveDashboardAt(
+      getDashboard(database, { now: afterEnd }) as any,
+      afterEnd.getTime(),
+    ).summary.nextEvent.id,
+    "later-live-0",
+  )
+  const boundaryWeek = getCalendarPage(database, {
+    from: "2026-10-05",
+    to: "2026-10-11",
+    pageSize: 100,
+  })
+  assert.ok(boundaryWeek.total > 100)
+  for (const [id, live] of [
+    ["grace-0", false],
+    ["grace-1", false],
+    ["grace-2", true],
+  ]) {
+    const event = getEvent(database, id)
+    const single = deriveDashboardAt(
+      { ...snapshot, events: [event] } as any,
+      now.getTime(),
+    )
+    assert.equal(Boolean(single.summary.nextEvent), live)
+  }
+})

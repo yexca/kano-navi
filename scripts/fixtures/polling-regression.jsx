@@ -16,7 +16,12 @@ let clock = 0,
   scenario = "success",
   counts = {},
   requests = [],
-  release = null
+  release = null,
+  calendarRevision = 0,
+  failCalendarPage = false,
+  flipCalendarRevision = false,
+  epoch = Date.now()
+Date.now = () => epoch + clock
 window.setTimeout = (callback, delay, ...args) => {
   const id = ++timerId
   timers.set(id, { at: clock + delay, callback: () => callback(...args) })
@@ -26,7 +31,44 @@ window.clearTimeout = (id) => timers.delete(id)
 window.fetch = async (url, options) => {
   const key = String(url).split("?")[0]
   counts[key] = (counts[key] || 0) + 1
-  requests.push({ key, at: clock })
+  requests.push({ key, url: String(url), at: clock })
+  if (scenario === "calendar-pages") {
+    if (key === "/api/dashboard/revision")
+      return new Response(JSON.stringify({ revision: calendarRevision }))
+    if (key === "/api/dashboard") {
+      const payload = await (await originalFetch(url, options)).json()
+      payload.meta.revision = calendarRevision
+      return new Response(JSON.stringify(payload))
+    }
+    if (key === "/api/calendar") {
+      const page = new URL(String(url), location.origin).searchParams.get(
+        "page",
+      )
+      if (page === "2" && failCalendarPage)
+        return new Response("{}", { status: 503 })
+      if (page === "2" && flipCalendarRevision) {
+        calendarRevision++
+        flipCalendarRevision = false
+      }
+      const payload = await (await originalFetch(url, options)).json()
+      payload.revision = calendarRevision
+      payload.events = payload.events.map((event) => ({
+        ...event,
+        title: `version-${calendarRevision} ${event.title}`,
+      }))
+      return new Response(JSON.stringify(payload))
+    }
+  }
+  if (
+    scenario === "calendar-race" &&
+    key === "/api/calendar" &&
+    counts[key] === 2
+  ) {
+    const response = await originalFetch(url, options)
+    return new Promise((resolve) => {
+      release = () => resolve(response)
+    })
+  }
   if (
     (scenario === "first-failure" &&
       key === "/api/dashboard" &&
@@ -165,6 +207,7 @@ function App() {
         ["admin", "superseded"],
         ["admin", "workflow-race"],
         ["public", "calendar-pages"],
+        ["public", "calendar-race"],
       ]) {
         setMounted(false)
         await settle()
@@ -172,6 +215,10 @@ function App() {
         counts = {}
         requests = []
         clock = 0
+        epoch = new Date().getTime()
+        calendarRevision = 0
+        failCalendarPage = false
+        flipCalendarRevision = false
         scenario = mode
         hidden = false
         release = null
@@ -192,7 +239,12 @@ function App() {
           )
         if (mode === "hidden") hidden = true
         await advance(
-          ["superseded", "workflow-race", "calendar-pages"].includes(mode)
+          [
+            "superseded",
+            "workflow-race",
+            "calendar-pages",
+            "calendar-race",
+          ].includes(mode)
             ? 0
             : mode === "persistent"
               ? 190000
@@ -304,13 +356,91 @@ function App() {
             state.calendar.events.length === 101 && !state.calendar.hasNext,
             "all weekly events remain reachable",
           )
+          const dashboardReads = counts["/api/dashboard"]
+          const pageReads = () =>
+            requests.filter(
+              (item) =>
+                item.key === "/api/calendar" && item.url.includes("page=2"),
+            ).length
+          const beforePages = pageReads()
+          await advance(64000)
+          check(
+            counts["/api/dashboard"] > dashboardReads,
+            "minute refresh still advances the focus snapshot",
+          )
+          check(
+            state.calendar.events.length === 101 &&
+              state.calendar.page === 2 &&
+              pageReads() === beforePages,
+            "unchanged revision retains loaded calendar pages",
+          )
+          calendarRevision++
+          await advance(8000)
+          check(
+            state.calendar.events.length === 101 &&
+              state.calendar.page === 2 &&
+              state.calendar.events.every((event) =>
+                event.title.startsWith("version-1 "),
+              ),
+            "revision refresh atomically replaces the loaded range",
+          )
+          calendarRevision++
+          failCalendarPage = true
+          await advance(8000)
+          check(
+            state.calendar.revision === 1 &&
+              state.calendar.events.length === 101 &&
+              state.calendar.events.every((event) =>
+                event.title.startsWith("version-1 "),
+              ),
+            "failed range refresh retains the complete known generation",
+          )
+          failCalendarPage = false
+          await advance(16000)
+          check(
+            state.calendar.revision === 2 &&
+              state.calendar.events.length === 101,
+            "failed range refresh retries and recovers",
+          )
+          calendarRevision++
+          flipCalendarRevision = true
+          await advance(8000)
+          check(
+            state.calendar.revision === 4 &&
+              state.calendar.events.length === 101 &&
+              state.calendar.events.every((event) =>
+                event.title.startsWith("version-4 "),
+              ),
+            "revision changes between pages restart the whole range",
+          )
           state.setWeekStart(
             new Date(state.weekStart.getTime() + 14 * 86400000),
           )
           await settle()
           check(
-            state.calendar.events[0]?.title === "Synthetic next week activity",
+            state.calendar.events[0]?.title.endsWith(
+              "Synthetic next week activity",
+            ) && state.calendar.page === 1,
             "forward calendar navigation",
+          )
+        }
+        if (mode === "calendar-race") {
+          state.setWeekStart(new Date(state.weekStart.getTime() - 7 * 86400000))
+          await waitUntil(() => release, "old week request starts")
+          state.setWeekStart(
+            new Date(state.weekStart.getTime() + 14 * 86400000),
+          )
+          await waitUntil(
+            () =>
+              state.calendar.events[0]?.title ===
+              "Synthetic next week activity",
+            "new week settles",
+          )
+          release()
+          await settle()
+          check(
+            state.calendar.events[0]?.title === "Synthetic next week activity",
+            "late old week response cannot replace selected week",
           )
         }
         const before = { ...counts }
@@ -325,7 +455,7 @@ function App() {
         results.push(type + " " + mode + " PASS")
         setOutput(results.join("\n"))
       }
-      setOutput((value) => value + "\nALL 12 BROWSER SCENARIOS PASS")
+      setOutput((value) => value + "\nALL 13 BROWSER SCENARIOS PASS")
     } catch (error) {
       setOutput(
         "FAIL: " +

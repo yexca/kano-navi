@@ -133,6 +133,13 @@ is independently checked for file availability. Calendar pages contain at most
 100 events in an inclusive seven-day range, total/day counts, the snapshot
 revision and adjacent dates. Tombstones are excluded on every public path.
 
+Additive indexes on `(source, source_item_id, id)` and locally normalized
+`stream_identity(url)` support dashboard video/event lookups. The latter excludes
+null URLs and uses the same deterministic YouTube/exact-URL identity rule as the
+frontend. Source evidence uses the existing `event_sources` identity index.
+Startup adds these indexes to existing snapshots without rewriting events,
+manual locks, tombstones, cancellation evidence or operator settings.
+
 ## Schema Changes
 
 server/database.ts owns the schema and additive upgrade behavior. Update this
