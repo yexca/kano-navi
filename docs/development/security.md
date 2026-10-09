@@ -8,6 +8,11 @@
 - Never embed usernames, passwords, tokens, or cookies in a URL. Do not write credentials from a response into `raw_json`, logs, or the UI.
 - Register a new source host and its purpose in `scripts/privacy-allowlist.json` first. The allowlist is a reviewable source record, not a comment-based way to bypass secret detection.
 - Extract only the fields needed from external HTML/JSON. Filter stack traces, absolute paths, and raw responses before displaying anything.
+  The HTTP error handler uses an allowlisted event/code/status log shape. Never
+  log a caught error object or its message/stack: body-parser and downstream clients
+  can attach original JSON bodies, headers, passwords and provider secrets. Invalid
+  JSON and oversized bodies are tested as 400/413 with simulated credentials in
+  captured logs; unexpected errors use the same restricted boundary.
 
 The model boundary is opt-in. Matching public schedule-post text and ready
 cached post images are sent only to the ordered, administrator-configured

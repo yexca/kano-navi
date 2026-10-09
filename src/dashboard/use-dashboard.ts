@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { fallbackProfile, POST_WINDOW_DAYS } from "./content"
-import type { Dashboard } from "@/types"
+import type { Dashboard, CalendarSnapshot } from "@/types"
+import { createRequestScope, startPolling } from "../lib/polling"
+import { startOfWeek, japanToday, localDateKey, addDays } from "./format"
 import { deriveDashboardAt } from "./derive-dashboard"
 
 const emptyDashboard: Dashboard = {
@@ -51,6 +53,129 @@ export function useDashboard(now = Date.now()) {
     isRefreshing: false,
     error: null,
   })
+  const scope = useMemo(() => createRequestScope(), [])
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(japanToday()))
+  const [calendar, setCalendar] = useState<CalendarSnapshot>({
+    events: [],
+    scheduleImages: [],
+    adjacent: { previous: null, next: null },
+    total: 0,
+    page: 1,
+    hasNext: false,
+    revision: 0,
+    dayCounts: {},
+  })
+  const [calendarLoading, setCalendarLoading] = useState(true)
+  const [calendarError, setCalendarError] = useState<Error | null>(null)
+  const weekRef = useRef(weekStart)
+  weekRef.current = weekStart
+  const calendarRef = useRef(calendar)
+  calendarRef.current = calendar
+  const calendarWeekRef = useRef<string | null>(null)
+  const readJson = async (url: string, signal: AbortSignal) => {
+    const response = await fetch(url, {
+      signal,
+      headers: { accept: "application/json" },
+    })
+    if (!response.ok) throw new Error(`API ${response.status}`)
+    return response.json()
+  }
+  const loadCalendar = useCallback(async () => {
+    const from = localDateKey(weekRef.current),
+      to = localDateKey(addDays(weekRef.current, 6))
+    const current =
+      calendarWeekRef.current === from ? calendarRef.current : null
+    setCalendarLoading(true)
+    try {
+      const payload = await scope.run("calendar", async (signal) => {
+        const readPage = async (page: number): Promise<CalendarSnapshot> => {
+          signal.throwIfAborted()
+          const result = await readJson(
+            `/api/calendar?from=${from}&to=${to}&page=${page}`,
+            signal,
+          )
+          signal.throwIfAborted()
+          if (
+            !Array.isArray(result.events) ||
+            !result.adjacent ||
+            !Number.isInteger(result.total) ||
+            !Number.isInteger(result.revision) ||
+            result.page !== page
+          )
+            throw new Error("Invalid calendar snapshot")
+          return result
+        }
+        // Replace the loaded prefix atomically. If a write lands between pages,
+        // restart under this request's deadline; never append mixed revisions.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          let next = await readPage(1)
+          if (current && next.revision === current.revision) return current
+          const revision = next.revision
+          let consistent = true
+          while (next.hasNext && next.page < (current?.page || 1)) {
+            const page = await readPage(next.page + 1)
+            if (page.revision !== revision) {
+              consistent = false
+              break
+            }
+            next = { ...page, events: [...next.events, ...page.events] }
+          }
+          if (consistent) return next
+        }
+        throw new Error("Calendar changed during refresh")
+      })
+      if (from !== localDateKey(weekRef.current)) return
+      calendarWeekRef.current = from
+      calendarRef.current = payload
+      setCalendar(payload)
+      setCalendarError(null)
+      setCalendarLoading(false)
+      return { ok: true }
+    } catch (error) {
+      if (
+        scope.active &&
+        from === localDateKey(weekRef.current) &&
+        error.name !== "AbortError"
+      ) {
+        setCalendarError(error)
+        setCalendarLoading(false)
+      }
+      return { ok: false }
+    }
+  }, [scope])
+  const loadMoreCalendar = useCallback(async () => {
+    const current = calendarRef.current
+    if (!current.hasNext || scope.busy("calendar")) return
+    const from = localDateKey(weekRef.current),
+      to = localDateKey(addDays(weekRef.current, 6))
+    if (calendarWeekRef.current !== from) return
+    try {
+      const next = await scope.run("calendar", (signal) =>
+        readJson(
+          `/api/calendar?from=${from}&to=${to}&page=${current.page + 1}`,
+          signal,
+        ),
+      )
+      if (from !== localDateKey(weekRef.current)) return
+      if (next.revision !== current.revision) {
+        await loadCalendar()
+        return
+      }
+      const combined = { ...next, events: [...current.events, ...next.events] }
+      calendarRef.current = combined
+      setCalendar(combined)
+      setCalendarError(null)
+    } catch (error) {
+      if (
+        scope.active &&
+        from === localDateKey(weekRef.current) &&
+        error.name !== "AbortError"
+      )
+        setCalendarError(error)
+    }
+  }, [scope, loadCalendar])
+  const calendarRetryRef = useRef(false)
+  calendarRetryRef.current = Boolean(calendarError)
   const reloadRef = useRef<() => Promise<LoadResult>>(async () => ({
     ok: false,
     error: new Error("Page is unavailable"),
@@ -58,7 +183,9 @@ export function useDashboard(now = Date.now()) {
   const load = useCallback(() => reloadRef.current(), [])
 
   useEffect(() => {
+    scope.activate()
     let active = true
+    let loadedAt = 0
     let hasLoaded = false
     let revision: number | null = null
     let needsSnapshot = true
@@ -81,6 +208,8 @@ export function useDashboard(now = Date.now()) {
       Math.min(MAX_RETRY_MS, REVISION_POLL_MS * 2 ** Math.max(0, failures - 1))
     const schedule = (delay = retryDelay()) => {
       clearTimer()
+      if (hasLoaded && !needsSnapshot && failures === 0)
+        delay = Math.min(delay, Math.max(0, loadedAt + 60000 - Date.now()))
       nextCheckAt = Date.now() + delay
       if (active && document.visibilityState !== "hidden")
         timer = window.setTimeout(check, delay)
@@ -160,10 +289,26 @@ export function useDashboard(now = Date.now()) {
             })
             revision = payload.meta?.revision ?? null
             hasLoaded = true
+            loadedAt = Date.now()
             needsSnapshot = false
             setStatus({ isLoading: false, isRefreshing: false, error: null })
-          } else
+            if (
+              !scope.busy("calendar") &&
+              !calendarRetryRef.current &&
+              (calendarWeekRef.current !== localDateKey(weekRef.current) ||
+                revision !== calendarRef.current.revision)
+            )
+              void loadCalendar()
+          } else {
             changed = revision == null || Number(payload.revision) !== revision
+            if (
+              !changed &&
+              Number(payload.revision) !== calendarRef.current.revision &&
+              !scope.busy("calendar") &&
+              !calendarRetryRef.current
+            )
+              void loadCalendar()
+          }
           failures = 0
           return { ok: true }
         } catch (caught) {
@@ -191,7 +336,11 @@ export function useDashboard(now = Date.now()) {
 
     function check() {
       if (!active || document.visibilityState === "hidden" || flight) return
-      void start(needsSnapshot || revision == null ? "snapshot" : "revision")
+      void start(
+        needsSnapshot || revision == null || Date.now() - loadedAt >= 60000
+          ? "snapshot"
+          : "revision",
+      )
     }
     const wake = () => {
       clearTimer()
@@ -207,6 +356,7 @@ export function useDashboard(now = Date.now()) {
     window.addEventListener("focus", wake)
     return () => {
       active = false
+      scope.dispose()
       generation++
       clearTimer()
       flight?.controller.abort(new Error("Page unmounted"))
@@ -217,13 +367,44 @@ export function useDashboard(now = Date.now()) {
       document.removeEventListener("visibilitychange", wake)
       window.removeEventListener("focus", wake)
     }
-  }, [])
+  }, [scope, loadCalendar])
 
+  useEffect(() => {
+    void loadCalendar()
+    const stop = startPolling(
+      async () => {
+        if (
+          document.visibilityState === "hidden" ||
+          scope.busy("calendar") ||
+          !calendarRetryRef.current
+        )
+          return
+        const result = await loadCalendar()
+        if (!result?.ok) throw new Error("calendar_unavailable")
+      },
+      { delay: () => REVISION_POLL_MS },
+    )
+    return () => {
+      stop()
+      scope.cancelKey("calendar")
+    }
+  }, [weekStart, loadCalendar, scope])
   const currentDashboard = useMemo(
     () => deriveDashboardAt(dashboard, now),
     [dashboard, now],
   )
-  return { dashboard: currentDashboard, ...status, reload: load }
+  return {
+    dashboard: currentDashboard,
+    ...status,
+    reload: load,
+    calendar,
+    calendarLoading,
+    calendarError,
+    reloadCalendar: loadCalendar,
+    loadMoreCalendar,
+    weekStart,
+    setWeekStart,
+  }
 }
 
 /** Re-renders on an interval so countdowns and relative times stay honest. */

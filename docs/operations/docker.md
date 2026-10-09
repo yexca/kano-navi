@@ -88,6 +88,13 @@ its own data volume and synthetic authentication, checks public pages and API
 contracts, and removes the container and anonymous volume afterwards.
 It does not mount the operator data/ directory or load .env.
 
+The runtime stage copies `server/`, `scripts/`, the shared `src/lib/` directory
+and the history media catalog alongside the built frontend and production
+dependencies. Shared server imports, including stream identity and their local
+dependencies, therefore survive packaging. Production still starts through
+`server/index.ts`, validates authentication before opening SQLite and stores
+runtime state only in the `/app/data` volume.
+
 ## Related Docs
 
 - [Configuration](configuration.md)

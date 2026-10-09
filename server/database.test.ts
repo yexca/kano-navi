@@ -317,7 +317,9 @@ test("reseeding preserves stored content and does not recreate deleted providers
     deleteLlmProvider(database, "configured-provider")
     seedDatabase(database)
     assert.deepEqual(listLlmProviders(database), [])
-    const dashboard = getDashboard(database)
+    const dashboard = getDashboard(database, {
+      now: new Date("2026-09-01T00:00:00Z"),
+    })
     assert.equal(dashboard.summary.latestPost.id, "stored-post")
     assert.equal(dashboard.summary.latestVideo.id, "stored-video")
     assert.equal(dashboard.events.length, 1)

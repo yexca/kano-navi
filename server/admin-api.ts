@@ -66,6 +66,7 @@ import {
   setAppSetting,
   setFeaturedVideoId,
   updateScheduleAssetManualReview,
+  updateScheduleAssetPeriod,
   updateManualEvent,
   resolveMediaReference,
 } from "./database.ts"
@@ -1666,6 +1667,34 @@ export function createAdminRouter({
         response.status(404).json({ error: "schedule_asset_not_found" })
         return
       }
+      bumpDashboardRevision(database)
+      response.json({ asset: scheduleAssetPayload(database, item) })
+    }),
+  )
+
+  router.post(
+    "/schedule-assets/:id/period",
+    route((request, response) => {
+      const { start, end } = request.body || {}
+      const reason = text(request.body?.reason, {
+        name: "reason",
+        required: true,
+        max: 500,
+      })
+      if (
+        !validDate(start) ||
+        !validDate(end) ||
+        end < start ||
+        Date.parse(end) - Date.parse(start) > 366 * 86400000
+      )
+        throw new AdminInputError("period is invalid")
+      const item = updateScheduleAssetPeriod(database, request.params.id, {
+        start,
+        end,
+        reason,
+      })
+      if (!item)
+        return response.status(404).json({ error: "schedule_asset_not_found" })
       bumpDashboardRevision(database)
       response.json({ asset: scheduleAssetPayload(database, item) })
     }),

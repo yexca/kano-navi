@@ -10,6 +10,7 @@ import { createAdminRouter } from "./admin-api.ts"
 import {
   getActiveProfileMedia,
   getDashboard,
+  getCalendarPage,
   getDashboardRevision,
   getLatestSync,
   getMediaAsset,
@@ -283,6 +284,26 @@ export function createApp({
     })
   })
 
+  app.get("/api/calendar", (request, response) => {
+    try {
+      const page = getCalendarPage(database, {
+        from: String(request.query.from || ""),
+        to: String(request.query.to || ""),
+        page: Number(request.query.page) || 1,
+        pageSize: Number(request.query.pageSize) || 100,
+      })
+      const items = page.items.map((event) =>
+        publicEvent(event, ["manualLocked"]),
+      )
+      response.set("Cache-Control", "no-store")
+      response.json({ ...page, items, events: items })
+    } catch (error) {
+      if (error instanceof RangeError)
+        response.status(400).json({ error: "invalid_calendar_range" })
+      else throw error
+    }
+  })
+
   app.get("/api/dashboard/revision", (request, response) => {
     const revision = getDashboardRevision(database)
     const since = Number.parseInt(String(request.query.since ?? ""), 10)
@@ -383,8 +404,30 @@ export function createApp({
   }
 
   app.use((error, _request, response, _next) => {
-    console.error(error)
-    response.status(500).json({ error: "internal_error" })
+    // Never serialize error objects, messages or stacks: parsers and downstream
+    // clients may attach raw bodies, authorization headers or provider keys.
+    const code =
+      new Map(
+        Object.entries({
+          "entity.parse.failed": "invalid_json",
+          "entity.too.large": "request_too_large",
+          "request.aborted": "invalid_request",
+          "request.size.invalid": "invalid_request",
+          "encoding.unsupported": "unsupported_encoding",
+          "charset.unsupported": "unsupported_encoding",
+        }),
+      ).get(error?.type) || "internal_error"
+    const status =
+      code === "request_too_large"
+        ? 413
+        : code === "unsupported_encoding"
+          ? 415
+          : code === "internal_error"
+            ? 500
+            : 400
+    console.error({ event: "http_error", code, status })
+    if (response.headersSent) response.destroy()
+    else response.status(status).json({ error: code })
   })
 
   return app

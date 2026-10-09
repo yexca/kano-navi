@@ -28,8 +28,20 @@ function syncStateFor(meta, error, t) {
 export function DashboardApp() {
   const { locale, t } = useAppSettings()
   const now = useNow()
-  const { dashboard, isLoading, isRefreshing, error, reload } =
-    useDashboard(now)
+  const {
+    dashboard,
+    isLoading,
+    isRefreshing,
+    error,
+    reload,
+    calendar,
+    calendarLoading,
+    calendarError,
+    reloadCalendar,
+    loadMoreCalendar,
+    weekStart,
+    setWeekStart,
+  } = useDashboard(now)
   const [toast, setToast] = useState(null)
   const [lightbox, setLightbox] = useState(null)
 
@@ -82,9 +94,6 @@ export function DashboardApp() {
     upcomingEvents: 0,
     videos: dashboard.videos.length,
   }
-  const scheduleImages = dashboard.scheduleImages?.length
-    ? dashboard.scheduleImages
-    : (dashboard.assets || []).filter((asset) => asset.kind === "schedule")
 
   return (
     <div className="board">
@@ -128,9 +137,18 @@ export function DashboardApp() {
 
         <div className="board-grid">
           <SchedulePanel
-            events={dashboard.events}
-            scheduleImages={scheduleImages}
-            isLoading={isLoading}
+            events={calendar.events}
+            scheduleImages={calendar.scheduleImages}
+            isLoading={calendarLoading}
+            error={calendarError}
+            onRetry={reloadCalendar}
+            weekStart={weekStart}
+            setWeekStart={setWeekStart}
+            adjacent={calendar.adjacent}
+            total={calendar.total}
+            hasNext={calendar.hasNext}
+            onLoadMore={loadMoreCalendar}
+            dayCounts={calendar.dayCounts}
             locale={locale}
             now={now}
             t={t}

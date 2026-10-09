@@ -42,8 +42,10 @@ export function ScheduleImagesView({ data }: { data: any }) {
     startJob,
     activeJob,
     reviewScheduleAsset,
+    correctSchedulePeriod,
     fail,
   } = data
+  const [periods, setPeriods] = useState({})
   const [reasons, setReasons] = useState({})
   const [busyId, setBusyId] = useState(null)
 
@@ -112,7 +114,11 @@ export function ScheduleImagesView({ data }: { data: any }) {
                   </div>
                   <div className="adm-schedule-asset-copy">
                     <div className="adm-schedule-asset-heading">
-                      <strong>{asset.weekStart || asset.id}</strong>
+                      <strong>
+                        {asset.periodStart
+                          ? `${asset.periodStart} – ${asset.periodEnd}`
+                          : t("admin.scheduleImages.periodUnknown")}
+                      </strong>
                       <Tag
                         tone={statusTone[asset.effectiveStatus] || "neutral"}
                       >
@@ -128,6 +134,14 @@ export function ScheduleImagesView({ data }: { data: any }) {
                         )}
                       </Tag>
                     </div>
+                    <p>
+                      {t(
+                        `admin.scheduleImages.periodBasis.${asset.periodBasis}`,
+                      )}{" "}
+                      · {asset.assetUpdatedAt}
+                    </p>
+                    {asset.periodReason ? <p>{asset.periodReason}</p> : null}
+                    {asset.manualReason ? <p>{asset.manualReason}</p> : null}
                     {!asset.sourceMatchesBoard ? (
                       <p className="adm-schedule-asset-reason">
                         {t("admin.scheduleImages.sourceNotBoard")}
@@ -187,12 +201,70 @@ export function ScheduleImagesView({ data }: { data: any }) {
                         )}
                       />
                     </label>
+                    <div className="adm-schedule-asset-reason-field">
+                      <label>
+                        {t("admin.scheduleImages.periodStart")}
+                        <input
+                          type="date"
+                          value={
+                            periods[asset.id]?.start ?? asset.periodStart ?? ""
+                          }
+                          onInput={(event) => {
+                            const value = event.currentTarget.value
+                            setPeriods((current) => ({
+                              ...current,
+                              [asset.id]: {
+                                ...current[asset.id],
+                                start: value,
+                              },
+                            }))
+                          }}
+                        />
+                      </label>
+                      <label>
+                        {t("admin.scheduleImages.periodEnd")}
+                        <input
+                          type="date"
+                          value={
+                            periods[asset.id]?.end ?? asset.periodEnd ?? ""
+                          }
+                          onInput={(event) => {
+                            const value = event.currentTarget.value
+                            setPeriods((current) => ({
+                              ...current,
+                              [asset.id]: { ...current[asset.id], end: value },
+                            }))
+                          }}
+                        />
+                      </label>
+                      <Btn
+                        size="sm"
+                        disabled={!hasReason || Boolean(busyId)}
+                        onClick={async () => {
+                          setBusyId(`${asset.id}:period`)
+                          try {
+                            await correctSchedulePeriod(
+                              asset.id,
+                              periods[asset.id]?.start ?? asset.periodStart,
+                              periods[asset.id]?.end ?? asset.periodEnd,
+                              reasons[asset.id],
+                            )
+                          } catch (error) {
+                            fail(error)
+                          } finally {
+                            setBusyId(null)
+                          }
+                        }}
+                      >
+                        {t("admin.scheduleImages.correctPeriod")}
+                      </Btn>
+                    </div>
                     <div className="adm-schedule-asset-actions">
                       <Btn
                         size="sm"
                         icon={Check}
                         busy={busyId === `${asset.id}:schedule`}
-                        disabled={Boolean(activeJob) || !hasReason}
+                        disabled={Boolean(busyId) || !hasReason}
                         onClick={() => review(asset, "schedule")}
                       >
                         {t("admin.scheduleImages.markSchedule")}
@@ -202,7 +274,7 @@ export function ScheduleImagesView({ data }: { data: any }) {
                         size="sm"
                         icon={X}
                         busy={busyId === `${asset.id}:not_schedule`}
-                        disabled={Boolean(activeJob) || !hasReason}
+                        disabled={Boolean(busyId) || !hasReason}
                         onClick={() => review(asset, "not_schedule")}
                       >
                         {t("admin.scheduleImages.markNotSchedule")}
@@ -211,7 +283,7 @@ export function ScheduleImagesView({ data }: { data: any }) {
                         <Btn
                           variant="ghost"
                           size="sm"
-                          disabled={Boolean(activeJob)}
+                          disabled={Boolean(busyId)}
                           onClick={() => review(asset, "unreviewed")}
                         >
                           {t("admin.scheduleImages.clearManual")}

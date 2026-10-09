@@ -167,12 +167,13 @@ loads, WAN throughput and production synchronization were not measured.
 
 ## Remaining Work and Evidence
 
-- Large identity dashboard responses still contain about 1.88 MB of JSON.
-  `getDashboard` reads/sorts the complete post/event collection and builds maps
-  from all media rows/links before projecting the requested feed. Four concurrent
-  reads still queue behind synchronous SQLite/JSON work (median 135.75 ms).
-  A later query/projection study should measure these phases before deciding on
-  schedule pagination or revision-keyed caching; neither contract changes here.
+- The measurements above predate the bounded snapshot/calendar repair merged
+  afterwards. That repair limits homepage previews and focus candidates, resolves
+  only displayed media and adds indexed video/event associations; full calendar
+  history is available through bounded pages. The measured 1.88 MB response and
+  135.75 ms concurrent median describe the earlier revision, rather than the current
+  response contract. Remeasure matching fixtures before applying those timings to
+  the combined implementation. First-query cost is tested without a response cache.
 - Pending media avoids ready-file checking. Profile actual ready-media syscall
   and hash/path-validation cost separately before considering a media-state
   verification redesign; retain its containment/version protections.

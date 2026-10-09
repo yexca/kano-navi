@@ -145,3 +145,13 @@ Run `npm run test:server` for path, identity, registration, downloader-host,
 MIME, and dashboard contract tests. `make check` runs those tests together with
 the sensitive scan, documentation checks, and the frontend build. Tests use
 synthetic response bodies; CI does not download live media.
+
+## Complete Post Media Declarations
+
+A successful complete post update replaces only its `post-image` links inside
+the post transaction, preserving declared order and removing vanished positions.
+An explicit empty media list clears the links and primary source URL; an omitted
+media declaration retains the previous snapshot. Failed reads make no post write.
+Unreferenced cached bytes may be retained, but neither post display nor extraction
+uses those old links. Extraction waits for every declared image and its contained
+regular cache file; one ready image cannot stand in for a multi-image post.

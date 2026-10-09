@@ -11,13 +11,16 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
   const vite = await createServer({
     configFile: false,
     envDir: false,
-    server: { middlewareMode: true },
+    server: { middlewareMode: true, watch: null },
+    optimizeDeps: { noDiscovery: true, include: [] },
     resolve: { alias: { "@": path.resolve("src") } },
   })
   try {
     const { useDashboard } = await vite.ssrLoadModule(
       "/src/dashboard/use-dashboard.ts",
     )
+    // Keep Vite's real watcher/optimizer timers outside the mocked clock.
+    await vite.close()
     const setup = async (context) => {
       context.mock.timers.enable({
         apis: ["Date", "setTimeout"],
@@ -43,19 +46,32 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
         resolve: (response: Response) => void
         reject: (error: Error) => void
       }[] = []
-      context.mock.method(
-        globalThis,
-        "fetch",
-        (url, options) =>
-          new Promise<Response>((resolve, reject) =>
-            requests.push({
-              url: String(url),
-              signal: options.signal,
-              resolve,
-              reject,
+      let calendarRevision = 0
+      context.mock.method(globalThis, "fetch", (url, options) => {
+        if (String(url).startsWith("/api/calendar"))
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              events: [],
+              scheduleImages: [],
+              adjacent: { previous: null, next: null },
+              total: 0,
+              page: 1,
+              hasNext: false,
+              revision: calendarRevision,
+              dayCounts: {},
             }),
-          ),
-      )
+          } as Response)
+        return new Promise<Response>((resolve, reject) =>
+          requests.push({
+            url: String(url),
+            signal: options.signal,
+            resolve,
+            reject,
+          }),
+        )
+      })
       let value: ReturnType<typeof useDashboard>
       let root: ReactTestRenderer
       function Probe() {
@@ -67,14 +83,17 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
       })
       const tick = async (ms: number) =>
         act(async () => context.mock.timers.tick(ms))
-      const respond = async (index: number, payload: any) =>
-        act(async () =>
+      const respond = async (index: number, payload: any) => {
+        if (payload.meta?.revision != null)
+          calendarRevision = payload.meta.revision
+        return act(async () =>
           requests[index].resolve({
             ok: true,
             status: 200,
             json: async () => payload,
           } as Response),
         )
+      }
       const reject = async (index: number) =>
         act(async () => requests[index].reject(new Error("Synthetic outage")))
       const unmount = async () => {
@@ -239,6 +258,29 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
           await fixture.tick(1)
           assert.equal(fixture.requests.length, 3)
           await fixture.respond(2, { revision: 1 })
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "unchanged revisions still refresh the focus snapshot after one minute",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          await fixture.respond(0, snapshot(1))
+          for (let index = 1; index <= 7; index++) {
+            await fixture.tick(8000)
+            assert.match(fixture.requests[index].url, /revision\?since=1$/)
+            await fixture.respond(index, { revision: 1 })
+          }
+          await fixture.tick(3999)
+          assert.equal(fixture.requests.length, 8)
+          await fixture.tick(1)
+          assert.equal(fixture.requests[8].url, "/api/dashboard?days=3")
+          await fixture.respond(8, snapshot(1))
+          assert.equal(fixture.current().error, null)
         } finally {
           await fixture.unmount()
         }

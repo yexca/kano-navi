@@ -88,3 +88,30 @@ initial. Removing a preset does not delete saved providers.
 - [Testing](../development/testing.md)
 - [Product overview](../overview.md)
 - [History and visual archive](../product/history.md)
+
+## Polling and Calendar Recovery
+
+Calendar and admin requests use the shared lifecycle/deadline helper with a
+12-second deadline including body consumption. The public snapshot coordinator
+uses the 15-second deadline and refresh deduplication described above. All requests
+are cancelled on unmount and reject superseded responses. Automatic polls wait for an active request rather
+than starting overlapping work. Their timer is scheduled after settlement,
+including failure, with exponential backoff capped at 60 seconds. Public polls
+continue to pause while hidden. A failed initial snapshot retries even before
+any revision has been recorded; manual retry remains available. Admin 401 stops
+polling and requires login. Failed initial admin loads also retry.
+
+The calendar's selected week lives in `use-dashboard.ts`. It reads one bounded
+page, shows the complete week/day counts, and offers more-event pagination.
+Changing weeks cancels old work and begins at page one; errors keep a retry control.
+Same-week refreshes with an unchanged revision retain every already loaded page.
+A revision change rereads the loaded page range and replaces it atomically, stopping
+at the new last page if the week shrank. A change while reading that range restarts
+from page one, with at most three attempts under the shared request deadline.
+Failed or repeatedly changing reads retain the complete known generation for retry;
+they never append pages from different revisions. Automatic snapshot refresh waits
+for active calendar work, and a pending calendar revision is checked on later polls.
+Adjacent-date hints support jumping to stored activity in either direction.
+Images match their applicable inclusive period, without an updated-at fallback.
+The bounded focus snapshot refreshes at least once per minute while visible to
+advance its shortlist as time passes, even when the durable revision is unchanged.

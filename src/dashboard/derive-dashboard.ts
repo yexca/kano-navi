@@ -1,4 +1,5 @@
 import type { Dashboard } from "../types.ts"
+import { streamIdentity } from "../lib/stream-identity.ts"
 import {
   eventIsUpcoming,
   eventStatus,
@@ -7,26 +8,6 @@ import {
 } from "./format.ts"
 
 export const LIVE_GRACE_MS = 3 * 3600 * 1000
-
-/** Match supported YouTube links using only their public video identity. */
-function streamIdentity(value: string) {
-  try {
-    const url = new URL(value)
-    if (["http:", "https:"].includes(url.protocol)) {
-      const id =
-        url.hostname === "youtu.be"
-          ? url.pathname.match(/^\/([^/]+)\/?$/u)?.[1]
-          : /(?:^|\.)youtube\.com$/u.test(url.hostname)
-            ? url.searchParams.get("v") ||
-              url.pathname.match(/^\/(?:live|shorts)\/([^/]+)\/?$/u)?.[1]
-            : null
-      if (id && /^[A-Za-z0-9_-]+$/u.test(id)) return `youtube:${id}`
-    }
-  } catch {
-    // Non-YouTube or unparseable links keep exact URL matching.
-  }
-  return `url:${value}`
-}
 
 export function eventIsLive(event, now: number) {
   if (
@@ -65,7 +46,7 @@ export function deriveDashboardAt(snapshot: Dashboard, now: number): Dashboard {
   }
   const videos = snapshot.videos.map((video) => ({
     ...video,
-    endsAt: streamEnds.get(streamIdentity(video.url)) || null,
+    endsAt: streamEnds.get(streamIdentity(video.url)) || video.endsAt || null,
     isUpcoming: video.scheduledAt
       ? Date.parse(video.scheduledAt) >= now
       : Boolean(video.isUpcoming),
@@ -103,7 +84,23 @@ export function deriveDashboardAt(snapshot: Dashboard, now: number): Dashboard {
       nextStream: focusVideos[0] || null,
       latestVideo: latestVideos[0] || null,
       counts: snapshot.summary.counts
-        ? { ...snapshot.summary.counts, upcomingEvents: upcomingEvents.length }
+        ? {
+            ...snapshot.summary.counts,
+            upcomingEvents: snapshot.meta.eventWindow
+              ? Math.max(
+                  0,
+                  snapshot.summary.counts.upcomingEvents +
+                    upcomingEvents.length -
+                    snapshot.events.filter(
+                      (event) =>
+                        event.isUpcoming &&
+                        !["cancelled", "cancellation_review"].includes(
+                          eventStatus(event, now),
+                        ),
+                    ).length,
+                )
+              : upcomingEvents.length,
+          }
         : null,
     },
   }

@@ -24,7 +24,6 @@ import {
   localDateKey,
   sortEvents,
   startOfWeek,
-  weekStartKey,
 } from "../format"
 import {
   EmptyState,
@@ -123,11 +122,29 @@ function EventRow({
 export function SchedulePanel({
   events,
   scheduleImages,
+  weekStart,
+  setWeekStart,
+  adjacent,
+  error,
+  onRetry,
+  total,
+  hasNext,
+  onLoadMore,
+  dayCounts = {},
   isLoading,
   locale,
   now,
   t,
 }: {
+  total: number
+  hasNext: boolean
+  onLoadMore: () => unknown
+  dayCounts: Record<string, number>
+  weekStart: Date
+  setWeekStart: (value: Date | ((value: Date) => Date)) => void
+  adjacent: { previous: string | null; next: string | null }
+  error: Error | null
+  onRetry: () => unknown
   events: ScheduleEvent[]
   scheduleImages: ScheduleAsset[]
   isLoading: boolean
@@ -135,7 +152,6 @@ export function SchedulePanel({
   now: number
   t: Translator
 }) {
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(japanToday()))
   const [focusDay, setFocusDay] = useState(null)
   const todayKey = dateKey(new Date(now))
 
@@ -165,20 +181,16 @@ export function SchedulePanel({
 
   // When the visible week is empty, offer the closest week that has events:
   // the next upcoming one, otherwise the most recent past one.
-  const jumpTarget = useMemo(() => {
-    if (weekEvents.length || !events.length) return null
-    const currentKey = localDateKey(weekStart)
-    const keys = [...new Set(events.map(eventDateKey).filter(Boolean))].sort()
-    const next = keys.find((key) => key >= currentKey)
-    const target = next || keys[keys.length - 1]
-    return target ? startOfWeek(keyToDate(target)) : null
-  }, [events, weekEvents.length, weekStart])
-
+  const jumpTarget =
+    !weekEvents.length && (adjacent.next || adjacent.previous)
+      ? startOfWeek(keyToDate(adjacent.next || adjacent.previous))
+      : null
   const weekStartId = localDateKey(weekStart)
-  const scheduleImage = scheduleImages.find(
-    (asset) =>
-      asset.url &&
-      (asset.weekStart || weekStartKey(asset.updatedAt)) === weekStartId,
+  const weekEndId = localDateKey(addDays(weekStart, 6))
+  const scheduleImage = scheduleImages.find((asset) =>
+    asset.url && asset.periodStart && asset.periodEnd
+      ? asset.periodStart <= weekEndId && asset.periodEnd >= weekStartId
+      : asset.url && asset.weekStart === weekStartId,
   )
   const range = formatWeekRange(weekStart, locale)
 
@@ -238,7 +250,7 @@ export function SchedulePanel({
       >
         {days.map((date, index) => {
           const key = localDateKey(date)
-          const count = eventsByDay.get(key)?.length || 0
+          const count = dayCounts[key] ?? eventsByDay.get(key)?.length ?? 0
           const isToday = key === todayKey
           const isFocused = key === focusDay
           return (
@@ -275,7 +287,7 @@ export function SchedulePanel({
               <CalendarDays aria-hidden="true" />
               {focusDay
                 ? formatLongDate(keyToDate(focusDay), locale)
-                : t("schedule.weekCount", { count: weekEvents.length })}
+                : t("schedule.weekCount", { count: total })}
             </span>
             {focusDay ? (
               <button
@@ -289,6 +301,14 @@ export function SchedulePanel({
             ) : null}
           </div>
 
+          {error ? (
+            <div role="alert">
+              <p>{t("error.api")}</p>
+              <button type="button" className="text-button" onClick={onRetry}>
+                {t("common.retry")}
+              </button>
+            </div>
+          ) : null}
           {isLoading ? (
             <Skeleton lines={4} />
           ) : visibleEvents.length ? (
@@ -324,6 +344,11 @@ export function SchedulePanel({
               ) : null}
             </EmptyState>
           )}
+          {hasNext ? (
+            <button type="button" className="soft-button" onClick={onLoadMore}>
+              {t("schedule.moreEvents")}
+            </button>
+          ) : null}
         </div>
 
         <aside className="schedule-image" aria-label={t("schedule.imageTitle")}>
