@@ -604,7 +604,7 @@ for (const schema of ["legacy", "incorrect-active"])
         database.close()
         for (const relative of [safePath, sourcePath])
           fs.rmSync(resolveMediaCachePath(relative), { force: true })
-        if (linked) fs.rmdirSync(linkPath)
+        if (linked) fs.rmSync(linkPath, { force: true, recursive: true })
         const resolved = path.resolve(directory)
         assert.ok(
           resolved.startsWith(`${path.resolve(os.tmpdir())}${path.sep}`),
