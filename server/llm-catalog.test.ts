@@ -67,6 +67,12 @@ test("model tags are inferred from common model identifiers", () => {
     "image",
     "tools",
   ])
+  assert.deepEqual(inferModelTags("claude-sonnet-5"), [
+    "text",
+    "image",
+    "reasoning",
+    "tools",
+  ])
   assert.deepEqual(inferModelTags("plain-chat-model"), ["text"])
 })
 

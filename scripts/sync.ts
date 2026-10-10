@@ -859,28 +859,45 @@ function extractYoutubeIds(html) {
 
 function extractYoutubePlayer(html) {
   const match = /\bytInitialPlayerResponse(?:["']\])?\s*[:=]\s*\{/u.exec(html)
-  if (!match) return undefined
-  const start = match.index + match[0].length - 1
-  let depth = 0
-  let quoted = false
-  let escaped = false
-  for (let index = start; index < html.length; index++) {
-    const character = html[index]
-    if (quoted) {
-      if (escaped) escaped = false
-      else if (character === "\\") escaped = true
-      else if (character === '"') quoted = false
-    } else if (character === '"') quoted = true
-    else if (character === "{") depth++
-    else if (character === "}" && --depth === 0) {
-      try {
-        return JSON.parse(html.slice(start, index + 1))
-      } catch {
-        return null
+  const parseObjectAt = (start) => {
+    let depth = 0
+    let quoted = false
+    let escaped = false
+    for (let index = start; index < html.length; index++) {
+      const character = html[index]
+      if (quoted) {
+        if (escaped) escaped = false
+        else if (character === "\\") escaped = true
+        else if (character === '"') quoted = false
+      } else if (character === '"') quoted = true
+      else if (character === "{") depth++
+      else if (character === "}" && --depth === 0) {
+        try {
+          return JSON.parse(html.slice(start, index + 1))
+        } catch {
+          return null
+        }
       }
     }
+    return null
   }
-  return null
+  if (match) {
+    const parsed = parseObjectAt(match.index + match[0].length - 1)
+    if (parsed) return parsed
+  }
+
+  // Older/alternate watch responses put the same player payload in
+  // ytplayer.config.args.player_response as an escaped JSON string.
+  const encoded = html.match(
+    /["']player_response["']\s*:\s*["']((?:\\.|[^"'])*)["']/u,
+  )?.[1]
+  if (!encoded) return undefined
+  try {
+    const decoded = JSON.parse(`"${encoded}"`)
+    return typeof decoded === "string" ? JSON.parse(decoded) : null
+  } catch {
+    return null
+  }
 }
 
 function parseYoutubeDetails(html, id) {

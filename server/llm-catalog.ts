@@ -14,9 +14,9 @@ const nonChatPattern =
 const embeddingPattern =
   /(?:embed|embedding|bge-|\be5-|gte-|jina-|rerank|text-similarity)/iu
 const imagePattern =
-  /(?:vision|[-_.]vl\b|[-_]vl[-_]|\bvl-|llava|pixtral|qvq|gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-5|\bo1(?!-mini)|\bo3|\bo4|chatgpt-4o|gemini|gemma-3|claude-3|claude-(?:sonnet|opus|haiku)|claude-[a-z]*-?4|glm-4(?:\.\d)?v|glm-4\.5v|minicpm-v|internvl|grok-(?:\d+-)?vision|grok-4|llama-4|llama-3\.2-(?:11|90)b|mistral-(?:small|medium)-3|kimi-(?:vl|latest)|doubao.*vision|step-1v|qwen.*-?omni|qwen-?vl|qwen2(?:\.5)?-vl|qwen3-vl)/iu
+  /(?:vision|[-_.]vl\b|[-_]vl[-_]|\bvl-|llava|pixtral|qvq|gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-5|\bo1(?!-mini)|\bo3|\bo4|chatgpt-4o|gemini|gemma-3|claude-3|claude-(?:sonnet|opus|haiku|fable|mythos)(?:[-_]|$)|claude-[a-z]*-?[45](?:[-_.]|$)|glm-4(?:\.\d)?v|glm-4\.5v|minicpm-v|internvl|grok-(?:\d+-)?vision|grok-4|llama-4|llama-3\.2-(?:11|90)b|mistral-(?:small|medium)-3|kimi-(?:vl|latest)|doubao.*vision|step-1v|qwen.*-?omni|qwen-?vl|qwen2(?:\.5)?-vl|qwen3-vl)/iu
 const reasoningPattern =
-  /(?:\bo1|\bo3|\bo4|reason|thinking|think\b|\br1\b|-r1|qwq|qvq|deepseek-r|gpt-5|claude-[a-z]*-?(?:4|3-7|3\.7)|grok-[34]|gemini-(?:2\.5|3)|magistral|kimi-k2|glm-4\.[5-9]|qwen3)/iu
+  /(?:\bo1|\bo3|\bo4|reason|thinking|think\b|\br1\b|-r1|qwq|qvq|deepseek-r|gpt-5|claude-[a-z]*-?(?:5|4|3-7|3\.7)|grok-[34]|gemini-(?:2\.5|3)|magistral|kimi-k2|glm-4\.[5-9]|qwen3)/iu
 const toolsPattern =
   /(?:gpt-4|gpt-5|gpt-3\.5-turbo|\bo3|\bo4|claude|gemini|qwen|deepseek-(?:chat|v3|v4)|glm-4|mistral|mixtral|grok|llama-3\.[1-3]|llama-4|kimi|moonshot|command-r|doubao|hunyuan|ernie)/iu
 

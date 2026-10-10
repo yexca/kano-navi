@@ -1183,6 +1183,32 @@ test("a valid ordinary YouTube player completes its detail check without a reser
   )
 })
 
+test("an escaped YouTube player response completes a detail check", async (t) => {
+  const database = initializeDatabase({ seed: false, filename: ":memory:" })
+  t.after(() => database.close())
+  const id = "escaped0001"
+  const player = JSON.stringify({
+    playabilityStatus: { status: "OK" },
+    videoDetails: { videoId: id, title: "Escaped video", isUpcoming: false },
+  })
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const value = String(url)
+    if (value.includes("/feeds/videos.xml"))
+      return response(
+        feedXml([
+          { id, title: "Escaped video", publishedAt: "2098-01-01T00:00:00Z" },
+        ]),
+      )
+    if (value.endsWith("/streams"))
+      return response(`<a href="/watch?v=${id}">video</a>`)
+    return response(
+      `<script>var ytplayer = {"args":{"player_response":${JSON.stringify(player)}}};</script>`,
+    )
+  })
+  assert.equal((await syncYoutube(database)).inspected, 1)
+  assert.equal(getVideoRecord(database, id).title, "Escaped video")
+})
+
 test("source deadline covers delayed RSS bodies and failed jobs release the single-flight queue", async (t) => {
   const database = initializeDatabase({ seed: false, filename: ":memory:" })
   t.after(() => database.close())
