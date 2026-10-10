@@ -20,6 +20,7 @@ deployment, change code, or review security and design decisions.
 | Development  | [Development map](development/index.md)   | Setup, design, testing, secure changes, commits and releases |
 | Security     | [Security map](security/index.md)         | Reporting policy, deployment and development boundaries      |
 | Decisions    | [ADR index](decisions/index.md)           | Durable architecture trade-offs                              |
+| History      | [Release history](history/index.md)       | Release notes and upgrade guidance                           |
 
 ## Reading Paths
 
@@ -31,6 +32,8 @@ deployment, change code, or review security and design decisions.
 - Operating a deployment: configuration, Docker, database, reliability, and
   deployment security.
 - Preparing a release: testing, commit and release, and deployment instructions.
+- Reviewing a release: [release history](history/index.md) and the current
+  contracts linked from each focused document.
 
 ## Documentation Rules
 

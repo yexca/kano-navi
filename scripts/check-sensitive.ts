@@ -49,6 +49,9 @@ const ignoredDirectoryNames = new Set([
   "data",
 ])
 
+// CodeGraph's local index is generated tooling state, not project data.
+const ignoredSensitivePaths = new Set([".codegraph/codegraph.db"])
+
 const binaryExtensions = new Set([
   ".7z",
   ".avi",
@@ -136,6 +139,7 @@ function isBinaryPath(file) {
 
 export function isSensitivePath(file) {
   const normalized = normalizePath(file)
+  if (ignoredSensitivePaths.has(normalized.toLowerCase())) return false
   if (isIgnoredPath(normalized)) return false
   const baseName = path.posix.basename(normalized).toLowerCase()
 

@@ -134,7 +134,7 @@ function createMcpServer({
   const server = new McpServer(
     {
       name: "kano-status-board",
-      version: "0.1.1",
+      version: "0.1.2",
     },
     {
       instructions:

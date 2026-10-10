@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   isAllowedHost,
+  isSensitivePath,
   isSafePlaceholder,
   parsePrivacyAllowlist,
   scanLine,
@@ -116,4 +117,10 @@ test("rejects malformed allowlist documents", () => {
       ),
     /duplicates an approved host/,
   )
+})
+
+test("ignores the local CodeGraph database but keeps other databases protected", () => {
+  assert.equal(isSensitivePath(".codegraph/codegraph.db"), false)
+  assert.equal(isSensitivePath(".CODEGRAPH/CODEGRAPH.DB"), false)
+  assert.equal(isSensitivePath("runtime/database.db"), true)
 })

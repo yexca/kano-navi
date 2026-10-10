@@ -30,6 +30,14 @@ The full read-only validation, including the production image and runtime smoke,
 must pass before publishing. CI is intentionally rerun for the tag; there is no
 lookup or wait for a previous main-branch run.
 
+## Release Notes
+
+Store user-facing release notes and upgrade guidance in
+`docs/history/v<major>.<minor>.<patch>.md`, then add the page to
+`docs/history/index.md`. Start the page with upgrade notes when a release
+changes configuration or public API behavior; keep current system contracts in
+the focused architecture, product, operations, and development documents.
+
 ## Publication Order and Credentials
 
 1. Complete the reusable CI workflow.

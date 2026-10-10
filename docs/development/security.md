@@ -40,6 +40,10 @@ opening SQLite, including in development mode.
 - `.env`, `.npmrc`, private-key, and database files. The committed
   `.env.example` contains only empty credentials and public/local defaults.
 
+The generated `.codegraph/codegraph.db` index is the one database-path
+exception because it is local tooling state; other database paths remain
+findings.
+
 `LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, `ADMIN_PASSWORD`, and provider API keys
 must remain in the ignored runtime environment. Example values are intentionally
 empty; never copy a production token into documentation or tests.

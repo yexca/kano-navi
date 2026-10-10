@@ -14,7 +14,7 @@ Compose pulls `yexca/kano-navi:latest` from Docker Hub on each startup. A deploy
 directory needs only `docker-compose.yml` and `.env`; the `./data` directory
 is created when needed and mounted at `/app/data`, preserving SQLite and media
 across container replacement. Run the same command to apply an image update.
-Set `KANO_IMAGE=yexca/kano-navi:0.1.1` in `.env` to pin the release,
+Set `KANO_IMAGE=yexca/kano-navi:0.1.2` in `.env` to pin the release,
 and use `KANO_PORT` to change the default host port of `7657`. The container
 listens on `7657`; the default public address is `http://localhost:7657`.
 To use the equivalent GHCR image, set
