@@ -1,105 +1,94 @@
-# Go backend migration: phase one
+# Go backend migration: phase two
 
 ## Goal and boundary
 
-Phase one establishes an independently buildable Go service without changing
-the production TypeScript backend. The service validates Go HTTP, tests,
-configuration, graceful shutdown, and read-only SQLite access with the smallest
-public API slice:
+Phase two adds a read-only Go projection for the public dashboard while the
+TypeScript service remains the production owner. The Go service now exposes:
 
 - `GET /api/health`
 - `GET /api/dashboard/revision`
+- `GET /api/dashboard?days=3`
 
-Admin API, MCP control, X and YouTube synchronization, media downloads,
-workflow execution, schedule extraction, LLM routing, frontend requests, and
-production routing remain owned by the TypeScript service. The root Dockerfile,
-Compose service, and existing `7657` listener are unchanged.
+The dashboard projection covers the current public profile, summary, posts,
+events, videos, focus, timeline, resources, schedule assets, profile media,
+media readiness fields, synchronization metadata, and revision metadata. Its
+field set is produced by `internal/publicview`, which removes source item IDs,
+raw JSON, job and trigger fields, provider information, database paths, and
+other operator-only data.
+
+Admin, calendar, MCP, synchronization, workflow scheduling, schedule
+extraction, LLM routing, media downloads, and the `/media` file routes remain
+owned by TypeScript. The Go service does not make external requests and does
+not receive frontend or production traffic.
 
 ## Running alongside TypeScript
 
-The Go module lives under `backend-go/` and has its own `go.mod`. It defaults to
-`:7658`, so it can be started beside the TypeScript listener on `:7657` while
-both point at the same snapshot. Start it from the repository root with:
+The Go module lives under `backend-go/` and listens on `:7658`; TypeScript
+continues to listen on `:7657`:
 
 ```text
 go run ./backend-go/cmd/kano-go -database data/database/kano.sqlite
 ```
 
-The path is passed explicitly with `-database`; no new shared environment
-variable was added. A deployment can pass an absolute path or mount the same
-read-only snapshot into a separate container. The existing Node Docker build
-continues to use the root `Dockerfile`; this phase does not connect the Go
-listener to the Compose or production route.
+The database path is explicit. Go opens the existing snapshot with the
+pure-Go `modernc.org/sqlite` driver and SQLite `mode=ro`, uses one connection,
+and validates the complete dashboard schema at startup. It never creates a
+file or directory, runs migrations, seeds rows, changes journal mode, writes
+SQLite state, downloads media, or proxies URLs.
 
-## Read-only database boundary
+The repository currently declares `go 1.26.4`. The available Windows toolchain
+was verified as `go1.26.4`, so this phase does not change the module version.
+Go CI, Docker pinning, and a supported Windows/Linux toolchain matrix remain a
+phase-three operational task because this repository does not yet run Go in
+CI.
 
-`internal/store/sqlite.OpenReadOnly` uses the pure-Go `modernc.org/sqlite`
-driver and SQLite's `mode=ro` URI option. It opens an existing regular file,
-sets one database connection, pings it, and verifies the `sync_runs` and
-`app_settings` tables and the columns required by this phase. It never creates a
-file or parent directory, executes schema migrations, seeds rows, changes
-journal mode, or writes to SQLite.
+## Dashboard query boundary
 
-The store owns the only SQL in this service:
+`internal/store/sqlite` owns all dashboard SQL. Reads are bounded to match the
+TypeScript board: at most 100 posts in the requested window plus one latest-post
+fallback, at most 100 week/upcoming/live event candidates before de-duplication
+plus one linked event per returned video, at most 30 recent and 30 upcoming
+videos plus the latest fallback and Featured selection, and at most 100
+timeline rows, resources, other assets, and schedule assets. Summary counts use separate aggregates, so the
+post payload remains bounded while its count remains accurate. Event ordering
+uses parsed ISO instants, with date-only events sorted at the end of their
+Japan date without inventing `startsAt`.
 
-- `GetLatestSync` follows `server/database.ts` and selects the newest completed
-  or failed row from `sync_runs`, excluding `running` rows.
-- `GetDashboardRevision` reads the `dashboard_revision` app setting and falls
-  back to `0`, matching the TypeScript parser's non-negative integer behavior.
+The store checks cancellation status, manual locks, tombstones, and suspected
+cancellations at the same projection boundary as TypeScript. `internal/httpapi`
+only parses and clamps `days` to 1 through 30, calls the store, and writes
+stable JSON errors. Matched public routes set `Vary: Accept-Encoding` for
+success, method errors, and database errors, and dashboard responses retain
+`Cache-Control: no-store`.
 
-`internal/publicview` maps the store record to the same sanitized fields as
-`server/public-view.ts`. Counts, raw messages, job IDs, trigger fields, source
-item IDs, paths, credentials, and provider metadata never enter the HTTP
-response.
+## Media and profile media
 
-## TypeScript to Go package mapping
+This phase maps public media state only. A ready asset is exposed as the same
+opaque `/media/<id>?v=<sha256>` URL when its hash and contained cache path are
+valid; pending, failed, missing, unsafe, or unavailable files expose `null`
+public URLs while retaining the public status. `/assets/...` is returned only
+when the contained static file exists. Remote CDN URLs are never copied into a
+public URL field. Profile slots use `/media/profile/<slot>?v=<sha256>` only for
+an active, hash-validated selected file. Go has not taken over media serving,
+so no frontend switch is possible in this phase.
 
-| TypeScript contract                         | Go package                                   |
-| ------------------------------------------- | -------------------------------------------- |
-| `server/index.ts` listener and startup      | `cmd/kano-go/main.go` plus `internal/config` |
-| `server/database.ts` `getLatestSync`        | `internal/store/sqlite.GetLatestSync`        |
-| `server/database.ts` `getDashboardRevision` | `internal/store/sqlite.GetDashboardRevision` |
-| `server/public-view.ts` `publicSyncRun`     | `internal/publicview.PublicSyncRun`          |
-| `server/app.ts` `/api/health`               | `internal/httpapi` health route              |
-| `server/app.ts` `/api/dashboard/revision`   | `internal/httpapi` revision route            |
+## Fixtures and parity checks
 
-Successful public reads use the existing JSON field names and ISO timestamps.
-Health keeps the TypeScript `now`, service name, and fixed Chinese sync status
-messages. Revision keeps `changed` semantics, `Cache-Control: no-store`, and
-`Vary: Accept-Encoding`. Unknown paths return `api_not_found`; unsupported
-methods return `method_not_allowed`; read failures return the stable
-`database_unavailable` code without the underlying error text.
+Go tests build disposable SQLite fixtures with synthetic rows. They cover empty
+snapshots, days parsing and clamping, X posts, YouTube videos, automatic and
+manually locked events, tombstones, suspected cancellations, date-only and
+mixed-offset ordering, unready media, sensitive-field exclusion, bounded post
+reads, schema/query failures, and response headers. No test reads the
+maintainer database or contacts X, YouTube, a CDN, or an LLM. The fixture
+assertions mirror the TypeScript public projection statically; a live
+TypeScript-to-Go comparison remains a future check when both test harnesses can
+share a fixture without installing dependencies or making network requests.
 
-## Driver and deployment effects
+## Future cutover work
 
-`modernc.org/sqlite` is selected because it does not require CGO. This keeps
-the module straightforward to build on Windows and in a small Linux builder;
-the dependency is pure Go but is larger than a CGO-backed SQLite driver. The
-current repository Docker build remains the Node 24 image in the root
-`Dockerfile`; a future Go image should use a Linux Go builder and copy the
-statically linked binary into a minimal runtime image. Windows operators can
-run the same module with the local Go toolchain and an explicit Windows SQLite
-path.
-
-## Known limits
-
-This service does not provide the dashboard snapshot, calendar, media, profile,
-admin, MCP, synchronization, source history, scheduler, extraction, or LLM
-routes. It also does not own database initialization or schema upgrades. The
-two required tables are checked at startup, but broader schema compatibility is
-intentionally deferred until a later migration slice.
-
-## Suggested phase two
-
-The next slice should add a read-only dashboard projection behind a separately
-reviewed store query and fixture set, including bounded event/post/video reads
-and media readiness mapping. It should preserve the same public projection
-boundary and run beside TypeScript until response and operational parity are
-measured. Admin and synchronization writes should remain out of scope until a
-separate ownership and rollback plan exists.
-
-Before switching any production traffic, the Go service must have parity tests
-against synthetic TypeScript fixtures, bounded-query and timeout measurements,
-container and Windows startup checks, read-only file and WAL validation,
-observability and rollback procedures, security review, and an explicit route
-cutover plan. No production cutover is part of phase one.
+Before any production route changes, phase three must add Go CI and pinned
+Docker/Windows startup checks, a shared fixture comparison against the
+TypeScript dashboard, query and timeout measurements, read-only file and WAL
+validation, observability and rollback procedures, and an explicit route
+cutover plan. Calendar, admin, MCP, synchronization, media serving, workflow,
+and LLM ownership must be reviewed separately.

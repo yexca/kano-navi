@@ -27,6 +27,14 @@ func TestMissingRequiredTableFailsAtStartup(t *testing.T) {
 	}
 }
 
+func TestMissingRequiredColumnFailsAtStartup(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	testutil.Exec(t, path, `ALTER TABLE profiles DROP COLUMN updated_at`)
+	if _, err := OpenReadOnly(path); !errors.Is(err, ErrSchema) {
+		t.Fatalf("error = %v, want ErrSchema", err)
+	}
+}
+
 func TestCorruptSnapshotFailsAtStartup(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "corrupt.sqlite")
 	if err := os.WriteFile(path, []byte("not a sqlite database"), 0o600); err != nil {

@@ -121,7 +121,7 @@ func TestRevisionAndSinceContract(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	handler := NewHandler(store)
 	unchanged := request(t, handler, http.MethodGet, "/api/dashboard/revision?since=17")
-	if unchanged.Code != http.StatusOK || unchanged.Header().Get("Cache-Control") != "no-store" {
+	if unchanged.Code != http.StatusOK || unchanged.Header().Get("Cache-Control") != "no-store" || unchanged.Header().Get("Vary") != "Accept-Encoding" {
 		t.Fatalf("revision response: status=%d headers=%v", unchanged.Code, unchanged.Header())
 	}
 	payload := decodeObject(t, unchanged)
@@ -136,6 +136,10 @@ func TestRevisionAndSinceContract(t *testing.T) {
 	if decodeObject(t, invalid)["changed"] != true {
 		t.Fatal("invalid since should be treated as no comparison")
 	}
+	method := request(t, handler, http.MethodPost, "/api/dashboard/revision")
+	if method.Code != http.StatusMethodNotAllowed || method.Header().Get("Vary") != "Accept-Encoding" {
+		t.Fatalf("revision method response: status=%d headers=%v", method.Code, method.Header())
+	}
 }
 
 func TestUnknownPathAndMethodUseStableErrors(t *testing.T) {
@@ -144,6 +148,9 @@ func TestUnknownPathAndMethodUseStableErrors(t *testing.T) {
 	method := request(t, handler, http.MethodPost, "/api/health")
 	if method.Code != http.StatusMethodNotAllowed || method.Header().Get("Allow") != "GET" {
 		t.Fatalf("method response: status=%d headers=%v", method.Code, method.Header())
+	}
+	if method.Header().Get("Vary") != "Accept-Encoding" {
+		t.Fatalf("method response vary = %q", method.Header().Get("Vary"))
 	}
 	if got := decodeObject(t, method)["error"]; got != "method_not_allowed" {
 		t.Fatalf("method error = %#v", got)
@@ -171,8 +178,15 @@ func TestClosedDatabaseReturnsStableError(t *testing.T) {
 	if recorder.Code != http.StatusServiceUnavailable || decodeObject(t, recorder)["error"] != "database_unavailable" {
 		t.Fatalf("unexpected database error response: status=%d body=%s", recorder.Code, recorder.Body)
 	}
+	if recorder.Header().Get("Vary") != "Accept-Encoding" {
+		t.Fatalf("database error vary = %q", recorder.Header().Get("Vary"))
+	}
 	if strings.Contains(recorder.Body.String(), "sql") || strings.Contains(recorder.Body.String(), "snapshot") {
 		t.Fatalf("database error leaked details: %s", recorder.Body)
+	}
+	revision := request(t, NewHandler(store), http.MethodGet, "/api/dashboard/revision")
+	if revision.Code != http.StatusServiceUnavailable || revision.Header().Get("Vary") != "Accept-Encoding" || decodeObject(t, revision)["error"] != "database_unavailable" {
+		t.Fatalf("unexpected revision database error: status=%d headers=%v body=%s", revision.Code, revision.Header(), revision.Body)
 	}
 }
 

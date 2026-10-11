@@ -17,6 +17,57 @@ func NewSnapshot(t testing.TB) string {
 	}
 	defer db.Close()
 	_, err = db.Exec(`
+		CREATE TABLE profiles (
+			id TEXT PRIMARY KEY, display_name TEXT NOT NULL, romanized_name TEXT,
+			bio TEXT, avatar_url TEXT, banner_url TEXT, x_url TEXT, youtube_url TEXT, updated_at TEXT, raw_json TEXT
+		);
+		CREATE TABLE posts (
+			id TEXT PRIMARY KEY, source TEXT NOT NULL, account_handle TEXT, type TEXT NOT NULL DEFAULT 'daily', label TEXT,
+			text TEXT NOT NULL, published_at TEXT NOT NULL, url TEXT NOT NULL, likes INTEGER DEFAULT 0, reposts INTEGER DEFAULT 0,
+			replies INTEGER DEFAULT 0, media_url TEXT, media_alt TEXT, raw_json TEXT
+		);
+		CREATE TABLE events (
+			id TEXT PRIMARY KEY, source TEXT NOT NULL, source_item_id TEXT, source_key TEXT, title TEXT NOT NULL, detail TEXT,
+			starts_on TEXT NOT NULL, starts_at TEXT, ends_at TEXT, timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
+			time_precision TEXT NOT NULL DEFAULT 'exact', status TEXT, event_type TEXT DEFAULT 'event', url TEXT,
+			is_upcoming INTEGER DEFAULT 0, provenance TEXT NOT NULL DEFAULT 'automatic', manual_locked INTEGER NOT NULL DEFAULT 0,
+			confidence REAL, extraction_id INTEGER, cancellation_status TEXT NOT NULL DEFAULT 'none', cancellation_source TEXT,
+			cancellation_reason TEXT, cancellation_evidence TEXT, cancellation_at TEXT, deleted_at TEXT,
+			created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '', raw_json TEXT
+		);
+		CREATE TABLE event_sources (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, source TEXT NOT NULL, source_item_id TEXT NOT NULL,
+			source_key TEXT, url TEXT, raw_json TEXT, deleted_at TEXT, created_at TEXT, updated_at TEXT
+		);
+		CREATE TABLE videos (
+			id TEXT PRIMARY KEY, source TEXT NOT NULL, title TEXT NOT NULL, published_at TEXT, scheduled_at TEXT,
+			url TEXT NOT NULL, thumbnail_url TEXT, kind TEXT, is_upcoming INTEGER DEFAULT 0, raw_json TEXT
+		);
+		CREATE TABLE focus (
+			id INTEGER PRIMARY KEY, video_id TEXT, date_label TEXT, title TEXT NOT NULL, description TEXT, image_url TEXT,
+			url TEXT, source_url TEXT, updated_at TEXT, raw_json TEXT
+		);
+		CREATE TABLE timeline (id INTEGER PRIMARY KEY, year TEXT NOT NULL, title TEXT NOT NULL, detail TEXT, sort_order INTEGER DEFAULT 0, raw_json TEXT);
+		CREATE TABLE resources (id INTEGER PRIMARY KEY, title TEXT NOT NULL, detail TEXT, icon TEXT, tone TEXT, url TEXT NOT NULL, sort_order INTEGER DEFAULT 0, raw_json TEXT);
+		CREATE TABLE assets (
+			id TEXT PRIMARY KEY, kind TEXT NOT NULL, url TEXT NOT NULL, source_url TEXT, alt TEXT, week_start TEXT, source_account TEXT,
+			updated_at TEXT, raw_json TEXT, period_start TEXT, period_end TEXT, period_basis TEXT, manual_period_start TEXT, manual_period_end TEXT
+		);
+		CREATE TABLE schedule_asset_reviews (
+			asset_id TEXT PRIMARY KEY, llm_status TEXT NOT NULL DEFAULT 'pending', manual_status TEXT NOT NULL DEFAULT 'unreviewed', updated_at TEXT NOT NULL DEFAULT ''
+		);
+		CREATE TABLE profile_media (
+			id TEXT PRIMARY KEY, slot TEXT NOT NULL, source TEXT NOT NULL, source_url TEXT, active_cache_path TEXT, active_sha256 TEXT,
+			active_mime_type TEXT, status TEXT NOT NULL DEFAULT 'pending', is_active INTEGER NOT NULL DEFAULT 0, raw_json TEXT
+		);
+		CREATE TABLE media_assets (
+			id TEXT PRIMARY KEY, source TEXT NOT NULL, source_url TEXT NOT NULL, cache_path TEXT, mime_type TEXT, byte_size INTEGER,
+			sha256 TEXT, width INTEGER, height INTEGER, status TEXT NOT NULL DEFAULT 'pending', raw_json TEXT
+		);
+		CREATE TABLE media_links (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, media_id TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,
+			role TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, alt TEXT
+		);
 		CREATE TABLE sync_runs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			source TEXT NOT NULL,

@@ -43,17 +43,26 @@ func NewServer(handler http.Handler, cfg config.Config) *http.Server {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/api/health":
+		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
 			writeMethodNotAllowed(w)
 			return
 		}
 		h.health(w, r)
 	case "/api/dashboard/revision":
+		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
 			writeMethodNotAllowed(w)
 			return
 		}
 		h.revision(w, r)
+	case "/api/dashboard":
+		w.Header().Set("Vary", "Accept-Encoding")
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w)
+			return
+		}
+		h.dashboard(w, r)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
 	}
@@ -65,7 +74,6 @@ func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "")
 		return
 	}
-	w.Header().Set("Vary", "Accept-Encoding")
 	writeJSON(w, http.StatusOK, publicview.Health(h.now(), run), "")
 }
 
@@ -81,8 +89,44 @@ func (h *Handler) revision(w http.ResponseWriter, r *http.Request) {
 			since = &parsed
 		}
 	}
-	w.Header().Set("Vary", "Accept-Encoding")
 	writeJSON(w, http.StatusOK, publicview.Revision(revision, since), "no-store")
+}
+
+func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
+	days := 3
+	if raw, ok := r.URL.Query()["days"]; ok && len(raw) > 0 {
+		if parsed, valid := parseInt10(raw[0]); valid {
+			days = int(parsed)
+		} else if numericPrefix(raw[0]) {
+			// JavaScript Number.parseInt accepts arbitrarily large finite
+			// decimal prefixes; clamping only needs their sign here.
+			if strings.HasPrefix(strings.TrimSpace(raw[0]), "-") {
+				days = 1
+			} else {
+				days = 30
+			}
+		}
+	}
+	if days < 1 {
+		days = 1
+	}
+	if days > 30 {
+		days = 30
+	}
+	dashboard, err := h.store.GetDashboard(r.Context(), days, h.now())
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "")
+		return
+	}
+	writeJSON(w, http.StatusOK, publicview.Dashboard(dashboard), "no-store")
+}
+
+func numericPrefix(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "+") || strings.HasPrefix(raw, "-") {
+		raw = raw[1:]
+	}
+	return raw != "" && raw[0] >= '0' && raw[0] <= '9'
 }
 
 func writeMethodNotAllowed(w http.ResponseWriter) {

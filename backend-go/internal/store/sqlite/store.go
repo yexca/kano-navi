@@ -28,7 +28,8 @@ type SyncRun struct {
 }
 
 type Store struct {
-	db *sql.DB
+	db       *sql.DB
+	dataRoot string
 }
 
 // OpenReadOnly opens an existing snapshot without creating directories,
@@ -66,13 +67,26 @@ func OpenReadOnly(filename string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs))}, nil
 }
 
 func verifySchema(ctx context.Context, db *sql.DB) error {
 	required := map[string][]string{
-		"sync_runs":    {"id", "source", "started_at", "finished_at", "status"},
-		"app_settings": {"key", "value"},
+		"profiles":               {"id", "display_name", "romanized_name", "bio", "avatar_url", "banner_url", "x_url", "youtube_url", "updated_at"},
+		"posts":                  {"id", "source", "account_handle", "type", "label", "text", "published_at", "url", "likes", "reposts", "replies", "media_url", "media_alt"},
+		"events":                 {"id", "source", "source_item_id", "title", "detail", "starts_on", "starts_at", "ends_at", "timezone", "time_precision", "status", "event_type", "url", "provenance", "manual_locked", "cancellation_status", "cancellation_source", "cancellation_reason", "cancellation_evidence", "cancellation_at", "deleted_at"},
+		"event_sources":          {"event_id", "source", "source_item_id", "deleted_at"},
+		"videos":                 {"id", "source", "title", "published_at", "scheduled_at", "url", "thumbnail_url", "kind", "is_upcoming"},
+		"focus":                  {"id", "video_id", "date_label", "title", "description", "image_url", "url", "source_url", "updated_at"},
+		"timeline":               {"id", "year", "title", "detail", "sort_order"},
+		"resources":              {"id", "title", "detail", "icon", "tone", "url", "sort_order"},
+		"assets":                 {"id", "kind", "url", "source_url", "alt", "week_start", "source_account", "updated_at", "period_start", "period_end", "period_basis", "manual_period_start", "manual_period_end"},
+		"schedule_asset_reviews": {"asset_id", "llm_status", "manual_status", "updated_at"},
+		"profile_media":          {"id", "slot", "source", "source_url", "active_cache_path", "active_sha256", "active_mime_type", "status", "is_active"},
+		"media_assets":           {"id", "source", "source_url", "cache_path", "mime_type", "byte_size", "sha256", "width", "height", "status"},
+		"media_links":            {"media_id", "owner_type", "owner_id", "role", "position", "alt"},
+		"sync_runs":              {"id", "source", "started_at", "finished_at", "status"},
+		"app_settings":           {"key", "value"},
 	}
 	for table, columns := range required {
 		rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table+")")
