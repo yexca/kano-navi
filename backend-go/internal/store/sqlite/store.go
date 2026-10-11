@@ -83,7 +83,7 @@ func verifySchema(ctx context.Context, db *sql.DB) error {
 		"assets":                 {"id", "kind", "url", "source_url", "alt", "week_start", "source_account", "updated_at", "period_start", "period_end", "period_basis", "manual_period_start", "manual_period_end"},
 		"schedule_asset_reviews": {"asset_id", "llm_status", "manual_status", "updated_at"},
 		"profile_media":          {"id", "slot", "source", "source_url", "active_cache_path", "active_sha256", "active_mime_type", "status", "is_active"},
-		"media_assets":           {"id", "source", "source_url", "cache_path", "mime_type", "byte_size", "sha256", "width", "height", "status"},
+		"media_assets":           {"id", "source", "source_url", "cache_path", "mime_type", "byte_size", "sha256", "width", "height", "status", "fetched_at"},
 		"media_links":            {"media_id", "owner_type", "owner_id", "role", "position", "alt"},
 		"sync_runs":              {"id", "source", "started_at", "finished_at", "status"},
 		"app_settings":           {"key", "value"},

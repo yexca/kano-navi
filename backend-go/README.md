@@ -1,13 +1,16 @@
 # Kano Navi Go read-only service
 
-This module is the fourth migration slice. It runs beside the TypeScript
-service, opens an existing Kano SQLite snapshot read-only, and exposes the
-public health, revision and dashboard reads:
+This module is the fifth migration slice. It runs beside the TypeScript
+service, opens an existing Kano SQLite snapshot read-only, and exposes these
+public reads:
 
 ```text
 GET /api/health
 GET /api/dashboard/revision
 GET /api/dashboard?days=3
+GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&page=1&pageSize=100
+GET|HEAD /media/<opaque-id>
+GET|HEAD /media/profile/<avatar|banner>
 ```
 
 Go listens on `:7658`; TypeScript continues to own `:7657` and all production
@@ -15,7 +18,14 @@ routes. The database path is explicit. The service uses the pure-Go
 `modernc.org/sqlite` driver with SQLite `mode=ro`, one connection, no
 migrations, no seed, no writes, no external requests and no media downloads.
 
-The dashboard projection matches TypeScript's public field set and ordering.
+The dashboard and calendar projections match TypeScript's public field set and
+ordering. Calendar dates are inclusive Asia/Tokyo dates, limited to seven days;
+pagination is bounded to 1..100 and schedule images use the same public asset
+projection. Media reads validate opaque IDs, ready status, allowed image MIME,
+content hash, version query, regular-file status and symlink containment. Cache
+paths are relative to the derived `data/` root (with the legacy
+`data/cache/media` namespace retained); selected profile files must remain in
+`data/avatar/`, pass image magic-byte checks and match the active hash/MIME.
 YouTube watch, short, live, shorts and share links use the same normalized
 `stream_identity`; non-YouTube values use exact URL identity. Timeline and
 resource reads are complete, while the documented post/event/video preview
@@ -55,11 +65,20 @@ For a local HTTP comparison over one disposable snapshot, run:
 make side-by-side-http
 ```
 
-The tool compares both services for health, revision and dashboard requests;
-only `health.now` and `dashboard.meta.generatedAt` are normalized. It also
-checks stable sanitized responses for unknown paths and POST methods. Go emits
-only route, method, status, duration and response-byte fields as structured
-stdout logs.
+The tool compares both services for health, revision, dashboard, calendar,
+ready media, selected profile media and unready media; only `health.now` and
+`dashboard.meta.generatedAt` are normalized. It compares sanitized JSON or
+bytes plus the relevant cache and validator headers. It also checks stable
+sanitized responses for unknown paths and POST methods. CI runs this after
+`make install`, Go setup and `make ci-backend`; a missing local `node_modules`
+is an explicit local skip and cannot pass the CI job after the locked install.
+Go emits only route, method, status, duration and response-byte fields as
+structured stdout logs.
+
+`make go-check` also builds the independent scratch image and runs
+`scripts/go-docker-smoke.mjs`. That check mounts a synthetic SQLite snapshot
+and synthetic media tree read-only, verifies health/dashboard/calendar/ready
+media, and confirms no database sidecar, WAL, journal or directory is created.
 
 Read-only tests verify unchanged database hashes and directory entries,
 absence of read-created WAL/journal files, and visibility of committed WAL
@@ -68,8 +87,9 @@ data. Missing, incomplete, closed and corrupt snapshots produce only stable
 
 ## Ownership and rollback
 
-The Go service has not taken over calendar, admin, MCP, synchronization,
-source history, workflow scheduling, schedule extraction, LLM routing, media
-download or `/media` serving. No production route or frontend behavior changes
-in this phase. To roll back a future side-by-side deployment, stop Go and
-continue using the TypeScript service on `:7657`.
+The Go service has not taken over admin, MCP, synchronization, source history,
+workflow scheduling, schedule extraction, LLM routing, media download,
+discovery, upload or cleanup. TypeScript still owns production traffic on
+`:7657`; calendar and media have not been connected to production routing. To
+roll back a future side-by-side deployment, stop Go on `:7658` and continue
+using TypeScript on `:7657`.

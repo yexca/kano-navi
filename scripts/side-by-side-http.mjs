@@ -2,10 +2,17 @@
 
 // Start the two local public-read services on one disposable snapshot and
 // compare their wire responses. This is deliberately separate from production
-// configuration and never reads data/ or .env.
+// configuration and never reads operator data/ or .env.
 import assert from "node:assert/strict"
 import { spawn, spawnSync } from "node:child_process"
-import { mkdtempSync, rmSync } from "node:fs"
+import crypto from "node:crypto"
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { createServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -28,7 +35,34 @@ const { initializeDatabase } = databaseModule
 const { createApp } = await import("../server/app.ts")
 
 const directory = mkdtempSync(join(tmpdir(), "kano-side-by-side-"))
-const databasePath = join(directory, "snapshot.sqlite")
+// Put the disposable snapshot below data/database so both implementations
+// derive the same runtime media root. No operator snapshot or media is read.
+const runtimeDirectory = join(root, "data")
+const hadRuntimeDirectory = existsSync(runtimeDirectory)
+const databaseDirectory = join(runtimeDirectory, "database")
+mkdirSync(databaseDirectory, { recursive: true })
+const databasePath = join(
+  databaseDirectory,
+  `side-by-side-${process.pid}-${Date.now()}.sqlite`,
+)
+const marker = `${process.pid}-${Date.now()}-${crypto.randomUUID()}`
+const mediaBody = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.from(`synthetic-side-by-side-image-${marker}`),
+])
+const mediaHash = crypto.createHash("sha256").update(mediaBody).digest("hex")
+const mediaID = crypto
+  .createHash("sha256")
+  .update("https://cdn.example.invalid/side-by-side.png")
+  .digest("hex")
+const mediaRelativePath = `x/sha256/${mediaHash.slice(0, 2)}/${mediaHash}.png`
+const profileRelativePath = `avatar/side-by-side-${marker}.png`
+const mediaPath = join(runtimeDirectory, ...mediaRelativePath.split("/"))
+const profilePath = join(runtimeDirectory, ...profileRelativePath.split("/"))
+mkdirSync(join(mediaPath, ".."), { recursive: true })
+mkdirSync(join(profilePath, ".."), { recursive: true })
+writeFileSync(mediaPath, mediaBody)
+writeFileSync(profilePath, mediaBody)
 const database = initializeDatabase({ seed: false, filename: databasePath })
 database.exec(`
   INSERT INTO profiles (id, display_name, romanized_name, bio, x_url, youtube_url, updated_at)
@@ -39,6 +73,12 @@ database.exec(`
     VALUES ('video-1', 'youtube', 'Synthetic stream', '2026-10-10T00:00:00.000Z', '2026-10-11T04:00:00Z', 'https://www.youtube.com/watch?v=video-1', 'stream', 1);
   INSERT INTO events (id, source, title, starts_on, starts_at, ends_at, timezone, time_precision, status, event_type, url, provenance, manual_locked, cancellation_status, created_at, updated_at)
     VALUES ('event-1', 'youtube', 'Synthetic stream', '2026-10-11', '2026-10-11T04:00:00Z', '2026-10-11T05:00:00Z', 'Asia/Tokyo', 'exact', 'scheduled', 'stream', 'https://youtu.be/video-1?si=fixture', 'automatic', 0, 'none', '', '');
+  INSERT INTO media_assets (id, source, source_url, cache_path, mime_type, byte_size, sha256, status, fetched_at, updated_at)
+    VALUES ('${mediaID}', 'x', 'https://cdn.example.invalid/side-by-side.png', '${mediaRelativePath}', 'image/png', ${mediaBody.length}, '${mediaHash}', 'ready', '2026-10-11T00:00:00.000Z', '2026-10-11T00:00:00.000Z');
+  INSERT INTO media_assets (id, source, source_url, status)
+    VALUES ('${"0".repeat(63)}1', 'x', 'https://cdn.example.invalid/pending.png', 'pending');
+  INSERT INTO profile_media (id, slot, source, source_url, active_cache_path, active_sha256, active_mime_type, status, is_active, updated_at)
+    VALUES ('profile-avatar', 'avatar', 'upload', 'https://cdn.example.invalid/profile.png', '${profileRelativePath}', '${mediaHash}', 'image/png', 'ready', 1, '2026-10-11T00:00:00.000Z');
   INSERT INTO focus (id, video_id, date_label, title, description, updated_at)
     VALUES (1, 'video-1', '2026-10-11', 'Focus', 'Synthetic focus', '2026-10-11T00:00:00.000Z');
   INSERT INTO timeline (id, year, title, detail, sort_order) VALUES (1, '2026', 'Timeline', 'Synthetic timeline', 1);
@@ -66,6 +106,7 @@ const goProcess = spawn(
   },
 )
 let goOutput = ""
+let comparisonPassed = false
 goProcess.stdout.on("data", (chunk) => {
   goOutput += chunk.toString()
 })
@@ -84,6 +125,12 @@ try {
     "/api/dashboard?days=30",
     "/api/dashboard?days=invalid",
     "/api/dashboard?days=999",
+    "/api/calendar?from=2026-10-11&to=2026-10-11&page=1&pageSize=100",
+    "/api/calendar?from=2026-10-11&to=2026-10-17&page=1&pageSize=1",
+    "/api/calendar?from=2026-10-11&to=2026-10-18&page=1&pageSize=100",
+    `/media/${mediaID}?v=${mediaHash}`,
+    `/media/profile/avatar?v=${mediaHash}`,
+    `/media/${"0".repeat(63)}1`,
   ]
   for (const path of requests) {
     const [typescript, goResponse] = await Promise.all([
@@ -91,15 +138,26 @@ try {
       fetch(`http://127.0.0.1:${goPort}${path}`),
     ])
     assert.equal(typescript.status, goResponse.status, path)
-    for (const header of ["content-type", "cache-control", "vary"])
+    const headers = ["content-type", "cache-control", "vary"]
+    if (path.startsWith("/media/") && typescript.status === 200)
+      headers.push("etag", "content-length", "last-modified")
+    for (const header of headers)
       assert.equal(
         typescript.headers.get(header),
         goResponse.headers.get(header),
         `${path} ${header}`,
       )
-    const left = normalize(path, await typescript.json())
-    const right = normalize(path, await goResponse.json())
-    assert.deepEqual(right, left, path)
+    if (path.startsWith("/media/")) {
+      assert.deepEqual(
+        Buffer.from(await goResponse.arrayBuffer()),
+        Buffer.from(await typescript.arrayBuffer()),
+        path,
+      )
+    } else {
+      const left = normalize(path, await typescript.json())
+      const right = normalize(path, await goResponse.json())
+      assert.deepEqual(right, left, path)
+    }
   }
   for (const [method, path] of [
     ["GET", "/api/unknown"],
@@ -119,6 +177,7 @@ try {
     }
   }
   console.log("side-by-side-http: PASS")
+  comparisonPassed = true
 } finally {
   if (goProcess.exitCode === null) {
     if (process.platform === "win32")
@@ -131,12 +190,38 @@ try {
     if (goProcess.exitCode !== null) resolve()
     else goProcess.once("exit", resolve)
   })
+  let rollbackError
+  if (comparisonPassed) {
+    try {
+      const typescriptStillHealthy = await fetch(
+        `http://127.0.0.1:${tsPort}/api/health`,
+      )
+      assert.equal(
+        typescriptStillHealthy.status,
+        200,
+        "TypeScript rollback health",
+      )
+    } catch (error) {
+      rollbackError = error
+    }
+  }
   await new Promise((resolve, reject) =>
     tsServer.close((error) => (error ? reject(error) : resolve())),
   )
   database.close()
   rmSync(directory, { recursive: true, force: true })
+  for (const path of [
+    databasePath,
+    `${databasePath}-wal`,
+    `${databasePath}-shm`,
+    `${databasePath}-journal`,
+    mediaPath,
+    profilePath,
+  ])
+    rmSync(path, { force: true })
+  if (!hadRuntimeDirectory) rmSync(runtimeDirectory, { recursive: true, force: true })
   if (goProcess.exitCode && goOutput) process.stderr.write(goOutput)
+  if (rollbackError) throw rollbackError
 }
 
 function normalize(path, value) {

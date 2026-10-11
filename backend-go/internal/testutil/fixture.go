@@ -62,7 +62,8 @@ func NewSnapshot(t testing.TB) string {
 		);
 		CREATE TABLE media_assets (
 			id TEXT PRIMARY KEY, source TEXT NOT NULL, source_url TEXT NOT NULL, cache_path TEXT, mime_type TEXT, byte_size INTEGER,
-			sha256 TEXT, width INTEGER, height INTEGER, status TEXT NOT NULL DEFAULT 'pending', raw_json TEXT
+			sha256 TEXT, width INTEGER, height INTEGER, status TEXT NOT NULL DEFAULT 'pending', fetched_at TEXT, last_checked_at TEXT,
+			last_seen_at TEXT, etag TEXT, last_modified TEXT, last_error TEXT, created_at TEXT, updated_at TEXT, raw_json TEXT
 		);
 		CREATE TABLE media_links (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, media_id TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,

@@ -1,20 +1,48 @@
-# Go backend migration: phase four
+# Go backend migration: phase five
 
 ## Goal and boundary
 
-Phase three makes the Go public dashboard projection semantically equivalent to
-the TypeScript projection and adds a cutover validation gate. The Go service
-still exposes only:
+Phase five adds the public calendar and read-only media projections beside the
+TypeScript service and makes the HTTP comparison a required CI gate. The Go
+service exposes:
 
 - `GET /api/health`
 - `GET /api/dashboard/revision`
 - `GET /api/dashboard?days=3`
+- `GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&page=1&pageSize=100`
+- `GET|HEAD /media/<opaque-id>`
+- `GET|HEAD /media/profile/<avatar|banner>`
 
-The service remains read-only, makes no external requests, does not serve
-`/media`, and is not connected to the production `:7657` route. TypeScript
-continues to own production traffic and all write and operator capabilities:
-admin, MCP control, synchronization, source history, workflow scheduling,
-schedule extraction, LLM routing, media downloading and media serving.
+The service remains read-only, makes no external requests, and is not connected
+to the production `:7657` route. TypeScript continues to own production
+traffic and all write/operator capabilities: admin, MCP control,
+synchronization, source history, workflow scheduling, schedule extraction, LLM
+routing, media downloading and production routing. Calendar and media have not
+been cut over.
+
+## Calendar ownership
+
+Go uses inclusive Asia/Tokyo date-only windows. Ranges must be ordered and at
+most seven days; page numbers are one-based and page sizes are clamped to
+1..100. The bounded SQLite queries preserve TypeScript ordering, mixed-offset
+timestamp sorting, date-only events, tombstones, manual locks, cancellation
+fields, day counts, adjacent dates and approved schedule-image projections.
+`items` and `events` use the same sanitized public event projection as the
+dashboard. The route returns `invalid_calendar_range` for invalid windows and
+never returns source item IDs, raw JSON, job IDs or operator fields.
+
+## Media ownership and containment
+
+Go serves only database rows marked `ready` whose opaque 64-character ID,
+allowed image MIME, content hash and version query agree. Cache paths are
+relative to the derived `data/` root (or the legacy `data/cache/media` root),
+reject parent/absolute components, are resolved through symlinks, and must end
+at a regular file contained by the cache root. Profile selections are further
+restricted to `data/avatar/`, the 15 MiB image limit, supported magic bytes and
+the selected active hash/MIME. Pending, missing, failed, unsafe, replaced or
+hash-mismatched files return stable public error codes; they are never replaced
+with a remote URL. GET/HEAD, range responses, ETag, Last-Modified,
+Content-Length and versioned cache headers follow the TypeScript media routes.
 
 ## Dashboard parity fixes
 
@@ -68,13 +96,16 @@ the bounded dashboard list.
 
 With npm dependencies installed, run `node scripts/side-by-side-http.mjs` or
 `make side-by-side-http`. The script creates one disposable synthetic SQLite
-snapshot, starts TypeScript and Go on local ephemeral ports, and compares
-status, Content-Type, Cache-Control, Vary and complete JSON for health,
-revision and dashboard requests with days `1`, `3`, `30`, `invalid` and `999`.
-Only `health.now` and `dashboard.meta.generatedAt` are normalized because they
-are generated per request. Unknown paths and POST requests are checked for
-stable sanitized errors. The Go HTTP tests exercise the same matrix without npm
-dependencies.
+snapshot and synthetic PNG files under the ignored `data/` tree, starts
+TypeScript and Go on local ephemeral ports, and compares status, selected wire
+headers (`Content-Type`, `Cache-Control`, `Vary`, `ETag`, `Content-Length` and
+`Last-Modified`) and complete bodies for health, revision, dashboard, calendar,
+ready media, selected profile media and an unready media row. Only
+`health.now` and `dashboard.meta.generatedAt` are normalized. Unknown paths and
+POST requests retain stable sanitized errors. The backend CI job runs this
+check after `make install`, `setup-go` and `make ci-backend`; missing local npm
+dependencies produce an explicit local `SKIPPED`, while CI has already run the
+locked install and therefore fails on a real comparison failure.
 
 ## Read-only and WAL verification
 
@@ -131,13 +162,13 @@ database paths, source URLs, providers, credentials and raw errors never enter
 stdout. Database failures remain the fixed public `database_unavailable`
 response.
 
-The independent `backend-go/Dockerfile` builds a scratch image. Mount a copied
-synthetic snapshot read-only, verify `/api/health` and
-`/api/dashboard/revision`, and confirm that no database sidecars or directories
-appear. For rollback, start TypeScript on `:7657`, start Go on `:7658`, stop Go,
-and verify TypeScript still serves the snapshot. Production traffic remains on
-TypeScript `:7657`; calendar, admin, MCP, synchronization, workflows, LLM and
-media are not migrated.
+The independent `backend-go/Dockerfile` builds a scratch image with no shell,
+Node or CGO. `scripts/go-docker-smoke.mjs` creates a synthetic snapshot and
+PNG, mounts `data/` read-only, verifies health, dashboard, calendar and ready
+media, and compares the mounted tree before and after requests. The check runs
+from `make go-check` after the image build. For rollback, start TypeScript on
+`:7657`, start Go on `:7658`, stop Go, and verify TypeScript still serves the
+snapshot. Production traffic remains on TypeScript `:7657`.
 
 ## Rollback and cutover gate
 
@@ -149,5 +180,6 @@ Before a future cutover, the remaining review must cover a production-like
 side-by-side HTTP comparison over a maintained snapshot, resource and latency
 observability, deployment-specific Docker startup, route ownership and
 operator rollback rehearsal. Admin, MCP, synchronization, workflows, LLM,
-media download/serving and frontend behavior are intentionally still owned by
-TypeScript.
+media download/discovery/upload/cleanup, and frontend behavior remain owned by
+TypeScript. No schema, frontend request path or production route changed in
+this phase.

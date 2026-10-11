@@ -69,6 +69,12 @@ run(
   ["build", "-f", "backend-go/Dockerfile", "-t", dockerImage, "backend-go"],
   { cwd: root },
 )
+run(
+  "Docker read-only HTTP smoke",
+  process.execPath,
+  ["scripts/go-docker-smoke.mjs"],
+  { cwd: root, env: { GO: go, DOCKER: docker, GO_DOCKER_IMAGE: dockerImage } },
+)
 console.log("go-check: PASS")
 
 function run(label, command, args, options = {}) {

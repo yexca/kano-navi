@@ -1310,7 +1310,10 @@ func safeHash(v string) bool {
 	if len(v) != 64 {
 		return false
 	}
-	for _, r := range strings.ToLower(v) {
+	if strings.ToLower(v) != v {
+		return false
+	}
+	for _, r := range v {
 		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
 			return false
 		}

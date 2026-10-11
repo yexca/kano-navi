@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,8 +64,33 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.dashboard(w, r)
+	case "/api/calendar":
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w)
+			return
+		}
+		h.calendar(w, r)
 	default:
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/media/profile/"):
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"}, "")
+				return
+			}
+			h.profileMedia(w, r, strings.TrimPrefix(r.URL.Path, "/media/profile/"))
+		case strings.HasPrefix(r.URL.Path, "/media/"):
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"}, "")
+				return
+			}
+			h.media(w, r, strings.TrimPrefix(r.URL.Path, "/media/"))
+		case strings.HasPrefix(r.URL.Path, "/media"):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"}, "")
+		case strings.HasPrefix(r.URL.Path, "/api/"):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
+		default:
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
+		}
 	}
 }
 
@@ -119,6 +145,75 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, publicview.Dashboard(dashboard), "no-store")
+}
+
+func queryCalendarNumber(r *http.Request, key string, fallback float64) float64 {
+	raw, ok := r.URL.Query()[key]
+	if !ok || len(raw) == 0 || strings.TrimSpace(raw[0]) == "" {
+		return fallback
+	}
+	value, err := strconv.ParseFloat(strings.TrimSpace(raw[0]), 64)
+	if err != nil || value == 0 {
+		return fallback
+	}
+	return value
+}
+
+func (h *Handler) calendar(w http.ResponseWriter, r *http.Request) {
+	pageValue := queryCalendarNumber(r, "page", 1)
+	pageSizeValue := queryCalendarNumber(r, "pageSize", 100)
+	page, pageSize := 1, 100
+	maxInt := float64(^uint(0) >> 1)
+	if pageValue < maxInt {
+		page = int(pageValue)
+		if page == 0 {
+			page = 1
+		}
+	} else {
+		page = int(^uint(0) >> 1)
+	}
+	if pageSizeValue < maxInt {
+		pageSize = int(pageSizeValue)
+		if pageSize == 0 {
+			// listAdminEventsPage uses its 25-item default when a non-zero
+			// fractional Number truncates to zero.
+			pageSize = 25
+		}
+	} else {
+		pageSize = int(^uint(0) >> 1)
+	}
+	calendar, err := h.store.GetCalendarPage(r.Context(), r.URL.Query().Get("from"), r.URL.Query().Get("to"), page, pageSize)
+	if err != nil {
+		if errors.Is(err, sqlite.ErrInvalidCalendarRange) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_calendar_range"}, "")
+			return
+		}
+		if errors.Is(err, sqlite.ErrUnavailable) || errors.Is(err, sqlite.ErrSchema) {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "")
+			return
+		}
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "")
+		return
+	}
+	items := make([]any, 0, len(calendar.Items))
+	for _, event := range calendar.Items {
+		projected := publicview.PublicEvent(event, false)
+		// Calendar exposes the same manual lock marker as TypeScript's
+		// publicEvent(event, ["manualLocked"]), while omitting dashboard-only
+		// isUpcoming.
+		projected["manualLocked"] = event.ManualLocked
+		items = append(items, projected)
+	}
+	images := make([]any, 0, len(calendar.ScheduleImages))
+	for _, asset := range calendar.ScheduleImages {
+		images = append(images, publicview.PublicAsset(asset))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items, "events": items, "page": calendar.Page, "pageSize": calendar.PageSize,
+		"total": calendar.Total, "totalPages": calendar.TotalPages, "hasPrevious": calendar.HasPrevious,
+		"hasNext": calendar.HasNext, "dayCounts": calendar.DayCounts, "revision": calendar.Revision,
+		"scheduleImages": images, "adjacent": map[string]any{"previous": calendar.Previous, "next": calendar.Next},
+	}, "no-store")
 }
 
 func numericPrefix(raw string) bool {

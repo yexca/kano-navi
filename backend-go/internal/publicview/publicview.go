@@ -119,6 +119,10 @@ func publicVideo(v sqlite.Video) map[string]any {
 func publicAsset(a sqlite.Asset) map[string]any {
 	return map[string]any{"id": a.ID, "kind": a.Kind, "alt": value(a.Alt), "weekStart": value(a.WeekStart), "periodStart": value(a.PeriodStart), "periodEnd": value(a.PeriodEnd), "periodBasis": value(a.PeriodBasis), "sourceAccount": value(a.SourceAccount), "updatedAt": value(a.UpdatedAt), "url": value(a.URL), "sourceUrl": value(a.SourceURL), "mediaId": value(a.MediaID), "mediaStatus": a.MediaStatus, "mediaSourceUrl": value(a.MediaSourceURL)}
 }
+
+// PublicAsset is the calendar-facing form of a schedule asset. Keep the
+// projection exported so calendar and dashboard use the same field boundary.
+func PublicAsset(a sqlite.Asset) map[string]any { return publicAsset(a) }
 func publicProfileMedia(m *sqlite.ProfileMedia) any {
 	if m == nil {
 		return nil

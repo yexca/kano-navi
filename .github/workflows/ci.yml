@@ -60,6 +60,8 @@ jobs:
         run: make ci-backend
       - name: Compare TypeScript and Go dashboard projections
         run: node scripts/dashboard-parity.mjs
+      - name: Compare TypeScript and Go public HTTP reads
+        run: make side-by-side-http
 
   go:
     name: Go read-only backend
