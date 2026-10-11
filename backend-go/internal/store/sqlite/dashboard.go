@@ -438,7 +438,7 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 	}
 
 	for i := range videos {
-		videos[i].IsCancelled, err = s.videoCancelled(ctx, videos[i].ID)
+		videos[i].IsCancelled, err = s.videoCancelled(ctx, videos[i])
 		if err != nil {
 			return nil, err
 		}
@@ -713,7 +713,7 @@ func (s *Store) queryEventCounts(ctx context.Context, today string, now time.Tim
 
 func (s *Store) queryVideos(ctx context.Context, now time.Time) ([]Video, error) {
 	n := now.UTC().Format(time.RFC3339Nano)
-	q := `SELECT id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming FROM videos WHERE id IN (SELECT id FROM (SELECT id FROM videos ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT v.id FROM videos v WHERE (julianday(v.scheduled_at)>julianday(?,'-3 hours') OR (v.scheduled_at IS NULL AND v.is_upcoming=1) OR EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)>julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND e.url=v.url)))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)<=julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND e.url=v.url))) ORDER BY julianday(v.scheduled_at) ASC,v.id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM videos WHERE scheduled_at IS NULL OR julianday(scheduled_at)<julianday(?) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 1)) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC`
+	q := `SELECT id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming FROM videos WHERE id IN (SELECT id FROM (SELECT id FROM videos ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT v.id FROM videos v WHERE (julianday(v.scheduled_at)>julianday(?,'-3 hours') OR (v.scheduled_at IS NULL AND v.is_upcoming=1) OR EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)>julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url))))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)<=julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url)))) ORDER BY julianday(v.scheduled_at) ASC,v.id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM videos WHERE scheduled_at IS NULL OR julianday(scheduled_at)<julianday(?) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 1)) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC`
 	rows, err := s.db.QueryContext(ctx, q, n, n, n, n)
 	if err != nil {
 		return nil, dbErr(err)
@@ -774,7 +774,7 @@ func (s *Store) getVideo(ctx context.Context, id string) (*Video, error) {
 	return &v, nil
 }
 func (s *Store) queryLinkedEvent(ctx context.Context, v Video, now time.Time) (*DashboardEvent, error) {
-	q := `SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at FROM events e WHERE e.deleted_at IS NULL AND (e.id='youtube-'||? OR (e.source='youtube' AND e.source_item_id=?) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=?) OR (e.url IS NOT NULL AND e.url=?)) ORDER BY ABS(julianday(e.starts_at)-julianday(?)),e.id ASC LIMIT 1`
+	q := `SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at FROM events e WHERE e.deleted_at IS NULL AND (e.id='youtube-'||? OR (e.source='youtube' AND e.source_item_id=?) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=?) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(?))) ORDER BY ABS(julianday(e.starts_at)-julianday(?)),e.id ASC LIMIT 1`
 	rows, err := s.db.QueryContext(ctx, q, v.ID, v.ID, v.ID, v.URL, stringValue(v.ScheduledAt))
 	if err != nil {
 		return nil, dbErr(err)
@@ -790,9 +790,9 @@ func (s *Store) queryLinkedEvent(ctx context.Context, v Video, now time.Time) (*
 	return &e, nil
 }
 
-func (s *Store) videoCancelled(ctx context.Context, id string) (bool, error) {
+func (s *Store) videoCancelled(ctx context.Context, video Video) (bool, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||? OR (e.source='youtube' AND e.source_item_id=?) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=?))`, id, id, id).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||? OR (e.source='youtube' AND e.source_item_id=?) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=?) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(?)))`, video.ID, video.ID, video.ID, video.URL).Scan(&n)
 	if err != nil {
 		return false, dbErr(err)
 	}
@@ -833,7 +833,7 @@ func (s *Store) queryFocus(ctx context.Context) (*Focus, error) {
 	return &f, nil
 }
 func (s *Store) queryTimeline(ctx context.Context) ([]TimelineItem, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,year,title,detail,sort_order FROM timeline ORDER BY sort_order ASC,id ASC LIMIT 100`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,year,title,detail,sort_order FROM timeline ORDER BY sort_order ASC,id ASC`)
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -853,7 +853,7 @@ func (s *Store) queryTimeline(ctx context.Context) ([]TimelineItem, error) {
 	return out, rows.Err()
 }
 func (s *Store) queryResources(ctx context.Context) ([]Resource, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,title,detail,icon,tone,url,sort_order FROM resources ORDER BY sort_order ASC,id ASC LIMIT 100`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,title,detail,icon,tone,url,sort_order FROM resources ORDER BY sort_order ASC,id ASC`)
 	if err != nil {
 		return nil, dbErr(err)
 	}

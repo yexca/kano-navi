@@ -5446,7 +5446,7 @@ export function getDashboard(
         `SELECT v.id AS videoId FROM videos v
        WHERE v.id IN (${mappedVideos.map(() => "?").join(",") || "NULL"})
        AND EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed'
-         AND e.id IN (${videoEvidenceIds("v.id")}))`,
+         AND e.id IN (${videoEventIds("v.id", "v.url")}))`,
       )
       .all(...mappedVideos.map((video) => video.id))
       .map((row) => row.videoId),

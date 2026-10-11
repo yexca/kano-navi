@@ -73,7 +73,7 @@ func OpenReadOnly(filename string) (*Store, error) {
 func verifySchema(ctx context.Context, db *sql.DB) error {
 	required := map[string][]string{
 		"profiles":               {"id", "display_name", "romanized_name", "bio", "avatar_url", "banner_url", "x_url", "youtube_url", "updated_at"},
-		"posts":                  {"id", "source", "account_handle", "type", "label", "text", "published_at", "url", "likes", "reposts", "replies", "media_url", "media_alt"},
+		"posts":                  {"id", "source", "account_handle", "type", "label", "text", "published_at", "url", "likes", "reposts", "replies", "media_url", "media_alt", "raw_json"},
 		"events":                 {"id", "source", "source_item_id", "title", "detail", "starts_on", "starts_at", "ends_at", "timezone", "time_precision", "status", "event_type", "url", "provenance", "manual_locked", "cancellation_status", "cancellation_source", "cancellation_reason", "cancellation_evidence", "cancellation_at", "deleted_at"},
 		"event_sources":          {"event_id", "source", "source_item_id", "deleted_at"},
 		"videos":                 {"id", "source", "title", "published_at", "scheduled_at", "url", "thumbnail_url", "kind", "is_upcoming"},

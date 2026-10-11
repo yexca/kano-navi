@@ -2,12 +2,13 @@
 
 NPM ?= npm
 NODE ?= node
+GO ?= go
 DOCKER ?= docker
 DOCKER_BUILD ?= $(DOCKER) build
 DOCKER_BUILD_ARGS ?=
 DOCKER_IMAGE ?= kano-navi:ci
 
-.PHONY: help install dev dev-client dev-server build preview start seed sync
+.PHONY: help install dev dev-client dev-server build preview start seed sync go-check
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
 .PHONY: smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
@@ -41,6 +42,9 @@ seed:
 
 sync:
 	$(NPM) run sync
+
+go-check:
+	$(NODE) scripts/go-check.mjs
 
 format:
 	$(NPM) run format

@@ -1,8 +1,8 @@
 # Kano Navi Go read-only service
 
-This module is the second migration slice. It runs beside the TypeScript
+This module is the third migration slice. It runs beside the TypeScript
 service, opens an existing Kano SQLite snapshot read-only, and exposes the
-public health, revision, and dashboard reads:
+public health, revision and dashboard reads:
 
 ```text
 GET /api/health
@@ -10,47 +10,54 @@ GET /api/dashboard/revision
 GET /api/dashboard?days=3
 ```
 
-The dashboard returns the current public profile, summary, bounded posts,
-events, videos, focus, timeline, resources, schedule assets, profile media,
-media status, and synchronization/revision metadata. Its JSON projection is
-kept separate from SQL and excludes raw JSON, source item IDs, job IDs,
-provider data, credentials, database paths, and absolute paths.
+Go listens on `:7658`; TypeScript continues to own `:7657` and all production
+routes. The database path is explicit. The service uses the pure-Go
+`modernc.org/sqlite` driver with SQLite `mode=ro`, one connection, no
+migrations, no seed, no writes, no external requests and no media downloads.
 
-From the repository root:
+The dashboard projection matches TypeScript's public field set and ordering.
+YouTube watch, short, live, shorts and share links use the same normalized
+`stream_identity`; non-YouTube values use exact URL identity. Timeline and
+resource reads are complete, while the documented post/event/video preview
+bounds remain in place. Startup requires every column used by the projection,
+including `posts.raw_json` for schedule source-text filtering.
 
-```text
-go run ./backend-go/cmd/kano-go -database data/database/kano.sqlite
-```
+## Checks
 
-Go listens on `:7658`; the TypeScript service continues to own `:7657` and all
-production routes. The database path is explicit. The service uses the
-pure-Go `modernc.org/sqlite` driver with SQLite `mode=ro`, one connection, no
-migrations, no seed, no writes, no external requests, and no media downloads.
-It validates the tables and columns needed by the complete dashboard at
-startup and returns stable `database_unavailable` responses for read failures.
-
-The current module declares `go 1.26.4`, and the available Windows toolchain
-was verified as `go1.26.4`. CI and Docker toolchain pinning are planned for the
-next phase; this repository does not yet run Go in CI.
-
-Run checks from this directory:
+From the repository root, run the complete Go gate:
 
 ```text
-gofmt -w (Get-ChildItem -Recurse -Filter *.go).FullName
-go test ./...
-go vet ./...
-go build ./...
-CGO_ENABLED=0 go test ./...
-CGO_ENABLED=0 go build ./...
+make go-check
 ```
 
-Tests use temporary SQLite fixtures and synthetic records. They verify days
-clamping, empty snapshots, public post/video/event projections, cancellation
-and tombstone semantics, date and offset ordering, media readiness, sensitive
-field exclusion, bounded reads, schema/query failures, and `Vary` plus cache
-headers. They do not access the maintained database or external services.
+It runs formatting, tests, vet, native and CGO-disabled builds, Linux and
+Windows amd64 cross-builds, and an independent scratch Docker image build from
+`backend-go/Dockerfile`. The module declares Go `1.26.4` and CI reads that
+version from `backend-go/go.mod`.
+
+The synthetic store test and benchmark use 10,000 posts, events and videos to
+verify bounded dashboard payloads and accurate counts:
+
+```text
+go test ./backend-go/internal/store/sqlite -run '^$' -bench BenchmarkDashboardSynthetic10k -benchmem
+```
+
+`node scripts/dashboard-parity.mjs` compares a fixed synthetic fixture through
+the TypeScript public projection and the Go `cmd/kano-parity` renderer. It
+compares all keys and values, including nulls, booleans, dates and array
+ordering. It needs the repository's npm dependencies. This checkout has no
+`node_modules`, so that live comparison was not run and no dependency
+installation was attempted.
+
+Read-only tests verify unchanged database hashes and directory entries,
+absence of read-created WAL/journal files, and visibility of committed WAL
+data. Missing, incomplete, closed and corrupt snapshots produce only stable
+`database_unavailable` responses at the HTTP boundary.
+
+## Ownership and rollback
 
 The Go service has not taken over calendar, admin, MCP, synchronization,
 source history, workflow scheduling, schedule extraction, LLM routing, media
-download, or `/media` serving. Frontend and production route behavior remain
-unchanged until a later cutover review.
+download or `/media` serving. No production route or frontend behavior changes
+in this phase. To roll back a future side-by-side deployment, stop Go and
+continue using the TypeScript service on `:7657`.

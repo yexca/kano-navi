@@ -180,6 +180,9 @@ func TestDashboardMethodAndDatabaseErrorsKeepVary(t *testing.T) {
 	if failed.Code != http.StatusServiceUnavailable || failed.Header().Get("Vary") != "Accept-Encoding" {
 		t.Fatalf("db status=%d headers=%v", failed.Code, failed.Header())
 	}
+	if failed.Body.String() != `{"error":"database_unavailable"}` {
+		t.Fatalf("unstable database error body: %s", failed.Body)
+	}
 	if strings.Contains(failed.Body.String(), "query failed") || strings.Contains(failed.Body.String(), "snapshot") {
 		t.Fatalf("error leaked: %s", failed.Body)
 	}
@@ -202,5 +205,65 @@ func TestDashboardPostsStayBoundedWhileCountsRemainAccurate(t *testing.T) {
 	counts := payload["summary"].(map[string]any)["counts"].(map[string]any)
 	if counts["posts"] != float64(125) {
 		t.Fatalf("post count=%v", counts["posts"])
+	}
+}
+
+func TestDashboardUsesYouTubeStreamIdentityForAssociationAndCancellation(t *testing.T) {
+	handler := dashboardHandler(t, func(path string) {
+		testutil.Exec(t, path, `
+		INSERT INTO videos (id,source,title,published_at,scheduled_at,url,kind,is_upcoming) VALUES
+		 ('identity-live','youtube','Identity live','2026-10-10T00:00:00Z','2026-10-11T04:00:00Z','https://www.youtube.com/watch?v=identity-live','stream',1),
+		 ('identity-cancelled','youtube','Identity cancelled','2026-10-10T00:00:00Z','2026-10-11T05:00:00Z','https://youtu.be/identity-cancelled?si=share','stream',1),
+		 ('identity-other','youtube','Other video','2026-10-10T00:00:00Z','2026-10-11T06:00:00Z','https://www.youtube.com/watch?v=identity-other','stream',1);
+		INSERT INTO events (id,source,title,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,created_at,updated_at) VALUES
+		 ('equivalent-live','youtube','Equivalent live','2026-10-11','2026-10-11T04:00:00Z','2026-10-11T05:00:00Z','Asia/Tokyo','exact','scheduled','stream','https://youtu.be/identity-live?feature=share','automatic',0,'none','',''),
+		 ('equivalent-cancelled','youtube','Equivalent cancelled','2026-10-11','2026-10-11T05:00:00Z','2026-10-11T06:00:00Z','Asia/Tokyo','exact','scheduled','stream','https://www.youtube.com/live/identity-cancelled','manual',1,'manual_confirmed','','');`)
+	})
+	status, _, payload, body := dashboardPayload(t, handler, "/api/dashboard")
+	if status != http.StatusOK {
+		t.Fatalf("status=%d body=%s", status, body)
+	}
+	videos := payload["videos"].([]any)
+	byID := map[string]map[string]any{}
+	for _, raw := range videos {
+		video := raw.(map[string]any)
+		byID[video["id"].(string)] = video
+	}
+	if got := byID["identity-live"]["endsAt"]; got != "2026-10-11T05:00:00Z" {
+		t.Fatalf("equivalent URL did not inherit endsAt: %v", got)
+	}
+	if got := byID["identity-live"]["isCancelled"]; got != false {
+		t.Fatalf("unexpected cancellation for live video: %v", got)
+	}
+	if got := byID["identity-cancelled"]["isCancelled"]; got != true {
+		t.Fatalf("equivalent URL cancellation was not applied: %v", got)
+	}
+	if got := byID["identity-other"]["endsAt"]; got != nil {
+		t.Fatalf("unrelated video inherited an end time: %v", got)
+	}
+	for _, raw := range payload["events"].([]any) {
+		if raw.(map[string]any)["id"] == "equivalent-live" {
+			return
+		}
+	}
+	t.Fatal("linked equivalent event was not retained in the public event set")
+}
+
+func TestDashboardTimelineAndResourcesAreNotTruncated(t *testing.T) {
+	handler := dashboardHandler(t, func(path string) {
+		for i := 0; i < 125; i++ {
+			testutil.Exec(t, path, `INSERT INTO timeline (id,year,title,sort_order) VALUES (?,?,?,?)`, i+1, "2026", fmt.Sprintf("Timeline %03d", i), i)
+			testutil.Exec(t, path, `INSERT INTO resources (id,title,url,sort_order) VALUES (?,?,?,?)`, i+1, fmt.Sprintf("Resource %03d", i), fmt.Sprintf("https://example.invalid/%03d", i), i)
+		}
+	})
+	status, _, payload, body := dashboardPayload(t, handler, "/api/dashboard")
+	if status != http.StatusOK {
+		t.Fatalf("status=%d body=%s", status, body)
+	}
+	if got := len(payload["timeline"].([]any)); got != 125 {
+		t.Fatalf("timeline length=%d, want 125", got)
+	}
+	if got := len(payload["resources"].([]any)); got != 125 {
+		t.Fatalf("resources length=%d, want 125", got)
 	}
 }
