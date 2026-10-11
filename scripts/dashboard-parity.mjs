@@ -9,6 +9,7 @@ import { join } from "node:path"
 import { spawnSync } from "node:child_process"
 
 const root = join(import.meta.dirname, "..")
+const go = process.env.GO || "go"
 const now = new Date("2026-10-11T03:00:00.000+09:00")
 
 let databaseModule
@@ -16,8 +17,31 @@ try {
   databaseModule = await import("../server/database.ts")
 } catch (error) {
   if (error?.code === "ERR_MODULE_NOT_FOUND") {
+    const smoke = spawnSync(
+      go,
+      [
+        "test",
+        "./cmd/kano-parity",
+        "-run",
+        "^TestRenderReadsSyntheticSnapshot$",
+        "-count=1",
+      ],
+      {
+        cwd: join(root, "backend-go"),
+        encoding: "utf8",
+        maxBuffer: 4 * 1024 * 1024,
+      },
+    )
+    if (smoke.stdout) process.stdout.write(smoke.stdout)
+    if (smoke.stderr) process.stderr.write(smoke.stderr)
+    if (smoke.error || smoke.status !== 0) {
+      console.error(
+        `dashboard-parity: dependency-free Go smoke failed (exit status ${smoke.status ?? "unknown"})`,
+      )
+      process.exit(1)
+    }
     console.error(
-      "dashboard-parity: SKIPPED (Node dependencies are unavailable; run npm ci before the live TypeScript comparison)",
+      "dashboard-parity: SKIPPED (Node dependencies are unavailable; Go synthetic snapshot smoke passed; run npm ci before the live TypeScript comparison)",
     )
     process.exit(2)
   }
@@ -63,11 +87,11 @@ try {
     },
     meta: { ...snapshot.meta, lastSync: publicSyncRun(snapshot.meta.lastSync) },
   }
-  const go = spawnSync(
-    "go",
+  const goResult = spawnSync(
+    go,
     [
       "run",
-      "./backend-go/cmd/kano-parity",
+      "./cmd/kano-parity",
       "-database",
       databasePath,
       "-days",
@@ -75,12 +99,21 @@ try {
       "-now",
       now.toISOString(),
     ],
-    { cwd: root, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
+    {
+      cwd: join(root, "backend-go"),
+      encoding: "utf8",
+      maxBuffer: 8 * 1024 * 1024,
+    },
   )
-  if (go.status !== 0) {
-    throw new Error(`Go parity projection failed: ${go.stderr || go.stdout}`)
+  if (goResult.error || goResult.status !== 0) {
+    const detail = goResult.error
+      ? `spawn error: ${goResult.error.code || "unknown"}`
+      : `exit status ${goResult.status}`
+    throw new Error(
+      `Go parity projection failed (${detail}); command: ${go} run ./cmd/kano-parity`,
+    )
   }
-  const goProjection = JSON.parse(go.stdout)
+  const goProjection = JSON.parse(goResult.stdout)
   const differences = []
   compare(typescriptProjection, goProjection, "$", differences)
   if (differences.length > 0) {

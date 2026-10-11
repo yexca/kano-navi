@@ -90,6 +90,56 @@ function providerFixture(t, db, capabilities = ["text", "image"]) {
   setLlmRouteProviders(db, "schedule_board", ["regression-provider"])
   setLlmRouteProviders(db, "schedule_message", ["regression-provider"])
 }
+
+test("dashboard cancellation follows YouTube URL identity", (t) => {
+  const db = databaseFixture(t)
+  upsertVideos(db, [
+    {
+      id: "cancelled-video",
+      source: "youtube",
+      title: "Cancelled stream",
+      scheduled_at: "2099-01-01T10:00:00Z",
+      url: "https://www.youtube.com/watch?v=abc",
+      kind: "stream",
+      is_upcoming: true,
+    },
+    {
+      id: "different-video",
+      source: "youtube",
+      title: "Different stream",
+      scheduled_at: "2099-01-01T10:30:00Z",
+      url: "https://www.youtube.com/watch?v=def",
+      kind: "stream",
+      is_upcoming: true,
+    },
+  ])
+  upsertEvents(db, [
+    {
+      id: "cancelled-event",
+      source: "youtube",
+      title: "Cancelled stream",
+      starts_on: "2099-01-01",
+      starts_at: "2099-01-01T10:00:00Z",
+      ends_at: "2099-01-01T13:00:00Z",
+      event_type: "stream",
+      url: "https://youtu.be/abc?si=fixture",
+      cancellation_status: "manual_confirmed",
+    },
+  ])
+  const snapshot = getDashboard(db, {
+    days: 3,
+    now: new Date("2099-01-01T12:00:00Z"),
+  })
+  const cancelled = snapshot.videos.find(
+    (video) => video.id === "cancelled-video",
+  )
+  const different = snapshot.videos.find(
+    (video) => video.id === "different-video",
+  )
+  assert.equal(cancelled?.isCancelled, true)
+  assert.equal(different?.isCancelled, false)
+})
+
 async function appFixture(t, db, options = {}) {
   const server = createApp({ database: db, ...options }).listen(0, "127.0.0.1")
   await new Promise<void>((resolve) => server.once("listening", resolve))

@@ -1101,11 +1101,21 @@ func (s *Store) profileMedia(id, slot, source string, su, cp, sha, mime sql.Null
 func (s *Store) getFeaturedVideoID(ctx context.Context) (*string, error) {
 	var v string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key='featured_video_id'`).Scan(&v)
-	if errors.Is(err, sql.ErrNoRows) || strings.TrimSpace(v) == "" {
-		return nil, nil
+	// An absent setting preserves the legacy focus selection. An explicit
+	// empty (or stale) setting is an operator decision and must not fall back.
+	if errors.Is(err, sql.ErrNoRows) {
+		var legacy sql.NullString
+		err = s.db.QueryRowContext(ctx, `SELECT video_id FROM focus ORDER BY id LIMIT 1`).Scan(&legacy)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		v = legacy.String
 	}
 	if err != nil {
 		return nil, dbErr(err)
+	}
+	if v == "" {
+		return nil, nil
 	}
 	exists, err := s.getVideo(ctx, v)
 	if err != nil {

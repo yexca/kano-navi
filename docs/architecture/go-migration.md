@@ -1,4 +1,4 @@
-# Go backend migration: phase three
+# Go backend migration: phase four
 
 ## Goal and boundary
 
@@ -43,15 +43,38 @@ fixture, renders the TypeScript public HTTP projection and renders the Go
 projection with the same fixed timestamp, then compares every object key,
 array item and scalar value. Object key order is ignored; missing, extra,
 null, boolean, date and ordering differences fail the comparison. The Go
-`cmd/kano-parity` utility is a local read-only renderer used by this script.
+`cmd/kano-parity` utility is a local read-only renderer used by this script. It
+runs from the `backend-go` module directory, so the runner works from the
+repository root on Windows, Linux and CI; set `GO` to override the executable.
+Errors include the command and exit status without printing the snapshot path.
 The comparison does not contact X, YouTube, a CDN or a model provider.
 The CI backend job runs this comparison after its locked npm installation;
 the separate Go job runs the full cross-platform and Docker gate.
 
-This checkout has no `node_modules` directory, so the live TypeScript
-comparison was not run here; the script reports that dependency state rather
-than installing packages or making network requests. Go fixtures and tests
-remain runnable without npm dependencies.
+When `node_modules` is absent, the runner executes the dependency-free
+`TestRenderReadsSyntheticSnapshot` Go smoke and exits with an explicit `SKIPPED`
+marker. It does not install packages or make network requests, and the result
+must not be reported as TypeScript parity success.
+
+## Featured video compatibility
+
+If the `featured_video_id` setting row is absent, Go uses `focus.video_id` only
+when that video exists. If the row is present, a non-empty value is used only
+when its video exists; an empty or stale value returns null and never falls
+back to focus. Tests cover both states and ensure the selected video remains in
+the bounded dashboard list.
+
+## Side-by-side HTTP check
+
+With npm dependencies installed, run `node scripts/side-by-side-http.mjs` or
+`make side-by-side-http`. The script creates one disposable synthetic SQLite
+snapshot, starts TypeScript and Go on local ephemeral ports, and compares
+status, Content-Type, Cache-Control, Vary and complete JSON for health,
+revision and dashboard requests with days `1`, `3`, `30`, `invalid` and `999`.
+Only `health.now` and `dashboard.meta.generatedAt` are normalized because they
+are generated per request. Unknown paths and POST requests are checked for
+stable sanitized errors. The Go HTTP tests exercise the same matrix without npm
+dependencies.
 
 ## Read-only and WAL verification
 
@@ -99,6 +122,22 @@ go test ./backend-go/internal/store/sqlite -run '^$' -bench BenchmarkDashboardSy
 The Windows amd64 validation host measured two benchmark iterations at about
 `533 ms/op`, `88 MB/op`, and `1.88 million allocations/op`; this is recorded
 for comparison only and is not a CI threshold.
+
+## Observability and rollback
+
+The Go process emits one JSON request record per request with only `route`,
+`method`, `status`, `duration_ms` and `response_bytes`. Query strings, bodies,
+database paths, source URLs, providers, credentials and raw errors never enter
+stdout. Database failures remain the fixed public `database_unavailable`
+response.
+
+The independent `backend-go/Dockerfile` builds a scratch image. Mount a copied
+synthetic snapshot read-only, verify `/api/health` and
+`/api/dashboard/revision`, and confirm that no database sidecars or directories
+appear. For rollback, start TypeScript on `:7657`, start Go on `:7658`, stop Go,
+and verify TypeScript still serves the snapshot. Production traffic remains on
+TypeScript `:7657`; calendar, admin, MCP, synchronization, workflows, LLM and
+media are not migrated.
 
 ## Rollback and cutover gate
 

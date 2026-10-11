@@ -27,7 +27,7 @@ func main() {
 	}
 	defer store.Close()
 
-	server := httpapi.NewServer(httpapi.NewHandler(store), cfg)
+	server := httpapi.NewServer(httpapi.RequestLog(httpapi.NewHandler(store), os.Stdout), cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)

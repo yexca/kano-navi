@@ -1,6 +1,6 @@
 # Kano Navi Go read-only service
 
-This module is the third migration slice. It runs beside the TypeScript
+This module is the fourth migration slice. It runs beside the TypeScript
 service, opens an existing Kano SQLite snapshot read-only, and exposes the
 public health, revision and dashboard reads:
 
@@ -45,9 +45,21 @@ go test ./backend-go/internal/store/sqlite -run '^$' -bench BenchmarkDashboardSy
 `node scripts/dashboard-parity.mjs` compares a fixed synthetic fixture through
 the TypeScript public projection and the Go `cmd/kano-parity` renderer. It
 compares all keys and values, including nulls, booleans, dates and array
-ordering. It needs the repository's npm dependencies. This checkout has no
-`node_modules`, so that live comparison was not run and no dependency
-installation was attempted.
+ordering. The runner starts Go from `backend-go` (or uses `GO`) so it works
+from the repository root. Without `node_modules`, it runs the dependency-free
+Go synthetic snapshot smoke and prints `SKIPPED`; it never installs packages.
+
+For a local HTTP comparison over one disposable snapshot, run:
+
+```text
+make side-by-side-http
+```
+
+The tool compares both services for health, revision and dashboard requests;
+only `health.now` and `dashboard.meta.generatedAt` are normalized. It also
+checks stable sanitized responses for unknown paths and POST methods. Go emits
+only route, method, status, duration and response-byte fields as structured
+stdout logs.
 
 Read-only tests verify unchanged database hashes and directory entries,
 absence of read-created WAL/journal files, and visibility of committed WAL

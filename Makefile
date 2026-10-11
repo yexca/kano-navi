@@ -10,7 +10,7 @@ DOCKER_IMAGE ?= kano-navi:ci
 
 .PHONY: help install dev dev-client dev-server build preview start seed sync go-check
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
-.PHONY: smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
+.PHONY: smoke side-by-side-http docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
 help:
 	@$(NODE) scripts/make-help.ts
@@ -73,6 +73,9 @@ test-server:
 
 smoke:
 	$(NODE) scripts/smoke.ts
+
+side-by-side-http:
+	$(NODE) scripts/side-by-side-http.mjs
 
 docker-build:
 	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -t $(DOCKER_IMAGE) .
