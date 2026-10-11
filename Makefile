@@ -10,7 +10,7 @@ DOCKER_IMAGE ?= kano-navi:ci
 
 .PHONY: help install dev dev-client dev-server build preview start seed sync go-check
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
-.PHONY: smoke side-by-side-http docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
+.PHONY: smoke side-by-side-http public-read-gate public-read-benchmark public-read-deployment-smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
 help:
 	@$(NODE) scripts/make-help.ts
@@ -76,6 +76,24 @@ smoke:
 
 side-by-side-http:
 	$(NODE) scripts/side-by-side-http.mjs
+
+public-read-benchmark:
+	$(NODE) scripts/public-read-benchmark.mjs
+
+public-read-deployment-smoke:
+	$(NODE) scripts/public-read-deployment-smoke.mjs
+
+# The public-read gate is intentionally ordered.  CI runs this target after
+# provisioning Node and Go; local runs must not turn a dependency-missing
+# comparison into a false success (the comparison scripts exit 2 and stop).
+public-read-gate:
+	$(MAKE) install
+	$(MAKE) ci-backend
+	$(NODE) scripts/dashboard-parity.mjs
+	$(NODE) scripts/side-by-side-http.mjs
+	$(MAKE) go-check
+	$(MAKE) sensitive-check
+	$(MAKE) docs-check
 
 docker-build:
 	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -t $(DOCKER_IMAGE) .

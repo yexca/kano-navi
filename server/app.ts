@@ -32,6 +32,11 @@ import {
 import { createSyncJobManager } from "./sync-jobs.ts"
 import { createWorkflowScheduler } from "./workflow-scheduler.ts"
 
+function publicMethodNotAllowed(response, allow = "GET") {
+  response.set("Allow", allow)
+  response.status(405).json({ error: "method_not_allowed" })
+}
+
 function createProfileMediaHandler(database: DatabaseConnection) {
   return (request, response) => {
     const slot = String(request.params.slot || "").toLowerCase()
@@ -245,6 +250,12 @@ export function createApp({
 
   // The route performs a database lookup instead of accepting a file path.
   app.get("/media/:id", createCachedMediaHandler(database))
+  app.all("/media/profile/:slot", (_request, response) =>
+    publicMethodNotAllowed(response, "GET, HEAD"),
+  )
+  app.all("/media/:id", (_request, response) =>
+    publicMethodNotAllowed(response, "GET, HEAD"),
+  )
   app.use("/media", (_request, response) =>
     response.status(404).json({ error: "media_not_found" }),
   )
@@ -257,6 +268,9 @@ export function createApp({
       lastSync: publicSyncRun(getLatestSync(database)),
     })
   })
+  app.all("/api/health", (_request, response) =>
+    publicMethodNotAllowed(response),
+  )
 
   app.get("/api/dashboard", (request, response) => {
     const requestedDays = Number.parseInt(String(request.query.days ?? "3"), 10)
@@ -283,6 +297,9 @@ export function createApp({
       },
     })
   })
+  app.all("/api/dashboard", (_request, response) =>
+    publicMethodNotAllowed(response),
+  )
 
   app.get("/api/calendar", (request, response) => {
     try {
@@ -303,6 +320,9 @@ export function createApp({
       else throw error
     }
   })
+  app.all("/api/calendar", (_request, response) =>
+    publicMethodNotAllowed(response),
+  )
 
   app.get("/api/dashboard/revision", (request, response) => {
     const revision = getDashboardRevision(database)
@@ -313,6 +333,9 @@ export function createApp({
       changed: Number.isInteger(since) ? revision !== since : true,
     })
   })
+  app.all("/api/dashboard/revision", (_request, response) =>
+    publicMethodNotAllowed(response),
+  )
 
   const jobManager =
     syncJobs ||

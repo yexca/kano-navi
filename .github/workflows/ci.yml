@@ -56,12 +56,8 @@ jobs:
         with:
           go-version-file: backend-go/go.mod
           cache-dependency-path: backend-go/go.sum
-      - name: Test server contracts
-        run: make ci-backend
-      - name: Compare TypeScript and Go dashboard projections
-        run: node scripts/dashboard-parity.mjs
-      - name: Compare TypeScript and Go public HTTP reads
-        run: make side-by-side-http
+      - name: Run ordered public-read gate
+        run: make public-read-gate
 
   go:
     name: Go read-only backend
@@ -80,6 +76,8 @@ jobs:
           cache-dependency-path: backend-go/go.sum
       - name: Validate Go toolchain and isolated image
         run: make go-check
+      - name: Rehearse TypeScript and Go public-read containers
+        run: make PUBLIC_READ_GO_IMAGE=kano-navi-go:ci public-read-deployment-smoke
 
   frontend:
     name: Frontend

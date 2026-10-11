@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,8 +19,15 @@ func RequestLog(next http.Handler, output io.Writer) http.Handler {
 		next.ServeHTTP(measured, r)
 		route := "unmatched"
 		switch r.URL.Path {
-		case "/api/health", "/api/dashboard/revision", "/api/dashboard":
+		case "/api/health", "/api/dashboard/revision", "/api/dashboard", "/api/calendar":
 			route = r.URL.Path
+		default:
+			switch {
+			case strings.HasPrefix(r.URL.Path, "/media/profile/"):
+				route = "/media/profile/:slot"
+			case strings.HasPrefix(r.URL.Path, "/media/"):
+				route = "/media/:id"
+			}
 		}
 		method := r.Method
 		switch method {

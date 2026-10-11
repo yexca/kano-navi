@@ -19,10 +19,16 @@ const groups = {
     "test-sensitive": "Test scanner behavior",
     "test-server": "Test SQLite, HTTP, sync, media, and LLM contracts",
     smoke: "Check a seeded temporary SQLite snapshot through local HTTP",
+    "public-read-benchmark":
+      "Measure TypeScript and Go public reads over 10,000 synthetic records",
+    "public-read-deployment-smoke":
+      "Run the canary/test TypeScript and Go container rehearsal",
     "ci-style": "Check formatting, documentation, and source privacy",
     "ci-backend": "Check types and run server contract tests",
     "ci-frontend": "Build the frontend",
     check: "Run installed-dependency checks and local API smoke",
+    "public-read-gate":
+      "Install, compare TypeScript/Go public reads, check Go, privacy, and docs",
   },
   "Docker and full CI": {
     "docker-build": "Build DOCKER_IMAGE (default kano-navi:ci)",

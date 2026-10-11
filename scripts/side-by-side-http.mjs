@@ -10,6 +10,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs"
@@ -23,7 +24,10 @@ let databaseModule
 try {
   databaseModule = await import("../server/database.ts")
 } catch (error) {
-  if (error?.code === "ERR_MODULE_NOT_FOUND") {
+  if (
+    error?.code === "ERR_MODULE_NOT_FOUND" &&
+    !existsSync(join(root, "node_modules"))
+  ) {
     console.error(
       "side-by-side-http: SKIPPED (Node dependencies are unavailable)",
     )
@@ -57,6 +61,7 @@ const mediaID = crypto
   .digest("hex")
 const mediaRelativePath = `x/sha256/${mediaHash.slice(0, 2)}/${mediaHash}.png`
 const profileRelativePath = `avatar/side-by-side-${marker}.png`
+const pendingMediaID = "0".repeat(63) + "1"
 const mediaPath = join(runtimeDirectory, ...mediaRelativePath.split("/"))
 const profilePath = join(runtimeDirectory, ...profileRelativePath.split("/"))
 mkdirSync(join(mediaPath, ".."), { recursive: true })
@@ -76,7 +81,7 @@ database.exec(`
   INSERT INTO media_assets (id, source, source_url, cache_path, mime_type, byte_size, sha256, status, fetched_at, updated_at)
     VALUES ('${mediaID}', 'x', 'https://cdn.example.invalid/side-by-side.png', '${mediaRelativePath}', 'image/png', ${mediaBody.length}, '${mediaHash}', 'ready', '2026-10-11T00:00:00.000Z', '2026-10-11T00:00:00.000Z');
   INSERT INTO media_assets (id, source, source_url, status)
-    VALUES ('${"0".repeat(63)}1', 'x', 'https://cdn.example.invalid/pending.png', 'pending');
+    VALUES ('${pendingMediaID}', 'x', 'https://cdn.example.invalid/pending.png', 'pending');
   INSERT INTO profile_media (id, slot, source, source_url, active_cache_path, active_sha256, active_mime_type, status, is_active, updated_at)
     VALUES ('profile-avatar', 'avatar', 'upload', 'https://cdn.example.invalid/profile.png', '${profileRelativePath}', '${mediaHash}', 'image/png', 'ready', 1, '2026-10-11T00:00:00.000Z');
   INSERT INTO focus (id, video_id, date_label, title, description, updated_at)
@@ -85,6 +90,16 @@ database.exec(`
   INSERT INTO resources (id, title, detail, icon, tone, url, sort_order) VALUES (1, 'Resource', 'Synthetic resource', 'link', 'blue', 'https://example.invalid/resource', 1);
   INSERT INTO app_settings (key, value, updated_at) VALUES ('dashboard_revision', '7', '2026-10-11T00:00:00.000Z');
 `)
+
+const protectedFiles = [
+  databasePath,
+  `${databasePath}-wal`,
+  `${databasePath}-shm`,
+  `${databasePath}-journal`,
+  mediaPath,
+  profilePath,
+]
+const beforeReads = fingerprintFiles(protectedFiles)
 
 const tsServer = createApp({ database }).listen(0, "127.0.0.1")
 await new Promise((resolve) => tsServer.once("listening", resolve))
@@ -130,7 +145,8 @@ try {
     "/api/calendar?from=2026-10-11&to=2026-10-18&page=1&pageSize=100",
     `/media/${mediaID}?v=${mediaHash}`,
     `/media/profile/avatar?v=${mediaHash}`,
-    `/media/${"0".repeat(63)}1`,
+    `/media/${pendingMediaID}`,
+    "/media/profile/banner",
   ]
   for (const path of requests) {
     const [typescript, goResponse] = await Promise.all([
@@ -159,23 +175,63 @@ try {
       assert.deepEqual(right, left, path)
     }
   }
+  for (const [method, path, headers] of [
+    ["HEAD", `/media/${mediaID}?v=${mediaHash}`, {}],
+    ["HEAD", `/media/profile/avatar?v=${mediaHash}`, {}],
+    ["GET", `/media/${mediaID}`, { Range: "bytes=0-3" }],
+    ["GET", `/media/${mediaID}`, { "If-None-Match": `"${mediaHash}"` }],
+  ]) {
+    const [typescript, goResponse] = await Promise.all([
+      fetch(`http://127.0.0.1:${tsPort}${path}`, { method, headers }),
+      fetch(`http://127.0.0.1:${goPort}${path}`, { method, headers }),
+    ])
+    assert.equal(typescript.status, goResponse.status, `${method} ${path}`)
+    for (const header of [
+      "content-type",
+      "cache-control",
+      "etag",
+      "content-length",
+      "last-modified",
+      "accept-ranges",
+      "content-range",
+    ])
+      assert.equal(
+        typescript.headers.get(header),
+        goResponse.headers.get(header),
+        `${method} ${path} ${header}`,
+      )
+    assert.deepEqual(
+      Buffer.from(await goResponse.arrayBuffer()),
+      Buffer.from(await typescript.arrayBuffer()),
+      `${method} ${path}`,
+    )
+  }
   for (const [method, path] of [
     ["GET", "/api/unknown"],
     ["POST", "/api/dashboard"],
+    ["POST", `/media/${mediaID}`],
   ]) {
     const [typescript, goResponse] = await Promise.all([
       fetch(`http://127.0.0.1:${tsPort}${path}`, { method }),
       fetch(`http://127.0.0.1:${goPort}${path}`, { method }),
     ])
-    for (const response of [typescript, goResponse]) {
-      const body = await response.text()
-      assert.match(body, /^\{"error":"[a-z_]+"\}$/)
-      assert.doesNotMatch(
-        body,
-        /sqlite|snapshot|database|[A-Za-z]:\\|\/home\//iu,
-      )
-    }
+    assert.equal(typescript.status, goResponse.status, `${method} ${path}`)
+    assert.equal(
+      typescript.headers.get("allow"),
+      goResponse.headers.get("allow"),
+      `${method} ${path} allow`,
+    )
+    const left = await typescript.text()
+    const right = await goResponse.text()
+    assert.equal(right, left, `${method} ${path} body`)
+    assert.match(left, /^\{"error":"[a-z_]+"\}$/)
+    assert.doesNotMatch(left, /sqlite|snapshot|database|[A-Za-z]:\\|\/home\//iu)
   }
+  assert.deepEqual(
+    fingerprintFiles(protectedFiles),
+    beforeReads,
+    "public reads changed the SQLite snapshot, sidecars, or media bytes",
+  )
   console.log("side-by-side-http: PASS")
   comparisonPassed = true
 } finally {
@@ -219,9 +275,23 @@ try {
     profilePath,
   ])
     rmSync(path, { force: true })
-  if (!hadRuntimeDirectory) rmSync(runtimeDirectory, { recursive: true, force: true })
+  if (!hadRuntimeDirectory)
+    rmSync(runtimeDirectory, { recursive: true, force: true })
   if (goProcess.exitCode && goOutput) process.stderr.write(goOutput)
   if (rollbackError) throw rollbackError
+}
+
+function fingerprintFiles(paths) {
+  return paths.map((path) => {
+    if (!existsSync(path)) return { path, present: false }
+    const bytes = readFileSync(path)
+    return {
+      path,
+      present: true,
+      size: bytes.length,
+      sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+    }
+  })
 }
 
 function normalize(path, value) {

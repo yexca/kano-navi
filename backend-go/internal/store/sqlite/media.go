@@ -19,6 +19,12 @@ var (
 	ErrMediaVersionNotFound = errors.New("media version not found")
 )
 
+// Source media downloads are capped at 10 MiB by the TypeScript media
+// downloader. Public reads enforce the same bound before allocating a byte
+// slice, so a corrupt or operator-edited cache row cannot trigger an
+// unbounded read.
+const maxCachedMediaBytes = 10 * 1024 * 1024
+
 type MediaFile struct {
 	Content      []byte
 	MIMEType     string
@@ -75,7 +81,7 @@ func (s *Store) ReadMedia(ctx context.Context, id, version string) (*MediaFile, 
 	if err != nil {
 		return nil, ErrMediaNotFound
 	}
-	content, modTime, err := readContainedFile(path, 0)
+	content, modTime, err := readContainedFile(path, maxCachedMediaBytes)
 	if err != nil {
 		return nil, ErrMediaNotFound
 	}

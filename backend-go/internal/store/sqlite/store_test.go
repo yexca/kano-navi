@@ -24,6 +24,19 @@ func TestMissingSnapshotFailsWithoutCreatingIt(t *testing.T) {
 	}
 }
 
+func TestReadContainedFileHonorsPublicMediaBound(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "oversize.bin")
+	if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(path, maxCachedMediaBytes+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readContainedFile(path, maxCachedMediaBytes); err == nil {
+		t.Fatal("oversized media file was accepted")
+	}
+}
+
 func TestMissingRequiredTableFailsAtStartup(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "incomplete.sqlite")
 	testutil.Exec(t, path, `CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)`)

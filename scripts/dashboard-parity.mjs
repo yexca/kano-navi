@@ -3,7 +3,7 @@
 // Compare one synthetic SQLite snapshot through the TypeScript public
 // projection and the read-only Go projection. This deliberately uses a fixed
 // clock so generatedAt and time-window fields are part of the comparison.
-import { mkdtempSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -16,7 +16,13 @@ let databaseModule
 try {
   databaseModule = await import("../server/database.ts")
 } catch (error) {
-  if (error?.code === "ERR_MODULE_NOT_FOUND") {
+  // A developer checkout may intentionally omit node_modules.  CI runs
+  // `make install` first, so an import failure there is a real gate failure,
+  // never a permitted skip.
+  if (
+    error?.code === "ERR_MODULE_NOT_FOUND" &&
+    !existsSync(join(root, "node_modules"))
+  ) {
     const smoke = spawnSync(
       go,
       [

@@ -46,27 +46,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/health":
 		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
-			writeMethodNotAllowed(w)
+			writeMethodNotAllowed(w, http.MethodGet)
 			return
 		}
 		h.health(w, r)
 	case "/api/dashboard/revision":
 		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
-			writeMethodNotAllowed(w)
+			writeMethodNotAllowed(w, http.MethodGet)
 			return
 		}
 		h.revision(w, r)
 	case "/api/dashboard":
 		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
-			writeMethodNotAllowed(w)
+			writeMethodNotAllowed(w, http.MethodGet)
 			return
 		}
 		h.dashboard(w, r)
 	case "/api/calendar":
 		if r.Method != http.MethodGet {
-			writeMethodNotAllowed(w)
+			writeMethodNotAllowed(w, http.MethodGet)
 			return
 		}
 		h.calendar(w, r)
@@ -74,13 +74,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/media/profile/"):
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"}, "")
+				writeMethodNotAllowed(w, "GET, HEAD")
 				return
 			}
 			h.profileMedia(w, r, strings.TrimPrefix(r.URL.Path, "/media/profile/"))
 		case strings.HasPrefix(r.URL.Path, "/media/"):
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"}, "")
+				writeMethodNotAllowed(w, "GET, HEAD")
 				return
 			}
 			h.media(w, r, strings.TrimPrefix(r.URL.Path, "/media/"))
@@ -224,8 +224,8 @@ func numericPrefix(raw string) bool {
 	return raw != "" && raw[0] >= '0' && raw[0] <= '9'
 }
 
-func writeMethodNotAllowed(w http.ResponseWriter) {
-	w.Header().Set("Allow", http.MethodGet)
+func writeMethodNotAllowed(w http.ResponseWriter, allow string) {
+	w.Header().Set("Allow", allow)
 	writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"}, "")
 }
 

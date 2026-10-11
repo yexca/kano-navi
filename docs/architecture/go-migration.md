@@ -1,9 +1,9 @@
-# Go backend migration: phase five
+# Go backend migration: phase six
 
 ## Goal and boundary
 
-Phase five adds the public calendar and read-only media projections beside the
-TypeScript service and makes the HTTP comparison a required CI gate. The Go
+Phase six formalizes the public-read validation, deployment rehearsal and
+rollback gate beside the TypeScript service. The Go
 service exposes:
 
 - `GET /api/health`
@@ -150,9 +150,9 @@ CI failure threshold out of machine-specific latency. Run it with:
 go test ./backend-go/internal/store/sqlite -run '^$' -bench BenchmarkDashboardSynthetic10k -benchmem
 ```
 
-The Windows amd64 validation host measured two benchmark iterations at about
-`533 ms/op`, `88 MB/op`, and `1.88 million allocations/op`; this is recorded
-for comparison only and is not a CI threshold.
+The Windows amd64 validation host measured two benchmark iterations at
+`521.7–551.9 ms/op`, `88.13 MB/op`, and `1,883,952–1,883,958 allocations/op`;
+this is recorded for comparison only and is not a CI threshold.
 
 ## Observability and rollback
 
@@ -170,16 +170,24 @@ from `make go-check` after the image build. For rollback, start TypeScript on
 `:7657`, start Go on `:7658`, stop Go, and verify TypeScript still serves the
 snapshot. Production traffic remains on TypeScript `:7657`.
 
-## Rollback and cutover gate
+## Phase-six gate and cutover
 
 Rollback is to stop the Go process and continue serving the existing
 TypeScript service on `:7657`; no database or schema rollback is needed. Go is
 not receiving production traffic in this phase.
 
-Before a future cutover, the remaining review must cover a production-like
-side-by-side HTTP comparison over a maintained snapshot, resource and latency
-observability, deployment-specific Docker startup, route ownership and
-operator rollback rehearsal. Admin, MCP, synchronization, workflows, LLM,
-media download/discovery/upload/cleanup, and frontend behavior remain owned by
-TypeScript. No schema, frontend request path or production route changed in
-this phase.
+`make public-read-gate` is the ordered CI entry point. It installs the locked
+dependencies, runs TypeScript contracts, dashboard parity, side-by-side HTTP,
+Go checks, the sensitive scan and documentation checks. The separate Go CI job
+adds the TypeScript/Go image restart rehearsal after building the independent
+Go image. The backend job invokes this target after setup-node and setup-go;
+because both comparison scripts return status 2 when dependencies are missing,
+CI cannot turn a local `SKIPPED` into a passing comparison.
+
+`docs/operations/go-public-read-cutover.md` records the production-like
+snapshot, resource/latency, container startup, route ownership and rollback
+steps. Admin, MCP, synchronization, workflows, LLM, media
+download/discovery/upload/cleanup, and frontend behavior remain owned by
+TypeScript. No schema, frontend request path or production route is changed by
+this phase. Only a future, separately approved cutover may change the public
+route owner.

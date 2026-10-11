@@ -1,6 +1,6 @@
 # Kano Navi Go read-only service
 
-This module is the fifth migration slice. It runs beside the TypeScript
+This module is the sixth migration slice. It runs beside the TypeScript
 service, opens an existing Kano SQLite snapshot read-only, and exposes these
 public reads:
 
@@ -75,10 +75,23 @@ is an explicit local skip and cannot pass the CI job after the locked install.
 Go emits only route, method, status, duration and response-byte fields as
 structured stdout logs.
 
+The ordered CI entry point is `make public-read-gate`. It runs the locked
+installation, TypeScript contracts, dashboard parity, side-by-side HTTP, Go
+checks, privacy scanning and documentation checks. With no local
+`node_modules`, the two comparison scripts return explicit `SKIPPED` status 2
+after the dependency-free Go smoke; this cannot pass the CI backend job after
+its locked installation.
+
 `make go-check` also builds the independent scratch image and runs
 `scripts/go-docker-smoke.mjs`. That check mounts a synthetic SQLite snapshot
 and synthetic media tree read-only, verifies health/dashboard/calendar/ready
 media, and confirms no database sidecar, WAL, journal or directory is created.
+The Go validation job then runs `make public-read-deployment-smoke`, which
+starts the existing TypeScript image and the independent Go image against
+copies of one synthetic snapshot, checks public reads and profile media, and
+restarts both containers while checking snapshot and media-tree hashes. For
+10,000-record resource measurements, run
+`node scripts/public-read-benchmark.mjs --output <path outside the repository>`.
 
 Read-only tests verify unchanged database hashes and directory entries,
 absence of read-created WAL/journal files, and visibility of committed WAL
