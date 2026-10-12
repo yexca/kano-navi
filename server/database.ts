@@ -5118,7 +5118,7 @@ export function getCalendarPage(
 
 export function getDashboard(
   database: DatabaseConnection,
-  { days = 3, now = new Date() }: { days?: number; now?: any } = {},
+  { days = 3, now = new Date(Date.now()) }: { days?: number; now?: any } = {},
 ) {
   const windowStart = now.getTime() - days * 24 * 60 * 60 * 1000
   const mediaBySourceUrl = new Map()
