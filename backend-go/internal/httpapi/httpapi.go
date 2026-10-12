@@ -57,7 +57,7 @@ func NewServer(handler http.Handler, cfg config.Config) *http.Server {
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
-	case "/api/admin", "/api/admin/", "/api/admin/session", "/api/admin/login", "/api/admin/logout", "/api/admin/videos", "/api/admin/posts/llm", "/api/admin/events", "/api/admin/sync/runs", "/api/admin/sync/jobs", "/api/admin/activity", "/api/admin/overview":
+	case "/api/admin", "/api/admin/", "/api/admin/session", "/api/admin/login", "/api/admin/logout", "/api/admin/videos", "/api/admin/posts/llm", "/api/admin/events", "/api/admin/sync/runs", "/api/admin/sync/jobs", "/api/admin/activity", "/api/admin/overview", "/api/admin/workflows", "/api/admin/runs":
 		h.admin.ServeHTTP(w, r)
 		return
 	case "/api/health":

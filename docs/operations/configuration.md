@@ -66,6 +66,14 @@ For example, generate a value locally with
 `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`
 and save it only in the ignored environment file or deployment secret store.
 
+## Go workflow execution
+
+The Go workflow core is opt-in. It does not start a timer from page requests or
+admin reads, and it does not replace the TypeScript scheduler. Enable the Go
+scheduler only in an explicitly controlled process by constructing it with
+`Enabled: true`; keep it disabled during side-by-side migration. Its interval
+follows the TypeScript bounds of 15 minutes through seven days.
+
 ## Related Docs
 
 - [Local development](../development/local-dev.md)

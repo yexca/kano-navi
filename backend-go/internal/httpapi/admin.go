@@ -81,14 +81,80 @@ func (h *adminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.runs(w, r)
 		case "/sync/jobs":
 			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "capability_not_migrated"}, "")
+		case "/workflows":
+			h.workflows(w, r, "")
+		case "/runs":
+			h.workflowRuns(w, r, "")
 		case "/activity":
 			h.activity(w, r)
 		case "/overview":
 			h.overview(w, r)
 		default:
+			if strings.HasPrefix(path, "/workflows/") {
+				h.workflows(w, r, strings.TrimPrefix(path, "/workflows/"))
+				return
+			}
+			if strings.HasPrefix(path, "/runs/") {
+				h.workflowRuns(w, r, strings.TrimPrefix(path, "/runs/"))
+				return
+			}
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "admin_not_found"}, "")
 		}
 	})).ServeHTTP(w, r)
+}
+
+func workflowUnavailable(w http.ResponseWriter, err error) {
+	if errors.Is(err, sqlite.ErrWorkflowNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "workflow_not_found"}, "")
+		return
+	}
+	if errors.Is(err, sqlite.ErrWorkflowUnavailable) {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "capability_not_migrated"}, "")
+		return
+	}
+	writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "")
+}
+func (h *adminHandler) workflows(w http.ResponseWriter, r *http.Request, id string) {
+	if id != "" {
+		item, err := h.store.GetWorkflow(r.Context(), id)
+		if err != nil {
+			workflowUnavailable(w, err)
+			return
+		}
+		if item == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "workflow_not_found"}, "")
+			return
+		}
+		writeJSON(w, http.StatusOK, item, "")
+		return
+	}
+	result, err := h.store.ListWorkflows(r.Context(), queryInt(r, "page", 1), queryInt(r, "pageSize", 25))
+	if err != nil {
+		workflowUnavailable(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result, "")
+}
+func (h *adminHandler) workflowRuns(w http.ResponseWriter, r *http.Request, id string) {
+	if id != "" {
+		item, err := h.store.GetWorkflowRun(r.Context(), id)
+		if err != nil {
+			workflowUnavailable(w, err)
+			return
+		}
+		if item == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "run_not_found"}, "")
+			return
+		}
+		writeJSON(w, http.StatusOK, item, "")
+		return
+	}
+	result, err := h.store.ListWorkflowRuns(r.Context(), queryInt(r, "page", 1), queryInt(r, "pageSize", 25), r.URL.Query().Get("status"), r.URL.Query().Get("workflowId"))
+	if err != nil {
+		workflowUnavailable(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result, "")
 }
 
 func (h *adminHandler) mutation(w http.ResponseWriter, r *http.Request, path string) {

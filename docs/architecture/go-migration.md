@@ -1,5 +1,9 @@
 # Go backend migration: phase seven
 
+Phase nine adds the persistent workflow execution core described in
+[Go workflow execution core](go-workflows.md). It remains side-by-side and
+does not change the phase-seven public-read or TypeScript production ownership.
+
 ## Goal and boundary
 
 Phase seven adds an independently authenticated, read-only admin sidecar

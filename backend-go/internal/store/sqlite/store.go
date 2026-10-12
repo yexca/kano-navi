@@ -28,9 +28,10 @@ type SyncRun struct {
 }
 
 type Store struct {
-	db       *sql.DB
-	dataRoot string
-	writable bool
+	db               *sql.DB
+	dataRoot         string
+	writable         bool
+	workflowWritable bool
 }
 
 // OpenReadOnly opens an existing snapshot without creating directories,
@@ -68,11 +69,23 @@ func OpenReadOnly(filename string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	var workflowTable int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='workflow_migrations'`).Scan(&workflowTable); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("%w: workflow schema could not be inspected", ErrUnavailable)
+	}
+	if workflowTable == 1 {
+		if err := verifyWorkflowSchema(ctx, db); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("%w: workflow schema unavailable", ErrSchema)
+		}
+	}
 	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs))}, nil
 }
 
 // OpenAdminWrites opens an existing fixture in SQLite rw mode. It never creates
-// a file or runs schema work; callers must explicitly enable development mode.
+// a file or seeds data. Its additive workflow migration is restricted to this
+// explicit development-only opener.
 func OpenAdminWrites(filename string) (*Store, error) {
 	abs, err := filepath.Abs(strings.TrimSpace(filename))
 	if err != nil {
@@ -98,7 +111,15 @@ func OpenAdminWrites(filename string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), writable: true}, nil
+	store := &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), writable: true}
+	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := migrateWorkflowSchema(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("%w: workflow schema unavailable", ErrSchema)
+	}
+	store.workflowWritable = true
+	return store, nil
 }
 
 func verifySchema(ctx context.Context, db *sql.DB) error {

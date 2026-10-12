@@ -6,6 +6,7 @@ Read core boundaries before changing the relationship between page reads, synchr
 - [Frontend](frontend.md)
 - [Backend and HTTP](backend.md)
 - [Go backend migration](go-migration.md)
+- [Go workflow execution core](go-workflows.md)
 - [Data model and event precedence](data-model.md)
 - [Sources and schedule extraction](sources.md)
 - [Workflows and historical fetch windows](workflows.md)

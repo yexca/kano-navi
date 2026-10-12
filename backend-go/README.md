@@ -1,6 +1,6 @@
-# Kano Navi Go service (phase eight)
+# Kano Navi Go service (phase nine)
 
-This module is the seventh migration slice. It runs beside the TypeScript
+This module is the ninth migration slice. It runs beside the TypeScript
 service, opens an existing Kano SQLite snapshot read-only, and exposes these
 public reads:
 
@@ -128,6 +128,14 @@ discovery, upload or cleanup. TypeScript still owns production traffic on
 `:7657`; calendar and media have not been connected to production routing. To
 roll back a future side-by-side deployment, stop Go on `:7658` and continue
 using TypeScript on `:7657`.
+
+The phase-nine workflow package (`internal/workflow`) persists definitions,
+runs, ordered steps, attempts and leases through the additive SQLite migration
+in `internal/store/sqlite`. It uses only synthetic step execution. The scheduler
+is opt-in and disabled unless its `Enabled` field is explicitly set. Admin
+workflow reads are `GET /api/admin/workflows`, `/api/admin/workflows/:id`,
+`/api/admin/runs`, and `/api/admin/runs/:id`; projections contain safe status,
+capability, retry and timing fields only.
 
 
 Phase eight keeps the service read-only by default. The isolated event mutation slice requires `APP_MODE=development` and `-enable-admin-writes` against an existing synthetic SQLite file. It uses the distinct `kano_go_canary_session` cookie and atomic event/source/revision transactions; production remains owned by TypeScript.
