@@ -14,7 +14,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs"
-import { createServer } from "node:http"
+import { createServer, request as httpRequest } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -99,9 +99,14 @@ const protectedFiles = [
   mediaPath,
   profilePath,
 ]
+database.pragma("wal_checkpoint(TRUNCATE)")
+database.pragma("journal_mode = DELETE")
 const beforeReads = fingerprintFiles(protectedFiles)
 
-const tsServer = createApp({ database, adminMode: "development" }).listen(0, "127.0.0.1")
+const tsServer = createApp({ database, adminMode: "development" }).listen(
+  0,
+  "127.0.0.1",
+)
 await new Promise((resolve) => tsServer.once("listening", resolve))
 const tsPort = tsServer.address().port
 const goPort = await unusedPort()
@@ -132,14 +137,84 @@ goProcess.stderr.on("data", (chunk) => {
 
 try {
   await waitForHealth(`http://127.0.0.1:${goPort}/api/health`)
+  for (const path of [
+    `/media/${mediaID}`,
+    `/media/${mediaID}?v=${mediaHash}`,
+    "/media/profile/avatar",
+    `/media/profile/avatar?v=${mediaHash}`,
+  ]) {
+    for (const candidate of [
+      null,
+      `"${mediaHash}"`,
+      `W/"${mediaHash}"`,
+      '"other-hash"',
+      `"other-hash", "${mediaHash}"`,
+      "*",
+      `"prefix-${mediaHash}"`,
+    ]) {
+      const headers = candidate == null ? {} : { "If-None-Match": candidate }
+      const responses = await Promise.all(
+        [tsPort, goPort].map((port) =>
+          wireFetch(`http://127.0.0.1:${port}${path}`, { headers }),
+        ),
+      )
+      const results = await Promise.all(
+        responses.map(async (response) => ({
+          status: response.status,
+          headers: Object.fromEntries(
+            [
+              "etag",
+              "last-modified",
+              "cache-control",
+              "content-type",
+              "content-length",
+              "accept-ranges",
+              "content-range",
+            ].map((name) => [name, response.headers.get(name)]),
+          ),
+          body: Buffer.from(await response.arrayBuffer()).toString("hex"),
+        })),
+      )
+      if (process.argv.includes("--media-diagnostic"))
+        console.log(
+          JSON.stringify({
+            route: path.startsWith("/media/profile/") ? "profile" : "media",
+            versioned: path.includes("?"),
+            candidate:
+              candidate == null
+                ? "absent"
+                : candidate.replaceAll(mediaHash, "exact-hash"),
+            typescript: results[0],
+            go: results[1],
+          }),
+        )
+      else
+        assert.deepEqual(
+          results[1],
+          results[0],
+          `media conditional ${path} ${candidate}`,
+        )
+    }
+  }
+  if (process.argv.includes("--media-diagnostic")) process.exitCode = 1
   // Admin comparison uses separate jars and never prints either cookie.
-  for (const path of ["/api/admin/session", "/api/admin/posts/llm", "/api/admin/videos", "/api/admin/events", "/api/admin/sync/runs"]) {
+  for (const path of [
+    "/api/admin/session",
+    "/api/admin/posts/llm",
+    "/api/admin/videos",
+    "/api/admin/events",
+    "/api/admin/sync/runs",
+  ]) {
     const [typescript, goResponse] = await Promise.all([
       fetch(`http://127.0.0.1:${tsPort}${path}`),
       fetch(`http://127.0.0.1:${goPort}${path}`),
     ])
     assert.equal(typescript.status, goResponse.status, `admin ${path}`)
-    assert.deepEqual(await goResponse.json(), await typescript.json(), `admin ${path}`)
+    assert.deepEqual(
+      await goResponse.json(),
+      await typescript.json(),
+      `admin ${path}`,
+    )
   }
   const requests = [
     "/api/health",
@@ -189,7 +264,6 @@ try {
     ["HEAD", `/media/${mediaID}?v=${mediaHash}`, {}],
     ["HEAD", `/media/profile/avatar?v=${mediaHash}`, {}],
     ["GET", `/media/${mediaID}`, { Range: "bytes=0-3" }],
-    ["GET", `/media/${mediaID}`, { "If-None-Match": `"${mediaHash}"` }],
   ]) {
     const [typescript, goResponse] = await Promise.all([
       fetch(`http://127.0.0.1:${tsPort}${path}`, { method, headers }),
@@ -304,6 +378,29 @@ function fingerprintFiles(paths) {
   })
 }
 
+// Fetch adds no-cache to conditional requests. Use exact wire headers here.
+function wireFetch(url, { method = "GET", headers = {} } = {}) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(url, { method, headers }, (response) => {
+      const chunks = []
+      response.on("data", (chunk) => chunks.push(chunk))
+      response.on("end", () =>
+        resolve(
+          new Response(
+            response.statusCode === 304 || method === "HEAD"
+              ? null
+              : Buffer.concat(chunks),
+            { status: response.statusCode, headers: response.headers },
+          ),
+        ),
+      )
+      response.on("error", reject)
+    })
+    request.on("error", reject)
+    request.end()
+  })
+}
+
 function normalize(path, value) {
   const copy = structuredClone(value)
   if (path === "/api/health") copy.now = "<dynamic>"
@@ -320,7 +417,7 @@ async function unusedPort() {
 }
 
 async function waitForHealth(url) {
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (let attempt = 0; attempt < 1200; attempt++) {
     try {
       const response = await fetch(url)
       if (response.ok) return

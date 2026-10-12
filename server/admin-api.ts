@@ -1759,7 +1759,6 @@ export function createAdminRouter({
     "/events",
     route((request, response) => {
       const event = createManualEvent(database, eventInput(request.body))
-      bumpDashboardRevision(database)
       response.status(201).json({ event })
     }),
   )
@@ -1775,7 +1774,6 @@ export function createAdminRouter({
         response.status(404).json({ error: "event_not_found" })
         return
       }
-      bumpDashboardRevision(database)
       response.json({ event })
     }),
   )
@@ -1790,9 +1788,8 @@ export function createAdminRouter({
       const event = updateManualEvent(
         database,
         request.params.id,
-        eventInput(existing),
+        eventInput({ ...existing, ...(request.body || {}) }),
       )
-      bumpDashboardRevision(database)
       response.json({ event })
     }),
   )
@@ -1801,7 +1798,6 @@ export function createAdminRouter({
       response.status(404).json({ error: "event_not_found" })
       return
     }
-    bumpDashboardRevision(database)
     response.status(204).end()
   })
 

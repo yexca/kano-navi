@@ -3357,6 +3357,7 @@ export function createManualEvent(database: DatabaseConnection, event) {
         reason: event.cancellation_reason ?? event.cancellationReason,
       })
     }
+    bumpDashboardRevision(database)
   })
   create()
   return getEvent(database, id)
@@ -3423,9 +3424,10 @@ export function updateManualEvent(database: DatabaseConnection, id, event) {
     nullable(event.starts_on ?? event.startsOn) || dateKeyInJapan(startsAt)
   if (!startsOn) throw new Error("event requires starts_on or starts_at")
   const timestamp = nowIso()
-  database
-    .prepare<unknown[], Record<string, any>>(
-      `UPDATE events SET
+  const update = database.transaction(() => {
+    database
+      .prepare<unknown[], Record<string, any>>(
+        `UPDATE events SET
          title=@title, detail=@detail, starts_on=@starts_on,
          starts_at=@starts_at, ends_at=@ends_at, timezone=@timezone,
          time_precision=@time_precision, status=@status,
@@ -3440,48 +3442,56 @@ export function updateManualEvent(database: DatabaseConnection, id, event) {
          manual_locked=1, deleted_at=NULL, updated_at=@updated_at,
          raw_json=@raw_json
        WHERE id=@id`,
+      )
+      .run({
+        id: String(id),
+        title: String(event.title || "").trim() || existing.title,
+        detail: nullable(event.detail),
+        starts_on: startsOn,
+        starts_at: startsAt,
+        ends_at: nullable(event.ends_at ?? event.endsAt),
+        timezone: event.timezone || existing.timezone || JAPAN_TIME_ZONE,
+        time_precision:
+          event.time_precision ??
+          event.timePrecision ??
+          (startsAt ? "exact" : "unknown"),
+        status: nullable(event.status),
+        ...manualCancellationFields(existing, event, timestamp),
+        event_type: event.event_type ?? event.eventType ?? existing.eventType,
+        url: nullable(event.url),
+        updated_at: timestamp,
+        raw_json: json({ ...event, provenance: "manual", manualLocked: true }),
+      })
+    insertEventSource(
+      database,
+      {
+        ...event,
+        source: "manual",
+        source_item_id: String(id),
+        source_key: "confirmed",
+      },
+      id,
+      timestamp,
     )
-    .run({
-      id: String(id),
-      title: String(event.title || "").trim() || existing.title,
-      detail: nullable(event.detail),
-      starts_on: startsOn,
-      starts_at: startsAt,
-      ends_at: nullable(event.ends_at ?? event.endsAt),
-      timezone: event.timezone || existing.timezone || JAPAN_TIME_ZONE,
-      time_precision:
-        event.time_precision ??
-        event.timePrecision ??
-        (startsAt ? "exact" : "unknown"),
-      status: nullable(event.status),
-      ...manualCancellationFields(existing, event, timestamp),
-      event_type: event.event_type ?? event.eventType ?? existing.eventType,
-      url: nullable(event.url),
-      updated_at: timestamp,
-      raw_json: json({ ...event, provenance: "manual", manualLocked: true }),
-    })
-  insertEventSource(
-    database,
-    {
-      ...event,
-      source: "manual",
-      source_item_id: String(id),
-      source_key: "confirmed",
-    },
-    id,
-    timestamp,
-  )
+    bumpDashboardRevision(database)
+  })
+  update()
   return getEvent(database, id)
 }
 
 export function deleteManualEvent(database: DatabaseConnection, id) {
   const timestamp = nowIso()
-  const result = database
-    .prepare<unknown[], Record<string, any>>(
-      `UPDATE events SET provenance='manual', manual_locked=1,
+  const remove = database.transaction(() => {
+    const result = database
+      .prepare<unknown[], Record<string, any>>(
+        `UPDATE events SET provenance='manual', manual_locked=1,
        deleted_at=?, updated_at=? WHERE id=?`,
-    )
-    .run(timestamp, timestamp, String(id))
+      )
+      .run(timestamp, timestamp, String(id))
+    if (result.changes > 0) bumpDashboardRevision(database)
+    return result
+  })
+  const result = remove()
   return result.changes > 0
 }
 

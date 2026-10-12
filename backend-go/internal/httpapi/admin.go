@@ -113,7 +113,11 @@ func (h *adminHandler) mutation(w http.ResponseWriter, r *http.Request, path str
 	confirm := r.Method == http.MethodPost && strings.HasSuffix(path, "/confirm")
 	var body map[string]json.RawMessage
 	var err error
-	if confirm && r.ContentLength == 0 { body = map[string]json.RawMessage{} } else { body, err = jsonbody.Object(w, r) }
+	if confirm && r.ContentLength == 0 {
+		body = map[string]json.RawMessage{}
+	} else {
+		body, err = jsonbody.Object(w, r)
+	}
 	if err != nil {
 		status := 400
 		if errors.Is(err, jsonbody.ErrLarge) {
@@ -134,6 +138,7 @@ func (h *adminHandler) mutation(w http.ResponseWriter, r *http.Request, path str
 	decode("startsOn", &i.StartsOn)
 	decode("startsAt", &i.StartsAt)
 	decode("endsAt", &i.EndsAt)
+	decode("timePrecision", &i.TimePrecision)
 	decode("status", &i.Status)
 	decode("eventType", &i.EventType)
 	decode("url", &i.URL)
@@ -142,8 +147,11 @@ func (h *adminHandler) mutation(w http.ResponseWriter, r *http.Request, path str
 	var e sqlite.AdminEvent
 	if confirm && len(body) == 0 {
 		current, getErr := h.store.GetAdminEvent(r.Context(), strings.TrimSuffix(strings.TrimPrefix(path, "/events/"), "/confirm"))
-		if getErr != nil { writeJSON(w, http.StatusNotFound, map[string]string{"error":"event_not_found"}, ""); return }
-		i = sqlite.EventInput{Title:current.Title, Detail:valueString(current.Detail), StartsOn:current.StartsOn, StartsAt:valueString(current.StartsAt), EndsAt:valueString(current.EndsAt), Status:valueString(current.Status), EventType:valueString(current.EventType), URL:valueString(current.URL), CancellationStatus:current.CancellationStatus, CancellationReason:valueString(current.CancellationReason)}
+		if getErr != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "event_not_found"}, "")
+			return
+		}
+		i = sqlite.EventInput{Title: current.Title, Detail: valueString(current.Detail), StartsOn: current.StartsOn, StartsAt: valueString(current.StartsAt), EndsAt: valueString(current.EndsAt), TimePrecision: current.TimePrecision, Status: valueString(current.Status), EventType: valueString(current.EventType), URL: valueString(current.URL), CancellationStatus: current.CancellationStatus, CancellationReason: valueString(current.CancellationReason)}
 	}
 	if r.Method == http.MethodPost && path == "/events" {
 		e, err = h.store.CreateManualEvent(r.Context(), i)
@@ -174,7 +182,12 @@ func (h *adminHandler) mutation(w http.ResponseWriter, r *http.Request, path str
 	writeJSON(w, status, map[string]any{"event": e}, "")
 }
 
-func valueString(v *string) string { if v == nil { return "" }; return *v }
+func valueString(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
 
 func queryInt(r *http.Request, name string, fallback int) int {
 	raw := strings.TrimSpace(r.URL.Query().Get(name))

@@ -136,6 +136,37 @@ func TestMediaAndProfileMediaContainmentAndHeaders(t *testing.T) {
 	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "image/png" || response.Header().Get("ETag") != `"`+hash+`"` || response.Body.String() != string(body) {
 		t.Fatalf("media response status=%d headers=%v body=%x", response.Code, response.Header(), response.Body.Bytes())
 	}
+	for _, tc := range []struct {
+		name, value string
+		status      int
+	}{
+		{"exact", `"` + hash + `"`, http.StatusNotModified},
+		{"weak", `W/"` + hash + `"`, http.StatusNotModified},
+		{"multiple", `"other", "` + hash + `"`, http.StatusNotModified},
+		{"other", `"other"`, http.StatusOK},
+		{"prefix", `"prefix-` + hash + `"`, http.StatusOK},
+		{"wildcard", `*`, http.StatusNotModified},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/media/"+id, nil)
+			r.Header.Set("If-None-Match", tc.value)
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, r)
+			if recorder.Code != tc.status {
+				t.Fatalf("status=%d want=%d headers=%v", recorder.Code, tc.status, recorder.Header())
+			}
+			if tc.status == http.StatusNotModified && recorder.Body.Len() != 0 {
+				t.Fatalf("304 body=%q", recorder.Body.Bytes())
+			}
+		})
+	}
+	profileConditional := httptest.NewRequest(http.MethodGet, "/media/profile/avatar", nil)
+	profileConditional.Header.Set("If-None-Match", `W/"`+hash+`"`)
+	profileRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(profileRecorder, profileConditional)
+	if profileRecorder.Code != http.StatusNotModified || profileRecorder.Body.Len() != 0 {
+		t.Fatalf("profile conditional status=%d body=%x", profileRecorder.Code, profileRecorder.Body.Bytes())
+	}
 	head := request(t, handler, http.MethodHead, "/media/profile/avatar?v="+hash)
 	if head.Code != http.StatusOK || head.Body.Len() != 0 || head.Header().Get("Content-Length") != contentLengthString(len(body)) {
 		t.Fatalf("profile HEAD status=%d headers=%v body=%q", head.Code, head.Header(), head.Body.String())
