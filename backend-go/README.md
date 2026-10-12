@@ -1,6 +1,6 @@
 # Kano Navi Go read-only service
 
-This module is the sixth migration slice. It runs beside the TypeScript
+This module is the seventh migration slice. It runs beside the TypeScript
 service, opens an existing Kano SQLite snapshot read-only, and exposes these
 public reads:
 
@@ -11,6 +11,22 @@ GET /api/dashboard?days=3
 GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&page=1&pageSize=100
 GET|HEAD /media/<opaque-id>
 GET|HEAD /media/profile/<avatar|banner>
+```
+
+When explicitly configured with `APP_MODE` and `ADMIN_PASSWORD`, the same
+process also exposes the independent in-memory admin session and read
+projections:
+
+```text
+GET  /api/admin/session
+POST /api/admin/login
+POST /api/admin/logout
+GET  /api/admin/posts/llm
+GET  /api/admin/videos
+GET  /api/admin/events
+GET  /api/admin/sync/runs
+GET  /api/admin/activity
+GET  /api/admin/overview
 ```
 
 Go listens on `:7658`; TypeScript continues to own `:7657` and all production
@@ -31,6 +47,12 @@ YouTube watch, short, live, shorts and share links use the same normalized
 resource reads are complete, while the documented post/event/video preview
 bounds remain in place. Startup requires every column used by the projection,
 including `posts.raw_json` for schedule source-text filtering.
+
+Admin sessions are deliberately not shared with TypeScript during the
+side-by-side phase. Go owns no admin mutation, source sync, workflow execution,
+LLM provider call, or media download/upload/discovery/cleanup. A future admin
+cutover must select one session owner and rehearse rollback to TypeScript on
+`:7657`; the Go admin router is not connected to the frontend.
 
 ## Checks
 

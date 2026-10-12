@@ -6,6 +6,7 @@
 | ----------------------------- | -------------------- | ------------------------------------------------------------------ |
 | `APP_MODE`                    | `production`         | Explicit `development` bypasses login; production requires it      |
 | `ADMIN_PASSWORD`              | Empty                | Production startup requires at least 12 non-padding characters     |
+| `ADMIN_ORIGIN`                | Empty                | Optional explicit origin accepted by the Go admin sidecar          |
 | `LLM_SECRETS_KEY`             | Empty                | Required non-blank encryption master key at startup in every mode  |
 | `PORT`                        | `7657`               | Shared frontend/API port for development, preview, and production  |
 | `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Initial legacy default for independent schedule stages             |

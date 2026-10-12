@@ -1,10 +1,10 @@
-# Go backend migration: phase six
+# Go backend migration: phase seven
 
 ## Goal and boundary
 
-Phase six formalizes the public-read validation, deployment rehearsal and
-rollback gate beside the TypeScript service. The Go
-service exposes:
+Phase seven adds an independently authenticated, read-only admin sidecar
+beside the public-read service. The Go service exposes the existing public
+reads and these admin reads:
 
 - `GET /api/health`
 - `GET /api/dashboard/revision`
@@ -12,13 +12,41 @@ service exposes:
 - `GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&page=1&pageSize=100`
 - `GET|HEAD /media/<opaque-id>`
 - `GET|HEAD /media/profile/<avatar|banner>`
+- `GET /api/admin/session`, `POST /api/admin/login`, `POST /api/admin/logout`
+- `GET /api/admin/posts/llm`, `/videos`, `/events`, `/sync/runs`,
+  `/activity` and `/overview`
 
 The service remains read-only, makes no external requests, and is not connected
 to the production `:7657` route. TypeScript continues to own production
-traffic and all write/operator capabilities: admin, MCP control,
-synchronization, source history, workflow scheduling, schedule extraction, LLM
-routing, media downloading and production routing. Calendar and media have not
-been cut over.
+traffic, the admin frontend, every admin mutation, MCP control, synchronization,
+source history, workflow scheduling, schedule extraction, LLM routing, media
+downloading and production routing. Admin reads are not connected to the
+frontend in this phase.
+
+## Admin authentication and ownership
+
+Go uses `kano_admin_session`, an HttpOnly, `SameSite=Strict` in-memory cookie
+with the TypeScript eight-hour lifetime and `/api/admin` path. Production
+requires `ADMIN_PASSWORD` with at least twelve non-padding characters; only an
+explicit `APP_MODE=development` enables password-free local authentication.
+Failed logins use the stable `invalid_credentials` and `too_many_attempts`
+codes. Cross-site unsafe requests are rejected with `csrf_origin_mismatch`.
+Passwords, hashes, session tokens and internal session identifiers never enter
+responses or logs.
+
+During side-by-side operation Go and TypeScript have separate session stores.
+They must not be joined through plaintext cookies, SQLite secrets or a shared
+session database. Before a production admin cutover, choose one session owner,
+run a cookie/session compatibility rehearsal, and keep the rollback path of
+stopping Go and returning all admin requests to TypeScript. The current Go
+admin router contains no POST/PUT/PATCH/DELETE data mutation.
+
+Admin list reads are SQL-bound and page-bounded. Event responses retain manual
+locks, tombstones, cancellation fields and provenance. Post LLM errors are
+classified rather than returned verbatim, run diagnostics remove stacks,
+paths, secrets and raw payloads, and no `raw_json` or provider material enters
+the projections. All reads use SQLite read-only mode and do not create or
+modify WAL, SHM, journal, snapshot or media files.
 
 ## Calendar ownership
 

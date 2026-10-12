@@ -74,7 +74,8 @@ func verifySchema(ctx context.Context, db *sql.DB) error {
 	required := map[string][]string{
 		"profiles":               {"id", "display_name", "romanized_name", "bio", "avatar_url", "banner_url", "x_url", "youtube_url", "updated_at"},
 		"posts":                  {"id", "source", "account_handle", "type", "label", "text", "published_at", "url", "likes", "reposts", "replies", "media_url", "media_alt", "raw_json"},
-		"events":                 {"id", "source", "source_item_id", "title", "detail", "starts_on", "starts_at", "ends_at", "timezone", "time_precision", "status", "event_type", "url", "provenance", "manual_locked", "cancellation_status", "cancellation_source", "cancellation_reason", "cancellation_evidence", "cancellation_at", "deleted_at"},
+		"post_llm_states":        {"post_id", "status", "route", "last_attempt_at", "last_processed_at", "last_error", "last_extraction_id", "reprocess_requested"},
+		"events":                 {"id", "source", "source_item_id", "source_key", "title", "detail", "starts_on", "starts_at", "ends_at", "timezone", "time_precision", "status", "event_type", "url", "provenance", "manual_locked", "cancellation_status", "cancellation_source", "cancellation_reason", "cancellation_evidence", "cancellation_source_item_id", "cancellation_confidence", "cancellation_at", "deleted_at", "created_at", "updated_at"},
 		"event_sources":          {"event_id", "source", "source_item_id", "deleted_at"},
 		"videos":                 {"id", "source", "title", "published_at", "scheduled_at", "url", "thumbnail_url", "kind", "is_upcoming"},
 		"focus":                  {"id", "video_id", "date_label", "title", "description", "image_url", "url", "source_url", "updated_at"},

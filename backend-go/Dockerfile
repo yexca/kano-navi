@@ -8,4 +8,5 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o /out/kano-go ./c
 
 FROM scratch
 COPY --from=build /out/kano-go /kano-go
+EXPOSE 7658
 ENTRYPOINT ["/kano-go"]

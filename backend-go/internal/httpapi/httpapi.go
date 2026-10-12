@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/config"
 	"github.com/yexca/kano-navi/backend-go/internal/publicview"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
@@ -17,6 +18,7 @@ import (
 type Handler struct {
 	store *sqlite.Store
 	now   func() time.Time
+	admin http.Handler
 }
 
 func NewHandler(store *sqlite.Store) http.Handler {
@@ -27,7 +29,19 @@ func NewHandlerWithClock(store *sqlite.Store, now func() time.Time) http.Handler
 	if now == nil {
 		now = time.Now
 	}
-	return &Handler{store: store, now: now}
+	// The legacy constructor serves public reads only. Admin authentication is
+	// attached explicitly through NewHandlerWithAdmin after configuration.
+	return &Handler{store: store, now: now, admin: newAdminHandler(store, nil)}
+}
+
+// NewHandlerWithAdmin attaches the independent in-memory admin session store.
+// It does not grant any write route; the admin handler below contains GET
+// projections only.
+func NewHandlerWithAdmin(store *sqlite.Store, now func() time.Time, auth *adminauth.Auth) http.Handler {
+	if now == nil {
+		now = time.Now
+	}
+	return &Handler{store: store, now: now, admin: newAdminHandler(store, auth)}
 }
 
 func NewServer(handler http.Handler, cfg config.Config) *http.Server {
@@ -43,6 +57,9 @@ func NewServer(handler http.Handler, cfg config.Config) *http.Server {
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
+	case "/api/admin", "/api/admin/", "/api/admin/session", "/api/admin/login", "/api/admin/logout", "/api/admin/videos", "/api/admin/posts/llm", "/api/admin/events", "/api/admin/sync/runs", "/api/admin/sync/jobs", "/api/admin/activity", "/api/admin/overview":
+		h.admin.ServeHTTP(w, r)
+		return
 	case "/api/health":
 		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
@@ -72,6 +89,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.calendar(w, r)
 	default:
 		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/admin/"):
+			h.admin.ServeHTTP(w, r)
 		case strings.HasPrefix(r.URL.Path, "/media/profile/"):
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {
 				writeMethodNotAllowed(w, "GET, HEAD")

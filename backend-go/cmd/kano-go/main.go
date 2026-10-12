@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/config"
 	"github.com/yexca/kano-navi/backend-go/internal/httpapi"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
@@ -20,6 +21,23 @@ func main() {
 		fmt.Fprintln(os.Stderr, "kano-go: invalid configuration")
 		os.Exit(2)
 	}
+	var admin *adminauth.Auth
+	// The public sidecar remains usable for the existing read-only smoke tests
+	// when no admin environment is supplied. Supplying any admin setting opts
+	// into the TypeScript-compatible production default and validates it before
+	// the admin router is attached.
+	if os.Getenv("APP_MODE") != "" || os.Getenv("ADMIN_PASSWORD") != "" || os.Getenv("ADMIN_ORIGIN") != "" {
+		adminConfig, configErr := adminauth.ResolveEnv()
+		if configErr != nil {
+			fmt.Fprintln(os.Stderr, "kano-go: invalid admin configuration")
+			os.Exit(2)
+		}
+		admin, err = adminauth.New(adminConfig)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "kano-go: invalid admin configuration")
+			os.Exit(2)
+		}
+	}
 	store, err := sqlite.OpenReadOnly(cfg.DatabasePath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "kano-go: database unavailable")
@@ -27,7 +45,7 @@ func main() {
 	}
 	defer store.Close()
 
-	server := httpapi.NewServer(httpapi.RequestLog(httpapi.NewHandler(store), os.Stdout), cfg)
+	server := httpapi.NewServer(httpapi.RequestLog(httpapi.NewHandlerWithAdmin(store, nil, admin), os.Stdout), cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)

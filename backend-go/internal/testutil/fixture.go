@@ -26,13 +26,20 @@ func NewSnapshot(t testing.TB) string {
 			text TEXT NOT NULL, published_at TEXT NOT NULL, url TEXT NOT NULL, likes INTEGER DEFAULT 0, reposts INTEGER DEFAULT 0,
 			replies INTEGER DEFAULT 0, media_url TEXT, media_alt TEXT, raw_json TEXT
 		);
+		CREATE TABLE post_llm_states (
+			post_id TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'never', route TEXT,
+			last_attempt_at TEXT, last_processed_at TEXT, last_error TEXT,
+			last_extraction_id INTEGER, reprocess_requested INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL DEFAULT ''
+		);
 		CREATE TABLE events (
 			id TEXT PRIMARY KEY, source TEXT NOT NULL, source_item_id TEXT, source_key TEXT, title TEXT NOT NULL, detail TEXT,
 			starts_on TEXT NOT NULL, starts_at TEXT, ends_at TEXT, timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
 			time_precision TEXT NOT NULL DEFAULT 'exact', status TEXT, event_type TEXT DEFAULT 'event', url TEXT,
 			is_upcoming INTEGER DEFAULT 0, provenance TEXT NOT NULL DEFAULT 'automatic', manual_locked INTEGER NOT NULL DEFAULT 0,
 			confidence REAL, extraction_id INTEGER, cancellation_status TEXT NOT NULL DEFAULT 'none', cancellation_source TEXT,
-			cancellation_reason TEXT, cancellation_evidence TEXT, cancellation_at TEXT, deleted_at TEXT,
+			cancellation_reason TEXT, cancellation_evidence TEXT, cancellation_source_item_id TEXT,
+			cancellation_confidence REAL, cancellation_at TEXT, deleted_at TEXT,
 			created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '', raw_json TEXT
 		);
 		CREATE TABLE event_sources (

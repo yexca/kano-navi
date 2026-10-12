@@ -15,10 +15,29 @@ The future public-read ownership boundary is:
 - `/api/calendar`
 - `/media`
 
-TypeScript continues to own the admin API and authentication, MCP control,
-source synchronization, workflow scheduling, LLM routing and extraction, and
-media discovery, download, upload and cleanup. No write or operator route is
-part of this phase.
+TypeScript continues to own the admin frontend, authentication in production,
+all admin mutation, MCP control, source synchronization, workflow scheduling,
+LLM routing and extraction, and media discovery, download, upload and cleanup.
+Go has a separate in-memory admin session only for side-by-side GET/read
+validation; it is not connected to the frontend and no write or operator
+mutation route is part of this phase.
+
+## Admin side-by-side boundary
+
+The Go admin contract mirrors the existing TypeScript paths for session,
+login, logout, posts/LLM, videos, events and sync runs. Go also provides
+read-only activity/overview aggregates for diagnostics. List queries use
+bounded `page`/`pageSize` values (events retain the existing event page shape)
+and bind every filter value. Event projections retain manual lock, tombstone,
+cancellation and provenance fields. LLM errors are returned as stable
+categories; run diagnostics omit raw JSON, stacks, absolute paths, secrets and
+provider material.
+
+The side-by-side session stores never share a cookie token or SQLite secret.
+Before production admin ownership changes, select the owner, verify the
+cookie and failure contract against TypeScript with synthetic fixtures, and
+prepare a rollback that disables the Go admin listener and returns `/api/admin`
+to TypeScript without changing the snapshot.
 
 ## Validation gate
 
