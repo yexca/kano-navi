@@ -137,7 +137,10 @@ func boundPage(page, pageSize, max, defaultSize int) (int, int) {
 	return page, pageSize
 }
 func pageCount(total, size int) int {
-	n := (total + size - 1) / size
+	n := total / size
+	if total%size != 0 {
+		n++
+	}
 	if n < 1 {
 		return 1
 	}
@@ -190,7 +193,7 @@ func (s *Store) ListAdminPosts(ctx context.Context, page, pageSize int, source, 
 		args = append(args, strings.TrimSpace(account))
 	}
 	if adminDateRE.MatchString(from) {
-		clauses = append(clauses, "substr(p.published_at,1,10) >= ?")
+		clauses = append(clauses, "date(p.published_at,'+9 hours') >= ?")
 		args = append(args, from)
 	}
 	if adminDateRE.MatchString(to) {
@@ -207,7 +210,7 @@ func (s *Store) ListAdminPosts(ctx context.Context, page, pageSize int, source, 
 	} else if strings.EqualFold(media, "missing") || strings.EqualFold(media, "none") || strings.EqualFold(media, "false") || media == "0" {
 		clauses = append(clauses, "(p.media_url IS NULL OR trim(p.media_url) = '')")
 	}
-	if status != "" {
+	if status == "never" || status == "pending" || status == "processed" || status == "failed" || status == "skipped" || status == "uncertain" {
 		clauses = append(clauses, "COALESCE(s.status, 'never') = ?")
 		args = append(args, status)
 	}
@@ -222,7 +225,7 @@ func (s *Store) ListAdminPosts(ctx context.Context, page, pageSize int, source, 
 	totalPages := pageCount(total, pageSize)
 	page = safePage(page, totalPages)
 	offset := (page - 1) * pageSize
-	query := `SELECT p.id,p.source,p.account_handle,p.text,p.published_at,p.url,p.media_url,p.media_alt,COALESCE(s.status,'never'),s.route,s.last_attempt_at,s.last_processed_at,s.last_error,s.last_extraction_id,COALESCE(s.reprocess_requested,0) FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE ` + where + ` ORDER BY p.published_at DESC,p.id ASC LIMIT ? OFFSET ?`
+	query := `SELECT p.id,p.source,p.account_handle,p.text,p.published_at,p.url,p.media_url,p.media_alt,COALESCE(s.status,'never'),s.route,s.last_attempt_at,s.last_processed_at,s.last_error,s.last_extraction_id,COALESCE(s.reprocess_requested,0) FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE ` + where + ` ORDER BY julianday(p.published_at) DESC,p.id ASC LIMIT ? OFFSET ?`
 	rows, err := s.db.QueryContext(ctx, query, append(args, pageSize, offset)...)
 	if err != nil {
 		return AdminPostsPage{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
@@ -254,15 +257,15 @@ func (s *Store) ListAdminPosts(ctx context.Context, page, pageSize int, source, 
 	return AdminPostsPage{Posts: items, Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages, HasPrevious: page > 1, HasNext: page < totalPages}, nil
 }
 
-func (s *Store) ListAdminVideos(ctx context.Context, page, pageSize int, status, kind, featured, thumbnail, eventID string) (AdminVideosPage, error) {
+func (s *Store) ListAdminVideos(ctx context.Context, page, pageSize int, status, kind, featured, thumbnail, eventID string, legacy ...bool) (AdminVideosPage, error) {
 	page, pageSize = boundPage(page, pageSize, 200, 100)
 	clauses := []string{"1=1"}
 	args := []any{}
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "published":
-		clauses = append(clauses, "v.published_at IS NOT NULL AND v.scheduled_at IS NULL")
+		clauses = append(clauses, "v.published_at IS NOT NULL AND COALESCE(v.is_upcoming,0)=0")
 	case "scheduled", "upcoming":
-		clauses = append(clauses, "v.scheduled_at IS NOT NULL")
+		clauses = append(clauses, "v.scheduled_at IS NOT NULL AND COALESCE(v.is_upcoming,0)=1")
 	case "live":
 		clauses = append(clauses, "lower(COALESCE(v.kind,'')) = 'live'")
 	}
@@ -271,7 +274,9 @@ func (s *Store) ListAdminVideos(ctx context.Context, page, pageSize int, status,
 		args = append(args, strings.TrimSpace(kind))
 	}
 	switch strings.ToLower(strings.TrimSpace(thumbnail)) {
-	case "1", "true", "yes", "ready", "present":
+	case "ready":
+		clauses = append(clauses, "EXISTS (SELECT 1 FROM media_assets m WHERE m.source_url=v.thumbnail_url AND m.status='ready')")
+	case "1", "true", "yes", "present":
 		clauses = append(clauses, "v.thumbnail_url IS NOT NULL AND trim(v.thumbnail_url) <> ''")
 	case "missing", "none", "false", "0":
 		clauses = append(clauses, "(v.thumbnail_url IS NULL OR trim(v.thumbnail_url) = '')")
@@ -280,7 +285,10 @@ func (s *Store) ListAdminVideos(ctx context.Context, page, pageSize int, status,
 		clauses = append(clauses, "EXISTS (SELECT 1 FROM event_sources es WHERE es.source_item_id=v.id AND es.event_id=? AND es.deleted_at IS NULL)")
 		args = append(args, strings.TrimSpace(eventID))
 	}
-	featuredID, _ := s.featuredVideoID(ctx)
+	featuredID, err := s.featuredVideoID(ctx)
+	if err != nil {
+		return AdminVideosPage{}, err
+	}
 	if featured == "1" || strings.EqualFold(featured, "true") {
 		if featuredID == nil {
 			return AdminVideosPage{Videos: []AdminVideo{}, Page: 1, PageSize: pageSize, Total: 0, TotalPages: 1}, nil
@@ -319,7 +327,8 @@ func (s *Store) ListAdminVideos(ctx context.Context, page, pageSize int, status,
 	if err := rows.Err(); err != nil {
 		return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
 	}
-	if featuredID != nil {
+	_ = rows.Close()
+	if len(legacy) > 0 && legacy[0] && featuredID != nil {
 		found := false
 		for _, item := range items {
 			if item.ID == *featuredID {
@@ -332,6 +341,9 @@ func (s *Store) ListAdminVideos(ctx context.Context, page, pageSize int, status,
 			var published, scheduled, thumbnail, itemKind sql.NullString
 			var upcoming int
 			err := s.db.QueryRowContext(ctx, `SELECT id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,COALESCE(is_upcoming,0) FROM videos WHERE id=?`, *featuredID).Scan(&item.ID, &item.Source, &item.Title, &published, &scheduled, &item.URL, &thumbnail, &itemKind, &upcoming)
+			if err != nil {
+				return AdminVideosPage{}, fmt.Errorf("%w: featured video unavailable", ErrUnavailable)
+			}
 			if err == nil {
 				item.PublishedAt = nullString(published)
 				item.ScheduledAt = nullString(scheduled)
@@ -349,16 +361,10 @@ func (s *Store) featuredVideoID(ctx context.Context) (*string, error) {
 	var value sql.NullString
 	err := s.db.QueryRowContext(ctx, "SELECT value FROM app_settings WHERE key='featured_video_id'").Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
-		var legacy sql.NullString
-		if legacyErr := s.db.QueryRowContext(ctx, "SELECT video_id FROM focus ORDER BY id LIMIT 1").Scan(&legacy); legacyErr != nil || !legacy.Valid || strings.TrimSpace(legacy.String) == "" {
-			return nil, nil
-		}
-		var exists int
-		if legacyErr := s.db.QueryRowContext(ctx, "SELECT 1 FROM videos WHERE id=?", legacy.String).Scan(&exists); legacyErr != nil {
-			return nil, nil
-		}
-		v := legacy.String
-		return &v, nil
+		err = s.db.QueryRowContext(ctx, "SELECT video_id FROM focus ORDER BY id LIMIT 1").Scan(&value)
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: featured video unavailable", ErrUnavailable)
@@ -367,15 +373,22 @@ func (s *Store) featuredVideoID(ctx context.Context) (*string, error) {
 		return nil, nil
 	}
 	var exists int
-	if err := s.db.QueryRowContext(ctx, "SELECT 1 FROM videos WHERE id=?", value.String).Scan(&exists); err != nil {
+	err = s.db.QueryRowContext(ctx, "SELECT 1 FROM videos WHERE id=?", value.String).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	v := value.String
-	return &v, nil
+	if err != nil {
+		return nil, fmt.Errorf("%w: featured video unavailable", ErrUnavailable)
+	}
+	return &value.String, nil
 }
 
-func (s *Store) ListAdminEventsPage(ctx context.Context, page, pageSize int, ascending, includeDeleted bool, search, provenance, source, from, to string) (AdminEventsPage, error) {
+func (s *Store) ListAdminEventsPage(ctx context.Context, page, pageSize int, ascending, includeDeleted bool, search, provenance, source, from, to string, legacy ...bool) (AdminEventsPage, error) {
 	page, pageSize = boundPage(page, pageSize, 100, 25)
+	if len(legacy) > 0 && legacy[0] {
+		page = 1
+		pageSize = int(^uint(0) >> 1)
+	}
 	clauses := []string{"1=1"}
 	args := []any{}
 	if !includeDeleted {

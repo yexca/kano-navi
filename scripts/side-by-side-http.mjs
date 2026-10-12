@@ -78,12 +78,12 @@ database.exec(`
     VALUES ('video-1', 'youtube', 'Synthetic stream', '2026-10-10T00:00:00.000Z', '2026-10-11T04:00:00Z', 'https://www.youtube.com/watch?v=video-1', 'stream', 1);
   INSERT INTO events (id, source, title, starts_on, starts_at, ends_at, timezone, time_precision, status, event_type, url, provenance, manual_locked, cancellation_status, created_at, updated_at)
     VALUES ('event-1', 'youtube', 'Synthetic stream', '2026-10-11', '2026-10-11T04:00:00Z', '2026-10-11T05:00:00Z', 'Asia/Tokyo', 'exact', 'scheduled', 'stream', 'https://youtu.be/video-1?si=fixture', 'automatic', 0, 'none', '', '');
-  INSERT INTO media_assets (id, source, source_url, cache_path, mime_type, byte_size, sha256, status, fetched_at, updated_at)
-    VALUES ('${mediaID}', 'x', 'https://cdn.example.invalid/side-by-side.png', '${mediaRelativePath}', 'image/png', ${mediaBody.length}, '${mediaHash}', 'ready', '2026-10-11T00:00:00.000Z', '2026-10-11T00:00:00.000Z');
-  INSERT INTO media_assets (id, source, source_url, status)
-    VALUES ('${pendingMediaID}', 'x', 'https://cdn.example.invalid/pending.png', 'pending');
-  INSERT INTO profile_media (id, slot, source, source_url, active_cache_path, active_sha256, active_mime_type, status, is_active, updated_at)
-    VALUES ('profile-avatar', 'avatar', 'upload', 'https://cdn.example.invalid/profile.png', '${profileRelativePath}', '${mediaHash}', 'image/png', 'ready', 1, '2026-10-11T00:00:00.000Z');
+  INSERT INTO media_assets (id, source, source_url, cache_path, mime_type, byte_size, sha256, status, fetched_at, created_at, updated_at)
+    VALUES ('${mediaID}', 'x', 'https://cdn.example.invalid/side-by-side.png', '${mediaRelativePath}', 'image/png', ${mediaBody.length}, '${mediaHash}', 'ready', '2026-10-11T00:00:00.000Z', '2026-10-11T00:00:00.000Z', '2026-10-11T00:00:00.000Z');
+  INSERT INTO media_assets (id, source, source_url, status, created_at, updated_at)
+    VALUES ('${pendingMediaID}', 'x', 'https://cdn.example.invalid/pending.png', 'pending', '2026-10-11T00:00:00.000Z', '2026-10-11T00:00:00.000Z');
+  INSERT INTO profile_media (id, slot, source, source_url, active_cache_path, active_sha256, active_mime_type, status, is_active, created_at, updated_at)
+    VALUES ('profile-avatar', 'avatar', 'upload', 'https://cdn.example.invalid/profile.png', '${profileRelativePath}', '${mediaHash}', 'image/png', 'ready', 1, '2026-10-11T00:00:00.000Z', '2026-10-11T00:00:00.000Z');
   INSERT INTO focus (id, video_id, date_label, title, description, updated_at)
     VALUES (1, 'video-1', '2026-10-11', 'Focus', 'Synthetic focus', '2026-10-11T00:00:00.000Z');
   INSERT INTO timeline (id, year, title, detail, sort_order) VALUES (1, '2026', 'Timeline', 'Synthetic timeline', 1);
@@ -101,7 +101,7 @@ const protectedFiles = [
 ]
 const beforeReads = fingerprintFiles(protectedFiles)
 
-const tsServer = createApp({ database }).listen(0, "127.0.0.1")
+const tsServer = createApp({ database, adminMode: "development" }).listen(0, "127.0.0.1")
 await new Promise((resolve) => tsServer.once("listening", resolve))
 const tsPort = tsServer.address().port
 const goPort = await unusedPort()
@@ -117,6 +117,7 @@ const goProcess = spawn(
   ],
   {
     cwd: join(root, "backend-go"),
+    env: { ...process.env, APP_MODE: "development" },
     stdio: ["ignore", "pipe", "pipe"],
   },
 )
@@ -131,6 +132,15 @@ goProcess.stderr.on("data", (chunk) => {
 
 try {
   await waitForHealth(`http://127.0.0.1:${goPort}/api/health`)
+  // Admin comparison uses separate jars and never prints either cookie.
+  for (const path of ["/api/admin/session", "/api/admin/posts/llm", "/api/admin/videos", "/api/admin/events", "/api/admin/sync/runs"]) {
+    const [typescript, goResponse] = await Promise.all([
+      fetch(`http://127.0.0.1:${tsPort}${path}`),
+      fetch(`http://127.0.0.1:${goPort}${path}`),
+    ])
+    assert.equal(typescript.status, goResponse.status, `admin ${path}`)
+    assert.deepEqual(await goResponse.json(), await typescript.json(), `admin ${path}`)
+  }
   const requests = [
     "/api/health",
     "/api/dashboard/revision",

@@ -21,6 +21,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "kano-go: invalid configuration")
 		os.Exit(2)
 	}
+	if cfg.EnableAdminWrites && os.Getenv("APP_MODE") != "development" {
+		fmt.Fprintln(os.Stderr, "kano-go: admin writes require APP_MODE=development")
+		os.Exit(2)
+	}
 	var admin *adminauth.Auth
 	// The public sidecar remains usable for the existing read-only smoke tests
 	// when no admin environment is supplied. Supplying any admin setting opts
@@ -38,7 +42,12 @@ func main() {
 			os.Exit(2)
 		}
 	}
-	store, err := sqlite.OpenReadOnly(cfg.DatabasePath)
+	var store *sqlite.Store
+	if cfg.EnableAdminWrites {
+		store, err = sqlite.OpenAdminWrites(cfg.DatabasePath)
+	} else {
+		store, err = sqlite.OpenReadOnly(cfg.DatabasePath)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "kano-go: database unavailable")
 		os.Exit(1)

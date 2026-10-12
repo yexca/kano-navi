@@ -30,6 +30,7 @@ type SyncRun struct {
 type Store struct {
 	db       *sql.DB
 	dataRoot string
+	writable bool
 }
 
 // OpenReadOnly opens an existing snapshot without creating directories,
@@ -68,6 +69,36 @@ func OpenReadOnly(filename string) (*Store, error) {
 		return nil, err
 	}
 	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs))}, nil
+}
+
+// OpenAdminWrites opens an existing fixture in SQLite rw mode. It never creates
+// a file or runs schema work; callers must explicitly enable development mode.
+func OpenAdminWrites(filename string) (*Store, error) {
+	abs, err := filepath.Abs(strings.TrimSpace(filename))
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid path", ErrUnavailable)
+	}
+	info, err := os.Stat(abs)
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: snapshot is unavailable", ErrUnavailable)
+	}
+	db, err := sql.Open("sqlite", "file:"+abs+"?mode=rw&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
+	if err != nil {
+		return nil, fmt.Errorf("%w: snapshot could not be opened", ErrUnavailable)
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("%w: snapshot could not be read", ErrUnavailable)
+	}
+	if err := verifySchema(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), writable: true}, nil
 }
 
 func verifySchema(ctx context.Context, db *sql.DB) error {

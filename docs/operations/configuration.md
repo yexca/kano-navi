@@ -53,6 +53,11 @@ models, encrypted keys, routes, source accounts, and workflow windows are
 operator settings managed through /admin. Source windows and timer intervals
 are independent.
 
+The Go canary uses `-database` and listens on `:7658` by default. It is
+read-only unless `-enable-admin-writes` is paired with `APP_MODE=development`;
+that flag is for disposable synthetic fixtures only and refuses production
+startup. The Go canary cookie is separate from the TypeScript admin cookie.
+
 Set `LLM_SECRETS_KEY` before starting development, preview, or production, even
 when no provider has been added. Missing, empty, or whitespace-only values
 refuse startup before SQLite opens. Use a random master key and retain it

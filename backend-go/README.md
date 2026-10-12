@@ -1,4 +1,4 @@
-# Kano Navi Go read-only service
+# Kano Navi Go service (phase eight)
 
 This module is the seventh migration slice. It runs beside the TypeScript
 service, opens an existing Kano SQLite snapshot read-only, and exposes these
@@ -128,3 +128,6 @@ discovery, upload or cleanup. TypeScript still owns production traffic on
 `:7657`; calendar and media have not been connected to production routing. To
 roll back a future side-by-side deployment, stop Go on `:7658` and continue
 using TypeScript on `:7657`.
+
+
+Phase eight keeps the service read-only by default. The isolated event mutation slice requires `APP_MODE=development` and `-enable-admin-writes` against an existing synthetic SQLite file. It uses the distinct `kano_go_canary_session` cookie and atomic event/source/revision transactions; production remains owned by TypeScript.

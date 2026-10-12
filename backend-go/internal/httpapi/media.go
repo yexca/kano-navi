@@ -150,6 +150,11 @@ func mediaCacheControl(immutable bool) string {
 
 func mediaFresh(r *http.Request, hash string, modified time.Time) bool {
 	if raw := r.Header.Get("If-None-Match"); raw != "" {
+		// Match the validator after proxies have optionally stripped weak
+		// markers or surrounding whitespace.
+		if strings.Contains(strings.ToLower(raw), strings.ToLower(hash)) {
+			return true
+		}
 		for _, candidate := range strings.Split(raw, ",") {
 			candidate = strings.TrimSpace(strings.TrimPrefix(candidate, "W/"))
 			if candidate == `"`+hash+`"` || candidate == "*" {

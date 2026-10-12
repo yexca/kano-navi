@@ -6,15 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yexca/kano-navi/backend-go/internal/jsonbody"
 	"net"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf16"
 )
 
-const CookieName = "kano_admin_session"
+const CookieName = "kano_go_canary_session"
 const DefaultSessionTTL = 8 * time.Hour
 
 var (
@@ -53,7 +55,7 @@ func NewConfig(mode, password, allowedOrigin string) (Config, error) {
 	if mode != "development" && mode != "production" {
 		return Config{}, ErrInvalidMode
 	}
-	if mode == "production" && len(strings.TrimSpace(password)) < 12 {
+	if mode == "production" && len(utf16.Encode([]rune(strings.TrimFunc(password, jsWhitespace)))) < 12 {
 		return Config{}, ErrPassword
 	}
 	ttl := DefaultSessionTTL
@@ -156,6 +158,20 @@ func (a *Auth) Session(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
+	object, err := jsonbody.Object(w, r)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, jsonbody.ErrLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	var password string
+	if raw, ok := object["password"]; ok && (string(raw) == "null" || json.Unmarshal(raw, &password) != nil) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
 	if a.cfg.Mode == "development" {
 		writeJSON(w, http.StatusOK, a.SessionPayload(r))
 		return
@@ -171,11 +187,7 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too_many_attempts"})
 		return
 	}
-	var body struct {
-		Password string `json:"password"`
-	}
-	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body)
-	actual := []byte(body.Password)
+	actual := []byte(password)
 	expected := []byte(a.cfg.Password)
 	matches := len(actual) == len(expected) && subtle.ConstantTimeCompare(actual, expected) == 1
 	if !matches {
@@ -201,7 +213,7 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 	a.sessions[token] = session{expiresAt: now.Add(a.cfg.SessionTTL)}
 	a.mu.Unlock()
 	setCookie(w, r, token, int(a.cfg.SessionTTL/time.Second))
-	writeJSON(w, http.StatusOK, a.SessionPayload(rWithCookie(r, token)))
+	writeJSON(w, http.StatusOK, map[string]any{"mode": a.cfg.Mode, "requiresPassword": true, "authenticated": true})
 }
 
 func (a *Auth) Logout(w http.ResponseWriter, r *http.Request) {
@@ -241,7 +253,7 @@ func (a *Auth) OriginGuard(next http.Handler) http.Handler {
 			return
 		}
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
-		if origin != "" && (a.cfg.AllowedOrigin == "" || !sameOrigin(origin, a.cfg.AllowedOrigin)) {
+		if origin != "" && !sameOrigin(origin, a.expectedOrigin(r)) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "csrf_origin_mismatch"})
 			return
 		}
@@ -302,12 +314,6 @@ func setCookie(w http.ResponseWriter, r *http.Request, token string, maxAge int)
 	w.Header().Set("Set-Cookie", fmt.Sprintf("%s=%s; Path=/api/admin; HttpOnly; SameSite=Strict; Max-Age=%d%s", CookieName, token, maxAge, secureSuffix))
 }
 
-func rWithCookie(r *http.Request, token string) *http.Request {
-	clone := r.Clone(r.Context())
-	clone.AddCookie(&http.Cookie{Name: CookieName, Value: token})
-	return clone
-}
-
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-transform")
@@ -317,4 +323,22 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 		body = []byte(`{"error":"internal_error"}`)
 	}
 	_, _ = w.Write(body)
+}
+
+// JavaScript String.trim whitespace; length is measured in UTF-16 code units.
+func jsWhitespace(r rune) bool {
+	return r == '\uFEFF' || r == '\u0009' || r == '\u000A' || r == '\u000B' || r == '\u000C' || r == '\u000D' || r == '\u0020' || r == '\u00A0' || r == '\u1680' || r >= '\u2000' && r <= '\u200A' || r == '\u2028' || r == '\u2029' || r == '\u202F' || r == '\u205F' || r == '\u3000'
+}
+func (a *Auth) expectedOrigin(r *http.Request) string {
+	if a.cfg.AllowedOrigin != "" {
+		return a.cfg.AllowedOrigin
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); forwarded != "" {
+		scheme = strings.ToLower(forwarded)
+	}
+	return scheme + "://" + r.Host
 }

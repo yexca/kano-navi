@@ -25,6 +25,7 @@ type Config struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	ShutdownTimeout   time.Duration
+	EnableAdminWrites bool
 }
 
 func Default() Config {
@@ -63,6 +64,7 @@ func Parse(args []string) (Config, error) {
 	flags.DurationVar(&c.WriteTimeout, "write-timeout", c.WriteTimeout, "maximum response write time")
 	flags.DurationVar(&c.IdleTimeout, "idle-timeout", c.IdleTimeout, "maximum keep-alive idle time")
 	flags.DurationVar(&c.ShutdownTimeout, "shutdown-timeout", c.ShutdownTimeout, "graceful shutdown deadline")
+	flags.BoolVar(&c.EnableAdminWrites, "enable-admin-writes", false, "enable development-only admin event writes")
 	if err := flags.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
