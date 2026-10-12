@@ -34,7 +34,7 @@ func migrateWorkflowSchema(ctx context.Context, db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS workflow_run_steps(id INTEGER PRIMARY KEY AUTOINCREMENT,
  run_id TEXT NOT NULL REFERENCES workflow_runs(id),step_id TEXT NOT NULL,step_order INTEGER NOT NULL,
  status TEXT NOT NULL CHECK(status IN ('pending','running','succeeded','partial','failed','cancelled','blocked')),
- capability TEXT NOT NULL CHECK(capability IN ('synthetic','capability_not_migrated')),
+ capability TEXT NOT NULL CHECK(capability IN ('synthetic','x_recent','capability_not_migrated')),
  started_at TEXT,finished_at TEXT,error_code TEXT,retryable INTEGER NOT NULL DEFAULT 0,
  UNIQUE(run_id,step_id),UNIQUE(run_id,step_order))`,
 		`CREATE TABLE IF NOT EXISTS workflow_step_attempts(id INTEGER PRIMARY KEY AUTOINCREMENT,

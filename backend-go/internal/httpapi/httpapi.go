@@ -35,13 +35,18 @@ func NewHandlerWithClock(store *sqlite.Store, now func() time.Time) http.Handler
 }
 
 // NewHandlerWithAdmin attaches the independent in-memory admin session store.
-// It does not grant any write route; the admin handler below contains GET
-// projections only.
+// The separate NewHandlerWithAdminAndX constructor can attach the explicitly
+// gated development X recent trigger.
 func NewHandlerWithAdmin(store *sqlite.Store, now func() time.Time, auth *adminauth.Auth) http.Handler {
+	return NewHandlerWithAdminAndX(store, now, auth, nil)
+}
+
+// NewHandlerWithAdminAndX attaches the development-only X recent trigger.
+func NewHandlerWithAdminAndX(store *sqlite.Store, now func() time.Time, auth *adminauth.Auth, trigger XSyncTrigger) http.Handler {
 	if now == nil {
 		now = time.Now
 	}
-	return &Handler{store: store, now: now, admin: newAdminHandler(store, auth)}
+	return &Handler{store: store, now: now, admin: newAdminHandlerWithX(store, auth, trigger)}
 }
 
 func NewServer(handler http.Handler, cfg config.Config) *http.Server {

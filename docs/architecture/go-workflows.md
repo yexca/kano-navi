@@ -22,7 +22,7 @@ back. The normal public read opener remains read-only and never migrates.
 
 `workflows` is the saved definition and timer metadata. `workflow_runs` is
 one operator, scheduler, or recovery execution. `workflow_run_steps` stores
-ordered steps and an explicit `capability` (`synthetic` or
+ordered steps and an explicit `capability` (`synthetic`, `x_recent`, or
 `capability_not_migrated`). `workflow_step_attempts` stores safe error
 codes, retryability and bounded timing metadata for every try.
 `workflow_leases` is the global single-flight lease; SQLite's partial unique

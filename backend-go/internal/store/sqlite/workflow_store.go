@@ -207,7 +207,7 @@ func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, er
 			return nil, ErrWorkflowStorage
 		}
 		st.Status = workflowStatus(st.Status, true)
-		if st.Capability != "synthetic" {
+		if st.Capability != "synthetic" && st.Capability != "x_recent" {
 			st.Capability = "capability_not_migrated"
 		}
 		st.StartedAt = nullableWorkflowString(sa)

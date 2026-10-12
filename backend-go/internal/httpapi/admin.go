@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -12,18 +13,29 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/jsonbody"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
+
+	"github.com/yexca/kano-navi/backend-go/internal/workflow"
 )
 
 // adminHandler keeps reads available in the canary; event writes are an
 // explicitly gated development-only slice. TypeScript remains the production
-// owner of every mutation, job queue, source fetch and model operation.
+// owner of every other mutation, job queue, source fetch and model operation.
 type adminHandler struct {
-	store *sqlite.Store
-	auth  *adminauth.Auth
+	store    *sqlite.Store
+	auth     *adminauth.Auth
+	xTrigger XSyncTrigger
+}
+
+type XSyncTrigger interface {
+	Trigger(context.Context, int) (*sqlite.WorkflowRun, error)
 }
 
 func newAdminHandler(store *sqlite.Store, auth *adminauth.Auth) http.Handler {
 	return &adminHandler{store: store, auth: auth}
+}
+
+func newAdminHandlerWithX(store *sqlite.Store, auth *adminauth.Auth, trigger XSyncTrigger) http.Handler {
+	return &adminHandler{store: store, auth: auth, xTrigger: trigger}
 }
 
 func (h *adminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +69,13 @@ func (h *adminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.auth.OriginGuard(http.HandlerFunc(h.auth.Logout)).ServeHTTP(w, r)
+		return
+	case "/sources/x/fetch":
+		if r.Method != http.MethodPost {
+			writeMethodNotAllowed(w, http.MethodPost)
+			return
+		}
+		h.auth.OriginGuard(h.auth.Require(http.HandlerFunc(h.fetchX))).ServeHTTP(w, r)
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -103,6 +122,74 @@ func (h *adminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})).ServeHTTP(w, r)
 }
 
+func (h *adminHandler) fetchX(w http.ResponseWriter, r *http.Request) {
+	if h.xTrigger == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "capability_not_migrated"}, "")
+		return
+	}
+	body, err := jsonbody.Object(w, r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_input"}, "")
+		return
+	}
+	for key := range body {
+		if key != "window" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_parameter"}, "")
+			return
+		}
+	}
+	var window map[string]any
+	if raw, ok := body["window"]; ok {
+		if json.Unmarshal(raw, &window) != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_input"}, "")
+			return
+		}
+	} else {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_input"}, "")
+		return
+	}
+	if window == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_input"}, "")
+		return
+	}
+	for key := range window {
+		if key != "mode" && key != "days" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_parameter"}, "")
+			return
+		}
+	}
+	mode, _ := window["mode"].(string)
+	if mode != "recent" {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "capability_not_migrated"}, "")
+		return
+	}
+	raw, exists := window["days"]
+	value, ok := raw.(float64)
+	if !exists || !ok || math.Trunc(value) != value {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_recent_days"}, "")
+		return
+	}
+	days := int(value)
+	if days < 1 || days > 30 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_recent_days"}, "")
+		return
+	}
+	run, err := h.xTrigger.Trigger(r.Context(), days)
+	if err != nil {
+		var se *workflow.StepError
+		if errors.As(err, &se) && se.Code == "invalid_recent_days" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_recent_days"}, "")
+			return
+		}
+		if errors.Is(err, sqlite.ErrWorkflowBusy) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "workflow_busy"}, "")
+			return
+		}
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "workflow_unavailable"}, "")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"run": run}, "")
+}
 func workflowUnavailable(w http.ResponseWriter, err error) {
 	if errors.Is(err, sqlite.ErrWorkflowNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "workflow_not_found"}, "")

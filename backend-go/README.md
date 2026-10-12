@@ -129,7 +129,7 @@ discovery, upload or cleanup. TypeScript still owns production traffic on
 roll back a future side-by-side deployment, stop Go on `:7658` and continue
 using TypeScript on `:7657`.
 
-The phase-nine workflow package (`internal/workflow`) persists definitions,
+The workflow package (`internal/workflow`) persists definitions,
 runs, ordered steps, attempts and leases through the additive SQLite migration
 in `internal/store/sqlite`. It uses only synthetic step execution. The scheduler
 is opt-in and disabled unless its `Enabled` field is explicitly set. Admin
@@ -139,3 +139,18 @@ capability, retry and timing fields only.
 
 
 Phase eight keeps the service read-only by default. The isolated event mutation slice requires `APP_MODE=development` and `-enable-admin-writes` against an existing synthetic SQLite file. It uses the distinct `kano_go_canary_session` cookie and atomic event/source/revision transactions; production remains owned by TypeScript.
+
+## Phase ten: X recent development slice
+
+Run `APP_MODE=development kano-go -database <temporary.sqlite> -enable-x-sync`
+for the isolated X recent path. After Go admin login, call
+`POST /api/admin/sources/x/fetch` with
+`{"window":{"mode":"recent","days":7}}`; the `202` response contains the
+persistent `x-recent` run, and `/api/admin/runs/:id` returns its step and attempt
+state. The fake-transport-tested adapter only reads allowlisted public
+`x.com`/`api.vxtwitter.com` endpoints and commits posts, pending media
+candidates, schedule candidates and incremental `sync_state` in one
+transaction. Failed source responses retain old posts and cursors. Production
+rejects the flag. X historical windows, archive search, YouTube, media
+ downloads, LLM, MCP, frontend integration and production routing remain
+`capability_not_migrated`.

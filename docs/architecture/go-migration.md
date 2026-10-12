@@ -223,3 +223,26 @@ download/discovery/upload/cleanup, and frontend behavior remain owned by
 TypeScript. No schema, frontend request path or production route is changed by
 this phase. Only a future, separately approved cutover may change the public
 route owner.
+
+## Phase ten: X recent vertical slice
+
+Phase ten adds one development-only writable path beside the TypeScript owner.
+`POST /api/admin/sources/x/fetch` accepts only
+`{"window":{"mode":"recent","days":7}}` after Go admin login. Start Go
+with `APP_MODE=development` and `-enable-x-sync` against a disposable database;
+production startup rejects the flag.
+
+The adapter reads public profile HTML from `x.com/<handle>` and detail JSON from
+`api.vxtwitter.com/<handle>/status/<id>`, with fake transport injection, fixed
+timeout/User-Agent, a 4 MiB response limit, redirect rejection, and typed
+errors. A successful run normalizes posts and commits `posts`, pending
+`media_assets`/`media_links`, schedule-board `assets`/`schedule_asset_reviews`,
+and incremental `sync_state` in one transaction. Duplicate IDs are idempotent;
+failed responses retain old posts and cursors, and discovered IDs remain in the
+pending queue. Historical/window cursors are untouched. Pending media is never
+downloaded, and schedule candidates remain pending/unreviewed without LLM work.
+
+The Go scheduler, X before/range/archive search, YouTube, media downloads, LLM,
+MCP, frontend integration and production routing remain
+`capability_not_migrated`. Rollback is to disable the flag and continue using
+TypeScript synchronization.

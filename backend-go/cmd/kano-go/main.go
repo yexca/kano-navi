@@ -8,11 +8,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/config"
 	"github.com/yexca/kano-navi/backend-go/internal/httpapi"
+	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
+	"github.com/yexca/kano-navi/backend-go/internal/workflow"
 )
 
 func main() {
@@ -23,6 +26,10 @@ func main() {
 	}
 	if cfg.EnableAdminWrites && os.Getenv("APP_MODE") != "development" {
 		fmt.Fprintln(os.Stderr, "kano-go: admin writes require APP_MODE=development")
+		os.Exit(2)
+	}
+	if cfg.EnableXSync && os.Getenv("APP_MODE") != "development" {
+		fmt.Fprintln(os.Stderr, "kano-go: X source writes require APP_MODE=development")
 		os.Exit(2)
 	}
 	var admin *adminauth.Auth
@@ -43,7 +50,9 @@ func main() {
 		}
 	}
 	var store *sqlite.Store
-	if cfg.EnableAdminWrites {
+	if cfg.EnableXSync {
+		store, err = sqlite.OpenWorkflowCore(cfg.DatabasePath, true)
+	} else if cfg.EnableAdminWrites {
 		store, err = sqlite.OpenAdminWrites(cfg.DatabasePath)
 	} else {
 		store, err = sqlite.OpenReadOnly(cfg.DatabasePath)
@@ -54,7 +63,19 @@ func main() {
 	}
 	defer store.Close()
 
-	server := httpapi.NewServer(httpapi.RequestLog(httpapi.NewHandlerWithAdmin(store, nil, admin), os.Stdout), cfg)
+	var trigger *workflow.XRecentTrigger
+	if cfg.EnableXSync {
+		if err = store.EnsureXRecentWorkflow(context.Background()); err != nil {
+			fmt.Fprintln(os.Stderr, "kano-go: workflow unavailable")
+			os.Exit(1)
+		}
+		opts := xsource.OptionsFromEnv()
+		adapter := xsource.NewAdapter(xsource.NewClient(&http.Client{Timeout: 10 * time.Second}), opts)
+		xexec := &workflow.XRecentExecutor{Store: store, Adapter: adapter, Options: opts}
+		executor := &workflow.Executor{Store: store, Steps: xexec, SyntheticSteps: map[string]bool{"x": false}}
+		trigger = &workflow.XRecentTrigger{Executor: executor, WorkflowID: "x-recent"}
+	}
+	server := httpapi.NewServer(httpapi.RequestLog(httpapi.NewHandlerWithAdminAndX(store, nil, admin, trigger), os.Stdout), cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)

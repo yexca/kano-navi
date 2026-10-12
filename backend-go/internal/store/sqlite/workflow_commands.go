@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	driver "modernc.org/sqlite"
@@ -77,10 +78,15 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, definition WorkflowDefini
 		}
 		return nil, ErrWorkflowBusy
 	}
+	var stepSchema string
+	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(sql,'') FROM sqlite_master WHERE type='table' AND name='workflow_run_steps'`).Scan(&stepSchema)
+	supportsXRecent := strings.Contains(stepSchema, "x_recent")
 	for order, step := range definition.Steps {
 		capability := "capability_not_migrated"
 		if synthetic[step] {
 			capability = "synthetic"
+		} else if step == "x" && supportsXRecent {
+			capability = "x_recent"
 		}
 		if _, e = tx.ExecContext(ctx, `INSERT INTO workflow_run_steps(run_id,step_id,step_order,status,capability) VALUES(?,?,?,'pending',?)`, id, step, order, capability); e != nil {
 			return nil, ErrWorkflowStorage

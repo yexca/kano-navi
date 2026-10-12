@@ -76,6 +76,10 @@ func NewSnapshot(t testing.TB) string {
 			id INTEGER PRIMARY KEY AUTOINCREMENT, media_id TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,
 			role TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, alt TEXT
 		);
+		CREATE TABLE sync_state (
+			source TEXT NOT NULL, account_id TEXT NOT NULL, cursor_id TEXT, cursor_time TEXT,
+			last_success_at TEXT, metadata_json TEXT, PRIMARY KEY (source, account_id)
+		);
 		CREATE TABLE sync_runs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			source TEXT NOT NULL,

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"net/http"
@@ -14,6 +15,52 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 	"github.com/yexca/kano-navi/backend-go/internal/testutil"
 )
+
+type fakeXTrigger struct{}
+
+func (fakeXTrigger) Trigger(context.Context, int) (*sqlite.WorkflowRun, error) {
+	return &sqlite.WorkflowRun{ID: "run-x", WorkflowID: "x-recent", Status: "succeeded"}, nil
+}
+
+func TestXRecentAdminTriggerRequiresSessionAndSupportsRecentOnly(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	store, err := sqlite.OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	cfg, _ := adminauth.NewConfig("production", "synthetic-admin-password", "")
+	auth, _ := adminauth.New(cfg)
+	h := NewHandlerWithAdminAndX(store, nil, auth, fakeXTrigger{})
+	unauth := request(t, h, http.MethodPost, "/api/admin/sources/x/fetch")
+	if unauth.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth status=%d", unauth.Code)
+	}
+	login := httptest.NewRequest(http.MethodPost, "/api/admin/login", strings.NewReader(`{"password":"synthetic-admin-password"}`))
+	login.Header.Set("Content-Type", "application/json")
+	lr := httptest.NewRecorder()
+	h.ServeHTTP(lr, login)
+	if lr.Code != http.StatusOK {
+		t.Fatalf("login=%d", lr.Code)
+	}
+	cookie := strings.Split(lr.Header().Get("Set-Cookie"), ";")[0]
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/sources/x/fetch", strings.NewReader(`{"window":{"mode":"recent","days":7}}`))
+	req.Header.Set("Cookie", cookie)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("trigger=%d body=%s", rec.Code, rec.Body)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/admin/sources/x/fetch", strings.NewReader(`{"window":{"mode":"range","days":7}}`))
+	req.Header.Set("Cookie", cookie)
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotImplemented {
+		t.Fatalf("unsupported=%d", rec.Code)
+	}
+}
 
 func TestAdminAuthAndReadOnlyProjections(t *testing.T) {
 	path := testutil.NewSnapshot(t)
