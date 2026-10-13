@@ -7,8 +7,11 @@ DOCKER ?= docker
 DOCKER_BUILD ?= $(DOCKER) build
 DOCKER_BUILD_ARGS ?=
 DOCKER_IMAGE ?= kano-navi:ci
+GO_STANDALONE_IMAGE ?= kano-navi-go-standalone:ci
+GO_BINARY ?= backend-go/bin/kano-go$(if $(filter Windows_NT,$(OS)),.exe,)
 
 .PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-test
+.PHONY: go-build go-start go-docker-build
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
 .PHONY: smoke side-by-side-http public-read-gate public-read-benchmark public-read-deployment-smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
@@ -49,6 +52,17 @@ go-check:
 go-test:
 	$(GO) -C backend-go test ./...
 	$(GO) -C backend-go vet ./...
+
+go-build:
+	$(GO) -C backend-go build -trimpath -o $(patsubst backend-go/%,%,$(GO_BINARY)) ./cmd/kano-go
+
+# The Go binary owns the whole site: it reads .env, data/ and dist/ from the
+# repository root exactly like `make start` does for the TypeScript service.
+go-start: go-build
+	$(GO_BINARY) -standalone
+
+go-docker-build:
+	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -f go.Dockerfile -t $(GO_STANDALONE_IMAGE) .
 
 format:
 	$(NPM) run format

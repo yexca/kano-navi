@@ -9,6 +9,7 @@ Read core boundaries before changing the relationship between page reads, synchr
 - [Go workflow execution core](go-workflows.md)
 - [Go X recent sync](go-x-sync.md)
 - [Go source workflows and media downloads](go-source-workflows.md)
+- [Go standalone backend](go-standalone.md)
 - [Data model and event precedence](data-model.md)
 - [Sources and schedule extraction](sources.md)
 - [Workflows and historical fetch windows](workflows.md)

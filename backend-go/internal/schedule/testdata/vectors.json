@@ -1,0 +1,524 @@
+{
+  "board": [
+    ["今週のスケジュール", true],
+    ["Weekly　Schedule board", true],
+    ["weekly_schedule", true],
+    ["this week's schedule", true],
+    ["This Week schedule", true],
+    ["来週\nの予定", false],
+    ["今月のざっくり予定", false],
+    ["今週はとてもながい予定", false],
+    ["予定表です", true],
+    ["reschedule", false],
+    ["schedules", false],
+    ["配信予定", false],
+    ["SCHEDULE-TABLE", true],
+    ["週間 予定", false]
+  ],
+  "numbers": [
+    [0, "0"],
+    [0, "0"],
+    [1, "1"],
+    [0.1, "0.1"],
+    [1e21, "1e+21"],
+    [1e-7, "1e-7"],
+    [123456789012345680000, "123456789012345680000"],
+    [1.5e-10, "1.5e-10"],
+    [0.000001, "0.000001"],
+    [100, "100"],
+    [1e300, "1e+300"],
+    [5e-324, "5e-324"],
+    [0.30000000000000004, "0.30000000000000004"],
+    [-12.5, "-12.5"]
+  ],
+  "quoted": [
+    "a\"b\\c\b\f\n\r\t\u0001\u001f<>&  😀é",
+    "\"a\\\"b\\\\c\\b\\f\\n\\r\\t\\u0001\\u001f<>&  😀é\""
+  ],
+  "reorder": [
+    "{\"b\":1,\"2\":{\"x\":1e3,\"y\":1.0},\"a\":[1,-0,2.50],\"1\":null,\"b\":3,\"01\":true}",
+    "{\"1\":null,\"2\":{\"x\":1000,\"y\":1},\"b\":3,\"a\":[1,0,2.5],\"01\":true}"
+  ],
+  "strings": [
+    ["ΑΣ", "ας", "ΑΣ"],
+    ["ΑΣ.", "ας.", "ΑΣ."],
+    ["ΑΣa", "ασa", "ΑΣa"],
+    ["Σ", "σ", "Σ"],
+    ["aΣ b", "aς b", "aΣ b"],
+    ["İstanbul", "i̇stanbul", "İstanbul"],
+    ["ÁΣ", "áς", "ÁΣ"],
+    ["ΑΣ́Β", "ασ́β", "ΑΣ́Β"],
+    [
+      "ＡＢＣ Schedule スケジュール",
+      "ａｂｃ schedule スケジュール",
+      "ＡＢＣ Schedule スケジュール"
+    ],
+    ["﻿　 x  ", "﻿　 x  ", "x "],
+    ["x ", "x ", "x"]
+  ],
+  "slices": [
+    [
+      "a😀😀😀😀😀",
+      4,
+      "87408fe77fd97ae33591e6c0b173428dfcf3c539e63753555852aecf94fc8403",
+      4
+    ],
+    [
+      "a😀😀😀😀😀",
+      5,
+      "1253f94316316abe1a420e24bda7f0401600a0ad866a8b8ab1c2ca8a5cd7f932",
+      5
+    ],
+    [
+      "😀😀",
+      1,
+      "83d544ccc223c057d2bf80d3f2a32982c32c3c0db8e2674820da5064783fb097",
+      1
+    ],
+    [
+      "日本語テキスト",
+      3,
+      "77710aedc74ecfa33685e33a6c7df5cc83004da1bdcef7fb280f5c2b2e97e0a5",
+      3
+    ],
+    [
+      "abc",
+      10,
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      3
+    ]
+  ],
+  "urls": [
+    [
+      "https://a.example.test/a^b`{}|c d\"<>?q=1 '\"<>^`{}|#f \"<>`{}^",
+      "https://a.example.test/a%5Eb%60%7B%7D|c%20d%22%3C%3E?q=1%20%27%22%3C%3E^`{}|#f%20%22%3C%3E%60{}^",
+      null,
+      "e5486dbac80de5deb129b3b9f53a25e0bf76746b81a1c44bb0e0e891313b4692"
+    ],
+    [
+      "HTTPS://Example.TEST:443/a/../b/./c%2e/%2E%2e/d",
+      "https://example.test/b/d",
+      null,
+      "bedeab2b5a7424f3d5ae59b8b309eac0ce079e7e4e46d6455f71ff118f0f93f6"
+    ],
+    [
+      "https:example.test",
+      "https://example.test/",
+      null,
+      "1648707b9f8d7b3a543fb75342c44ccc4e680cc222c5249b21454b2f1ca36109"
+    ],
+    [
+      "https://example.test?",
+      "https://example.test/?",
+      null,
+      "43ba86cd534b6a20919c711130f4df7c5a123ce35e4abb9c184716cb860c7e9e"
+    ],
+    [
+      "https://example.test/#",
+      "https://example.test/#",
+      null,
+      "1648707b9f8d7b3a543fb75342c44ccc4e680cc222c5249b21454b2f1ca36109"
+    ],
+    [
+      "http://example.test:80/日本語?ク=え#フ",
+      "http://example.test/%E6%97%A5%E6%9C%AC%E8%AA%9E?%E3%82%AF=%E3%81%88#%E3%83%95",
+      null,
+      "46577a6547635e45ed43ffbb779dc3aa909b9c32072800d36e7cee81b0400f86"
+    ],
+    [
+      "  https://example.test/a\tb\n ",
+      "https://example.test/ab",
+      null,
+      "a61463016a7619d6e8dcdb97948465d2410577462258471857b87557616b0da1"
+    ],
+    [
+      "https://youtu.be/abcDEF12345?t=3",
+      "https://youtu.be/abcDEF12345?t=3",
+      "abcDEF12345",
+      "4fc4be0f699855ad9c795bc41ea2fb3bc230d1dacae17948cfb000b3e17c5759"
+    ],
+    [
+      "https://youtu.be/",
+      "https://youtu.be/",
+      null,
+      "dae5a0a5ce1e8c19a30988b8ae35ef9639fee7259000dc26fcf6742f29c0677b"
+    ],
+    [
+      "https://www.youtube.com/watch?v=abc%20d+e&x=1",
+      "https://www.youtube.com/watch?v=abc%20d+e&x=1",
+      "abc d e",
+      "f7b2d60b67a9ed714f96470c7b2638f7674486d29e77197f7953e5f97cc16915"
+    ],
+    [
+      "https://www.youtube.com/watch?x=1&v=&v=second",
+      "https://www.youtube.com/watch?x=1&v=&v=second",
+      null,
+      "851bc2cb6470a6a013b0f1e57bb1a46c2e06f9546951cd4f575b43464c64569c"
+    ],
+    [
+      "https://m.youtube.com/live/XYZ/extra",
+      "https://m.youtube.com/live/XYZ/extra",
+      "XYZ",
+      "6762023422c9ad6c65cd09bfc46fe3c4e475c756d37235c53cfe6cc061f01731"
+    ],
+    [
+      "https://www.youtube.com/channel/UCsynthetic",
+      "https://www.youtube.com/channel/UCsynthetic",
+      null,
+      "c833efb99d506f4de36b5fdef5782240516f34852f634c3a66e2deb507d8f166"
+    ],
+    ["youtu.be/abc", null, null, null],
+    ["ftp://youtu.be/abc", "ftp://youtu.be/abc", "abc", null],
+    [
+      "https://EXAMPLE.test:0443/",
+      "https://example.test/",
+      null,
+      "1648707b9f8d7b3a543fb75342c44ccc4e680cc222c5249b21454b2f1ca36109"
+    ],
+    [
+      "https://[::1]:8080/v1",
+      "https://[::1]:8080/v1",
+      null,
+      "4a2af3b995abd39cb7fa18044e3b222e6ad99c5636fc4305be391c6901baa270"
+    ],
+    [
+      "https://127.0.0.1:11434",
+      "https://127.0.0.1:11434/",
+      null,
+      "498346fe1490ed808d847e06c5f0c0b2f6b17ae6bd077b5f1c89a9eceacaddbe"
+    ],
+    [
+      "https://example.test/a//b///",
+      "https://example.test/a//b///",
+      null,
+      "9b6fae9c764f3b9302d74719c84a997f3a6cbd5b9a7b1cb38c3ccd0c4aadd35d"
+    ],
+    [
+      "https://example.test/..",
+      "https://example.test/",
+      null,
+      "1648707b9f8d7b3a543fb75342c44ccc4e680cc222c5249b21454b2f1ca36109"
+    ],
+    [
+      "https://example.test/a/.",
+      "https://example.test/a/",
+      null,
+      "25f1f38e525114188b4ed43493a3bea724445df27a3eb3a75c55c62bbbd8e336"
+    ],
+    [
+      "https://example.test/%zz%41",
+      "https://example.test/%zz%41",
+      null,
+      "367785e101de39421c785e11edce94e613ba1162ef232f65418a79798a7a6d46"
+    ],
+    ["mailto:a@b", "mailto:a@b", null, null],
+    ["https://", null, null, null],
+    [
+      "https://example.test/a?b=c?d#e#f",
+      "https://example.test/a?b=c?d#e#f",
+      null,
+      "1868fbb96e9189ef603687fa7abcb694b862c5674fe71a9a5eef818b51aaa377"
+    ],
+    [
+      "https://exa%6dple.test/x",
+      "https://example.test/x",
+      null,
+      "43801b35013f26054f2088b4d5dc31792f550d74910dfffd02913dec3218f531"
+    ],
+    [
+      "https://example.test:/x",
+      "https://example.test/x",
+      null,
+      "43801b35013f26054f2088b4d5dc31792f550d74910dfffd02913dec3218f531"
+    ],
+    [
+      "https://pbs.twimg.com/media/synthetic.png?name=orig#frag",
+      "https://pbs.twimg.com/media/synthetic.png?name=orig#frag",
+      null,
+      "25d4db6c43da11ace6992a16c8e9150dc7537fd830030bdd9f146566706b388b"
+    ],
+    ["", null, null, null],
+    ["   ", null, null, null],
+    ["/assets/local.png", null, null, null]
+  ],
+  "oddUrls": [
+    [
+      ["https", "us er:p@ss:w@example.test:8443/x\\y"],
+      ["https", "us%20er:p%40ss%3Aw@example.test:8443/x/y"],
+      null,
+      "7f3989d38349ff1cd1fc1b308ca97e2c41f0290e3c38153d8e8ccdefb3d511e5"
+    ],
+    [["https", "example.test:99999/"], null, null, null],
+    [["https", "exa mple.test/"], null, null, null],
+    [["https", "example.test:80a/x"], null, null, null],
+    [["https", "a|b.test/"], null, null, null]
+  ],
+  "endpoints": [
+    [
+      "https://api.openai.com/v1",
+      "openai-responses",
+      "https://api.openai.com/v1",
+      "https://api.openai.com/v1/responses"
+    ],
+    [
+      "https://api.openai.com",
+      "openai-chat-completions",
+      "https://api.openai.com/v1",
+      "https://api.openai.com/v1/chat/completions"
+    ],
+    [
+      "https://api.openai.com/v1/chat/completions/",
+      "openai-chat-completions",
+      "https://api.openai.com/v1",
+      "https://api.openai.com/v1/chat/completions"
+    ],
+    [
+      "https://openrouter.ai",
+      "openai-chat-completions",
+      "https://openrouter.ai/api/v1",
+      "https://openrouter.ai/api/v1/chat/completions"
+    ],
+    [
+      "https://openrouter.ai/api/",
+      "openai-chat-completions",
+      "https://openrouter.ai/api/v1",
+      "https://openrouter.ai/api/v1/chat/completions"
+    ],
+    [
+      "https://generativelanguage.googleapis.com",
+      "openai-chat-completions",
+      "https://generativelanguage.googleapis.com/v1beta/openai",
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    ],
+    [
+      "https://dashscope.aliyuncs.com/compatible-mode",
+      "openai-responses",
+      "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "https://dashscope.aliyuncs.com/compatible-mode/v1/responses"
+    ],
+    [
+      "http://localhost:11434/api",
+      "anthropic-messages",
+      "http://localhost:11434/api/v1",
+      "http://localhost:11434/api/v1/messages"
+    ],
+    [
+      "https://API.Example.test:443/",
+      "anthropic-messages",
+      "https://api.example.test/v1",
+      "https://api.example.test/v1/messages"
+    ],
+    [
+      "  https://provider.example.test/custom/path/messages ",
+      "anthropic-messages",
+      "https://provider.example.test/custom/path",
+      "https://provider.example.test/custom/path/messages"
+    ],
+    [
+      "provider.example.test",
+      "openai-responses",
+      "provider.example.test",
+      "provider.example.test/responses"
+    ],
+    ["", "openai-responses", "", ""],
+    [
+      "https://provider.example.test?x=1",
+      "openai-responses",
+      "https://provider.example.test/v1?x=1",
+      "https://provider.example.test/v1?x=1/responses"
+    ],
+    [
+      "https://provider.example.test/v1/models",
+      "unknown-protocol",
+      "https://provider.example.test/v1",
+      "https://provider.example.test/v1/responses"
+    ]
+  ],
+  "normalized": [
+    [
+      "invalidClassification",
+      "{\"classification\":\"maybe\",\"events\":[]}",
+      null,
+      "schedule extraction returned an invalid classification"
+    ],
+    [
+      "eventsInNotSchedule",
+      "{\"classification\":\"not_schedule\",\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "not_schedule extraction contained events"
+    ],
+    [
+      "eventsInUncertain",
+      "{\"classification\":\"uncertain\",\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "uncertain extraction contained events"
+    ],
+    [
+      "badDate",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-02-30\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "earlyYear",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"0099-01-01\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "badTime",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":\"24:00\",\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "emptyTime",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":\"\",\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "endWithoutStart",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":\"10:00\",\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "badPrecision",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"Exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "badType",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"party\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "badConfidence",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":1.5,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "stringConfidence",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":\" 0.25 \",\"evidence\":\"\"}]}",
+      "{\"classification\":\"schedule\",\"events\":[{\"id\":\"x-schedule-20990102-779df4d5d4\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-1\",\"canonicalSourceKey\":\"2099-01-02Tunknown:e3b98a4da3\",\"source_key\":\"2099-01-02Tunknown:e3b98a4da3\",\"title\":\"T\",\"detail\":null,\"starts_on\":\"2099-01-02\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"ok\",\"event_type\":\"event\",\"url\":\"https://x.com/synthetic_handle/status/1\",\"is_upcoming\":true,\"confidence\":0.25,\"raw\":{\"evidence\":\"\"}}],\"confidence\":0.25,\"evidence\":\"\",\"reason\":\"\",\"action\":\"add\"}",
+      null
+    ],
+    [
+      "nullConfidence",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":null,\"evidence\":\"\"}]}",
+      "{\"classification\":\"schedule\",\"events\":[{\"id\":\"x-schedule-20990102-779df4d5d4\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-1\",\"canonicalSourceKey\":\"2099-01-02Tunknown:e3b98a4da3\",\"source_key\":\"2099-01-02Tunknown:e3b98a4da3\",\"title\":\"T\",\"detail\":null,\"starts_on\":\"2099-01-02\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"ok\",\"event_type\":\"event\",\"url\":\"https://x.com/synthetic_handle/status/1\",\"is_upcoming\":true,\"confidence\":0,\"raw\":{\"evidence\":\"\"}}],\"confidence\":0,\"evidence\":\"\",\"reason\":\"\",\"action\":\"add\"}",
+      null
+    ],
+    [
+      "missingConfidence",
+      "{\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "blankTitle",
+      "{\"events\":[{\"title\":\" 　 \",\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"ok\",\"eventType\":\"event\",\"url\":null,\"confidence\":0.5,\"evidence\":\"\"}]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "nullEvent",
+      "{\"events\":[null]}",
+      null,
+      "schedule extraction contained an invalid event"
+    ],
+    [
+      "badRootConfidence",
+      "{\"classification\":\"schedule\",\"events\":[],\"confidence\":\"x\"}",
+      null,
+      "schedule extraction returned an invalid confidence"
+    ],
+    [
+      "badAction",
+      "{\"classification\":\"schedule\",\"events\":[],\"action\":\"delete\"}",
+      null,
+      "schedule extraction returned an invalid action"
+    ],
+    [
+      "legacyNoClassification",
+      "{\"events\":[{\"title\":\"T\",\"detail\":\"  d  \",\"date\":\"2099-01-02\",\"time\":\"23:30\",\"endTime\":\"00:15\",\"timePrecision\":\"exact\",\"status\":\"キャンセル\",\"eventType\":\"event\",\"url\":\"https://youtu.be/abcdefghijk?t=1\",\"confidence\":0.5,\"evidence\":\" e \"}]}",
+      "{\"classification\":\"schedule\",\"events\":[{\"id\":\"youtube-abcdefghijk\",\"canonicalSource\":\"youtube\",\"canonicalSourceItemId\":\"abcdefghijk\",\"canonicalSourceKey\":\"reservation\",\"source_key\":\"2099-01-02T23:30:e3b98a4da3\",\"title\":\"T\",\"detail\":\"d\",\"starts_on\":\"2099-01-02\",\"starts_at\":\"2099-01-02T14:30:00.000Z\",\"ends_at\":\"2099-01-02T15:15:00.000Z\",\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"exact\",\"cancellationSuspected\":true,\"status\":\"待确认\",\"event_type\":\"event\",\"url\":\"https://youtu.be/abcdefghijk?t=1\",\"is_upcoming\":true,\"confidence\":0.5,\"raw\":{\"evidence\":\" e \"}}],\"confidence\":0.5,\"evidence\":\"\",\"reason\":\"\",\"action\":\"add\"}",
+      null
+    ],
+    [
+      "pastEvent",
+      "{\"classification\":\"schedule\",\"events\":[{\"title\":\"T\",\"detail\":null,\"date\":\"2020-02-29\",\"time\":\"00:00\",\"endTime\":\"00:00\",\"timePrecision\":\"approximate\",\"status\":\" Canceled soon \",\"eventType\":\"event\",\"url\":\"javascript:alert(1)\",\"confidence\":0.5,\"evidence\":\"\"}],\"confidence\":null}",
+      "{\"classification\":\"schedule\",\"events\":[{\"id\":\"x-schedule-20200229-325c08cf1b\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-1\",\"canonicalSourceKey\":\"2020-02-29T00:00:e3b98a4da3\",\"source_key\":\"2020-02-29T00:00:e3b98a4da3\",\"title\":\"T\",\"detail\":null,\"starts_on\":\"2020-02-29\",\"starts_at\":\"2020-02-28T15:00:00.000Z\",\"ends_at\":\"2020-02-28T15:00:00.000Z\",\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"approximate\",\"cancellationSuspected\":true,\"status\":\"待确认\",\"event_type\":\"event\",\"url\":\"https://x.com/synthetic_handle/status/1\",\"is_upcoming\":false,\"confidence\":0.5,\"raw\":{\"evidence\":\"\"}}],\"confidence\":0.5,\"evidence\":\"\",\"reason\":\"\",\"action\":\"add\"}",
+      null
+    ],
+    [
+      "emptyLegacy",
+      "{}",
+      "{\"classification\":\"not_schedule\",\"events\":[],\"confidence\":0,\"evidence\":\"\",\"reason\":\"\",\"action\":\"none\"}",
+      null
+    ],
+    [
+      "nullResult",
+      "null",
+      "{\"classification\":\"not_schedule\",\"events\":[],\"confidence\":0,\"evidence\":\"\",\"reason\":\"\",\"action\":\"none\"}",
+      null
+    ],
+    [
+      "defaults",
+      "{\"classification\":\" SCHEDULE \",\"events\":[{\"title\":12,\"detail\":null,\"date\":\"2099-01-02\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":null,\"eventType\":\"event\",\"url\":\"https://m.youtube.com/shorts/short_id-1/x\",\"confidence\":0.5,\"evidence\":\"\"}],\"action\":\" UPDATE \",\"evidence\":5,\"reason\":\" r \"}",
+      "{\"classification\":\"schedule\",\"events\":[{\"id\":\"youtube-short_id-1\",\"canonicalSource\":\"youtube\",\"canonicalSourceItemId\":\"short_id-1\",\"canonicalSourceKey\":\"reservation\",\"source_key\":\"2099-01-02Tunknown:6b51d431df\",\"title\":\"12\",\"detail\":null,\"starts_on\":\"2099-01-02\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"待确认\",\"event_type\":\"event\",\"url\":\"https://m.youtube.com/shorts/short_id-1/x\",\"is_upcoming\":true,\"confidence\":0.5,\"raw\":{\"evidence\":\"\"}}],\"confidence\":0.5,\"evidence\":\"5\",\"reason\":\"r\",\"action\":\"update\"}",
+      null
+    ]
+  ],
+  "verification": [
+    [
+      "ok",
+      "{\"classification\":\" Uncertain\",\"confidence\":\"0.5\",\"evidence\":1,\"reason\":null}",
+      "{\"classification\":\"uncertain\",\"confidence\":0.5,\"evidence\":\"1\",\"reason\":\"\"}",
+      null
+    ],
+    [
+      "badClass",
+      "{\"classification\":\"yes\",\"confidence\":0.5}",
+      null,
+      "schedule image verification returned an invalid classification"
+    ],
+    [
+      "badConfidence",
+      "{\"classification\":\"schedule\",\"confidence\":-1}",
+      null,
+      "schedule image verification returned an invalid confidence"
+    ],
+    [
+      "missing",
+      "{}",
+      null,
+      "schedule image verification returned an invalid classification"
+    ]
+  ],
+  "capabilities": [
+    ["[\"text\",\"image\"]", true, ["text", "image"]],
+    ["[\"Vision\"]", false, ["image"]],
+    ["text, image", false, ["text", "image"]],
+    ["", true, ["text", "image"]],
+    ["", false, ["text"]],
+    ["\"text\"", true, ["text", "image"]],
+    ["[]", false, ["text"]],
+    ["[\"image\",\"text\",\"image\"]", true, ["image", "text"]],
+    ["audio", true, ["text", "image"]],
+    ["[\"TEXT \"]", true, ["text"]]
+  ],
+  "tags": [
+    ["[\"text\"]", ["text"]],
+    ["[\"image\",\"reasoning\",\"text\"]", ["text", "image"]],
+    ["[\"vision\",\"tools\"]", ["image"]],
+    ["[]", []],
+    ["embedding", []],
+    ["[\"reasoning\"]", []],
+    ["text image", ["text", "image"]]
+  ]
+}

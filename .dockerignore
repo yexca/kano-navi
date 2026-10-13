@@ -12,3 +12,4 @@ coverage
 *.log
 *.sqlite
 *.sqlite-*
+backend-go/bin

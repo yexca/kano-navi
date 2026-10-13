@@ -1,8 +1,17 @@
-# Kano Navi Go service (phase nine)
+# Kano Navi Go service
 
-This module is the ninth migration slice. It runs beside the TypeScript
-service, opens an existing Kano SQLite snapshot read-only, and exposes these
-public reads:
+`kano-go -standalone` serves the whole site from this module: public API,
+operator console, workflows, schedule extraction, MCP and the built frontend.
+From the repository root, `make build && make go-start` runs it against
+`data/`, `dist/` and `.env`; `make go-docker-build` builds its scratch image
+from `go.Dockerfile`. See
+[Go standalone backend](../docs/architecture/go-standalone.md) for startup
+order, route ownership, differences from the TypeScript service, remaining
+work and rollback.
+
+Without `-standalone` the binary is the original read-only sidecar described
+below. It runs beside the TypeScript service, opens an existing Kano SQLite
+snapshot read-only, and exposes these public reads:
 
 ```text
 GET /api/health
@@ -137,12 +146,11 @@ existing current-schema snapshots/settings on reseed and does not enable
 admin/source writes unless their flags are also present. Node is not needed
 for Go initialization; legacy schema upgrades remain a migration gap.
 
-The Go service has not taken over admin, MCP, synchronization, source history,
+In sidecar mode the Go service does not take over admin, MCP, synchronization,
 workflow scheduling, schedule extraction, LLM routing, media download,
-discovery, upload or cleanup. TypeScript still owns production traffic on
-`:7657`; calendar and media have not been connected to production routing. To
-roll back a future side-by-side deployment, stop Go on `:7658` and continue
-using TypeScript on `:7657`.
+discovery, upload or cleanup; those belong to standalone mode. The published
+image still runs TypeScript on `:7657`. To roll back a side-by-side
+deployment, stop Go on `:7658` and continue using TypeScript on `:7657`.
 
 The workflow package (`internal/workflow`) persists definitions,
 runs, ordered steps, attempts and leases through the additive SQLite migration

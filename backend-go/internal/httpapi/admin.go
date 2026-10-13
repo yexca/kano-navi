@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"math"
@@ -26,6 +25,8 @@ type adminHandler struct {
 	xTrigger       XSyncTrigger
 	sourceTriggers map[string]XSyncTrigger
 	queue          *workflow.Queue
+	// compat is set when this process owns the operator console.
+	compat *Compat
 }
 
 type XSyncTrigger interface {
@@ -50,6 +51,19 @@ func (h *adminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "/"
 	}
+	if h.compat != nil && path != "/session" && path != "/login" && path != "/logout" {
+		h.auth.Require(h.auth.OriginGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !h.serveCompat(w, r, path) {
+				h.serveSidecar(w, r, path)
+			}
+		}))).ServeHTTP(w, r)
+		return
+	}
+	h.serveSidecar(w, r, path)
+}
+
+// serveSidecar is the original read canary plus its development-only slices.
+func (h *adminHandler) serveSidecar(w http.ResponseWriter, r *http.Request, path string) {
 	switch path {
 	case "/session":
 		if r.Method != http.MethodGet {
@@ -301,104 +315,6 @@ func (h *adminHandler) workflowRuns(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 	writeJSON(w, http.StatusOK, result, "")
-}
-
-func (h *adminHandler) mutation(w http.ResponseWriter, r *http.Request, path string) {
-	if r.Method == http.MethodDelete && strings.HasPrefix(path, "/events/") {
-		e, err := h.store.DeleteManualEvent(r.Context(), strings.TrimPrefix(path, "/events/"))
-		if errors.Is(err, sql.ErrNoRows) {
-			writeJSON(w, 404, map[string]string{"error": "event_not_found"}, "")
-			return
-		}
-		if errors.Is(err, sqlite.ErrReadOnly) {
-			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "capability_not_migrated"}, "")
-			return
-		}
-		if err != nil {
-			writeJSON(w, 500, map[string]string{"error": "internal_error"}, "")
-			return
-		}
-		writeJSON(w, 204, nil, "")
-		_ = e
-		return
-	}
-	confirm := r.Method == http.MethodPost && strings.HasSuffix(path, "/confirm")
-	var body map[string]json.RawMessage
-	var err error
-	if confirm && r.ContentLength == 0 {
-		body = map[string]json.RawMessage{}
-	} else {
-		body, err = jsonbody.Object(w, r)
-	}
-	if err != nil {
-		status := 400
-		if errors.Is(err, jsonbody.ErrLarge) {
-			status = 413
-		}
-		writeJSON(w, status, map[string]string{"error": err.Error()}, "")
-		return
-	}
-	var i sqlite.EventInput
-	decode := func(k string, p *string) {
-		if v, ok := body[k]; ok {
-			_ = json.Unmarshal(v, p)
-		}
-	}
-	decode("id", &i.ID)
-	decode("title", &i.Title)
-	decode("detail", &i.Detail)
-	decode("startsOn", &i.StartsOn)
-	decode("startsAt", &i.StartsAt)
-	decode("endsAt", &i.EndsAt)
-	decode("timePrecision", &i.TimePrecision)
-	decode("status", &i.Status)
-	decode("eventType", &i.EventType)
-	decode("url", &i.URL)
-	decode("cancellationStatus", &i.CancellationStatus)
-	decode("cancellationReason", &i.CancellationReason)
-	var e sqlite.AdminEvent
-	if confirm && len(body) == 0 {
-		current, getErr := h.store.GetAdminEvent(r.Context(), strings.TrimSuffix(strings.TrimPrefix(path, "/events/"), "/confirm"))
-		if getErr != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "event_not_found"}, "")
-			return
-		}
-		i = sqlite.EventInput{Title: current.Title, Detail: valueString(current.Detail), StartsOn: current.StartsOn, StartsAt: valueString(current.StartsAt), EndsAt: valueString(current.EndsAt), TimePrecision: current.TimePrecision, Status: valueString(current.Status), EventType: valueString(current.EventType), URL: valueString(current.URL), CancellationStatus: current.CancellationStatus, CancellationReason: valueString(current.CancellationReason)}
-	}
-	if r.Method == http.MethodPost && path == "/events" {
-		e, err = h.store.CreateManualEvent(r.Context(), i)
-	} else if r.Method == http.MethodPut && strings.HasPrefix(path, "/events/") {
-		e, err = h.store.UpdateManualEvent(r.Context(), strings.TrimPrefix(path, "/events/"), i)
-	} else if confirm {
-		e, err = h.store.UpdateManualEvent(r.Context(), strings.TrimSuffix(strings.TrimPrefix(path, "/events/"), "/confirm"), i)
-	} else {
-		writeMethodNotAllowed(w, "GET")
-		return
-	}
-	if err != nil {
-		if errors.Is(err, sqlite.ErrReadOnly) {
-			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "capability_not_migrated"}, "")
-			return
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			writeJSON(w, 404, map[string]string{"error": "event_not_found"}, "")
-			return
-		}
-		writeJSON(w, 400, map[string]string{"error": "invalid_input"}, "")
-		return
-	}
-	status := 200
-	if r.Method == http.MethodPost && !confirm {
-		status = 201
-	}
-	writeJSON(w, status, map[string]any{"event": e}, "")
-}
-
-func valueString(v *string) string {
-	if v == nil {
-		return ""
-	}
-	return *v
 }
 
 func queryInt(r *http.Request, name string, fallback int) int {

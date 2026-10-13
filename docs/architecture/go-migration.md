@@ -1,10 +1,18 @@
 # Go backend migration
 
-The latest implementation is phase eleven:
-[Go source workflows and media downloads](go-source-workflows.md). It adds
-YouTube recent synchronization, media downloads, asynchronous submission,
-workflow CRUD, opt-in timers, cancellation and recovery. Production ownership
-is still TypeScript; the sections below record the earlier public-read canary.
+The latest implementation is phase twelve:
+[Go standalone backend](go-standalone.md). `kano-go -standalone` serves the
+public API, the complete operator console, workflows and timers, schedule
+extraction, MCP and the built frontend from one process, and upgrades older
+snapshots additively. The published image still runs TypeScript, which remains
+the rollback path; switching it is a separate, explicit release decision.
+
+Phase eleven is
+[Go source workflows and media downloads](go-source-workflows.md): YouTube
+recent synchronization, media downloads, asynchronous submission, workflow
+CRUD, opt-in timers, cancellation and recovery. The sections below record the
+earlier read-only sidecar, which is still what the binary is without
+`-standalone`.
 
 Phase nine adds the persistent workflow execution core described in
 [Go workflow execution core](go-workflows.md). It remains side-by-side and

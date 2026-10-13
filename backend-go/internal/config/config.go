@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -12,6 +14,9 @@ import (
 const (
 	DefaultListenAddress = ":7658"
 	DefaultDatabasePath  = "data/database/kano.sqlite"
+	// StandalonePort is the product port when this process owns the site.
+	StandalonePort         = 7657
+	DefaultStaticDirectory = "dist"
 )
 
 // Config contains only process-local settings for the read-only Go service.
@@ -31,6 +36,13 @@ type Config struct {
 	EnableMediaDownloads bool
 	EnableScheduler      bool
 	Initialize           bool
+	// Standalone makes this process the single owner of the site: writable
+	// snapshot, full operator console, workflows, MCP and the built frontend.
+	Standalone      bool
+	StaticDirectory string
+	// HealthCheck probes a running standalone process and exits; the scratch
+	// image has no shell or HTTP client for a container health check.
+	HealthCheck bool
 }
 
 func Default() Config {
@@ -58,6 +70,14 @@ func (c Config) Validate() error {
 	return nil
 }
 
+func standalonePort(raw string) int {
+	port, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || port < 1 || port > 65535 {
+		return StandalonePort
+	}
+	return port
+}
+
 func Parse(args []string) (Config, error) {
 	c := Default()
 	flags := flag.NewFlagSet("kano-go", flag.ContinueOnError)
@@ -75,11 +95,29 @@ func Parse(args []string) (Config, error) {
 	flags.BoolVar(&c.EnableMediaDownloads, "enable-media-downloads", false, "enable development-only bounded media downloads")
 	flags.BoolVar(&c.EnableScheduler, "enable-scheduler", false, "enable development-only Go workflow timers")
 	flags.BoolVar(&c.Initialize, "initialize", false, "initialize and seed a development snapshot with Go")
+	flags.BoolVar(&c.Standalone, "standalone", false, "serve the whole site from this process (API, admin, workflows, MCP, frontend)")
+	flags.StringVar(&c.StaticDirectory, "static", DefaultStaticDirectory, "built frontend directory served in standalone mode")
+	flags.BoolVar(&c.HealthCheck, "healthcheck", false, "probe the local standalone service and exit")
 	if err := flags.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
 	if flags.NArg() != 0 {
 		return Config{}, fmt.Errorf("unexpected positional arguments")
+	}
+	if c.Standalone || c.HealthCheck {
+		explicit := map[string]bool{}
+		flags.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+		if !explicit["listen"] {
+			c.ListenAddress = ":" + strconv.Itoa(standalonePort(os.Getenv("PORT")))
+		}
+		// Operator requests may wait on a provider test, a profile download
+		// or a 15 MiB upload, which the sidecar's read/write bounds would cut.
+		if !explicit["read-timeout"] {
+			c.ReadTimeout = 60 * time.Second
+		}
+		if !explicit["write-timeout"] {
+			c.WriteTimeout = 150 * time.Second
+		}
 	}
 	if err := c.Validate(); err != nil {
 		return Config{}, err

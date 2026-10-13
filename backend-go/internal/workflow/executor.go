@@ -91,7 +91,32 @@ type Executor struct {
 	MaxAttempts    int
 	Clock          func() time.Time
 	SyntheticSteps map[string]bool
-	initMu         sync.Mutex
+	// TolerateFailure lists steps whose final failure does not abort the run:
+	// one unavailable source must not stop the other source or post-processing.
+	TolerateFailure map[string]bool
+	initMu          sync.Mutex
+}
+
+// ResultRecorder is an optional Persistence capability that keeps each step's
+// counters with the run history.
+type ResultRecorder interface {
+	RecordStepResult(context.Context, string, string, map[string]any) error
+}
+
+// stepResultKey matches the keys the admin console already reads.
+func stepResultKey(step string) string {
+	if step == "schedule" {
+		return "schedules"
+	}
+	return step
+}
+
+func (e *Executor) record(runID, step string, result map[string]any) {
+	recorder, ok := e.Store.(ResultRecorder)
+	if !ok || result == nil {
+		return
+	}
+	_ = recorder.RecordStepResult(context.Background(), runID, stepResultKey(step), result)
 }
 
 func (e *Executor) defaults() {
@@ -131,6 +156,20 @@ func (e *Executor) Prepare(ctx context.Context, workflowID string, trigger Trigg
 	def, err := e.Store.GetWorkflow(ctx, workflowID)
 	if err != nil {
 		return nil, err
+	}
+	return e.PrepareDefinition(ctx, *def, trigger, key, lookback)
+}
+
+// PrepareDefinition reserves a run for a definition that need not be saved,
+// such as an operator's full sync, scan or single-source fetch.
+func (e *Executor) PrepareDefinition(ctx context.Context, definition sqlite.WorkflowDefinition, trigger TriggerSource, key string, lookback map[string]int) (*Run, error) {
+	e.defaults()
+	if e.Store == nil {
+		return nil, errors.New("workflow store is required")
+	}
+	def := &definition
+	if def.SourceLookbackDays == nil {
+		def.SourceLookbackDays = map[string]int{"x": 7, "youtube": 14}
 	}
 	synthetic := e.SyntheticSteps
 	if synthetic == nil {
@@ -198,12 +237,16 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 		}
 	}()
 	partial := false
+	completed, tolerated := 0, 0
+	toleratedCode := ""
 	for _, step := range run.Steps {
 		if step.Status == "succeeded" {
+			completed++
 			continue
 		}
 		if step.Status == "partial" {
 			partial = true
+			completed++
 			continue
 		}
 		success := false
@@ -254,6 +297,13 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 				if err = e.Store.FinishWorkflowStep(finishCtx, lease, step.ID, num, sqlite.WorkflowOutcome{Status: outStatus, Code: code, Retryable: retry}, retry && attempt < e.MaxAttempts, e.Clock().UTC()); err != nil {
 					return nil, err
 				}
+				if (!retry || attempt == e.MaxAttempts) && outStatus == "failed" && e.TolerateFailure[step.StepID] {
+					e.record(run.ID, step.StepID, map[string]any{"error": code})
+					tolerated++
+					toleratedCode = code
+					success = true
+					break
+				}
 				if !retry || attempt == e.MaxAttempts {
 					if err = e.Store.FinishWorkflowRun(finishCtx, lease, outStatus, code, e.Clock().UTC()); err != nil {
 						return nil, err
@@ -269,8 +319,20 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 			if err = e.Store.FinishWorkflowStep(ctx, lease, step.ID, num, sqlite.WorkflowOutcome{Status: out.Status}, false, e.Clock().UTC()); err != nil {
 				return nil, err
 			}
+			e.record(run.ID, step.StepID, out.Result)
+			if out.Status == "failed" && e.TolerateFailure[step.StepID] {
+				tolerated++
+				toleratedCode = "permanent"
+				success = true
+				break
+			}
 			if out.Status == "failed" || out.Status == "blocked" {
-				if err = e.Store.FinishWorkflowRun(ctx, lease, out.Status, "blocked", e.Clock().UTC()); err != nil {
+				// A step that ran and reported failure is not a missing capability.
+				code := "blocked"
+				if out.Status == "failed" {
+					code = "permanent"
+				}
+				if err = e.Store.FinishWorkflowRun(ctx, lease, out.Status, code, e.Clock().UTC()); err != nil {
 					return nil, err
 				}
 				finished = true
@@ -279,6 +341,7 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 			if out.Status == "partial" {
 				partial = true
 			}
+			completed++
 			success = true
 			break
 		}
@@ -288,11 +351,14 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 			return run, nil
 		}
 	}
-	finalStatus := "succeeded"
-	if partial {
+	finalStatus, finalCode := "succeeded", ""
+	if partial || tolerated > 0 {
 		finalStatus = "partial"
 	}
-	if err = e.Store.FinishWorkflowRun(ctx, lease, finalStatus, "", e.Clock().UTC()); err != nil {
+	if tolerated > 0 && completed == 0 {
+		finalStatus, finalCode = "failed", toleratedCode
+	}
+	if err = e.Store.FinishWorkflowRun(ctx, lease, finalStatus, finalCode, e.Clock().UTC()); err != nil {
 		return nil, err
 	}
 	finished = true

@@ -1,0 +1,551 @@
+{
+  "files": {
+    "https://pbs.twimg.com/media/synthetic-board.png?name=orig#frag": {
+      "relativePath": "sha256/9d/9d2f6a05604212d76179e00a6c2cb99e63a303cc750f9187a5173a190520c98b.png",
+      "sha256": "9d2f6a05604212d76179e00a6c2cb99e63a303cc750f9187a5173a190520c98b",
+      "base64": "iVBORw0KGgoQ",
+      "mediaId": "f2ea0e54964d4654ae4b2bccb213228156f477791896cde41b3537b2ecc2f3c5"
+    },
+    "https://pbs.twimg.com/media/synthetic-other.png": {
+      "relativePath": "sha256/aa/aaa6d030b411bb121a9d61adeb2bddef9e399d38a99599e32894208ef3acb725.png",
+      "sha256": "aaa6d030b411bb121a9d61adeb2bddef9e399d38a99599e32894208ef3acb725",
+      "base64": "iVBORw0KGgoR",
+      "mediaId": "50eae40578b596d6c2db52b8fcf8ec52550b5ec6b1ec5501985e0cb7af3e8e6f"
+    }
+  },
+  "mediaLinks": [
+    {
+      "media_id": "f2ea0e54964d4654ae4b2bccb213228156f477791896cde41b3537b2ecc2f3c5",
+      "owner_type": "post",
+      "owner_id": "img-a",
+      "role": "post-image",
+      "position": 0
+    },
+    {
+      "media_id": "50eae40578b596d6c2db52b8fcf8ec52550b5ec6b1ec5501985e0cb7af3e8e6f",
+      "owner_type": "post",
+      "owner_id": "img-a",
+      "role": "post-image",
+      "position": 1
+    },
+    {
+      "media_id": "50eae40578b596d6c2db52b8fcf8ec52550b5ec6b1ec5501985e0cb7af3e8e6f",
+      "owner_type": "post",
+      "owner_id": "img-b",
+      "role": "post-image",
+      "position": 0
+    },
+    {
+      "media_id": "4f17e274620b89bb317d9f08348254caf27e2b4b57eb140d06e7b4255196c859",
+      "owner_type": "post",
+      "owner_id": "img-c",
+      "role": "post-image",
+      "position": 0
+    },
+    {
+      "media_id": "50eae40578b596d6c2db52b8fcf8ec52550b5ec6b1ec5501985e0cb7af3e8e6f",
+      "owner_type": "post",
+      "owner_id": "img-d",
+      "role": "post-image",
+      "position": 0
+    },
+    {
+      "media_id": "f2ea0e54964d4654ae4b2bccb213228156f477791896cde41b3537b2ecc2f3c5",
+      "owner_type": "asset",
+      "owner_id": "schedule-2026-04-27",
+      "role": "schedule",
+      "position": 0
+    },
+    {
+      "media_id": "f2ea0e54964d4654ae4b2bccb213228156f477791896cde41b3537b2ecc2f3c5",
+      "owner_type": "asset",
+      "owner_id": "weekly-schedule",
+      "role": "schedule",
+      "position": 0
+    },
+    {
+      "media_id": "50eae40578b596d6c2db52b8fcf8ec52550b5ec6b1ec5501985e0cb7af3e8e6f",
+      "owner_type": "asset",
+      "owner_id": "schedule-2026-04-20",
+      "role": "schedule",
+      "position": 0
+    },
+    {
+      "media_id": "4f17e274620b89bb317d9f08348254caf27e2b4b57eb140d06e7b4255196c859",
+      "owner_type": "asset",
+      "owner_id": "schedule-2026-04-13",
+      "role": "schedule",
+      "position": 0
+    },
+    {
+      "media_id": "50eae40578b596d6c2db52b8fcf8ec52550b5ec6b1ec5501985e0cb7af3e8e6f",
+      "owner_type": "asset",
+      "owner_id": "schedule-2026-04-06",
+      "role": "schedule",
+      "position": 0
+    }
+  ],
+  "mediaAssets": [
+    {
+      "id": "4f17e274620b89bb317d9f08348254caf27e2b4b57eb140d06e7b4255196c859",
+      "source_url": "https://pbs.twimg.com/media/synthetic-pending.png",
+      "status": "pending"
+    },
+    {
+      "id": "50eae40578b596d6c2db52b8fcf8ec52550b5ec6b1ec5501985e0cb7af3e8e6f",
+      "source_url": "https://pbs.twimg.com/media/synthetic-other.png",
+      "status": "ready"
+    },
+    {
+      "id": "f2ea0e54964d4654ae4b2bccb213228156f477791896cde41b3537b2ecc2f3c5",
+      "source_url": "https://pbs.twimg.com/media/synthetic-board.png?name=orig",
+      "status": "ready"
+    }
+  ],
+  "first": {
+    "attempted": 4,
+    "success": 3,
+    "cached": 0,
+    "skipped": 1,
+    "failed": 0,
+    "uncertain": 0,
+    "boardAttempted": 4,
+    "messageAttempted": 0,
+    "keywords": [
+      "schedule",
+      "スケジュール",
+      "配信予定",
+      "週間予定",
+      "今週の予定",
+      "予定"
+    ],
+    "providers": ["p-text", "p-vision", "p-anth", "p-chat"],
+    "providerOrders": {
+      "schedule_message": ["p-text", "p-vision", "p-anth", "p-chat"],
+      "schedule_board": ["p-text", "p-vision", "p-anth", "p-chat"],
+      "schedule_vision": ["p-text", "p-vision", "p-anth", "p-chat"]
+    },
+    "assetVerification": {
+      "attempted": 3,
+      "success": 2,
+      "cached": 0,
+      "skipped": 1,
+      "failed": 0,
+      "uncertain": 0,
+      "schedule": 1,
+      "notSchedule": 1
+    }
+  },
+  "requests": [
+    {
+      "url": "https://provider.example.test/v1/responses",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-v\",\"store\":false,\"instructions\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Source post published at 2026-04-28T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/img-a\\n\\n今週のスケジュールです\"},{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoQ\",\"detail\":\"high\"},{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoR\",\"detail\":\"high\"}]}],\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_output_tokens\":4000}"
+    },
+    {
+      "url": "https://provider.example.test/v1/responses",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-v\",\"store\":false,\"instructions\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoR\",\"detail\":\"high\"}]}],\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_output_tokens\":4000}"
+    },
+    {
+      "url": "https://provider.example.test/v1/responses",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-v\",\"store\":false,\"instructions\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Source post published at 2026-04-25T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/img-d\\n\\n今日は22時から配信予定です\"},{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoR\",\"detail\":\"high\"}]}],\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_output_tokens\":4000}"
+    },
+    {
+      "url": "https://provider.example.test/v1/responses",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-v\",\"store\":false,\"instructions\":\"Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the image is unreadable or the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly.\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Candidate schedule image. Source URL: https://x.com/synthetic_handle/status/img-a\"},{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoQ\",\"detail\":\"high\"}]}],\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"kano_schedule_asset_verification\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"type\":\"string\"}},\"required\":[\"classification\",\"confidence\",\"evidence\",\"reason\"]}}},\"max_output_tokens\":800}"
+    },
+    {
+      "url": "https://provider.example.test/v1/responses",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-v\",\"store\":false,\"instructions\":\"Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the image is unreadable or the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly.\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Candidate schedule image. Source URL: \"},{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoR\",\"detail\":\"high\"}]}],\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"kano_schedule_asset_verification\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"type\":\"string\"}},\"required\":[\"classification\",\"confidence\",\"evidence\",\"reason\"]}}},\"max_output_tokens\":800}"
+    },
+    {
+      "url": "https://provider.example.test/v1/responses",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-v\",\"store\":false,\"instructions\":\"Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the image is unreadable or the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly.\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Candidate schedule image. Source URL: \"},{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoR\",\"detail\":\"high\"}]}],\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"kano_schedule_asset_verification\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"type\":\"string\"}},\"required\":[\"classification\",\"confidence\",\"evidence\",\"reason\"]}}},\"max_output_tokens\":800}"
+    },
+    {
+      "url": "https://provider.example.test/v1/responses",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-v\",\"store\":false,\"instructions\":\"Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the image is unreadable or the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly.\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Candidate schedule image. Source URL: \"},{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,iVBORw0KGgoR\",\"detail\":\"high\"}]}],\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"kano_schedule_asset_verification\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"type\":\"string\"}},\"required\":[\"classification\",\"confidence\",\"evidence\",\"reason\"]}}},\"max_output_tokens\":800}"
+    },
+    {
+      "url": "https://anthropic.example.test/v1/messages",
+      "headers": {
+        "content-type": "application/json",
+        "x-api-key": "<redacted>",
+        "anthropic-version": "2023-06-01"
+      },
+      "body": "{\"model\":\"model-c\",\"max_tokens\":800,\"system\":\"Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the image is unreadable or the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly.\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoR\"}},{\"type\":\"text\",\"text\":\"Candidate schedule image. Source URL: \"}]}],\"tools\":[{\"name\":\"kano_schedule_asset_verification\",\"description\":\"Return the structured classification result.\",\"input_schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"type\":\"string\"}},\"required\":[\"classification\",\"confidence\",\"evidence\",\"reason\"]}}],\"tool_choice\":{\"type\":\"tool\",\"name\":\"kano_schedule_asset_verification\"}}"
+    }
+  ],
+  "afterFirst": {
+    "extractions": [
+      {
+        "id": 1,
+        "source_item_id": "img-a",
+        "content_fingerprint": "c09ffd47970d5918d5eb2a61f0c7295923bc722fccde6f56cc7cbaaf4d26681a",
+        "extractor_version": "openai-schedule-v4:board:text_image:p-vision:openai-responses:f6608a954e42cf3b923096571f3f808cf9e46e18a76eab421295ffe52233bca1",
+        "model": "model-v",
+        "status": "success",
+        "result_json": "{\"classification\":\"schedule\",\"events\":[{\"title\":\"歌枠\",\"detail\":null,\"date\":\"2099-05-03\",\"time\":\"21:00\",\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"scheduled\",\"eventType\":\"stream\",\"url\":null,\"confidence\":0.9,\"evidence\":\"board\"}],\"confidence\":0.9,\"evidence\":\"board\",\"reason\":null,\"action\":\"add\"}",
+        "error": null
+      },
+      {
+        "id": 3,
+        "source_item_id": "img-b",
+        "content_fingerprint": "dfa5a184a0c57ed209881680241943734b99c33c28a1cb49d0493363cbee0d40",
+        "extractor_version": "openai-schedule-v4:board:image:p-vision:openai-responses:f6608a954e42cf3b923096571f3f808cf9e46e18a76eab421295ffe52233bca1",
+        "model": "model-v",
+        "status": "success",
+        "result_json": "{\"classification\":\"not_schedule\",\"events\":[],\"confidence\":0.6,\"evidence\":\"art\",\"reason\":\"illustration\",\"action\":\"none\"}",
+        "error": null
+      },
+      {
+        "id": 5,
+        "source_item_id": "img-d",
+        "content_fingerprint": "de9621ea6cbcebf0d316e6ea6c2529090cbf46ae1a436a1165bf686f9829c957",
+        "extractor_version": "openai-schedule-v4:board:text_image:p-vision:openai-responses:f6608a954e42cf3b923096571f3f808cf9e46e18a76eab421295ffe52233bca1",
+        "model": "model-v",
+        "status": "success",
+        "result_json": "{\"classification\":\"schedule\",\"events\":[{\"title\":\"歌枠\",\"detail\":null,\"date\":\"2099-05-03\",\"time\":\"21:00\",\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"scheduled\",\"eventType\":\"stream\",\"url\":null,\"confidence\":0.9,\"evidence\":\"board\"}],\"confidence\":0.9,\"evidence\":\"board\",\"reason\":null,\"action\":\"add\"}",
+        "error": null
+      }
+    ],
+    "postStates": [
+      {
+        "post_id": "img-a",
+        "status": "success",
+        "route": "schedule_board",
+        "last_error": null,
+        "last_extraction_id": 1,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "img-b",
+        "status": "success",
+        "route": "schedule_board",
+        "last_error": null,
+        "last_extraction_id": 3,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "img-c",
+        "status": "skipped",
+        "route": "schedule_board",
+        "last_error": "media_pending",
+        "last_extraction_id": null,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "img-d",
+        "status": "success",
+        "route": "schedule_board",
+        "last_error": null,
+        "last_extraction_id": 5,
+        "reprocess_requested": 0
+      }
+    ],
+    "reviews": [
+      {
+        "asset_id": "schedule-2026-04-06",
+        "llm_status": "not_schedule",
+        "llm_confidence": 0.2,
+        "llm_reason": "single card",
+        "llm_evidence": "thumbnail",
+        "llm_model": "model-c",
+        "checked": 1,
+        "llm_input_fingerprint": "2d47abb9a1af552569d10a8a4d648822bbcaa50d0d60d76f55c1c3fbbf80dbef",
+        "manual_status": "unreviewed"
+      },
+      {
+        "asset_id": "schedule-2026-04-13",
+        "llm_status": "skipped",
+        "llm_confidence": null,
+        "llm_reason": "media_pending",
+        "llm_evidence": null,
+        "llm_model": null,
+        "checked": 0,
+        "llm_input_fingerprint": null,
+        "manual_status": "unreviewed"
+      },
+      {
+        "asset_id": "schedule-2026-04-20",
+        "llm_status": "not_schedule",
+        "llm_confidence": 0.2,
+        "llm_reason": "single card",
+        "llm_evidence": "thumbnail",
+        "llm_model": "model-c",
+        "checked": 1,
+        "llm_input_fingerprint": "2d47abb9a1af552569d10a8a4d648822bbcaa50d0d60d76f55c1c3fbbf80dbef",
+        "manual_status": "unreviewed"
+      },
+      {
+        "asset_id": "schedule-2026-04-27",
+        "llm_status": "schedule",
+        "llm_confidence": 0.93,
+        "llm_reason": "grid of days",
+        "llm_evidence": "weekly table",
+        "llm_model": "model-v",
+        "checked": 1,
+        "llm_input_fingerprint": "e917a864f30ac297352ac9c48052c78633f06294153b4f3f719a1689e6197c67",
+        "manual_status": "unreviewed"
+      },
+      {
+        "asset_id": "weekly-schedule",
+        "llm_status": "schedule",
+        "llm_confidence": 0.93,
+        "llm_reason": "grid of days",
+        "llm_evidence": "weekly table",
+        "llm_model": "model-v",
+        "checked": 1,
+        "llm_input_fingerprint": "e917a864f30ac297352ac9c48052c78633f06294153b4f3f719a1689e6197c67",
+        "manual_status": "unreviewed"
+      }
+    ],
+    "providers": [
+      {
+        "id": "p-anth",
+        "last_status": "success",
+        "last_error": null
+      },
+      {
+        "id": "p-chat",
+        "last_status": null,
+        "last_error": null
+      },
+      {
+        "id": "p-text",
+        "last_status": null,
+        "last_error": null
+      },
+      {
+        "id": "p-vision",
+        "last_status": "success",
+        "last_error": null
+      }
+    ],
+    "events": [
+      {
+        "id": "x-schedule-20990503-4014c6c122",
+        "source_item_id": "img-d",
+        "title": "歌枠",
+        "raw_json": "{\"id\":\"x-schedule-20990503-4014c6c122\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"img-d\",\"canonicalSourceKey\":\"2099-05-03T21:00:1e8e6712d5\",\"source_key\":\"2099-05-03T21:00:1e8e6712d5\",\"title\":\"歌枠\",\"detail\":null,\"starts_on\":\"2099-05-03\",\"starts_at\":\"2099-05-03T12:00:00.000Z\",\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"exact\",\"cancellationSuspected\":false,\"status\":\"scheduled\",\"event_type\":\"stream\",\"url\":\"https://x.com/synthetic_handle/status/img-d\",\"is_upcoming\":true,\"confidence\":0.9,\"raw\":{\"evidence\":\"board\"},\"source\":\"x\",\"source_item_id\":\"img-d\",\"provenance\":\"automatic\",\"manual_locked\":0,\"extraction_id\":5,\"deleted_at\":null}"
+      }
+    ]
+  },
+  "second": {
+    "attempted": 1,
+    "success": 0,
+    "cached": 3,
+    "skipped": 1,
+    "failed": 0,
+    "uncertain": 0,
+    "boardAttempted": 1,
+    "messageAttempted": 0,
+    "keywords": [
+      "schedule",
+      "スケジュール",
+      "配信予定",
+      "週間予定",
+      "今週の予定",
+      "予定"
+    ],
+    "providers": ["p-text", "p-vision", "p-anth", "p-chat"],
+    "providerOrders": {
+      "schedule_message": ["p-text", "p-vision", "p-anth", "p-chat"],
+      "schedule_board": ["p-text", "p-vision", "p-anth", "p-chat"],
+      "schedule_vision": ["p-text", "p-vision", "p-anth", "p-chat"]
+    },
+    "assetVerification": {
+      "attempted": 1,
+      "success": 0,
+      "cached": 2,
+      "skipped": 1,
+      "failed": 0,
+      "uncertain": 0,
+      "schedule": 1,
+      "notSchedule": 1
+    }
+  },
+  "secondRequests": [],
+  "afterSecond": {
+    "extractions": [
+      {
+        "id": 1,
+        "source_item_id": "img-a",
+        "content_fingerprint": "c09ffd47970d5918d5eb2a61f0c7295923bc722fccde6f56cc7cbaaf4d26681a",
+        "extractor_version": "openai-schedule-v4:board:text_image:p-vision:openai-responses:f6608a954e42cf3b923096571f3f808cf9e46e18a76eab421295ffe52233bca1",
+        "model": "model-v",
+        "status": "success",
+        "result_json": "{\"classification\":\"schedule\",\"events\":[{\"title\":\"歌枠\",\"detail\":null,\"date\":\"2099-05-03\",\"time\":\"21:00\",\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"scheduled\",\"eventType\":\"stream\",\"url\":null,\"confidence\":0.9,\"evidence\":\"board\"}],\"confidence\":0.9,\"evidence\":\"board\",\"reason\":null,\"action\":\"add\"}",
+        "error": null
+      },
+      {
+        "id": 3,
+        "source_item_id": "img-b",
+        "content_fingerprint": "dfa5a184a0c57ed209881680241943734b99c33c28a1cb49d0493363cbee0d40",
+        "extractor_version": "openai-schedule-v4:board:image:p-vision:openai-responses:f6608a954e42cf3b923096571f3f808cf9e46e18a76eab421295ffe52233bca1",
+        "model": "model-v",
+        "status": "success",
+        "result_json": "{\"classification\":\"not_schedule\",\"events\":[],\"confidence\":0.6,\"evidence\":\"art\",\"reason\":\"illustration\",\"action\":\"none\"}",
+        "error": null
+      },
+      {
+        "id": 5,
+        "source_item_id": "img-d",
+        "content_fingerprint": "de9621ea6cbcebf0d316e6ea6c2529090cbf46ae1a436a1165bf686f9829c957",
+        "extractor_version": "openai-schedule-v4:board:text_image:p-vision:openai-responses:f6608a954e42cf3b923096571f3f808cf9e46e18a76eab421295ffe52233bca1",
+        "model": "model-v",
+        "status": "success",
+        "result_json": "{\"classification\":\"schedule\",\"events\":[{\"title\":\"歌枠\",\"detail\":null,\"date\":\"2099-05-03\",\"time\":\"21:00\",\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"scheduled\",\"eventType\":\"stream\",\"url\":null,\"confidence\":0.9,\"evidence\":\"board\"}],\"confidence\":0.9,\"evidence\":\"board\",\"reason\":null,\"action\":\"add\"}",
+        "error": null
+      }
+    ],
+    "postStates": [
+      {
+        "post_id": "img-a",
+        "status": "success",
+        "route": "schedule_board",
+        "last_error": null,
+        "last_extraction_id": 1,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "img-b",
+        "status": "success",
+        "route": "schedule_board",
+        "last_error": null,
+        "last_extraction_id": 3,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "img-c",
+        "status": "skipped",
+        "route": "schedule_board",
+        "last_error": "media_pending",
+        "last_extraction_id": null,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "img-d",
+        "status": "success",
+        "route": "schedule_board",
+        "last_error": null,
+        "last_extraction_id": 5,
+        "reprocess_requested": 0
+      }
+    ],
+    "reviews": [
+      {
+        "asset_id": "schedule-2026-04-06",
+        "llm_status": "not_schedule",
+        "llm_confidence": 0.2,
+        "llm_reason": "single card",
+        "llm_evidence": "thumbnail",
+        "llm_model": "model-c",
+        "checked": 1,
+        "llm_input_fingerprint": "2d47abb9a1af552569d10a8a4d648822bbcaa50d0d60d76f55c1c3fbbf80dbef",
+        "manual_status": "unreviewed"
+      },
+      {
+        "asset_id": "schedule-2026-04-13",
+        "llm_status": "skipped",
+        "llm_confidence": null,
+        "llm_reason": "media_pending",
+        "llm_evidence": null,
+        "llm_model": null,
+        "checked": 0,
+        "llm_input_fingerprint": null,
+        "manual_status": "unreviewed"
+      },
+      {
+        "asset_id": "schedule-2026-04-20",
+        "llm_status": "not_schedule",
+        "llm_confidence": 0.2,
+        "llm_reason": "single card",
+        "llm_evidence": "thumbnail",
+        "llm_model": "model-c",
+        "checked": 1,
+        "llm_input_fingerprint": "2d47abb9a1af552569d10a8a4d648822bbcaa50d0d60d76f55c1c3fbbf80dbef",
+        "manual_status": "unreviewed"
+      },
+      {
+        "asset_id": "schedule-2026-04-27",
+        "llm_status": "schedule",
+        "llm_confidence": 0.93,
+        "llm_reason": "grid of days",
+        "llm_evidence": "weekly table",
+        "llm_model": "model-v",
+        "checked": 1,
+        "llm_input_fingerprint": "e917a864f30ac297352ac9c48052c78633f06294153b4f3f719a1689e6197c67",
+        "manual_status": "unreviewed"
+      },
+      {
+        "asset_id": "weekly-schedule",
+        "llm_status": "schedule",
+        "llm_confidence": 0.93,
+        "llm_reason": "grid of days",
+        "llm_evidence": "weekly table",
+        "llm_model": "model-v",
+        "checked": 1,
+        "llm_input_fingerprint": "e917a864f30ac297352ac9c48052c78633f06294153b4f3f719a1689e6197c67",
+        "manual_status": "unreviewed"
+      }
+    ],
+    "providers": [
+      {
+        "id": "p-anth",
+        "last_status": "success",
+        "last_error": null
+      },
+      {
+        "id": "p-chat",
+        "last_status": null,
+        "last_error": null
+      },
+      {
+        "id": "p-text",
+        "last_status": null,
+        "last_error": null
+      },
+      {
+        "id": "p-vision",
+        "last_status": "success",
+        "last_error": null
+      }
+    ],
+    "events": [
+      {
+        "id": "x-schedule-20990503-4014c6c122",
+        "source_item_id": "img-d",
+        "title": "歌枠",
+        "raw_json": "{\"id\":\"x-schedule-20990503-4014c6c122\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"img-d\",\"canonicalSourceKey\":\"2099-05-03T21:00:1e8e6712d5\",\"source_key\":\"2099-05-03T21:00:1e8e6712d5\",\"title\":\"歌枠\",\"detail\":null,\"starts_on\":\"2099-05-03\",\"starts_at\":\"2099-05-03T12:00:00.000Z\",\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"exact\",\"cancellationSuspected\":false,\"status\":\"scheduled\",\"event_type\":\"stream\",\"url\":\"https://x.com/synthetic_handle/status/img-d\",\"is_upcoming\":true,\"confidence\":0.9,\"raw\":{\"evidence\":\"board\"},\"source\":\"x\",\"source_item_id\":\"img-d\",\"provenance\":\"automatic\",\"manual_locked\":0,\"extraction_id\":5,\"deleted_at\":null}"
+      }
+    ]
+  }
+}

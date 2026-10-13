@@ -46,6 +46,10 @@
       "reason": "Public shadcn/ui schema referenced by components.json."
     },
     {
+      "host": "json-schema.org",
+      "reason": "JSON Schema dialect identifier declared by every MCP tool input schema; an identifier only, never fetched by the server or a browser."
+    },
+    {
       "host": "x.com",
       "reason": "Public X profile, posts, hashtags, and schedule links used by the board."
     },

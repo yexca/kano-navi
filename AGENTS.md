@@ -86,6 +86,7 @@ External reads belong to server-side synchronization and its helpers.
 | Model routing and extraction     | server/schedule-extractor.ts, server/schedule-asset.ts, server/llm-catalog.ts, server/secret-store.ts |
 | Dynamic media                    | server/media-cache.ts, server/media-downloader.ts                                                     |
 | Fixed history packaging          | scripts/package-history-media.ts, scripts/import-history-media.ts, public/assets/history/             |
+| Go standalone backend            | backend-go/cmd/kano-go/, backend-go/internal/, go.Dockerfile, docs/architecture/go-standalone.md      |
 
 ## Validation and Handoff
 

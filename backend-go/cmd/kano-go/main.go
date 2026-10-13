@@ -27,6 +27,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "kano-go: invalid configuration")
 		os.Exit(2)
 	}
+	if cfg.HealthCheck {
+		os.Exit(runHealthCheck(cfg))
+	}
+	if cfg.Standalone {
+		os.Exit(runStandalone(cfg))
+	}
 	if cfg.EnableAdminWrites && os.Getenv("APP_MODE") != "development" {
 		fmt.Fprintln(os.Stderr, "kano-go: admin writes require APP_MODE=development")
 		os.Exit(2)

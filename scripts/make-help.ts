@@ -9,6 +9,9 @@ const groups = {
     start: "Start the API and serve dist (configure production auth first)",
     seed: "Add missing static seed records to the runtime database",
     sync: "Fetch configured external sources and update runtime snapshots",
+    "go-build": "Build the Go backend binary into backend-go/bin",
+    "go-start":
+      "Start the standalone Go backend serving dist (configure production auth first)",
   },
   Validation: {
     format: "Format supported files (writes changes)",
@@ -36,6 +39,8 @@ const groups = {
   "Docker and full CI": {
     "docker-build": "Build DOCKER_IMAGE (default kano-navi:ci)",
     "production-smoke": "Check the built image in a disposable container",
+    "go-docker-build":
+      "Build the standalone Go image GO_STANDALONE_IMAGE (default kano-navi-go-standalone:ci)",
     "ci-local": "Run checks, build the image, and check production runtime",
     ci: "Install dependencies, then run ci-local (requires Docker)",
   },

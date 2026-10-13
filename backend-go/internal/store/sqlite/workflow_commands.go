@@ -111,6 +111,8 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, definition WorkflowDefini
 				adapter = "youtube_recent"
 			case "media":
 				adapter = "media_download"
+			case "schedule":
+				adapter = "schedule_extract"
 			}
 		}
 		if adapter != "" {
@@ -151,15 +153,20 @@ func (s *Store) ClaimWorkflowRun(ctx context.Context, id, owner string, now time
 		return WorkflowLease{}, workflowSQLError(e)
 	}
 	var interval, enabled int
-	if e = tx.QueryRowContext(ctx, `SELECT interval_minutes,schedule_enabled FROM workflows WHERE id=?`, workflowID).Scan(&interval, &enabled); e != nil {
+	e = tx.QueryRowContext(ctx, `SELECT interval_minutes,schedule_enabled FROM workflows WHERE id=?`, workflowID).Scan(&interval, &enabled)
+	// Operator jobs (full sync, scan, one-source fetch) run from an unsaved
+	// definition, so there is no saved workflow row to plan or annotate.
+	if e != nil && !(errors.Is(e, sql.ErrNoRows) && IsAdhocWorkflow(workflowID)) {
 		return WorkflowLease{}, ErrWorkflowStorage
 	}
-	var next any
-	if enabled != 0 {
-		next = workflowTime(now.Add(time.Duration(clampInterval(interval)) * time.Minute))
-	}
-	if _, e = tx.ExecContext(ctx, `UPDATE workflows SET last_run_at=?,last_job_id=?,last_status='running',next_run_at=?,updated_at=? WHERE id=?`, workflowTime(now), id, next, workflowTime(now), workflowID); e != nil {
-		return WorkflowLease{}, ErrWorkflowStorage
+	if e == nil {
+		var next any
+		if enabled != 0 {
+			next = workflowTime(now.Add(time.Duration(clampInterval(interval)) * time.Minute))
+		}
+		if _, e = tx.ExecContext(ctx, `UPDATE workflows SET last_run_at=?,last_job_id=?,last_status='running',next_run_at=?,updated_at=? WHERE id=?`, workflowTime(now), id, next, workflowTime(now), workflowID); e != nil {
+			return WorkflowLease{}, ErrWorkflowStorage
+		}
 	}
 	if e = tx.Commit(); e != nil {
 		return WorkflowLease{}, ErrWorkflowStorage

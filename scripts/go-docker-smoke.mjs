@@ -126,7 +126,6 @@ try {
       body: JSON.stringify(body),
     })
   const event = await send("/api/admin/events", "POST", {
-    id: "smoke-manual",
     title: "Synthetic manual event",
     startsOn: "2026-01-02",
   })
@@ -135,6 +134,9 @@ try {
     201,
     "source flags must not disable admin event writes",
   )
+  // The server assigns manual event IDs; a client-supplied ID is ignored.
+  const eventId = (await event.json()).event.id
+  assert.match(eventId, /^manual-[0-9a-f-]{36}$/u)
   const created = await send("/api/admin/workflows", "POST", {
     name: "Synthetic blocked capability",
     steps: ["schedule"],
@@ -164,7 +166,7 @@ try {
     "unmigrated capabilities must finish as blocked without fetching",
   )
   const deleted = await send(
-    "/api/admin/events/smoke-manual",
+    `/api/admin/events/${encodeURIComponent(eventId)}`,
     "DELETE",
     undefined,
   )

@@ -1,5 +1,6 @@
 node_modules/
 dist/
+backend-go/bin/
 # SQLite, downloaded media, and profile selections are local runtime state.
 data/
 .env

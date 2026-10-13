@@ -1,0 +1,558 @@
+{
+  "first": {
+    "attempted": 3,
+    "success": 2,
+    "cached": 0,
+    "skipped": 0,
+    "failed": 0,
+    "uncertain": 1,
+    "boardAttempted": 2,
+    "messageAttempted": 1,
+    "keywords": [
+      "schedule",
+      "スケジュール",
+      "配信予定",
+      "週間予定",
+      "今週の予定",
+      "予定"
+    ],
+    "providers": [],
+    "providerOrders": {
+      "schedule_message": ["p-resp"],
+      "schedule_board": ["p-chat", "p-anth"],
+      "schedule_vision": []
+    },
+    "assetVerification": {
+      "attempted": 0,
+      "success": 0,
+      "cached": 0,
+      "skipped": 0,
+      "failed": 0,
+      "uncertain": 0,
+      "schedule": 0,
+      "notSchedule": 0
+    }
+  },
+  "requests": [
+    {
+      "url": "https://chat.example.test/v1/chat/completions",
+      "method": "POST",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-b\",\"messages\":[{\"role\":\"system\",\"content\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Source post published at 2026-04-28T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-a\\n\\n今週のスケジュール 😀 です\\n5/3 21:00 歌枠 <b>& \"}]}],\"response_format\":{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_completion_tokens\":4000}"
+    },
+    {
+      "url": "https://chat.example.test/v1/chat/completions",
+      "method": "POST",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-b\",\"messages\":[{\"role\":\"system\",\"content\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Source post published at 2026-04-27T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-c\\n\\n予定していた5/3の配信は中止です\"}]}],\"response_format\":{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_completion_tokens\":4000}"
+    },
+    {
+      "url": "https://chat.example.test/v1/chat/completions",
+      "method": "POST",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-b\",\"messages\":[{\"role\":\"system\",\"content\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Source post published at 2026-04-27T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-c\\n\\n予定していた5/3の配信は中止です\"}]}],\"response_format\":{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_completion_tokens\":4000}"
+    },
+    {
+      "url": "https://chat.example.test/v1/chat/completions",
+      "method": "POST",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-b\",\"messages\":[{\"role\":\"system\",\"content\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Source post published at 2026-04-27T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-c\\n\\n予定していた5/3の配信は中止です\"}]}],\"response_format\":{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_completion_tokens\":4000}"
+    },
+    {
+      "url": "https://anthropic.example.test/v1/messages",
+      "method": "POST",
+      "headers": {
+        "content-type": "application/json",
+        "x-api-key": "<redacted>",
+        "anthropic-version": "2023-06-01"
+      },
+      "body": "{\"model\":\"model-c\",\"max_tokens\":4000,\"system\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Source post published at 2026-04-27T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-c\\n\\n予定していた5/3の配信は中止です\"}]}],\"tools\":[{\"name\":\"kano_schedule_extraction\",\"description\":\"Return the structured classification result.\",\"input_schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}],\"tool_choice\":{\"type\":\"tool\",\"name\":\"kano_schedule_extraction\"}}"
+    },
+    {
+      "url": "https://provider.example.test/v1/responses",
+      "method": "POST",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "<redacted>"
+      },
+      "body": "{\"model\":\"model-a\",\"store\":false,\"instructions\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Source post published at 2026-04-26T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-b\\n\\n明日 20時から歌います\"}]}],\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_output_tokens\":4000}"
+    }
+  ],
+  "afterFirst": {
+    "events": [
+      {
+        "id": "x-schedule-20990503-5fe175d72c",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-03T21:00:f0dbd43122",
+        "title": "歌枠 Singing Stream",
+        "detail": "詳細",
+        "starts_on": "2099-05-03",
+        "starts_at": "2099-05-03T12:00:00.000Z",
+        "ends_at": "2099-05-03T16:30:00.000Z",
+        "timezone": "Asia/Tokyo",
+        "time_precision": "exact",
+        "status": "scheduled",
+        "event_type": "stream",
+        "url": "https://x.com/synthetic_handle/status/post-a",
+        "is_upcoming": 1,
+        "provenance": "automatic",
+        "manual_locked": 0,
+        "confidence": 0.9,
+        "extraction_id": 1,
+        "cancellation_status": "llm_suspected",
+        "cancellation_source": "llm",
+        "cancellation_reason": "配信中止",
+        "cancellation_evidence": "中止です",
+        "cancellation_source_item_id": "post-c",
+        "cancellation_confidence": 0.7,
+        "deleted": 0,
+        "raw_json": "{\"id\":\"x-schedule-20990503-5fe175d72c\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-a\",\"canonicalSourceKey\":\"2099-05-03T21:00:f0dbd43122\",\"source_key\":\"2099-05-03T21:00:f0dbd43122\",\"title\":\"歌枠 Singing Stream\",\"detail\":\"詳細\",\"starts_on\":\"2099-05-03\",\"starts_at\":\"2099-05-03T12:00:00.000Z\",\"ends_at\":\"2099-05-03T16:30:00.000Z\",\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"exact\",\"cancellationSuspected\":false,\"status\":\"scheduled\",\"event_type\":\"stream\",\"url\":\"https://x.com/synthetic_handle/status/post-a\",\"is_upcoming\":true,\"confidence\":0.9,\"raw\":{\"evidence\":\"5/3 21:00 歌枠\"},\"source\":\"x\",\"source_item_id\":\"post-a\",\"provenance\":\"automatic\",\"manual_locked\":0,\"extraction_id\":1,\"deleted_at\":null}"
+      },
+      {
+        "id": "x-schedule-20990505-289bfee584",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-05Tunknown:6a510e867b",
+        "title": "a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀�",
+        "detail": "d",
+        "starts_on": "2099-05-05",
+        "starts_at": null,
+        "ends_at": null,
+        "timezone": "Asia/Tokyo",
+        "time_precision": "unknown",
+        "status": null,
+        "event_type": "release",
+        "url": "https://x.com/synthetic_handle/status/post-a",
+        "is_upcoming": 1,
+        "provenance": "automatic",
+        "manual_locked": 0,
+        "confidence": 1e-7,
+        "extraction_id": 1,
+        "cancellation_status": "none",
+        "cancellation_source": null,
+        "cancellation_reason": null,
+        "cancellation_evidence": null,
+        "cancellation_source_item_id": null,
+        "cancellation_confidence": null,
+        "deleted": 0,
+        "raw_json": "{\"id\":\"x-schedule-20990505-289bfee584\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-a\",\"canonicalSourceKey\":\"2099-05-05Tunknown:6a510e867b\",\"source_key\":\"2099-05-05Tunknown:6a510e867b\",\"title\":\"a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\\ud83d\",\"detail\":\"d\",\"starts_on\":\"2099-05-05\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"\",\"event_type\":\"release\",\"url\":\"https://x.com/synthetic_handle/status/post-a\",\"is_upcoming\":true,\"confidence\":1e-7,\"raw\":{\"evidence\":\"long\"},\"source\":\"x\",\"source_item_id\":\"post-a\",\"provenance\":\"automatic\",\"manual_locked\":0,\"extraction_id\":1,\"deleted_at\":null}"
+      },
+      {
+        "id": "youtube-abcdefghijk",
+        "source": "youtube",
+        "source_item_id": "abcdefghijk",
+        "source_key": "reservation",
+        "title": "メン限 ΑΣ İ",
+        "detail": null,
+        "starts_on": "2099-05-04",
+        "starts_at": null,
+        "ends_at": null,
+        "timezone": "Asia/Tokyo",
+        "time_precision": "unknown",
+        "status": "待确认",
+        "event_type": "member",
+        "url": "https://www.youtube.com/watch?v=abcdefghijk&t=1",
+        "is_upcoming": 1,
+        "provenance": "automatic",
+        "manual_locked": 0,
+        "confidence": 1,
+        "extraction_id": 1,
+        "cancellation_status": "none",
+        "cancellation_source": null,
+        "cancellation_reason": null,
+        "cancellation_evidence": null,
+        "cancellation_source_item_id": null,
+        "cancellation_confidence": null,
+        "deleted": 0,
+        "raw_json": "{\"id\":\"youtube-abcdefghijk\",\"canonicalSource\":\"youtube\",\"canonicalSourceItemId\":\"abcdefghijk\",\"canonicalSourceKey\":\"reservation\",\"source_key\":\"reservation\",\"title\":\"メン限 ΑΣ İ\",\"detail\":null,\"starts_on\":\"2099-05-04\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"待确认\",\"event_type\":\"member\",\"url\":\"https://www.youtube.com/watch?v=abcdefghijk&t=1\",\"is_upcoming\":true,\"confidence\":1,\"raw\":{\"evidence\":\"\"},\"source\":\"youtube\",\"source_item_id\":\"abcdefghijk\",\"provenance\":\"automatic\",\"manual_locked\":0,\"extraction_id\":1,\"deleted_at\":null}"
+      }
+    ],
+    "eventSources": [
+      {
+        "event_id": "x-schedule-20990503-5fe175d72c",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-03T21:00:f0dbd43122",
+        "url": "https://x.com/synthetic_handle/status/post-a",
+        "raw_json": "{\"id\":\"x-schedule-20990503-5fe175d72c\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-a\",\"canonicalSourceKey\":\"2099-05-03T21:00:f0dbd43122\",\"source_key\":\"2099-05-03T21:00:f0dbd43122\",\"title\":\"歌枠 Singing Stream\",\"detail\":\"詳細\",\"starts_on\":\"2099-05-03\",\"starts_at\":\"2099-05-03T12:00:00.000Z\",\"ends_at\":\"2099-05-03T16:30:00.000Z\",\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"exact\",\"cancellationSuspected\":false,\"status\":\"scheduled\",\"event_type\":\"stream\",\"url\":\"https://x.com/synthetic_handle/status/post-a\",\"is_upcoming\":true,\"confidence\":0.9,\"raw\":{\"evidence\":\"5/3 21:00 歌枠\"},\"source\":\"x\",\"source_item_id\":\"post-a\"}",
+        "deleted": 0
+      },
+      {
+        "event_id": "youtube-abcdefghijk",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-04Tunknown:c854c629ff",
+        "url": "https://www.youtube.com/watch?v=abcdefghijk&t=1",
+        "raw_json": "{\"id\":\"youtube-abcdefghijk\",\"canonicalSource\":\"youtube\",\"canonicalSourceItemId\":\"abcdefghijk\",\"canonicalSourceKey\":\"reservation\",\"source_key\":\"2099-05-04Tunknown:c854c629ff\",\"title\":\"メン限 ΑΣ İ\",\"detail\":null,\"starts_on\":\"2099-05-04\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"待确认\",\"event_type\":\"member\",\"url\":\"https://www.youtube.com/watch?v=abcdefghijk&t=1\",\"is_upcoming\":true,\"confidence\":1,\"raw\":{\"evidence\":\"\"},\"source\":\"x\",\"source_item_id\":\"post-a\"}",
+        "deleted": 0
+      },
+      {
+        "event_id": "x-schedule-20990505-289bfee584",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-05Tunknown:6a510e867b",
+        "url": "https://x.com/synthetic_handle/status/post-a",
+        "raw_json": "{\"id\":\"x-schedule-20990505-289bfee584\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-a\",\"canonicalSourceKey\":\"2099-05-05Tunknown:6a510e867b\",\"source_key\":\"2099-05-05Tunknown:6a510e867b\",\"title\":\"a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\\ud83d\",\"detail\":\"d\",\"starts_on\":\"2099-05-05\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"\",\"event_type\":\"release\",\"url\":\"https://x.com/synthetic_handle/status/post-a\",\"is_upcoming\":true,\"confidence\":1e-7,\"raw\":{\"evidence\":\"long\"},\"source\":\"x\",\"source_item_id\":\"post-a\"}",
+        "deleted": 0
+      }
+    ],
+    "extractions": [
+      {
+        "id": 1,
+        "source": "x",
+        "source_item_id": "post-a",
+        "content_fingerprint": "e4ab208fb8f621e2454b69dc194c4ac5e8c637f0f74ef08c6e4f61c394d70015",
+        "extractor_version": "openai-schedule-v4:board:text:p-chat:openai-chat-completions:b3646dcbd00f86734f463a9b72118a547301f11b8b55063fa4f7675194339316",
+        "model": "model-b",
+        "status": "success",
+        "result_json": "{\"classification\":\"schedule\",\"events\":[{\"title\":\"  歌枠 Singing Stream \",\"detail\":\"詳細 \",\"date\":\"2099-05-03\",\"time\":\"21:00\",\"endTime\":\"01:30\",\"timePrecision\":\"exact\",\"status\":\"scheduled\",\"eventType\":\"stream\",\"url\":null,\"confidence\":0.9,\"evidence\":\"5/3 21:00 歌枠\"},{\"title\":\"メン限 ΑΣ İ\",\"detail\":null,\"date\":\"2099-05-04\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"\",\"eventType\":\"member\",\"url\":\"https://www.youtube.com/watch?v=abcdefghijk&t=1\",\"confidence\":1,\"evidence\":\"\"},{\"title\":\"Old Event\",\"detail\":\"\",\"date\":\"2020-01-02\",\"time\":\"09:05\",\"endTime\":null,\"timePrecision\":\"approximate\",\"status\":\"Cancelled\",\"eventType\":\"event\",\"url\":\"HTTPS://Example.TEST/a b?q=1#f\",\"confidence\":0.25,\"evidence\":\"e\"},{\"title\":\"a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\",\"detail\":\"d\",\"date\":\"2099-05-05\",\"time\":null,\"endTime\":null,\"timePrecision\":\"unknown\",\"status\":\"  \",\"eventType\":\"release\",\"url\":\"ftp://example.test/x\",\"confidence\":1e-7,\"evidence\":\"long\"}],\"confidence\":0.8,\"evidence\":\"ev <tag>\",\"reason\":null,\"action\":\"add\"}",
+        "error": null
+      },
+      {
+        "id": 3,
+        "source": "x",
+        "source_item_id": "post-c",
+        "content_fingerprint": "44a8ac994b5d7a2fd0c9595c56ed6baf3d488bb6a2e0745d705fd355d3e2b749",
+        "extractor_version": "openai-schedule-v4:board:text:p-chat:openai-chat-completions:b3646dcbd00f86734f463a9b72118a547301f11b8b55063fa4f7675194339316",
+        "model": "model-b",
+        "status": "failed",
+        "result_json": null,
+        "error": "LLM request failed (HTTP 500)"
+      },
+      {
+        "id": 5,
+        "source": "x",
+        "source_item_id": "post-c",
+        "content_fingerprint": "44a8ac994b5d7a2fd0c9595c56ed6baf3d488bb6a2e0745d705fd355d3e2b749",
+        "extractor_version": "openai-schedule-v4:board:text:p-anth:anthropic-messages:c2cd48424491eeab88d2e254908957c25925e2351d367d51b01dd4cd604582e3",
+        "model": "model-c",
+        "status": "success",
+        "result_json": "{\"classification\":\"schedule\",\"events\":[{\"title\":\"歌枠・Singing Stream！\",\"detail\":null,\"date\":\"2099-05-03\",\"time\":\"21:00\",\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"cancelled\",\"eventType\":\"stream\",\"url\":null,\"confidence\":0.7,\"evidence\":\"中止です\"}],\"confidence\":0.7,\"evidence\":\"中止です\",\"reason\":\"配信中止\",\"action\":\"cancel\"}",
+        "error": null
+      },
+      {
+        "id": 7,
+        "source": "x",
+        "source_item_id": "post-b",
+        "content_fingerprint": "f48d4872c5a8bbe9d2521bcd215fb5969d9425f9c54ebfd85095613fd06451d5",
+        "extractor_version": "openai-schedule-v4:message:text:p-resp:openai-responses:178858412ac004a2b0e5dc0a47e6e5b44149c44cfea3a85fd2975cf83e512e98",
+        "model": "model-a",
+        "status": "uncertain",
+        "result_json": "{\"classification\":\"uncertain\",\"events\":[],\"confidence\":0.4,\"evidence\":\"\",\"reason\":\"曖昧\",\"action\":\"none\"}",
+        "error": null
+      }
+    ],
+    "postStates": [
+      {
+        "post_id": "post-a",
+        "status": "success",
+        "route": "schedule_board",
+        "attempted": 1,
+        "processed": 1,
+        "last_error": null,
+        "last_extraction_id": 1,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "post-b",
+        "status": "uncertain",
+        "route": "schedule_message",
+        "attempted": 1,
+        "processed": 1,
+        "last_error": null,
+        "last_extraction_id": 7,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "post-c",
+        "status": "success",
+        "route": "schedule_board",
+        "attempted": 1,
+        "processed": 1,
+        "last_error": null,
+        "last_extraction_id": 5,
+        "reprocess_requested": 0
+      }
+    ],
+    "providers": [
+      {
+        "id": "p-anth",
+        "last_status": "success",
+        "last_error": null
+      },
+      {
+        "id": "p-chat",
+        "last_status": "failed",
+        "last_error": "LLM request failed (HTTP 500)"
+      },
+      {
+        "id": "p-resp",
+        "last_status": "success",
+        "last_error": null
+      }
+    ]
+  },
+  "second": {
+    "attempted": 1,
+    "success": 0,
+    "cached": 3,
+    "skipped": 0,
+    "failed": 0,
+    "uncertain": 0,
+    "boardAttempted": 1,
+    "messageAttempted": 0,
+    "keywords": [
+      "schedule",
+      "スケジュール",
+      "配信予定",
+      "週間予定",
+      "今週の予定",
+      "予定"
+    ],
+    "providers": [],
+    "providerOrders": {
+      "schedule_message": ["p-resp"],
+      "schedule_board": ["p-chat", "p-anth"],
+      "schedule_vision": []
+    },
+    "assetVerification": {
+      "attempted": 0,
+      "success": 0,
+      "cached": 0,
+      "skipped": 0,
+      "failed": 0,
+      "uncertain": 0,
+      "schedule": 0,
+      "notSchedule": 0
+    }
+  },
+  "secondRequests": 3,
+  "afterSecond": {
+    "events": [
+      {
+        "id": "x-schedule-20990503-5fe175d72c",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-03T21:00:f0dbd43122",
+        "title": "歌枠 Singing Stream",
+        "detail": "詳細",
+        "starts_on": "2099-05-03",
+        "starts_at": "2099-05-03T12:00:00.000Z",
+        "ends_at": "2099-05-03T16:30:00.000Z",
+        "timezone": "Asia/Tokyo",
+        "time_precision": "exact",
+        "status": "scheduled",
+        "event_type": "stream",
+        "url": "https://x.com/synthetic_handle/status/post-a",
+        "is_upcoming": 1,
+        "provenance": "automatic",
+        "manual_locked": 0,
+        "confidence": 0.9,
+        "extraction_id": 1,
+        "cancellation_status": "llm_suspected",
+        "cancellation_source": "llm",
+        "cancellation_reason": "配信中止",
+        "cancellation_evidence": "中止です",
+        "cancellation_source_item_id": "post-c",
+        "cancellation_confidence": 0.7,
+        "deleted": 0,
+        "raw_json": "{\"id\":\"x-schedule-20990503-5fe175d72c\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-a\",\"canonicalSourceKey\":\"2099-05-03T21:00:f0dbd43122\",\"source_key\":\"2099-05-03T21:00:f0dbd43122\",\"title\":\"歌枠 Singing Stream\",\"detail\":\"詳細\",\"starts_on\":\"2099-05-03\",\"starts_at\":\"2099-05-03T12:00:00.000Z\",\"ends_at\":\"2099-05-03T16:30:00.000Z\",\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"exact\",\"cancellationSuspected\":false,\"status\":\"scheduled\",\"event_type\":\"stream\",\"url\":\"https://x.com/synthetic_handle/status/post-a\",\"is_upcoming\":true,\"confidence\":0.9,\"raw\":{\"evidence\":\"5/3 21:00 歌枠\"},\"source\":\"x\",\"source_item_id\":\"post-a\",\"provenance\":\"automatic\",\"manual_locked\":0,\"extraction_id\":1,\"deleted_at\":null}"
+      },
+      {
+        "id": "x-schedule-20990505-289bfee584",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-05Tunknown:6a510e867b",
+        "title": "a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀�",
+        "detail": "d",
+        "starts_on": "2099-05-05",
+        "starts_at": null,
+        "ends_at": null,
+        "timezone": "Asia/Tokyo",
+        "time_precision": "unknown",
+        "status": null,
+        "event_type": "release",
+        "url": "https://x.com/synthetic_handle/status/post-a",
+        "is_upcoming": 1,
+        "provenance": "automatic",
+        "manual_locked": 0,
+        "confidence": 1e-7,
+        "extraction_id": 1,
+        "cancellation_status": "none",
+        "cancellation_source": null,
+        "cancellation_reason": null,
+        "cancellation_evidence": null,
+        "cancellation_source_item_id": null,
+        "cancellation_confidence": null,
+        "deleted": 0,
+        "raw_json": "{\"id\":\"x-schedule-20990505-289bfee584\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-a\",\"canonicalSourceKey\":\"2099-05-05Tunknown:6a510e867b\",\"source_key\":\"2099-05-05Tunknown:6a510e867b\",\"title\":\"a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\\ud83d\",\"detail\":\"d\",\"starts_on\":\"2099-05-05\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"\",\"event_type\":\"release\",\"url\":\"https://x.com/synthetic_handle/status/post-a\",\"is_upcoming\":true,\"confidence\":1e-7,\"raw\":{\"evidence\":\"long\"},\"source\":\"x\",\"source_item_id\":\"post-a\",\"provenance\":\"automatic\",\"manual_locked\":0,\"extraction_id\":1,\"deleted_at\":null}"
+      },
+      {
+        "id": "youtube-abcdefghijk",
+        "source": "youtube",
+        "source_item_id": "abcdefghijk",
+        "source_key": "reservation",
+        "title": "メン限 ΑΣ İ",
+        "detail": null,
+        "starts_on": "2099-05-04",
+        "starts_at": null,
+        "ends_at": null,
+        "timezone": "Asia/Tokyo",
+        "time_precision": "unknown",
+        "status": "待确认",
+        "event_type": "member",
+        "url": "https://www.youtube.com/watch?v=abcdefghijk&t=1",
+        "is_upcoming": 1,
+        "provenance": "automatic",
+        "manual_locked": 0,
+        "confidence": 1,
+        "extraction_id": 1,
+        "cancellation_status": "none",
+        "cancellation_source": null,
+        "cancellation_reason": null,
+        "cancellation_evidence": null,
+        "cancellation_source_item_id": null,
+        "cancellation_confidence": null,
+        "deleted": 0,
+        "raw_json": "{\"id\":\"youtube-abcdefghijk\",\"canonicalSource\":\"youtube\",\"canonicalSourceItemId\":\"abcdefghijk\",\"canonicalSourceKey\":\"reservation\",\"source_key\":\"reservation\",\"title\":\"メン限 ΑΣ İ\",\"detail\":null,\"starts_on\":\"2099-05-04\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"待确认\",\"event_type\":\"member\",\"url\":\"https://www.youtube.com/watch?v=abcdefghijk&t=1\",\"is_upcoming\":true,\"confidence\":1,\"raw\":{\"evidence\":\"\"},\"source\":\"youtube\",\"source_item_id\":\"abcdefghijk\",\"provenance\":\"automatic\",\"manual_locked\":0,\"extraction_id\":1,\"deleted_at\":null}"
+      }
+    ],
+    "eventSources": [
+      {
+        "event_id": "x-schedule-20990503-5fe175d72c",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-03T21:00:f0dbd43122",
+        "url": "https://x.com/synthetic_handle/status/post-a",
+        "raw_json": "{\"id\":\"x-schedule-20990503-5fe175d72c\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-a\",\"canonicalSourceKey\":\"2099-05-03T21:00:f0dbd43122\",\"source_key\":\"2099-05-03T21:00:f0dbd43122\",\"title\":\"歌枠 Singing Stream\",\"detail\":\"詳細\",\"starts_on\":\"2099-05-03\",\"starts_at\":\"2099-05-03T12:00:00.000Z\",\"ends_at\":\"2099-05-03T16:30:00.000Z\",\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"exact\",\"cancellationSuspected\":false,\"status\":\"scheduled\",\"event_type\":\"stream\",\"url\":\"https://x.com/synthetic_handle/status/post-a\",\"is_upcoming\":true,\"confidence\":0.9,\"raw\":{\"evidence\":\"5/3 21:00 歌枠\"},\"source\":\"x\",\"source_item_id\":\"post-a\"}",
+        "deleted": 0
+      },
+      {
+        "event_id": "youtube-abcdefghijk",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-04Tunknown:c854c629ff",
+        "url": "https://www.youtube.com/watch?v=abcdefghijk&t=1",
+        "raw_json": "{\"id\":\"youtube-abcdefghijk\",\"canonicalSource\":\"youtube\",\"canonicalSourceItemId\":\"abcdefghijk\",\"canonicalSourceKey\":\"reservation\",\"source_key\":\"2099-05-04Tunknown:c854c629ff\",\"title\":\"メン限 ΑΣ İ\",\"detail\":null,\"starts_on\":\"2099-05-04\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"待确认\",\"event_type\":\"member\",\"url\":\"https://www.youtube.com/watch?v=abcdefghijk&t=1\",\"is_upcoming\":true,\"confidence\":1,\"raw\":{\"evidence\":\"\"},\"source\":\"x\",\"source_item_id\":\"post-a\"}",
+        "deleted": 0
+      },
+      {
+        "event_id": "x-schedule-20990505-289bfee584",
+        "source": "x",
+        "source_item_id": "post-a",
+        "source_key": "2099-05-05Tunknown:6a510e867b",
+        "url": "https://x.com/synthetic_handle/status/post-a",
+        "raw_json": "{\"id\":\"x-schedule-20990505-289bfee584\",\"canonicalSource\":\"x\",\"canonicalSourceItemId\":\"post-a\",\"canonicalSourceKey\":\"2099-05-05Tunknown:6a510e867b\",\"source_key\":\"2099-05-05Tunknown:6a510e867b\",\"title\":\"a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\\ud83d\",\"detail\":\"d\",\"starts_on\":\"2099-05-05\",\"starts_at\":null,\"ends_at\":null,\"timezone\":\"Asia/Tokyo\",\"time_precision\":\"unknown\",\"cancellationSuspected\":false,\"status\":\"\",\"event_type\":\"release\",\"url\":\"https://x.com/synthetic_handle/status/post-a\",\"is_upcoming\":true,\"confidence\":1e-7,\"raw\":{\"evidence\":\"long\"},\"source\":\"x\",\"source_item_id\":\"post-a\"}",
+        "deleted": 0
+      }
+    ],
+    "extractions": [
+      {
+        "id": 1,
+        "source": "x",
+        "source_item_id": "post-a",
+        "content_fingerprint": "e4ab208fb8f621e2454b69dc194c4ac5e8c637f0f74ef08c6e4f61c394d70015",
+        "extractor_version": "openai-schedule-v4:board:text:p-chat:openai-chat-completions:b3646dcbd00f86734f463a9b72118a547301f11b8b55063fa4f7675194339316",
+        "model": "model-b",
+        "status": "success",
+        "result_json": "{\"classification\":\"schedule\",\"events\":[{\"title\":\"  歌枠 Singing Stream \",\"detail\":\"詳細 \",\"date\":\"2099-05-03\",\"time\":\"21:00\",\"endTime\":\"01:30\",\"timePrecision\":\"exact\",\"status\":\"scheduled\",\"eventType\":\"stream\",\"url\":null,\"confidence\":0.9,\"evidence\":\"5/3 21:00 歌枠\"},{\"title\":\"メン限 ΑΣ İ\",\"detail\":null,\"date\":\"2099-05-04\",\"time\":null,\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"\",\"eventType\":\"member\",\"url\":\"https://www.youtube.com/watch?v=abcdefghijk&t=1\",\"confidence\":1,\"evidence\":\"\"},{\"title\":\"Old Event\",\"detail\":\"\",\"date\":\"2020-01-02\",\"time\":\"09:05\",\"endTime\":null,\"timePrecision\":\"approximate\",\"status\":\"Cancelled\",\"eventType\":\"event\",\"url\":\"HTTPS://Example.TEST/a b?q=1#f\",\"confidence\":0.25,\"evidence\":\"e\"},{\"title\":\"a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\",\"detail\":\"d\",\"date\":\"2099-05-05\",\"time\":null,\"endTime\":null,\"timePrecision\":\"unknown\",\"status\":\"  \",\"eventType\":\"release\",\"url\":\"ftp://example.test/x\",\"confidence\":1e-7,\"evidence\":\"long\"}],\"confidence\":0.8,\"evidence\":\"ev <tag>\",\"reason\":null,\"action\":\"add\"}",
+        "error": null
+      },
+      {
+        "id": 3,
+        "source": "x",
+        "source_item_id": "post-c",
+        "content_fingerprint": "44a8ac994b5d7a2fd0c9595c56ed6baf3d488bb6a2e0745d705fd355d3e2b749",
+        "extractor_version": "openai-schedule-v4:board:text:p-chat:openai-chat-completions:b3646dcbd00f86734f463a9b72118a547301f11b8b55063fa4f7675194339316",
+        "model": "model-b",
+        "status": "failed",
+        "result_json": null,
+        "error": "LLM request failed (HTTP 500)"
+      },
+      {
+        "id": 5,
+        "source": "x",
+        "source_item_id": "post-c",
+        "content_fingerprint": "44a8ac994b5d7a2fd0c9595c56ed6baf3d488bb6a2e0745d705fd355d3e2b749",
+        "extractor_version": "openai-schedule-v4:board:text:p-anth:anthropic-messages:c2cd48424491eeab88d2e254908957c25925e2351d367d51b01dd4cd604582e3",
+        "model": "model-c",
+        "status": "success",
+        "result_json": "{\"classification\":\"schedule\",\"events\":[{\"title\":\"歌枠・Singing Stream！\",\"detail\":null,\"date\":\"2099-05-03\",\"time\":\"21:00\",\"endTime\":null,\"timePrecision\":\"exact\",\"status\":\"cancelled\",\"eventType\":\"stream\",\"url\":null,\"confidence\":0.7,\"evidence\":\"中止です\"}],\"confidence\":0.7,\"evidence\":\"中止です\",\"reason\":\"配信中止\",\"action\":\"cancel\"}",
+        "error": null
+      },
+      {
+        "id": 7,
+        "source": "x",
+        "source_item_id": "post-b",
+        "content_fingerprint": "f48d4872c5a8bbe9d2521bcd215fb5969d9425f9c54ebfd85095613fd06451d5",
+        "extractor_version": "openai-schedule-v4:message:text:p-resp:openai-responses:178858412ac004a2b0e5dc0a47e6e5b44149c44cfea3a85fd2975cf83e512e98",
+        "model": "model-a",
+        "status": "uncertain",
+        "result_json": "{\"classification\":\"uncertain\",\"events\":[],\"confidence\":0.4,\"evidence\":\"\",\"reason\":\"曖昧\",\"action\":\"none\"}",
+        "error": null
+      }
+    ],
+    "postStates": [
+      {
+        "post_id": "post-a",
+        "status": "success",
+        "route": "schedule_board",
+        "attempted": 1,
+        "processed": 1,
+        "last_error": null,
+        "last_extraction_id": 1,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "post-b",
+        "status": "uncertain",
+        "route": "schedule_message",
+        "attempted": 1,
+        "processed": 1,
+        "last_error": null,
+        "last_extraction_id": 7,
+        "reprocess_requested": 0
+      },
+      {
+        "post_id": "post-c",
+        "status": "success",
+        "route": "schedule_board",
+        "attempted": 1,
+        "processed": 1,
+        "last_error": null,
+        "last_extraction_id": 5,
+        "reprocess_requested": 0
+      }
+    ],
+    "providers": [
+      {
+        "id": "p-anth",
+        "last_status": "success",
+        "last_error": null
+      },
+      {
+        "id": "p-chat",
+        "last_status": "failed",
+        "last_error": "LLM request failed (HTTP 500)"
+      },
+      {
+        "id": "p-resp",
+        "last_status": "success",
+        "last_error": null
+      }
+    ]
+  }
+}

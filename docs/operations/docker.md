@@ -49,6 +49,20 @@ docker build -t kano-navi:local .
 KANO_IMAGE=kano-navi:local docker compose up -d --pull never
 ```
 
+The Go backend has its own image. It serves the same routes from one static
+binary without a Node runtime and accepts the same environment and `/app/data`
+volume, so the Compose file works unchanged with `KANO_IMAGE` pointed at it:
+
+```bash
+make go-docker-build
+KANO_IMAGE=kano-navi-go-standalone:ci docker compose up -d --pull never
+```
+
+Stop the TypeScript container first: only one service may write a snapshot.
+The Go listener compresses with gzip only. See
+[Go standalone backend](../architecture/go-standalone.md) for what it does not
+yet cover and how to roll back.
+
 Version tags run the Release workflow, which builds once and publishes the
 same image to Docker Hub and GHCR with version, major/minor, and `latest` tags.
 Configure the repository secret `DOCKERHUB_TOKEN` with push access. The Docker

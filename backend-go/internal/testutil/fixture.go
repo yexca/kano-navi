@@ -46,6 +46,7 @@ func NewSnapshot(t testing.TB) string {
 			id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, source TEXT NOT NULL, source_item_id TEXT NOT NULL,
 			source_key TEXT, url TEXT, raw_json TEXT, deleted_at TEXT, created_at TEXT, updated_at TEXT
 		);
+		CREATE UNIQUE INDEX event_sources_identity_idx ON event_sources (source, source_item_id, source_key);
 		CREATE TABLE videos (
 			id TEXT PRIMARY KEY, source TEXT NOT NULL, title TEXT NOT NULL, published_at TEXT, scheduled_at TEXT,
 			url TEXT NOT NULL, thumbnail_url TEXT, kind TEXT, is_upcoming INTEGER DEFAULT 0, raw_json TEXT

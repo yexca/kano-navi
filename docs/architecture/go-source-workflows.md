@@ -117,15 +117,14 @@ transports exercise complete X → YouTube → media execution, API cancellation
 manual locks, rollback, leases, v1 upgrades, identity repair and response bounds.
 No validation fetches live source, CDN or model data.
 
-Still required for the complete production Go backend:
+[Go standalone backend](go-standalone.md) has since added additive schema
+upgrades, selected-profile startup repair, LLM configuration, schedule
+extraction and image review, profile media, MCP, the complete operator console
+and static frontend serving. Still required before TypeScript can be removed:
 
-- Full legacy schema upgrades and selected-profile startup repair.
-- LLM secrets/catalog/discovery/routes, schedule extraction and image review.
 - Source API historical windows and atomic history checkpoints.
-- Profile discovery, download, selection, upload and startup repair.
-- MCP public/control transport and tool contracts.
-- Complete admin response compatibility, frontend integration, static SPA
-  serving and replacement of the TypeScript production entry point/image.
+- The rebuilding migration for snapshots that predate event sources.
+- Replacement of the published production image and the Vite development API.
 
 Rollback is to stop the Go writer and return to TypeScript. Additive workflow
 state and repaired media identities need no snapshot or cached-file deletion.

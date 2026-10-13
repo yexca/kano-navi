@@ -20,6 +20,33 @@ type Handler struct {
 	store *sqlite.Store
 	now   func() time.Time
 	admin http.Handler
+	// static and mcp are attached only when this process is the single owner
+	// of the site instead of a read-only sidecar.
+	static http.Handler
+	mcp    http.Handler
+}
+
+// Standalone carries everything the single-process owner serves beyond the
+// public reads: the full operator console, MCP and the built frontend.
+type Standalone struct {
+	Compat *Compat
+	Queue  *workflow.Queue
+	Static http.Handler
+	MCP    http.Handler
+}
+
+// NewStandaloneHandler serves the whole product from this process.
+func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, auth *adminauth.Auth, options Standalone) http.Handler {
+	if now == nil {
+		now = time.Now
+	}
+	return &Handler{
+		store:  store,
+		now:    now,
+		admin:  &adminHandler{store: store, auth: auth, queue: options.Queue, compat: options.Compat},
+		static: options.Static,
+		mcp:    options.MCP,
+	}
 }
 
 func NewHandler(store *sqlite.Store) http.Handler {
@@ -118,8 +145,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.media(w, r, strings.TrimPrefix(r.URL.Path, "/media/"))
 		case strings.HasPrefix(r.URL.Path, "/media"):
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"}, "")
-		case strings.HasPrefix(r.URL.Path, "/api/"):
+		case strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/api":
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
+		case h.mcp != nil && (r.URL.Path == "/mcp" || strings.HasPrefix(r.URL.Path, "/mcp/")):
+			h.mcp.ServeHTTP(w, r)
+		case h.static != nil && r.URL.Path != "/mcp" && !strings.HasPrefix(r.URL.Path, "/mcp/"):
+			h.static.ServeHTTP(w, r)
 		default:
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
 		}

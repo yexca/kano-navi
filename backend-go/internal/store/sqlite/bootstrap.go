@@ -25,6 +25,10 @@ var publicStaticSeed []byte
 // static records in an existing current-schema snapshot. It never reconstructs
 // unknown/legacy tables, clears snapshots, or changes provider configuration.
 func OpenInitialized(filename string, adminWrites, workflowWrites bool) (*Store, error) {
+	return openInitialized(filename, adminWrites, workflowWrites, false)
+}
+
+func openInitialized(filename string, adminWrites, workflowWrites, upgrade bool) (*Store, error) {
 	if strings.TrimSpace(filename) == "" {
 		return nil, ErrUnavailable
 	}
@@ -68,8 +72,13 @@ func OpenInitialized(filename string, adminWrites, workflowWrites bool) (*Store,
 			return nil, fmt.Errorf("%w: fresh schema could not be created", ErrSchema)
 		}
 	} else {
-		// Validate before making any seed write. Existing legacy upgrades still
-		// belong to the original migrator until their Go parity is implemented.
+		// The site owner applies additive upgrades first; every other opener
+		// validates before making any seed write and leaves old schemas alone.
+		if upgrade {
+			if err = upgradeSchema(ctx, tx); err != nil {
+				return nil, err
+			}
+		}
 		if err = verifySchema(ctx, dbInTransaction{tx}); err != nil {
 			return nil, err
 		}

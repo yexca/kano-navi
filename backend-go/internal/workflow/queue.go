@@ -36,6 +36,24 @@ func (q *Queue) Submit(ctx context.Context, id string, trigger TriggerSource, ke
 	return run, nil
 }
 
+// SubmitDefinition queues an unsaved definition through the same durable
+// single-flight reservation as saved workflows.
+func (q *Queue) SubmitDefinition(ctx context.Context, definition sqlite.WorkflowDefinition, trigger TriggerSource, days map[string]int) (*Run, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed || q.Executor == nil {
+		return nil, sqlite.ErrWorkflowUnavailable
+	}
+	run, err := q.Executor.PrepareDefinition(ctx, definition, trigger, "", days)
+	if err != nil {
+		return nil, err
+	}
+	if run.Status == "queued" {
+		q.dispatch(run)
+	}
+	return run, nil
+}
+
 // Caller holds mu. A bounded background context deliberately outlives the
 // initiating request. Cancel/Close stop active network requests as well.
 func (q *Queue) dispatch(run *Run) {
