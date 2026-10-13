@@ -18,6 +18,9 @@ const groups = {
     "sensitive-check": "Scan workspace source for sensitive information",
     "test-sensitive": "Test scanner behavior",
     "test-server": "Test SQLite, HTTP, sync, media, and LLM contracts",
+    "go-test": "Run Go backend contracts and vet without Docker",
+    "go-check":
+      "Check Go formatting, contracts, cross-builds, and disposable containers",
     smoke: "Check a seeded temporary SQLite snapshot through local HTTP",
     "public-read-benchmark":
       "Measure TypeScript and Go public reads over 10,000 synthetic records",

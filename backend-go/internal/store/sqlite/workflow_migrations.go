@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const WorkflowSchemaVersion = 1
+const WorkflowSchemaVersion = 2
 
 var ErrWorkflowSchema = errors.New("workflow schema invalid")
 
@@ -89,10 +89,44 @@ func migrateWorkflowSchema(ctx context.Context, db *sql.DB) error {
 			return ErrWorkflowSchema
 		}
 	}
+	// Preserve the v1 constrained table and its rows. New adapter names use an
+	// additive field, while old binaries can still inspect the legacy capability.
+	for _, column := range []struct{ table, name, ddl string }{
+		{"workflow_runs", "source_lookback_json", `ALTER TABLE workflow_runs ADD COLUMN source_lookback_json TEXT NOT NULL DEFAULT '{}'`},
+		{"workflow_run_steps", "adapter_capability", `ALTER TABLE workflow_run_steps ADD COLUMN adapter_capability TEXT`},
+	} {
+		rows, e := tx.QueryContext(ctx, "PRAGMA table_info("+column.table+")")
+		if e != nil {
+			return ErrWorkflowSchema
+		}
+		found := false
+		for rows.Next() {
+			var cid, nn, pk int
+			var name, typ string
+			var def any
+			if rows.Scan(&cid, &name, &typ, &nn, &def, &pk) != nil {
+				rows.Close()
+				return ErrWorkflowSchema
+			}
+			if name == column.name {
+				found = true
+			}
+		}
+		e = rows.Err()
+		rows.Close()
+		if e != nil {
+			return ErrWorkflowSchema
+		}
+		if !found {
+			if _, e = tx.ExecContext(ctx, column.ddl); e != nil {
+				return ErrWorkflowSchema
+			}
+		}
+	}
 	if err = verifyWorkflowSchema(ctx, tx); err != nil {
 		return err
 	}
-	if version == 0 {
+	if version < WorkflowSchemaVersion {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO workflow_migrations VALUES(?,?,'applied')`, WorkflowSchemaVersion, workflowTime(time.Now())); err != nil {
 			return ErrWorkflowSchema
 		}
@@ -116,6 +150,13 @@ func verifyWorkflowSchema(ctx context.Context, q workflowQuerier) error {
 		`SELECT id,step_id,attempt_number,status,error_code,retryable,started_at,finished_at,duration_ms FROM workflow_step_attempts LIMIT 0`,
 		`SELECT scope,run_id,owner_id,acquired_at,expires_at,generation FROM workflow_leases LIMIT 0`,
 		`SELECT version,applied_at,result FROM workflow_migrations LIMIT 0`,
+	}
+	var version int
+	if q.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM workflow_migrations`).Scan(&version) != nil || version > WorkflowSchemaVersion {
+		return ErrWorkflowSchema
+	}
+	if version >= 2 {
+		checks = append(checks, `SELECT source_lookback_json FROM workflow_runs LIMIT 0`, `SELECT adapter_capability FROM workflow_run_steps LIMIT 0`)
 	}
 	for _, query := range checks {
 		rows, e := q.QueryContext(ctx, query)

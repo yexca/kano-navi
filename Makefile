@@ -8,7 +8,7 @@ DOCKER_BUILD ?= $(DOCKER) build
 DOCKER_BUILD_ARGS ?=
 DOCKER_IMAGE ?= kano-navi:ci
 
-.PHONY: help install dev dev-client dev-server build preview start seed sync go-check
+.PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-test
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
 .PHONY: smoke side-by-side-http public-read-gate public-read-benchmark public-read-deployment-smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
@@ -45,6 +45,10 @@ sync:
 
 go-check:
 	$(NODE) scripts/go-check.mjs
+
+go-test:
+	$(GO) -C backend-go test ./...
+	$(GO) -C backend-go vet ./...
 
 format:
 	$(NPM) run format

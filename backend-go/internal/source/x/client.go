@@ -121,6 +121,8 @@ type Options struct {
 	RefreshKnown      int
 	Handles           []string
 	ScheduleKeywords  []string
+	PendingIDs        []string
+	KnownIDs          map[string]bool
 }
 
 func DefaultOptions() Options {
@@ -261,9 +263,33 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		ids = filtered
 	}
 	result.DiscoveredCount = len(ids)
-	if len(ids) == 0 {
+	if len(ids) == 0 && len(opts.PendingIDs) == 0 {
 		return result, &Error{Code: ErrInvalidResponse, Err: errors.New("no status ids")}
 	}
+	queue := []string{}
+	seen := map[string]bool{}
+	add := func(id string) {
+		if regexp.MustCompile(`^\d{10,22}$`).MatchString(id) && !seen[id] {
+			queue = append(queue, id)
+			seen[id] = true
+		}
+	}
+	for _, id := range opts.PendingIDs {
+		add(id)
+	}
+	for _, id := range ids {
+		if !opts.KnownIDs[id] {
+			add(id)
+		}
+	}
+	refresh := opts.RefreshKnown
+	for _, id := range ids {
+		if opts.KnownIDs[id] && refresh > 0 {
+			add(id)
+			refresh--
+		}
+	}
+	ids = queue
 	if opts.MaxDetailRequests <= 0 {
 		result.PendingIDs = ids
 		return result, nil
@@ -293,7 +319,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 			continue
 		}
 		post := Normalize(payload, id, account)
-		if post == nil {
+		if post == nil || post.ID != id {
 			if firstDetailErr == nil {
 				firstDetailErr = &Error{Code: ErrInvalidResponse}
 			}
@@ -318,7 +344,9 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 	if len(result.Posts) > 0 {
 		newest := result.Posts[0]
 		for _, p := range result.Posts[1:] {
-			if p.PublishedAt > newest.PublishedAt {
+			pt, _ := time.Parse(time.RFC3339Nano, p.PublishedAt)
+			nt, _ := time.Parse(time.RFC3339Nano, newest.PublishedAt)
+			if pt.After(nt) {
 				newest = p
 			}
 		}

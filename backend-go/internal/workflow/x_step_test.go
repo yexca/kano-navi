@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 type xTestRT func(*http.Request) (*http.Response, error)
@@ -43,5 +44,46 @@ func TestXRecentExecutorPersistsWorkflowAttempt(t *testing.T) {
 	got, err := s.GetWorkflowRun(context.Background(), run.ID)
 	if err != nil || len(got.Steps) != 1 || len(got.Steps[0].Attempts) != 1 {
 		t.Fatalf("run=%#v err=%v", got, err)
+	}
+}
+
+func TestXSingleRequestBudgetRotatesAccountsAcrossRestart(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := sqlite.OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requested := []string{}
+	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
+		id, account := "111111111111", "fixture_a"
+		if strings.Contains(r.URL.Path, "fixture_b") {
+			id, account = "222222222222", "fixture_b"
+		}
+		body := "status/" + id
+		if r.URL.Host == "api.vxtwitter.com" {
+			requested = append(requested, account)
+			body = `{"tweetID":"` + id + `","text":"fixture","date":"2026-01-02T00:00:00Z"}`
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
+	opts := xsource.Options{Handles: []string{"fixture_a", "fixture_b"}, DiscoveryLimit: 1, MaxDetailRequests: 1, BootstrapDays: 7}
+	a := xsource.NewAdapter(xsource.NewClient(&http.Client{Transport: rt}), opts)
+	a.Now = func() time.Time { return time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC) }
+	ex := &XRecentExecutor{Store: s, Adapter: a, Options: opts}
+	if _, err = ex.Execute(context.Background(), StepInput{StepID: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = sqlite.OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ex.Store = s
+	if _, err = ex.Execute(context.Background(), StepInput{StepID: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(requested) != 2 || requested[0] != "fixture_a" || requested[1] != "fixture_b" {
+		t.Fatalf("account budget starved a source: %v", requested)
 	}
 }

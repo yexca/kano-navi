@@ -193,7 +193,18 @@ func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, er
 	if e != nil {
 		return nil, ErrWorkflowStorage
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT id,step_id,step_order,status,capability,started_at,finished_at,error_code,retryable FROM workflow_run_steps WHERE run_id=? ORDER BY step_order LIMIT 16`, id)
+	capabilityColumn := "capability"
+	if s.workflowVersion >= 2 {
+		var lookback string
+		if s.db.QueryRowContext(ctx, `SELECT source_lookback_json FROM workflow_runs WHERE id=?`, id).Scan(&lookback) != nil {
+			return nil, ErrWorkflowStorage
+		}
+		if json.Unmarshal([]byte(lookback), &x.SourceLookbackDays) != nil {
+			return nil, ErrWorkflowStorage
+		}
+		capabilityColumn = "COALESCE(adapter_capability,capability)"
+	}
+	rows, e := s.db.QueryContext(ctx, `SELECT id,step_id,step_order,status,`+capabilityColumn+`,started_at,finished_at,error_code,retryable FROM workflow_run_steps WHERE run_id=? ORDER BY step_order LIMIT 16`, id)
 	if e != nil {
 		return nil, ErrWorkflowStorage
 	}
@@ -207,7 +218,7 @@ func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, er
 			return nil, ErrWorkflowStorage
 		}
 		st.Status = workflowStatus(st.Status, true)
-		if st.Capability != "synthetic" && st.Capability != "x_recent" {
+		if st.Capability != "synthetic" && st.Capability != "x_recent" && st.Capability != "youtube_recent" && st.Capability != "media_download" {
 			st.Capability = "capability_not_migrated"
 		}
 		st.StartedAt = nullableWorkflowString(sa)

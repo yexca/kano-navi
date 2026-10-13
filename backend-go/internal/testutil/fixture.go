@@ -58,7 +58,7 @@ func NewSnapshot(t testing.TB) string {
 		CREATE TABLE resources (id INTEGER PRIMARY KEY, title TEXT NOT NULL, detail TEXT, icon TEXT, tone TEXT, url TEXT NOT NULL, sort_order INTEGER DEFAULT 0, raw_json TEXT);
 		CREATE TABLE assets (
 			id TEXT PRIMARY KEY, kind TEXT NOT NULL, url TEXT NOT NULL, source_url TEXT, alt TEXT, week_start TEXT, source_account TEXT,
-			updated_at TEXT, raw_json TEXT, period_start TEXT, period_end TEXT, period_basis TEXT, manual_period_start TEXT, manual_period_end TEXT
+			updated_at TEXT, raw_json TEXT, period_start TEXT, period_end TEXT, period_basis TEXT, manual_period_start TEXT, manual_period_end TEXT, asset_version INTEGER NOT NULL DEFAULT 0
 		);
 		CREATE TABLE schedule_asset_reviews (
 			asset_id TEXT PRIMARY KEY, llm_status TEXT NOT NULL DEFAULT 'pending', manual_status TEXT NOT NULL DEFAULT 'unreviewed', updated_at TEXT NOT NULL DEFAULT ''
@@ -74,7 +74,7 @@ func NewSnapshot(t testing.TB) string {
 		);
 		CREATE TABLE media_links (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, media_id TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,
-			role TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, alt TEXT
+			role TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, alt TEXT, created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT ''
 		);
 		CREATE TABLE sync_state (
 			source TEXT NOT NULL, account_id TEXT NOT NULL, cursor_id TEXT, cursor_time TEXT,

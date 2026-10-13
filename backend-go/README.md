@@ -122,6 +122,21 @@ data. Missing, incomplete, closed and corrupt snapshots produce only stable
 
 ## Ownership and rollback
 
+Phase eleven implements development X/YouTube recent synchronization, media
+downloads, workflow CRUD, asynchronous runs, cancellation, retry, recovery and
+explicitly enabled API timers. See
+[Go source workflows and media downloads](../docs/architecture/go-source-workflows.md)
+for current flags, API and remaining work. `make go-test` runs contracts and vet
+without Docker; `make go-check` adds cross-builds and disposable read-only/write
+containers. Default startup remains the read-only canary. The following
+describes earlier phases.
+
+`-initialize` now creates a fresh snapshot with embedded SQL and public static
+seeds, requiring explicit development mode and `LLM_SECRETS_KEY`. It retains
+existing current-schema snapshots/settings on reseed and does not enable
+admin/source writes unless their flags are also present. Node is not needed
+for Go initialization; legacy schema upgrades remain a migration gap.
+
 The Go service has not taken over admin, MCP, synchronization, source history,
 workflow scheduling, schedule extraction, LLM routing, media download,
 discovery, upload or cleanup. TypeScript still owns production traffic on
@@ -137,7 +152,6 @@ workflow reads are `GET /api/admin/workflows`, `/api/admin/workflows/:id`,
 `/api/admin/runs`, and `/api/admin/runs/:id`; projections contain safe status,
 capability, retry and timing fields only.
 
-
 Phase eight keeps the service read-only by default. The isolated event mutation slice requires `APP_MODE=development` and `-enable-admin-writes` against an existing synthetic SQLite file. It uses the distinct `kano_go_canary_session` cookie and atomic event/source/revision transactions; production remains owned by TypeScript.
 
 ## Phase ten: X recent development slice
@@ -152,5 +166,5 @@ state. The fake-transport-tested adapter only reads allowlisted public
 candidates, schedule candidates and incremental `sync_state` in one
 transaction. Failed source responses retain old posts and cursors. Production
 rejects the flag. X historical windows, archive search, YouTube, media
- downloads, LLM, MCP, frontend integration and production routing remain
+downloads, LLM, MCP, frontend integration and production routing remain
 `capability_not_migrated`.

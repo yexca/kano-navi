@@ -8,5 +8,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o /out/kano-go ./c
 
 FROM scratch
 COPY --from=build /out/kano-go /kano-go
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 EXPOSE 7658
 ENTRYPOINT ["/kano-go"]

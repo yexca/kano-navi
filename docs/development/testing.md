@@ -1,5 +1,12 @@
 # Testing and CI
 
+For Go, `make go-test` runs contracts and vet without Docker. `make go-check`
+also validates formatting, CGO-free operation, Linux/Windows builds and
+disposable read-only/development containers. Source tests use fake transports;
+container workflow smoke executes only an unsupported blocked step and never
+synchronizes sources. See
+[Go source workflows and media downloads](../architecture/go-source-workflows.md).
+
 The Makefile is the canonical validation entry point. GitHub Actions invokes
 its targets so local and hosted checks protect the same contracts. Use the
 smallest target that covers the change; aggregate checks are for broad changes,

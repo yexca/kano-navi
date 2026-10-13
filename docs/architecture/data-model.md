@@ -5,6 +5,13 @@
 The database file is `data/database/kano.sqlite`. On startup the server creates the
 directory, schema, and missing seed records. The current tables are:
 
+The development Go service can now do fresh initialization with `-initialize`
+using its embedded canonical SQL and public static seed. It retains existing
+current-schema records when reseeded, validates unknown schemas before writes,
+and keeps external snapshots and LLM catalogs empty. Full legacy upgrades still
+belong to the TypeScript initializer. See
+[Go source workflows and media downloads](go-source-workflows.md).
+
 | Table                    | Purpose                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------- |
 | `profiles`               | Name, bio, avatar, banner, and official entry points                                                      |
@@ -33,6 +40,15 @@ directory, schema, and missing seed records. The current tables are:
 The API maps snake_case columns to camelCase and removes `raw_json`. The
 frontend must not depend on database fields that are not declared in the API
 response.
+
+The development Go executor adds `workflow_migrations`, `workflow_runs`,
+`workflow_run_steps`, `workflow_step_attempts` and `workflow_leases` through
+atomic additive upgrades. Schema version 2 freezes a run's source windows in
+`source_lookback_json` and records real adapters in `adapter_capability` while
+preserving the v1 capability column and all prior attempts. These tables are
+optional for ordinary TypeScript snapshots and Go public reads. See
+[Go source workflows and media downloads](go-source-workflows.md) for ownership,
+lease fencing, compatibility, identity repair and verification.
 
 Remote media URL columns are retained as migration-era source fields. The
 dashboard maps them through `media_assets`: a ready file becomes

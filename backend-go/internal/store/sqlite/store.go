@@ -32,6 +32,7 @@ type Store struct {
 	dataRoot         string
 	writable         bool
 	workflowWritable bool
+	workflowVersion  int
 }
 
 // OpenReadOnly opens an existing snapshot without creating directories,
@@ -80,7 +81,11 @@ func OpenReadOnly(filename string) (*Store, error) {
 			return nil, fmt.Errorf("%w: workflow schema unavailable", ErrSchema)
 		}
 	}
-	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs))}, nil
+	var version int
+	if workflowTable == 1 {
+		_ = db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM workflow_migrations`).Scan(&version)
+	}
+	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), workflowVersion: version}, nil
 }
 
 // OpenAdminWrites opens an existing fixture in SQLite rw mode. It never creates
@@ -119,10 +124,15 @@ func OpenAdminWrites(filename string) (*Store, error) {
 		return nil, fmt.Errorf("%w: workflow schema unavailable", ErrSchema)
 	}
 	store.workflowWritable = true
+	store.workflowVersion = WorkflowSchemaVersion
 	return store, nil
 }
 
-func verifySchema(ctx context.Context, db *sql.DB) error {
+type schemaQuerier interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func verifySchema(ctx context.Context, db schemaQuerier) error {
 	required := map[string][]string{
 		"profiles":               {"id", "display_name", "romanized_name", "bio", "avatar_url", "banner_url", "x_url", "youtube_url", "updated_at"},
 		"posts":                  {"id", "source", "account_handle", "type", "label", "text", "published_at", "url", "likes", "reposts", "replies", "media_url", "media_alt", "raw_json"},

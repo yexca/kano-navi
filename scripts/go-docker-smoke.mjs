@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-// Run the independent scratch Go image against a disposable, read-only
-// snapshot and media tree. The production Dockerfile and routes are not used.
+// Exercise read-only defaults and opt-in development writes against disposable
+// state. No source endpoint is invoked and no external synchronization runs.
 import assert from "node:assert/strict"
 import {
   mkdtempSync,
@@ -76,6 +76,108 @@ try {
     after,
     before,
     "read-only container changed snapshot or media tree",
+  )
+  run(docker, ["rm", "-f", container], root, true)
+  container = null
+  const writable = run(
+    docker,
+    [
+      "run",
+      "-d",
+      "--read-only",
+      "--tmpfs",
+      "/tmp:rw,noexec,nosuid,size=16m",
+      "-v",
+      `${dataRoot}:/data:rw`,
+      "-p",
+      "127.0.0.1::7658",
+      "-e",
+      "APP_MODE=development",
+      "-e",
+      "LLM_SECRETS_KEY=synthetic-encryption-key",
+      image,
+      "-database",
+      "/data/database/fresh.sqlite",
+      "-listen",
+      "0.0.0.0:7658",
+      "-initialize",
+      "-enable-admin-writes",
+      "-enable-x-sync",
+      "-enable-youtube-sync",
+      "-enable-media-downloads",
+    ],
+    root,
+    true,
+  )
+  container = writable.trim()
+  const writablePort = run(
+    docker,
+    ["port", container, "7658/tcp"],
+    root,
+    true,
+  ).match(/:(\d+)\s*$/u)?.[1]
+  assert.ok(writablePort)
+  const writableOrigin = `http://127.0.0.1:${writablePort}`
+  await waitForHealth(`${writableOrigin}/api/health`)
+  const send = (path, method, body) =>
+    fetch(`${writableOrigin}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  const event = await send("/api/admin/events", "POST", {
+    id: "smoke-manual",
+    title: "Synthetic manual event",
+    startsOn: "2026-01-02",
+  })
+  assert.equal(
+    event.status,
+    201,
+    "source flags must not disable admin event writes",
+  )
+  const created = await send("/api/admin/workflows", "POST", {
+    name: "Synthetic blocked capability",
+    steps: ["schedule"],
+  })
+  assert.equal(created.status, 201)
+  const workflow = (await created.json()).workflow
+  const submitted = await send(
+    `/api/admin/workflows/${workflow.id}/run`,
+    "POST",
+    {},
+  )
+  assert.equal(submitted.status, 202)
+  const runID = (await submitted.json()).run.id
+  let finished = false
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const response = await fetch(`${writableOrigin}/api/admin/runs/${runID}`)
+    assert.equal(response.status, 200)
+    const run = await response.json()
+    if (run.status === "blocked") {
+      finished = true
+      break
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  assert.ok(
+    finished,
+    "unmigrated capabilities must finish as blocked without fetching",
+  )
+  const deleted = await send(
+    "/api/admin/events/smoke-manual",
+    "DELETE",
+    undefined,
+  )
+  assert.equal(deleted.status, 204)
+  const denied = spawnSync(
+    docker,
+    ["run", "--rm", "-e", "APP_MODE=production", image, "-enable-youtube-sync"],
+    { cwd: root, encoding: "utf8" },
+  )
+  assert.equal(
+    denied.status,
+    2,
+    "production rejects development source flags before opening SQLite",
   )
   console.log("go-docker-smoke: PASS")
 } finally {

@@ -1,5 +1,10 @@
 # Go X recent sync vertical slice
 
+Phase eleven fixes repeated asynchronous refreshes, persists requested days,
+reloads pending work and aligns media identities with TypeScript. See
+[Go source workflows and media downloads](go-source-workflows.md) for current
+flags and queue behavior. The original phase-ten boundary is below.
+
 Phase ten adds one development-only writable path beside the TypeScript owner:
 `POST /api/admin/sources/x/fetch` with `{ "window": { "mode": "recent", "days": 7 } }`.
 It requires a Go admin session, `APP_MODE=development`, and the explicit

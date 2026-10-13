@@ -21,9 +21,11 @@ import (
 // explicitly gated development-only slice. TypeScript remains the production
 // owner of every other mutation, job queue, source fetch and model operation.
 type adminHandler struct {
-	store    *sqlite.Store
-	auth     *adminauth.Auth
-	xTrigger XSyncTrigger
+	store          *sqlite.Store
+	auth           *adminauth.Auth
+	xTrigger       XSyncTrigger
+	sourceTriggers map[string]XSyncTrigger
+	queue          *workflow.Queue
 }
 
 type XSyncTrigger interface {
@@ -70,7 +72,7 @@ func (h *adminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.auth.OriginGuard(http.HandlerFunc(h.auth.Logout)).ServeHTTP(w, r)
 		return
-	case "/sources/x/fetch":
+	case "/sources/x/fetch", "/sources/youtube/fetch":
 		if r.Method != http.MethodPost {
 			writeMethodNotAllowed(w, http.MethodPost)
 			return
@@ -79,6 +81,10 @@ func (h *adminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodGet {
+		if path == "/workflows" || strings.HasPrefix(path, "/workflows/") || strings.HasPrefix(path, "/runs/") {
+			h.auth.OriginGuard(h.auth.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.workflowMutation(w, r, path) }))).ServeHTTP(w, r)
+			return
+		}
 		if path == "/events" || strings.HasPrefix(path, "/events/") {
 			h.auth.OriginGuard(h.auth.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.mutation(w, r, path) }))).ServeHTTP(w, r)
 			return
@@ -123,13 +129,22 @@ func (h *adminHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) fetchX(w http.ResponseWriter, r *http.Request) {
-	if h.xTrigger == nil {
+	source := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/admin/sources/"), "/fetch")
+	trigger := h.sourceTriggers[source]
+	if trigger == nil && source == "x" {
+		trigger = h.xTrigger
+	}
+	if trigger == nil {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "capability_not_migrated"}, "")
 		return
 	}
 	body, err := jsonbody.Object(w, r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_input"}, "")
+		status := http.StatusBadRequest
+		if errors.Is(err, jsonbody.ErrLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeJSON(w, status, map[string]string{"error": "invalid_input"}, "")
 		return
 	}
 	for key := range body {
@@ -170,11 +185,11 @@ func (h *adminHandler) fetchX(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	days := int(value)
-	if days < 1 || days > 30 {
+	if days < 1 || days > 365 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_recent_days"}, "")
 		return
 	}
-	run, err := h.xTrigger.Trigger(r.Context(), days)
+	run, err := trigger.Trigger(r.Context(), days)
 	if err != nil {
 		var se *workflow.StepError
 		if errors.As(err, &se) && se.Code == "invalid_recent_days" {
@@ -190,7 +205,51 @@ func (h *adminHandler) fetchX(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"run": run}, "")
 }
+
+func (h *adminHandler) workflowMutation(w http.ResponseWriter, r *http.Request, path string) {
+	if path == "/workflows" || strings.HasPrefix(path, "/workflows/") && !strings.HasSuffix(path, "/run") {
+		h.saveWorkflow(w, r, path)
+		return
+	}
+	if h.queue == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "capability_not_migrated"}, "")
+		return
+	}
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) != 3 || r.Method != http.MethodPost {
+		writeMethodNotAllowed(w, "GET")
+		return
+	}
+	var run *sqlite.WorkflowRun
+	var err error
+	if parts[0] == "workflows" && parts[2] == "run" {
+		run, err = h.queue.Submit(r.Context(), parts[1], workflow.TriggerOperator, "", nil)
+	} else if parts[0] == "runs" && parts[2] == "cancel" {
+		err = h.queue.Cancel(r.Context(), parts[1])
+		if err == nil {
+			run, err = h.store.GetWorkflowRun(r.Context(), parts[1])
+		}
+	} else if parts[0] == "runs" && parts[2] == "retry" {
+		run, err = h.queue.Retry(r.Context(), parts[1])
+	} else {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "admin_not_found"}, "")
+		return
+	}
+	if err != nil {
+		if errors.Is(err, sqlite.ErrWorkflowBusy) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "workflow_busy"}, "")
+			return
+		}
+		workflowUnavailable(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"run": run}, "")
+}
 func workflowUnavailable(w http.ResponseWriter, err error) {
+	if errors.Is(err, sqlite.ErrWorkflowValidation) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_input"}, "")
+		return
+	}
 	if errors.Is(err, sqlite.ErrWorkflowNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "workflow_not_found"}, "")
 		return

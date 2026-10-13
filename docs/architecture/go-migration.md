@@ -1,4 +1,10 @@
-# Go backend migration: phase seven
+# Go backend migration
+
+The latest implementation is phase eleven:
+[Go source workflows and media downloads](go-source-workflows.md). It adds
+YouTube recent synchronization, media downloads, asynchronous submission,
+workflow CRUD, opt-in timers, cancellation and recovery. Production ownership
+is still TypeScript; the sections below record the earlier public-read canary.
 
 Phase nine adds the persistent workflow execution core described in
 [Go workflow execution core](go-workflows.md). It remains side-by-side and

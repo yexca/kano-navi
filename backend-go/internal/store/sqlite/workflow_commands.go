@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -78,6 +79,16 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, definition WorkflowDefini
 		}
 		return nil, ErrWorkflowBusy
 	}
+	if _, e = tx.ExecContext(ctx, `INSERT INTO sync_runs(source,started_at,status,message,counts_json,triggered_by,job_id) VALUES('workflow',?,'running','','{}',?,?)`, workflowTime(now), trigger, id); e != nil {
+		return nil, ErrWorkflowStorage
+	}
+	lookback, marshalErr := json.Marshal(definition.SourceLookbackDays)
+	if marshalErr != nil {
+		return nil, ErrWorkflowValidation
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE workflow_runs SET source_lookback_json=? WHERE id=?`, string(lookback), id); e != nil {
+		return nil, ErrWorkflowStorage
+	}
 	var stepSchema string
 	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(sql,'') FROM sqlite_master WHERE type='table' AND name='workflow_run_steps'`).Scan(&stepSchema)
 	supportsXRecent := strings.Contains(stepSchema, "x_recent")
@@ -85,11 +96,27 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, definition WorkflowDefini
 		capability := "capability_not_migrated"
 		if synthetic[step] {
 			capability = "synthetic"
-		} else if step == "x" && supportsXRecent {
+		} else if enabled, declared := synthetic[step]; step == "x" && supportsXRecent && declared && !enabled {
 			capability = "x_recent"
 		}
 		if _, e = tx.ExecContext(ctx, `INSERT INTO workflow_run_steps(run_id,step_id,step_order,status,capability) VALUES(?,?,?,'pending',?)`, id, step, order, capability); e != nil {
 			return nil, ErrWorkflowStorage
+		}
+		adapter := ""
+		if enabled, declared := synthetic[step]; declared && !enabled {
+			switch step {
+			case "x":
+				adapter = "x_recent"
+			case "youtube":
+				adapter = "youtube_recent"
+			case "media":
+				adapter = "media_download"
+			}
+		}
+		if adapter != "" {
+			if _, e = tx.ExecContext(ctx, `UPDATE workflow_run_steps SET adapter_capability=? WHERE run_id=? AND step_id=?`, adapter, id, step); e != nil {
+				return nil, ErrWorkflowStorage
+			}
 		}
 	}
 	if e = tx.Commit(); e != nil {
@@ -242,11 +269,32 @@ func (s *Store) FinishWorkflowRun(ctx context.Context, l WorkflowLease, status, 
 	if status == "cancelled" {
 		tail = "cancelled"
 	}
+	if status == "failed" || status == "cancelled" || status == "blocked" {
+		if _, e = tx.ExecContext(ctx, `UPDATE workflow_step_attempts SET status=?,error_code=?,finished_at=?,duration_ms=MAX(0,CAST(ROUND((julianday(?)-julianday(started_at))*86400000) AS INTEGER)) WHERE status='running' AND step_id IN(SELECT id FROM workflow_run_steps WHERE run_id=?)`, status, ec, workflowTime(now), workflowTime(now), l.RunID); e != nil {
+			return ErrWorkflowStorage
+		}
+		if _, e = tx.ExecContext(ctx, `UPDATE workflow_run_steps SET status=?,error_code=?,finished_at=? WHERE run_id=? AND status='running'`, status, ec, workflowTime(now), l.RunID); e != nil {
+			return ErrWorkflowStorage
+		}
+	}
 	if _, e = tx.ExecContext(ctx, `UPDATE workflow_run_steps SET status=?,error_code=?,finished_at=? WHERE run_id=? AND status='pending'`, tail, ec, workflowTime(now), l.RunID); e != nil {
 		return ErrWorkflowStorage
 	}
 	if e = affected(tx.ExecContext(ctx, `UPDATE workflow_runs SET status=?,error_code=?,finished_at=? WHERE id=? AND status='running'`, status, ec, workflowTime(now), l.RunID)); e != nil {
 		return e
+	}
+	syncStatus := status
+	if status == "succeeded" {
+		syncStatus = "success"
+	}
+	if status == "cancelled" || status == "blocked" {
+		syncStatus = "failed"
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE sync_runs SET status=?,finished_at=?,message=? WHERE job_id=? AND status='running'`, syncStatus, workflowTime(now), ec, l.RunID); e != nil {
+		return ErrWorkflowStorage
+	}
+	if e = bumpRevision(ctx, tx, workflowTime(now)); e != nil {
+		return ErrWorkflowStorage
 	}
 	if _, e = tx.ExecContext(ctx, `UPDATE workflows SET last_status=?,updated_at=? WHERE last_job_id=?`, status, workflowTime(now), l.RunID); e != nil {
 		return ErrWorkflowStorage
@@ -279,6 +327,15 @@ func (s *Store) RequestWorkflowCancellation(ctx context.Context, id string, now 
 	if _, e = tx.ExecContext(ctx, `UPDATE workflow_runs SET status='cancelled',error_code='cancelled',finished_at=? WHERE id=? AND status='queued'`, workflowTime(now), id); e != nil {
 		return ErrWorkflowStorage
 	}
+	cancelledRun, e := tx.ExecContext(ctx, `UPDATE sync_runs SET status='failed',message='cancelled',finished_at=? WHERE job_id=? AND EXISTS(SELECT 1 FROM workflow_runs WHERE id=? AND status='cancelled')`, workflowTime(now), id, id)
+	if e != nil {
+		return ErrWorkflowStorage
+	}
+	if n, _ := cancelledRun.RowsAffected(); n > 0 {
+		if e = bumpRevision(ctx, tx, workflowTime(now)); e != nil {
+			return ErrWorkflowStorage
+		}
+	}
 	if e = tx.Commit(); e != nil {
 		return ErrWorkflowStorage
 	}
@@ -300,7 +357,7 @@ func (s *Store) RetryWorkflowRun(ctx context.Context, id string, now time.Time) 
 		return e
 	}
 	defer tx.Rollback()
-	result, e := tx.ExecContext(ctx, `UPDATE workflow_runs SET status='queued',finished_at=NULL,error_code=NULL,cancellation_requested_at=NULL
+	result, e := tx.ExecContext(ctx, `UPDATE workflow_runs SET status='queued',finished_at=NULL,error_code=NULL,cancellation_requested_at=NULL,execution_source='recovery',recovery_count=recovery_count+1
  WHERE id=? AND status IN('failed','partial','blocked') AND NOT EXISTS(SELECT 1 FROM workflow_runs WHERE status IN('queued','running'))`, id)
 	if e != nil {
 		return workflowSQLError(e)
@@ -317,6 +374,9 @@ func (s *Store) RetryWorkflowRun(ctx context.Context, id string, now time.Time) 
 		return ErrWorkflowValidation
 	}
 	if _, e = tx.ExecContext(ctx, `UPDATE workflow_run_steps SET status='pending',finished_at=NULL WHERE run_id=? AND (status='failed' AND retryable=1 OR status='blocked')`, id); e != nil {
+		return ErrWorkflowStorage
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE sync_runs SET status='running',message='',finished_at=NULL WHERE job_id=?`, id); e != nil {
 		return ErrWorkflowStorage
 	}
 	if e = tx.Commit(); e != nil {

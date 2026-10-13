@@ -1,8 +1,10 @@
 # Go workflow execution core
 
-Phase nine adds a persistent execution core beside the TypeScript owner. It is
-an execution library and read API; it does not call X, YouTube, a CDN, an LLM
-provider, or MCP.
+Phase nine introduced the persistent core. Phase eleven attaches real
+X/YouTube/media adapters, asynchronous submission, workflow CRUD, cancellation,
+retry and opt-in API timers. See
+[Go source workflows and media downloads](go-source-workflows.md) for current
+enablement, schema version 2 and validation. Production remains TypeScript.
 
 ## Ownership and compatibility
 
@@ -13,7 +15,7 @@ compatible, while new workflow execution state lives in additive tables. A
 future adapter can use the same executor without changing HTTP handlers.
 
 The workflow tables are created only by the explicit development
-`OpenWorkflowCore` opener. Migration version `1` is recorded in
+`OpenWorkflowCore` opener. Migration version `2` is recorded in
 `workflow_migrations` in the same transaction as the DDL. Existing
 snapshot/event/media rows are never rewritten; failure rolls the transaction
 back. The normal public read opener remains read-only and never migrates.
@@ -22,8 +24,10 @@ back. The normal public read opener remains read-only and never migrates.
 
 `workflows` is the saved definition and timer metadata. `workflow_runs` is
 one operator, scheduler, or recovery execution. `workflow_run_steps` stores
-ordered steps and an explicit `capability` (`synthetic`, `x_recent`, or
-`capability_not_migrated`). `workflow_step_attempts` stores safe error
+ordered steps and a projected `capability` (`synthetic`, `x_recent`,
+`youtube_recent`, `media_download`, or `capability_not_migrated`). The additive
+`adapter_capability` preserves the v1 constraint. Runs freeze source windows
+in `source_lookback_json`. `workflow_step_attempts` stores safe error
 codes, retryability and bounded timing metadata for every try.
 `workflow_leases` is the global single-flight lease; SQLite's partial unique
 index also prevents two queued/running runs.
@@ -55,5 +59,6 @@ due for a later tick. Timer intervals are clamped to the TypeScript
 
 To roll back, stop the Go executor and continue using the TypeScript workflow
 owner. No production route or production database is changed in this phase.
-Only synthetic executors are used until the X/YouTube adapter migration is
-approved.
+Enabled X, YouTube and media adapters use the same executor. Remaining
+capabilities finish as blocked; production cutover requires completing the
+remaining contracts and validation.

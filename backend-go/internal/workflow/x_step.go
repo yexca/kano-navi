@@ -3,8 +3,6 @@ package workflow
 import (
 	"context"
 
-	"strings"
-
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
@@ -23,11 +21,22 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	if len(opts.Handles) == 0 {
 		opts = xsource.OptionsFromEnv()
 	}
+	if in.LookbackDays > 0 {
+		opts.BootstrapDays = in.LookbackDays
+	}
 	if opts.MaxDetailRequests < 0 {
 		opts.MaxDetailRequests = 0
 	}
 	if len(opts.Handles) == 0 {
 		return AttemptResult{}, NewStepError("x_no_accounts", ErrValidation)
+	}
+	start, startErr := x.Store.XAccountStart(ctx, opts.Handles)
+	if startErr != nil {
+		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+	}
+	handles := append(append([]string{}, opts.Handles[start:]...), opts.Handles[:start]...)
+	if err := x.Store.SetXNextAccount(ctx, opts.Handles[(start+1)%len(opts.Handles)]); err != nil {
+		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 	}
 	remaining := opts.MaxDetailRequests
 	total := 0
@@ -35,10 +44,10 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	requested := 0
 	partial := false
 	errorsOut := []string{}
-	for i, account := range opts.Handles {
+	for i, account := range handles {
 		alloc := remaining
 		if alloc > 0 {
-			left := len(opts.Handles) - i
+			left := len(handles) - i
 			alloc = (remaining + left - 1) / left
 		}
 		if alloc < 0 {
@@ -46,6 +55,12 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		}
 		accountOpts := opts
 		accountOpts.MaxDetailRequests = alloc
+		state, stateErr := x.Store.XRecentState(ctx, account)
+		if stateErr != nil {
+			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+		}
+		accountOpts.PendingIDs = state.PendingIDs
+		accountOpts.KnownIDs = state.KnownIDs
 		result, err := x.Adapter.FetchRecent(ctx, account, accountOpts)
 		discovered += result.DiscoveredCount
 		requested += result.RequestedCount
@@ -82,32 +97,4 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		status = "partial"
 	}
 	return AttemptResult{Status: status, Result: map[string]any{"source": "x", "posts": total, "discovered": discovered, "requested": requested, "errors": errorsOut}}, nil
-}
-
-// XRecentTrigger is the narrow admin API seam; it intentionally accepts only
-// the recent window and delegates durable run/step/attempt persistence to core.
-type XRecentTrigger struct {
-	Executor   *Executor
-	WorkflowID string
-}
-
-func (t *XRecentTrigger) Trigger(ctx context.Context, days int) (*sqlite.WorkflowRun, error) {
-	if t == nil || t.Executor == nil {
-		return nil, NewStepError("x_source_unavailable", ErrDependency)
-	}
-	if days < 1 || days > 30 {
-		return nil, NewStepError("invalid_recent_days", ErrValidation)
-	}
-	return t.Executor.Run(ctx, t.WorkflowID, TriggerOperator, "x-recent:"+strings.TrimSpace(t.WorkflowID)+":"+itoa(days))
-}
-func itoa(v int) string {
-	if v == 0 {
-		return "0"
-	}
-	b := []byte{}
-	for v > 0 {
-		b = append([]byte{byte('0' + v%10)}, b...)
-		v /= 10
-	}
-	return string(b)
 }

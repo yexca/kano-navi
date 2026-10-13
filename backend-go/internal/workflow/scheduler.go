@@ -10,6 +10,7 @@ import (
 type Scheduler struct {
 	Store        *sqlite.Store
 	Executor     *Executor
+	Queue        *Queue
 	Enabled      bool
 	TickInterval time.Duration
 	Now          func() time.Time
@@ -57,7 +58,7 @@ func (s *Scheduler) Status() map[string]any {
 	return map[string]any{"running": s.cancel != nil, "enabled": s.Enabled, "tickSeconds": int(interval / time.Second)}
 }
 func (s *Scheduler) Tick(ctx context.Context) (*Run, error) {
-	if !s.Enabled || s.Store == nil || s.Executor == nil {
+	if !s.Enabled || s.Store == nil || (s.Executor == nil && s.Queue == nil) {
 		return nil, nil
 	}
 	now := time.Now()
@@ -70,5 +71,8 @@ func (s *Scheduler) Tick(ctx context.Context) (*Run, error) {
 	}
 	w := due[0]
 	key := "scheduler:" + w.ID + ":" + now.UTC().Format("2006-01-02T15:04")
+	if s.Queue != nil {
+		return s.Queue.Submit(ctx, w.ID, TriggerScheduler, key, nil)
+	}
 	return s.Executor.Run(ctx, w.ID, TriggerScheduler, key)
 }

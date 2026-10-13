@@ -63,6 +63,7 @@ type WorkflowRun struct {
 	ErrorCode               *string        `json:"errorCode"`
 	CancellationRequestedAt *string        `json:"cancellationRequestedAt"`
 	RecoveryCount           int            `json:"recoveryCount"`
+	SourceLookbackDays      map[string]int `json:"sourceLookbackDays,omitempty"`
 	Steps                   []WorkflowStep `json:"steps,omitempty"`
 }
 type WorkflowPage struct {

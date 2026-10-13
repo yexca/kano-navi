@@ -13,6 +13,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/config"
 	"github.com/yexca/kano-navi/backend-go/internal/publicview"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
+	"github.com/yexca/kano-navi/backend-go/internal/workflow"
 )
 
 type Handler struct {
@@ -47,6 +48,13 @@ func NewHandlerWithAdminAndX(store *sqlite.Store, now func() time.Time, auth *ad
 		now = time.Now
 	}
 	return &Handler{store: store, now: now, admin: newAdminHandlerWithX(store, auth, trigger)}
+}
+
+func NewHandlerWithSources(store *sqlite.Store, now func() time.Time, auth *adminauth.Auth, triggers map[string]XSyncTrigger, queue *workflow.Queue) http.Handler {
+	if now == nil {
+		now = time.Now
+	}
+	return &Handler{store: store, now: now, admin: &adminHandler{store: store, auth: auth, sourceTriggers: triggers, queue: queue}}
 }
 
 func NewServer(handler http.Handler, cfg config.Config) *http.Server {

@@ -18,15 +18,19 @@ const (
 // The database path is deliberately a command-line option rather than a new
 // shared production environment variable.
 type Config struct {
-	ListenAddress     string
-	DatabasePath      string
-	ReadHeaderTimeout time.Duration
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
-	ShutdownTimeout   time.Duration
-	EnableAdminWrites bool
-	EnableXSync       bool
+	ListenAddress        string
+	DatabasePath         string
+	ReadHeaderTimeout    time.Duration
+	ReadTimeout          time.Duration
+	WriteTimeout         time.Duration
+	IdleTimeout          time.Duration
+	ShutdownTimeout      time.Duration
+	EnableAdminWrites    bool
+	EnableXSync          bool
+	EnableYoutubeSync    bool
+	EnableMediaDownloads bool
+	EnableScheduler      bool
+	Initialize           bool
 }
 
 func Default() Config {
@@ -67,6 +71,10 @@ func Parse(args []string) (Config, error) {
 	flags.DurationVar(&c.ShutdownTimeout, "shutdown-timeout", c.ShutdownTimeout, "graceful shutdown deadline")
 	flags.BoolVar(&c.EnableAdminWrites, "enable-admin-writes", false, "enable development-only admin event writes")
 	flags.BoolVar(&c.EnableXSync, "enable-x-sync", false, "enable development-only X recent source writes")
+	flags.BoolVar(&c.EnableYoutubeSync, "enable-youtube-sync", false, "enable development-only YouTube recent source writes")
+	flags.BoolVar(&c.EnableMediaDownloads, "enable-media-downloads", false, "enable development-only bounded media downloads")
+	flags.BoolVar(&c.EnableScheduler, "enable-scheduler", false, "enable development-only Go workflow timers")
+	flags.BoolVar(&c.Initialize, "initialize", false, "initialize and seed a development snapshot with Go")
 	if err := flags.Parse(args); err != nil {
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
