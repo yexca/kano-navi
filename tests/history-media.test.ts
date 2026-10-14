@@ -5,25 +5,16 @@ import os from "node:os"
 import path from "node:path"
 import test from "node:test"
 
-import { importHistoryMedia } from "../scripts/import-history-media.ts"
-import { packageHistoryMedia } from "../scripts/package-history-media.ts"
-import { historyMedia } from "../src/history/media.ts"
-import { milestones } from "../src/history/milestones.ts"
-import {
-  getMediaAsset,
-  initializeDatabase,
-  listMediaAssets,
-  listMediaLinks,
-} from "./database.ts"
 import {
   mediaIdForSourceUrl,
-  resolveMediaCachePath,
+  packageHistoryMedia,
   sha256ForContent,
-} from "./media-cache.ts"
+} from "../scripts/package-history-media.ts"
+import { historyMedia } from "../src/history/media.ts"
+import { milestones } from "../src/history/milestones.ts"
 
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "kano-history-test-"))
-  const database = initializeDatabase({ filename: ":memory:", seed: false })
   const content = Buffer.concat([
     Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1WQAAAAASUVORK5CYII=",
@@ -36,14 +27,10 @@ async function fixture(t) {
     id: "fixture-image",
     filename: "history.png",
     sourceUrl,
-    sourcePage: "https://example.invalid/history",
     mediaId: mediaIdForSourceUrl(sourceUrl),
     sha256: sha256ForContent(content),
     byteSize: content.length,
     mimeType: "image/png",
-    width: 1,
-    height: 1,
-    title: { en: "Synthetic archive image" },
   }
   await fs.writeFile(path.join(root, image.filename), content)
   const records = [{ filename: image.filename, file: image.filename }]
@@ -54,19 +41,11 @@ async function fixture(t) {
     )
   await saveManifest()
   t.after(async () => {
-    for (const asset of listMediaAssets(database)) {
-      if (asset.cachePath && asset.sha256 === image.sha256) {
-        const cachePath = resolveMediaCachePath(asset.cachePath)
-        assert.equal(path.basename(cachePath), `${image.sha256}.png`)
-        await fs.rm(cachePath, { force: true })
-      }
-    }
-    database.close()
     assert.equal(path.dirname(root), path.resolve(os.tmpdir()))
     assert.ok(path.basename(root).startsWith("kano-history-test-"))
     await fs.rm(root, { recursive: true, force: true })
   })
-  return { root, database, content, image, records, saveManifest }
+  return { root, content, image, records, saveManifest }
 }
 
 test("history catalog preserves distinct source identities, dates, and milestone references", () => {
@@ -135,78 +114,28 @@ test("history packaging validates the archive before publishing fixed images", a
   assert.deepEqual(await fs.readFile(packagedFile), content)
 })
 
-test("offline history import preserves original bytes and is idempotent", async (t) => {
-  const { root, database, content, image } = await fixture(t)
-  assert.deepEqual(await importHistoryMedia(database, root, [image]), {
-    imported: 1,
-    bytes: content.length,
-  })
-  await importHistoryMedia(database, root, [image])
-  const asset = getMediaAsset(database, image.mediaId)
-  assert.equal(asset.status, "ready")
-  assert.equal(asset.source, "history")
-  assert.deepEqual(
-    await fs.readFile(resolveMediaCachePath(asset.cachePath)),
-    content,
-  )
-  assert.equal(listMediaAssets(database).length, 1)
-  assert.equal(
-    listMediaLinks(database, { ownerType: "history-image", ownerId: image.id })
-      .length,
-    1,
-  )
-})
-
-test("a changed archive is rejected before any partial database update", async (t) => {
-  const { root, database, content, image, records, saveManifest } =
-    await fixture(t)
-  await importHistoryMedia(database, root, [image])
-  const next = {
-    ...image,
-    id: "next-image",
-    filename: "next.png",
-    sourceUrl: "https://images.example.invalid/next.png",
-  }
-  next.mediaId = mediaIdForSourceUrl(next.sourceUrl)
-  records.push({ filename: next.filename, file: next.filename })
-  await saveManifest()
-  await fs.writeFile(
-    path.join(root, next.filename),
-    Buffer.alloc(content.length),
-  )
-  await assert.rejects(
-    importHistoryMedia(database, root, [image, next]),
-    /identity mismatch/u,
-  )
-  assert.equal(listMediaAssets(database).length, 1)
-  assert.equal(getMediaAsset(database, image.mediaId).status, "ready")
-  assert.deepEqual(
-    await fs.readFile(
-      resolveMediaCachePath(getMediaAsset(database, image.mediaId).cachePath),
-    ),
-    content,
-  )
-})
-
-test("offline history import rejects traversal, wrong MIME, and changed size", async (t) => {
-  const { root, database, image, records, saveManifest } = await fixture(t)
+test("history packaging rejects traversal, wrong MIME, and changed size before writing", async (t) => {
+  const { root, image, records, saveManifest } = await fixture(t)
+  const destination = path.join(root, "packaged")
   records[0].file = "../outside.png"
   await saveManifest()
   await assert.rejects(
-    importHistoryMedia(database, root, [image]),
+    packageHistoryMedia(root, destination, [image]),
     /unsafe archive image path/u,
   )
   records[0].file = image.filename
   await saveManifest()
   await assert.rejects(
-    importHistoryMedia(database, root, [{ ...image, mimeType: "image/gif" }]),
+    packageHistoryMedia(root, destination, [
+      { ...image, mimeType: "image/gif" },
+    ]),
     /identity mismatch/u,
   )
   await assert.rejects(
-    importHistoryMedia(database, root, [
+    packageHistoryMedia(root, destination, [
       { ...image, byteSize: image.byteSize + 1 },
     ]),
     /size mismatch/u,
   )
-  assert.equal(listMediaAssets(database).length, 0)
+  await assert.rejects(fs.access(destination))
 })

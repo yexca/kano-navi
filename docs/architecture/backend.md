@@ -10,9 +10,7 @@ production. In development and bundle preview Vite serves the frontend and
 proxies `/api`, `/media`, and `/mcp` to the same backend with the browser's
 Host header, keeping authentication, media access, and MCP control on one
 origin. The site defaults to port `7657`; development and preview refuse to
-switch ports when it is occupied. The contracts on this page are
-implementation-independent; the TypeScript files in `server/` are the previous
-implementation of the same contracts.
+switch ports when it is occupied.
 Responses should remain stable and sanitized; do not expose
 `raw_json`, stack traces, credentials, or absolute local paths to the browser.
 Ready runtime media is served only through the opaque-ID `/media/:id` route.
@@ -75,9 +73,9 @@ Selected profile media uses /media/profile/avatar and /media/profile/banner.
 
 Compression precedes the response handlers. Successful GET/HEAD public
 dashboard, revision and health JSON, plus build HTML/JavaScript/CSS, negotiate
-gzip through `Accept-Encoding`. Bodies below 1 KiB remain uncompressed. The Go
-listener does not produce Brotli or deflate, which the TypeScript listener
-also offered. `Vary: Accept-Encoding` also accompanies
+gzip through `Accept-Encoding`. Bodies below 1 KiB remain uncompressed. The
+listener does not produce Brotli or deflate, which releases up to 0.1.3 also
+offered. `Vary: Accept-Encoding` also accompanies
 eligible identity and conditional responses. Existing weak ETags validate the
 uncompressed representation across encodings; 304 and HEAD have no compressed
 body. Range responses, non-success responses, already encoded bodies and

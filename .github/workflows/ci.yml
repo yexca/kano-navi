@@ -44,23 +44,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: "24.19.0"
-          cache: npm
-      - name: Install locked dependencies
-        run: make install
       - name: Set up Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: backend-go/go.mod
           cache-dependency-path: backend-go/go.sum
-      - name: Run backend contracts and the ordered public-read gate
-        run: make public-read-gate
+      - name: Run Go backend contracts
+        run: make ci-backend
 
   go:
-    name: Go backend
+    name: Go gate
     needs: style
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -74,10 +67,8 @@ jobs:
         with:
           go-version-file: backend-go/go.mod
           cache-dependency-path: backend-go/go.sum
-      - name: Validate Go toolchain and isolated image
+      - name: Check formatting, cross-builds and the read-only container
         run: make go-check
-      - name: Rehearse TypeScript and Go public-read containers
-        run: make PUBLIC_READ_GO_IMAGE=kano-navi-go:ci public-read-deployment-smoke
 
   frontend:
     name: Frontend
@@ -96,7 +87,7 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: make install
-      - name: Build frontend
+      - name: Type-check, build and test the frontend
         run: make ci-frontend
 
   smoke:

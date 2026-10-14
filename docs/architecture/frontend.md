@@ -6,8 +6,7 @@
 page in `src/history/`, the static `/about` page in `src/about/`, and `/admin`. History copy and image metadata are
 static; verified fixed images ship in `public/assets/history/` and `dist/`.
 `scripts/package-history-media.ts` updates these files from a local reference
-archive without network requests; the runtime importer remains available for
-legacy `/media` consumers.
+archive without network requests.
 See [History and visual archive](../product/history.md). The board
 lives in `src/dashboard/`: `use-dashboard.ts` owns the snapshot request and
 revision polling, `format.ts` owns Japan-time and event-status helpers,
@@ -19,7 +18,7 @@ lives in `src/admin/`: `index.tsx` registers the views and renders the shell,
 the workflow, schedule, detection-rule, LLM-provider, and content views, and
 `admin.css` styles them with `adm-` prefixed selectors. `src/components/ui/` contains
 basic UI primitives, while the CSS files contain layout and design tokens. The
-presentation layer must not import `better-sqlite3` or call X, YouTube, OpenAI,
+presentation layer must not open SQLite or call X, YouTube, OpenAI,
 or a third-party proxy directly.
 
 ## Request and UI Ownership

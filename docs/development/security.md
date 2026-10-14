@@ -78,10 +78,9 @@ images, source artifacts, or logs. See [Testing](testing.md) and
 Run npm audit for the full dependency tree and npm audit --omit=dev for the
 production subset. These network advisory checks are separate from source
 privacy and deterministic CI. Review the lockfile and outbound boundaries on
-upgrades. concurrently stays development-only; its scoped shell-quote override
-selects a patched package. The allowScripts policy approves only the reviewed
-better-sqlite3@13.0.3 native build; update the version-specific approval with
-SQLite upgrades instead of approving all dependency scripts.
+upgrades. No npm dependency needs an install script: the image build installs
+with `--ignore-scripts`, and SQLite is the pure-Go `modernc.org/sqlite` driver
+pinned in `backend-go/go.mod`. Review `go.sum` changes like the lockfile.
 
 ## Related Docs
 

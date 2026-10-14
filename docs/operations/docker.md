@@ -62,14 +62,14 @@ docker compose run --rm kano migrate-llm
 
 ### Upgrading from a TypeScript release
 
-Releases up to 0.1.2 shipped a Node image. The Go image accepts the same
+Releases up to 0.1.3 shipped a Node image. The Go image accepts the same
 environment and `/app/data` volume, so `docker-compose.yml` and `.env` are
 unchanged. Back up `./data`, then update as usual; the first start upgrades
 the snapshot in place and keeps every record, provider and workflow. Provider
 keys stay readable with the same `LLM_SECRETS_KEY`.
 
 To roll back, stop the container and pin the previous image with
-`KANO_IMAGE=yexca/kano-navi:0.1.2`. Only one service may own a snapshot at a
+`KANO_IMAGE=yexca/kano-navi:0.1.3`. Only one service may own a snapshot at a
 time. See [Go backend](../architecture/go-standalone.md#rollback).
 
 Version tags run the Release workflow, which builds once and publishes the
@@ -117,8 +117,6 @@ The runtime stage copies the `kano-go` binary, `dist/`, `public/` and a CA
 bundle. The embedded schema and static seeds are compiled into the binary.
 Production starts through `kano-go serve`, validates authentication before
 opening SQLite and stores runtime state only in the `/app/data` volume.
-`ts.Dockerfile` (`make ts-docker-build`) still builds the previous TypeScript
-image for a locally built rollback.
 
 ## Related Docs
 

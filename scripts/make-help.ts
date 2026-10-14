@@ -11,36 +11,28 @@ const groups = {
     seed: "Add missing static seed records to the runtime database",
     sync: "Fetch configured external sources once and update runtime snapshots",
     "go-build": "Build the Go backend binary into backend-go/bin",
-    "ts-start": "Rollback: start the previous TypeScript service",
   },
   Validation: {
     format: "Format supported files (writes changes)",
     "format-check": "Check formatting",
-    typecheck: "Check TypeScript source, scripts, and tests",
+    typecheck: "Check the TypeScript frontend, scripts, and tests",
     "docs-check": "Check local Markdown links",
     "sensitive-check": "Scan workspace source for sensitive information",
     "test-sensitive": "Test scanner behavior",
-    "test-server": "Test the TypeScript reference implementation's contracts",
+    "test-frontend":
+      "Test frontend request hooks, polling, and the history catalog",
     "go-test": "Run Go backend contracts and vet without Docker",
     "go-check":
       "Check Go formatting, contracts, cross-builds, and disposable containers",
     smoke: "Check a seeded temporary SQLite snapshot through the Go backend",
-    "public-read-benchmark":
-      "Measure TypeScript and Go public reads over 10,000 synthetic records",
-    "public-read-deployment-smoke":
-      "Run the canary/test TypeScript and Go container rehearsal",
     "ci-style": "Check formatting, documentation, and source privacy",
-    "ci-backend": "Check types and run the TypeScript and Go contract tests",
-    "ci-frontend": "Build the frontend",
+    "ci-backend": "Run the Go backend contract tests and vet",
+    "ci-frontend": "Type-check and build the frontend, then run its tests",
     check: "Run installed-dependency checks and local API smoke",
-    "public-read-gate":
-      "Install, compare TypeScript/Go public reads, check Go, privacy, and docs",
   },
   "Docker and full CI": {
     "docker-build": "Build the Go image DOCKER_IMAGE (default kano-navi:ci)",
     "production-smoke": "Check the built image in a disposable container",
-    "ts-docker-build":
-      "Rollback: build the TypeScript image TS_DOCKER_IMAGE (default kano-navi-ts:ci)",
     "ci-local": "Run checks, build the image, and check production runtime",
     ci: "Install dependencies, then run ci-local (requires Docker)",
   },

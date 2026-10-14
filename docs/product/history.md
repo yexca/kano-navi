@@ -48,38 +48,16 @@ To update the fixed collection from the local reference archive, run:
 npm run history:package -- --from /path/to/kano_official
 ```
 
-Packaging reuses the importer's validation of the entire selection before
-writing: manifest entries, contained real paths, size limits, SHA-256
+Packaging validates the entire selection before writing: manifest entries, contained real paths, size limits, SHA-256
 identities, and image magic bytes must match the catalog. Original bytes,
 credits, and provenance are preserved. Packaging performs no network requests
 and does not change the reference collection or runtime SQLite database.
 Review the catalog and packaged assets together when updating the collection.
 
-## Optional Legacy Import
-
-The original runtime-cache importer remains available for consumers of the
-legacy opaque-ID `/media` URLs. It is no longer required by `/history`:
-
-```bash
-npm run history:import -- --from /path/to/kano_official
-```
-
-The importer locates files through `manifest.json` and validates the entire
-selection before writing. It checks real paths stay inside the collection,
-size limits, SHA-256 identities, and image magic bytes. It neither downloads
-files nor changes the reference collection.
-
-The existing atomic media writer stores X files in `data/x/`, archived stream
-frames and video thumbnails in `data/youtube/`, and other publisher files in
-the supported `data/cache/media/` root. Original bytes are preserved. Rows use
-`media_assets` and `media_links.owner_type = history-image`. Database changes
-are transactional; repeated imports reuse identities. Failed validation
-retains the previous snapshot. No schema change or startup import is required.
-
-Run imports in the server's environment. For Docker, make the collection
-available inside the container and run the importer there. Avoid simultaneous
-Windows/Linux access to the same SQLite file. Restart the development service
-after an offline import if it holds an older database connection.
+The runtime-cache importer of releases up to 0.1.3 (`history:import`), which
+copied these images into `media_assets` for the legacy opaque-ID `/media`
+URLs, was removed with the TypeScript backend. Rows it created in an existing
+snapshot are kept and still served; `/history` does not use them.
 
 When moving a deployment, preserve the ignored `data/` directory for source
 snapshots, dynamic media, and provider configuration. History images are
@@ -94,8 +72,8 @@ portrait is loaded eagerly. Original websites open only when visitors follow
 a link. Provenance hosts are documented in the privacy allowlist without
 expanding the remote downloader's destination policy.
 
-Run `npm run build`, `npm run test:server`, `make docs-check`, and
-`make sensitive-check`. Packaging and importer tests use synthetic archives without network
-requests. Browser verification covers identity/image-type filters, year
+Run `make ci-frontend`, `make docs-check`, and `make sensitive-check`.
+`tests/history-media.test.ts` checks the catalog, the shipped bytes and
+packaging with synthetic archives and without network requests. Browser verification covers identity/image-type filters, year
 navigation, dialog focus and Escape, source links, three languages, themes,
 and desktop/mobile layouts.

@@ -7,13 +7,12 @@ DOCKER ?= docker
 DOCKER_BUILD ?= $(DOCKER) build
 DOCKER_BUILD_ARGS ?=
 DOCKER_IMAGE ?= kano-navi:ci
-TS_DOCKER_IMAGE ?= kano-navi-ts:ci
 GO_BINARY ?= backend-go/bin/kano-go$(if $(filter Windows_NT,$(OS)),.exe,)
 
 .PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-test
-.PHONY: go-build go-start go-docker-build ts-start ts-docker-build
-.PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
-.PHONY: smoke side-by-side-http public-read-gate public-read-benchmark public-read-deployment-smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
+.PHONY: go-build go-start go-docker-build
+.PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-frontend
+.PHONY: smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
 help:
 	@$(NODE) scripts/make-help.ts
@@ -46,12 +45,6 @@ seed: go-build
 
 sync: go-build
 	$(GO_BINARY) sync
-
-# Rollback path: the previous TypeScript service on the same data/ directory.
-# Never run it while the Go service is running against that snapshot.
-ts-start: export NODE_ENV := production
-ts-start:
-	$(NODE) server/index.ts
 
 go-check:
 	$(NODE) scripts/go-check.mjs
@@ -89,38 +82,14 @@ check-sensitive privacy-check: sensitive-check
 test-sensitive:
 	$(NPM) run test:sensitive
 
-test-server:
-	$(NPM) run test:server
+test-frontend:
+	$(NPM) run test:frontend
 
 smoke:
 	$(NODE) scripts/smoke.ts
 
-side-by-side-http:
-	$(NODE) scripts/side-by-side-http.mjs
-
-public-read-benchmark:
-	$(NODE) scripts/public-read-benchmark.mjs
-
-public-read-deployment-smoke:
-	$(NODE) scripts/public-read-deployment-smoke.mjs
-
-# The public-read gate is intentionally ordered.  CI runs this target after
-# provisioning Node and Go; local runs must not turn a dependency-missing
-# comparison into a false success (the comparison scripts exit 2 and stop).
-public-read-gate:
-	$(MAKE) install
-	$(MAKE) ci-backend
-	$(NODE) scripts/dashboard-parity.mjs
-	$(NODE) scripts/side-by-side-http.mjs
-	$(MAKE) go-check
-	$(MAKE) sensitive-check
-	$(MAKE) docs-check
-
 docker-build:
 	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -t $(DOCKER_IMAGE) .
-
-ts-docker-build:
-	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -f ts.Dockerfile -t $(TS_DOCKER_IMAGE) .
 
 production-smoke:
 	$(NODE) scripts/production-smoke.ts $(DOCKER_IMAGE)
@@ -128,11 +97,10 @@ production-smoke:
 # Narrow checks use the existing locked installation and never fetch source data.
 ci-style: format-check docs-check test-sensitive sensitive-check
 
-# go-test covers the shipped backend; typecheck and test-server keep the
-# TypeScript reference implementation and the maintenance scripts honest.
-ci-backend: typecheck test-server go-test
+ci-backend: go-test
 
-ci-frontend: build
+# The build type-checks the frontend, the maintenance scripts and the tests.
+ci-frontend: build test-frontend
 
 check: ci-style ci-backend ci-frontend smoke
 

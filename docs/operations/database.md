@@ -7,10 +7,6 @@ source snapshots and LLM provider/model routes.
 
 ## Seed and Synchronization
 
-The `/history` visual archive has an offline import command:
-`npm run history:import -- --from /path/to/kano_official`. Run it in the server's
-environment. See [History and visual archive](../product/history.md) for details.
-
 ```bash
 make seed                    # Idempotently add missing static records
 npm run seed -- -overwrite   # Restore the shipped profile, timeline and resources

@@ -141,7 +141,7 @@ browser does not silently fall back to a CDN.
 
 ## Verification
 
-Run `npm run test:server` for path, identity, registration, downloader-host,
+Run `make go-test` for path, identity, registration, downloader-host,
 MIME, and dashboard contract tests. `make check` runs those tests together with
 the sensitive scan, documentation checks, and the frontend build. Tests use
 synthetic response bodies; CI does not download live media.

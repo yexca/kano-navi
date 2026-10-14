@@ -9,10 +9,11 @@ import (
 	"time"
 )
 
-// testdata/vectors.json is produced by testdata/vectors.mjs from the
-// TypeScript sources and the Node runtime. It pins the JavaScript semantics
-// this package re-implements: URL normalization, string handling, number
-// formatting and the result normalizers.
+// testdata/vectors.json was recorded from the original TypeScript sources and
+// the Node runtime before that implementation was removed. It is a frozen
+// reference that pins the JavaScript semantics this package re-implements: URL
+// normalization, string handling, number formatting and the result
+// normalizers.
 type vectorData struct {
 	Board        [][]any    `json:"board"`
 	Numbers      [][]any    `json:"numbers"`

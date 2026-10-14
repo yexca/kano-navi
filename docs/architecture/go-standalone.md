@@ -6,9 +6,8 @@ the built frontend from one process, against the SQLite snapshot and `data/`
 tree. Releases, the published image, local development and CI all run it; no
 Node runtime is shipped. Node remains the frontend build toolchain.
 
-The TypeScript files in `server/` and the sync/seed scripts are the previous
-implementation. They stay in the repository as the rollback path and as the
-reference side of the comparison checks; see [Rollback](#rollback).
+The TypeScript backend of releases up to 0.1.3 was removed after the
+migration; see [Rollback](#rollback) for returning to such a release.
 
 ## Commands
 
@@ -44,8 +43,8 @@ the service. If the service is already synchronizing, the command reports a
 busy queue instead of starting a second run.
 
 Running the binary with flags only (no command) keeps the read-only sidecar
-described in [Go backend migration](go-migration.md). Only the comparison
-checks use it.
+described in [Go backend migration](go-migration.md). Only the read-only
+container smoke in `make go-check` uses it.
 
 ## Development
 
@@ -108,7 +107,7 @@ single-source fetch run from unsaved definitions with the reserved IDs
 them share the SQLite single-flight reservation, so a second start answers
 `409` with `already_running` and the active job.
 
-Differences from the TypeScript job manager that operators can observe:
+Differences from releases up to 0.1.3 that operators can observe:
 
 - Jobs survive a restart and are recovered; the list is no longer limited to
   the current process lifetime.
@@ -144,8 +143,8 @@ reduced to controlled codes (`source_api_http_<status>`,
 commits in one transaction with its continuation in `sync_state`
 (`x-window`/`youtube-window`, and `x-backfill`/`youtube-backfill` for `before`),
 so a repeated fetch resumes after the last committed page and the incremental
-cursors are never touched. Checkpoint keys match the ones the TypeScript
-implementation stored. X accounts rotate across runs and share the
+cursors are never touched. Checkpoint keys match the ones releases up to
+0.1.3 stored. X accounts rotate across runs and share the
 `X_MAX_STATUS_REQUESTS` budget; pages per account are bounded by
 `SOURCE_HISTORY_MAX_PAGES`. The contract is described in
 [Workflows](workflows.md#fetch-windows-and-historical-backfill).
@@ -159,13 +158,13 @@ identity representation.
 
 ## Rollback
 
-The previous release image (`yexca/kano-navi:0.1.2`) and `make ts-start` run
-the TypeScript service on the same `data/` directory. Stop the Go process
-first: only one process may own a snapshot, since both write SQLite and both
-would start timed workflows.
+The last TypeScript release image (`yexca/kano-navi:0.1.3`) runs on the same
+`data/` directory; its source is the `v0.1.3` tag. Stop the Go process first:
+only one process may own a snapshot, since both write SQLite and both would
+start timed workflows.
 
-The additive `workflow_*` tables and columns are ignored by TypeScript, and
+The additive `workflow_*` tables and columns are ignored by that release, and
 provider secrets use the same encryption format in both directions. Saved
 workflows keep their definitions; their last status may read as an unknown
-value until the next run. `make ts-docker-build` builds the TypeScript image
-from `ts.Dockerfile`.
+value until the next run. A legacy `events` table that was rebuilt on upgrade
+is already in the layout 0.1.3 expects.

@@ -12,10 +12,12 @@ import (
 	"testing"
 )
 
-// testdata/parity.json is produced by testdata/parity.mjs, which runs the
-// TypeScript extractor against the same synthetic posts, providers and canned
-// model replies used here. The Go step must send byte-identical requests and
-// leave byte-identical identities, fingerprints and stored JSON behind.
+// testdata/parity.json was recorded from the original TypeScript extractor
+// against the same synthetic posts, providers and canned model replies used
+// here, before that implementation was removed. It is a frozen reference: the
+// Go step must keep sending byte-identical requests and leaving byte-identical
+// identities, fingerprints and stored JSON behind, so rows written by earlier
+// releases stay compatible.
 type parityData struct {
 	First    map[string]any `json:"first"`
 	Requests []struct {

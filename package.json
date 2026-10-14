@@ -11,68 +11,44 @@
     "dev:client": "vite",
     "dev:server": "node scripts/run-app.mjs server",
     "build": "npm run typecheck && vite build",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "preview": "node scripts/run-app.mjs preview",
     "start": "node scripts/run-app.mjs start",
     "seed": "node scripts/run-app.mjs seed",
-    "history:import": "node scripts/import-history-media.ts",
     "history:package": "node scripts/package-history-media.ts",
     "migrate:llm": "node scripts/run-app.mjs migrate-llm",
     "sync": "node scripts/run-app.mjs sync",
-    "legacy:start": "NODE_ENV=production node server/index.ts",
-    "legacy:seed": "node scripts/seed.ts",
-    "legacy:sync": "node scripts/sync.ts",
-    "legacy:migrate-llm": "node scripts/migrate-llm-secret.ts",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "check-sensitive": "node scripts/check-sensitive.ts",
     "test:sensitive": "node --test scripts/check-sensitive.test.ts",
-    "test:server": "node --test server/*.test.ts",
+    "test:frontend": "node --test tests/*.test.ts",
     "docs:check-links": "node scripts/check-doc-links.ts",
-    "check": "npm run format:check && npm run test:sensitive && npm run test:server && npm run check-sensitive && npm run docs:check-links && npm run build"
+    "check": "npm run format:check && npm run test:sensitive && npm run test:frontend && npm run check-sensitive && npm run docs:check-links && npm run build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "compression": "^1.8.2",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "fast-xml-parser": "^5.11.1",
     "lucide-react": "^0.468.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "tailwind-merge": "^3.7.0",
-    "zod": "^3.25.76"
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/compression": "^1.8.1",
-    "@types/express": "^5.0.6",
     "@types/node": "^24.19.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/react-test-renderer": "^19.3.0",
     "@vitejs/plugin-react": "^5.0.4",
-    "concurrently": "^10.0.5",
     "prettier": "^3.9.6",
     "react-test-renderer": "^19.2.8",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^8.2.2"
-  },
-  "overrides": {
-    "concurrently": {
-      "shell-quote": "^1.12.0"
-    }
-  },
-  "allowScripts": {
-    "better-sqlite3@13.0.3": true
   }
 }

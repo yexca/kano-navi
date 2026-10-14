@@ -1,5 +1,12 @@
 # Synthetic API and Page Performance
 
+> Historical record. These measurements were taken with the TypeScript backend
+> of releases up to 0.1.3 and its `scripts/benchmark-api.ts` harness, both of
+> which were removed with the migration to Go. They document why the bounded
+> projections, indexes and compression rules exist; they are not current
+> numbers. The Go store keeps a synthetic 10,000-record benchmark:
+> `go test ./internal/store/sqlite -run '^$' -bench BenchmarkDashboardSynthetic10k`.
+
 ## Scope and Conditions
 
 Measured on 2026-10-09, with Node 24.19.0 on the same Windows workstation and

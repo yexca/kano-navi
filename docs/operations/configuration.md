@@ -61,10 +61,10 @@ environment variable, as are `-static` and `-listen`. `KANO_API_PORT` is read
 only by `make dev`/`make preview` and Vite; production serves everything on
 `PORT`.
 
-Run with flags only and no command, the binary is the read-only comparison
-sidecar on `:7658`; its `-enable-*` flags require `APP_MODE=development` and a
-disposable database and are used only by the checks described in
-[Go backend migration](../architecture/go-migration.md).
+Run with flags only and no command, the binary is a read-only sidecar on
+`:7658`; its `-enable-*` flags require `APP_MODE=development` and a disposable
+database. Only `make go-check` uses this mode, for its read-only container
+smoke.
 
 Set `LLM_SECRETS_KEY` before starting development, preview, or production, even
 when no provider has been added. Missing, empty, or whitespace-only values
@@ -74,13 +74,11 @@ For example, generate a value locally with
 `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`
 and save it only in the ignored environment file or deployment secret store.
 
-## Go workflow execution
+## Workflow timers
 
-The Go workflow core is opt-in. It does not start a timer from page requests or
-admin reads, and it does not replace the TypeScript scheduler. Enable the Go
-scheduler only in an explicitly controlled process by constructing it with
-`Enabled: true`; keep it disabled during side-by-side migration. Its interval
-follows the TypeScript bounds of 15 minutes through seven days.
+`kano-go serve` starts the workflow timer unless
+`WORKFLOW_SCHEDULER_ENABLED=0`. Page requests and admin reads never start a
+timer or a run. A saved workflow's interval is 15 minutes through seven days.
 
 ## Related Docs
 

@@ -9,175 +9,61 @@ From the repository root, `make build && make start` runs it against `data/`,
 `dist/` and `.env`; `make dev` runs it behind Vite; `make docker-build` builds
 the release image from the root `Dockerfile`. See
 [Go backend](../docs/architecture/go-standalone.md) for commands, startup
-order, route ownership, differences from the TypeScript implementation and
-rollback.
+order, route ownership and rollback.
 
-The rest of this page records the migration phases and the read-only sidecar,
-which is what the binary still is when run with flags only and no command. The
-comparison checks use it beside the TypeScript reference implementation. It
-opens an existing Kano SQLite snapshot read-only and exposes these public
-reads:
+## Layout
 
 ```text
-GET /api/health
-GET /api/dashboard/revision
-GET /api/dashboard?days=3
-GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD&page=1&pageSize=100
-GET|HEAD /media/<opaque-id>
-GET|HEAD /media/profile/<avatar|banner>
+cmd/kano-go        entry point and commands
+cmd/kano-fixture   synthetic snapshot generator for the container smoke
+internal/httpapi   public reads, media, admin routes, static frontend
+internal/adminauth session, login, origin guard
+internal/store     SQLite schema, upgrades, queries and writes
+internal/source    X and YouTube adapters, historical API windows
+internal/workflow  durable runs, steps, queue, timers
+internal/jobs      operator job projection of workflow runs
+internal/schedule  LLM schedule extraction
+internal/llmadmin  providers, models, routes, settings
+internal/contentadmin  profile media, schedule images, post reprocess
+internal/mcpapi    /mcp tools
 ```
 
-When explicitly configured with `APP_MODE` and `ADMIN_PASSWORD`, the same
-process also exposes the independent in-memory admin session and read
-projections:
-
-```text
-GET  /api/admin/session
-POST /api/admin/login
-POST /api/admin/logout
-GET  /api/admin/posts/llm
-GET  /api/admin/videos
-GET  /api/admin/events
-GET  /api/admin/sync/runs
-GET  /api/admin/activity
-GET  /api/admin/overview
-```
-
-Go listens on `:7658`; TypeScript continues to own `:7657` and all production
-routes. The database path is explicit. The service uses the pure-Go
-`modernc.org/sqlite` driver with SQLite `mode=ro`, one connection, no
-migrations, no seed, no writes, no external requests and no media downloads.
-
-The dashboard and calendar projections match TypeScript's public field set and
-ordering. Calendar dates are inclusive Asia/Tokyo dates, limited to seven days;
-pagination is bounded to 1..100 and schedule images use the same public asset
-projection. Media reads validate opaque IDs, ready status, allowed image MIME,
-content hash, version query, regular-file status and symlink containment. Cache
-paths are relative to the derived `data/` root (with the legacy
-`data/cache/media` namespace retained); selected profile files must remain in
-`data/avatar/`, pass image magic-byte checks and match the active hash/MIME.
-YouTube watch, short, live, shorts and share links use the same normalized
-`stream_identity`; non-YouTube values use exact URL identity. Timeline and
-resource reads are complete, while the documented post/event/video preview
-bounds remain in place. Startup requires every column used by the projection,
-including `posts.raw_json` for schedule source-text filtering.
-
-Admin sessions are deliberately not shared with TypeScript during the
-side-by-side phase. Go owns no admin mutation, source sync, workflow execution,
-LLM provider call, or media download/upload/discovery/cleanup. A future admin
-cutover must select one session owner and rehearse rollback to TypeScript on
-`:7657`; the Go admin router is not connected to the frontend.
+The module uses the pure-Go `modernc.org/sqlite` driver and builds with
+`CGO_ENABLED=0`. It declares Go `1.26.4`; CI reads that version from
+`go.mod`.
 
 ## Checks
 
-From the repository root, run the complete Go gate:
+From the repository root:
 
 ```text
-make go-check
+make go-test    go test and go vet
+make go-check   formatting, tests, vet, CGO-free and Linux/Windows builds,
+                and the read-only container smoke
+make smoke      seed twice and read a fresh snapshot through kano-go serve
 ```
 
-It runs formatting, tests, vet, native and CGO-disabled builds, Linux and
-Windows amd64 cross-builds, and an independent scratch Docker image build from
-`backend-go/Dockerfile`. The module declares Go `1.26.4` and CI reads that
-version from `backend-go/go.mod`.
+Tests use fake transports, synthetic records and temporary SQLite files; none
+contacts X, YouTube, a CDN or a model provider. `internal/schedule/testdata`
+holds reference vectors recorded from the original TypeScript implementation,
+which keep stored identities and fingerprints compatible with earlier
+releases.
 
-The synthetic store test and benchmark use 10,000 posts, events and videos to
-verify bounded dashboard payloads and accurate counts:
+The synthetic store benchmark uses 10,000 posts, events and videos:
 
 ```text
-go test ./backend-go/internal/store/sqlite -run '^$' -bench BenchmarkDashboardSynthetic10k -benchmem
+go test ./internal/store/sqlite -run '^$' -bench BenchmarkDashboardSynthetic10k -benchmem
 ```
 
-`node scripts/dashboard-parity.mjs` compares a fixed synthetic fixture through
-the TypeScript public projection and the Go `cmd/kano-parity` renderer. It
-compares all keys and values, including nulls, booleans, dates and array
-ordering. The runner starts Go from `backend-go` (or uses `GO`) so it works
-from the repository root. Without `node_modules`, it runs the dependency-free
-Go synthetic snapshot smoke and prints `SKIPPED`; it never installs packages.
+## Read-only sidecar
 
-For a local HTTP comparison over one disposable snapshot, run:
+Run with flags only and no command, the binary opens an existing snapshot in
+SQLite `mode=ro` on `:7658` and serves the public reads without migrations,
+seeds or writes. `backend-go/Dockerfile` packages that mode, and
+`scripts/go-docker-smoke.mjs` (part of `make go-check`) mounts a synthetic
+`data/` tree read-only and verifies that no database sidecar, WAL, journal or
+directory is created. The `-enable-*` flags of this mode require
+`APP_MODE=development` and a disposable database.
 
-```text
-make side-by-side-http
-```
-
-The tool compares both services for health, revision, dashboard, calendar,
-ready media, selected profile media and unready media; only `health.now` and
-`dashboard.meta.generatedAt` are normalized. It compares sanitized JSON or
-bytes plus the relevant cache and validator headers. It also checks stable
-sanitized responses for unknown paths and POST methods. CI runs this after
-`make install`, Go setup and `make ci-backend`; a missing local `node_modules`
-is an explicit local skip and cannot pass the CI job after the locked install.
-Go emits only route, method, status, duration and response-byte fields as
-structured stdout logs.
-
-The ordered CI entry point is `make public-read-gate`. It runs the locked
-installation, TypeScript contracts, dashboard parity, side-by-side HTTP, Go
-checks, privacy scanning and documentation checks. With no local
-`node_modules`, the two comparison scripts return explicit `SKIPPED` status 2
-after the dependency-free Go smoke; this cannot pass the CI backend job after
-its locked installation.
-
-`make go-check` also builds the independent scratch image and runs
-`scripts/go-docker-smoke.mjs`. That check mounts a synthetic SQLite snapshot
-and synthetic media tree read-only, verifies health/dashboard/calendar/ready
-media, and confirms no database sidecar, WAL, journal or directory is created.
-The Go validation job then runs `make public-read-deployment-smoke`, which
-starts the existing TypeScript image and the independent Go image against
-copies of one synthetic snapshot, checks public reads and profile media, and
-restarts both containers while checking snapshot and media-tree hashes. For
-10,000-record resource measurements, run
-`node scripts/public-read-benchmark.mjs --output <path outside the repository>`.
-
-Read-only tests verify unchanged database hashes and directory entries,
-absence of read-created WAL/journal files, and visibility of committed WAL
-data. Missing, incomplete, closed and corrupt snapshots produce only stable
-`database_unavailable` responses at the HTTP boundary.
-
-## Ownership and rollback
-
-Phase eleven implements development X/YouTube recent synchronization, media
-downloads, workflow CRUD, asynchronous runs, cancellation, retry, recovery and
-explicitly enabled API timers. See
-[Go source workflows and media downloads](../docs/architecture/go-source-workflows.md)
-for current flags, API and remaining work. `make go-test` runs contracts and vet
-without Docker; `make go-check` adds cross-builds and disposable read-only/write
-containers. Default startup remains the read-only canary. The following
-describes earlier phases.
-
-`-initialize` now creates a fresh snapshot with embedded SQL and public static
-seeds, requiring explicit development mode and `LLM_SECRETS_KEY`. It retains
-existing current-schema snapshots/settings on reseed and does not enable
-admin/source writes unless their flags are also present. Node is not needed
-for Go initialization. `serve` and the maintenance commands additionally
-upgrade older snapshots, including the legacy events layout.
-
-In sidecar mode the Go service does not take over admin, MCP, synchronization,
-workflow scheduling, schedule extraction, LLM routing, media download,
-discovery, upload or cleanup; those belong to `kano-go serve`, which the
-published image runs on `:7657`.
-
-The workflow package (`internal/workflow`) persists definitions,
-runs, ordered steps, attempts and leases through the additive SQLite migration
-in `internal/store/sqlite`. It uses only synthetic step execution. The scheduler
-is opt-in and disabled unless its `Enabled` field is explicitly set. Admin
-workflow reads are `GET /api/admin/workflows`, `/api/admin/workflows/:id`,
-`/api/admin/runs`, and `/api/admin/runs/:id`; projections contain safe status,
-capability, retry and timing fields only.
-
-Phase eight keeps the service read-only by default. The isolated event mutation slice requires `APP_MODE=development` and `-enable-admin-writes` against an existing synthetic SQLite file. It uses the distinct `kano_go_canary_session` cookie and atomic event/source/revision transactions; production remains owned by TypeScript.
-
-## Phase ten: X recent development slice
-
-Run `APP_MODE=development kano-go -database <temporary.sqlite> -enable-x-sync`
-for the isolated X recent path. After Go admin login, call
-`POST /api/admin/sources/x/fetch` with
-`{"window":{"mode":"recent","days":7}}`; the `202` response contains the
-persistent `x-recent` run, and `/api/admin/runs/:id` returns its step and attempt
-state. The fake-transport-tested adapter only reads allowlisted public
-`x.com`/`api.vxtwitter.com` endpoints and commits posts, pending media
-candidates, schedule candidates and incremental `sync_state` in one
-transaction. Failed source responses retain old posts and cursors. Production
-rejects the flag. X historical windows, archive search, YouTube, media
-downloads, LLM, MCP, frontend integration and production routing remain
-`capability_not_migrated`.
+The phases that led here are recorded in
+[Go backend migration](../docs/architecture/go-migration.md).

@@ -22,9 +22,7 @@ area you are changing.
 The browser reads a prepared SQLite snapshot through the local API.
 External reads belong to server-side synchronization and its helpers.
 The backend is the Go service in backend-go/; releases, development and CI run
-it. The TypeScript files in server/ and the sync/seed scripts are the previous
-implementation, kept as the rollback path and comparison reference. Change
-behavior in Go first and keep the TypeScript reference and its tests passing.
+it. TypeScript is the frontend and the maintenance scripts only.
 
 - Page loads, refreshes, and revision requests never fetch X, YouTube, or model
   providers. A failed source retains known snapshots and records its outcome.
@@ -83,19 +81,19 @@ behavior in Go first and keep the TypeScript reference and its tests passing.
 
 Backend paths are relative to backend-go/.
 
-| Area                             | Main paths                                                                                         |
-| -------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Public UI and history            | src/dashboard/, src/history/, src/about/, src/components/ui/                                       |
-| Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                                          |
-| Entry point and commands         | cmd/kano-go/ (serve, seed, sync, migrate-llm, healthcheck), ../Dockerfile                          |
-| API, authentication, projections | internal/httpapi/, internal/adminauth/, internal/mcpapi/, internal/publicview/                     |
-| SQLite and static initialization | internal/store/sqlite/ (bootstrap.sql, static-seed.json, schema_upgrade.go)                        |
-| Sources and historical windows   | internal/source/x/, internal/source/youtube/, internal/source/history/                             |
-| Jobs, steps, timers              | internal/jobs/, internal/workflow/                                                                 |
-| Model routing and extraction     | internal/schedule/, internal/llmadmin/, internal/secretstore/                                      |
-| Dynamic and profile media        | internal/mediadownload/, internal/contentadmin/, internal/httpapi/media.go                         |
-| Fixed history packaging          | ../scripts/package-history-media.ts, ../scripts/import-history-media.ts, ../public/assets/history/ |
-| TypeScript reference (legacy)    | ../server/, ../scripts/sync.ts, ../scripts/seed.ts, ../ts.Dockerfile                               |
+| Area                             | Main paths                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| Public UI and history            | src/dashboard/, src/history/, src/about/, src/components/ui/                   |
+| Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                      |
+| Entry point and commands         | cmd/kano-go/ (serve, seed, sync, migrate-llm, healthcheck), ../Dockerfile      |
+| API, authentication, projections | internal/httpapi/, internal/adminauth/, internal/mcpapi/, internal/publicview/ |
+| SQLite and static initialization | internal/store/sqlite/ (bootstrap.sql, static-seed.json, schema_upgrade.go)    |
+| Sources and historical windows   | internal/source/x/, internal/source/youtube/, internal/source/history/         |
+| Jobs, steps, timers              | internal/jobs/, internal/workflow/                                             |
+| Model routing and extraction     | internal/schedule/, internal/llmadmin/, internal/secretstore/                  |
+| Dynamic and profile media        | internal/mediadownload/, internal/contentadmin/, internal/httpapi/media.go     |
+| Fixed history packaging          | ../scripts/package-history-media.ts, ../public/assets/history/                 |
+| Frontend tests                   | ../tests/ (request hooks, polling, history catalog)                            |
 
 ## Validation and Handoff
 
@@ -104,8 +102,8 @@ The Makefile is the canonical validation entry point for local work and Actions.
 - Begin with git status --short and preserve existing user changes. Do not use
   destructive reset or checkout commands.
 - Choose the smallest sufficient target: make docs-check for docs, make ci-style
-  for style/tooling, make go-test for Go-only changes, make ci-backend for
-  data/API/sync (Go and the TypeScript reference), and make ci-frontend for UI.
+  for style/tooling, make ci-backend for data/API/sync (the Go tests and vet),
+  and make ci-frontend for UI (type check, build and frontend tests).
   Check affected UI in a browser at desktop and mobile widths.
 - Use make smoke for seeded snapshot/API integration and make docker-build plus
   make production-smoke for runtime/container work. Smoke uses disposable state;

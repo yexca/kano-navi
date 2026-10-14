@@ -4,8 +4,8 @@
 
 > Historical record. The migration is complete: releases run the Go backend
 > described in [Go backend](../architecture/go-standalone.md). This page
-> documents the earlier read-only canary rehearsal, which CI still runs as a
-> comparison check.
+> documents the earlier read-only canary rehearsal. Its scripts and the
+> TypeScript service were removed afterwards.
 
 At the time of this rehearsal, production traffic remained on the TypeScript
 service at `:7657`. Go is a

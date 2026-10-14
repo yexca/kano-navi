@@ -6,7 +6,7 @@ FROM node:24.19.0-bookworm-slim AS frontend
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-# Only the Vite build runs here, so native add-ons are not compiled.
+# Only the Vite build runs here; no package needs an install script.
 RUN npm ci --ignore-scripts
 
 COPY . .

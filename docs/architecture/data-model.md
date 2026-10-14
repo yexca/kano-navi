@@ -166,16 +166,17 @@ wording (including `raw_json.search_text`) and applies the existing text/image
 and manual-review gates. The index is non-unique because multiple stored records
 can share a source URL.
 
-server/database.ts owns the schema and additive upgrade behavior. Update this
+backend-go/internal/store/sqlite owns the schema (`bootstrap.sql`) and the
+additive upgrade behavior (`schema_upgrade.go`). Update this
 contract, seed behavior, and relevant tests together. Never silently drop
 columns, rebuild an existing database from seed data, clear snapshots, or
 recreate deleted providers. See [Database operations](../operations/database.md).
 
 ## Implementation Ownership
 
-### Persistence: `server/database.ts`
+### Persistence: `backend-go/internal/store/sqlite`
 
-This module creates the SQLite schema, provides seed/upsert/query functions, and
+This package creates the SQLite schema, provides seed/upsert/query functions, and
 keeps the database at `data/database/kano.sqlite`. Raw source data may be retained in
 internal `raw_json`, but API mapping removes it. Writes should use the existing
 transaction and upsert patterns so a partial synchronization cannot erase known
@@ -198,10 +199,11 @@ protocols. The
 clients. The provider routes `schedule_board`, `schedule_message`, and legacy
 `schedule_vision` each have their own priority order.
 
-`server/media-cache.ts` owns cache-root path validation, source URL identities,
-content hashes, and atomic file writes. `server/media-downloader.ts` performs
-bounded downloads from the X and YouTube image hosts and promotes verified
-files to ready cache rows.
+`internal/httpapi/media.go` and `internal/store/sqlite/media.go` own cache-root
+path validation and serving; `internal/store/sqlite/source_write.go` owns
+source URL identities. `internal/mediadownload` performs bounded downloads
+from the X and YouTube image hosts and promotes verified files to ready cache
+rows.
 
 ## Related Docs
 

@@ -5,10 +5,14 @@ current service: `kano-go serve` runs the public API, the complete operator
 console, workflows and timers, historical source windows, schedule extraction,
 MCP and the built frontend from one process, upgrades older snapshots, and
 provides the `seed`, `sync` and `migrate-llm` commands. Releases, the
-published image, development and CI run it; the TypeScript implementation is
-kept as the rollback path and comparison reference.
+published image, development and CI run it.
 
-The rest of this page is the record of the earlier phases.
+The rest of this page is the record of the earlier phases. The TypeScript
+backend it refers to (`server/`, the sync and seed scripts) and the
+TypeScript/Go comparison tooling (`dashboard-parity`, `side-by-side-http`,
+`public-read-gate`, the container rehearsal, `cmd/kano-parity`) were removed
+once the migration was complete; they remain available at the `v0.1.3` tag
+and in the history before it.
 
 Phase eleven is
 [Go source workflows and media downloads](go-source-workflows.md): YouTube
