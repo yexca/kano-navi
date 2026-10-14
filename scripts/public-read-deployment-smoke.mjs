@@ -52,7 +52,7 @@ try {
     )
   }
   if (!process.env.PUBLIC_READ_TS_IMAGE) {
-    run(docker, ["build", "-t", tsImage, "."], root)
+    run(docker, ["build", "-f", "ts.Dockerfile", "-t", tsImage, "."], root)
   }
 
   // The production TypeScript entry point performs the normal additive seed

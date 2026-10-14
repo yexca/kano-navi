@@ -2,7 +2,7 @@
 
 ## Trust Boundary
 
-- The browser trusts only the prepared snapshot returned by the local Express API. X, YouTube, image CDNs, and other public pages are untrusted input.
+- The browser trusts only the prepared snapshot returned by the local API. X, YouTube, image CDNs, and other public pages are untrusted input.
 - SQLite, runtime directories, and environment variables belong to the local maintainer boundary and must not be exposed verbatim through the API.
 - `/mcp` is a separate integration boundary: public tools expose only prepared
   read-only facts, while mutation tools require a dedicated bearer token. The

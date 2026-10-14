@@ -101,7 +101,8 @@ and [workflows](docs/architecture/workflows.md) for coverage and fetch limits.
 
 ## Develop locally
 
-Requires **Node.js 24.19+ in the 24 LTS line**, **npm 10+**, and Git.
+Requires **Go 1.26+** for the backend, **Node.js 24.19+ in the 24 LTS line**
+and **npm 10+** for the frontend, and Git.
 
 ```bash
 git clone https://github.com/yexca/kano-navi.git
@@ -119,12 +120,14 @@ require it. Then run:
 npm run dev
 ```
 
-The frontend and API share [localhost:7657](http://localhost:7657/).
+`npm run dev` builds and starts the Go backend and serves the frontend through
+Vite; both share [localhost:7657](http://localhost:7657/).
 In PowerShell, use `Copy-Item .env.example .env` for the copy step.
 See [local development](docs/development/local-dev.md) for build, preview, and
 Docker development instructions.
 
-The project uses **React · TypeScript · Vite · Tailwind CSS · Express · SQLite**.
+The project uses **React · TypeScript · Vite · Tailwind CSS** for the frontend
+and **Go · SQLite** for the backend, shipped as one static binary.
 GNU Make is the validation entry point:
 
 ```bash

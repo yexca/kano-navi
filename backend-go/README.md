@@ -1,17 +1,22 @@
-# Kano Navi Go service
+# Kano Navi Go backend
 
-`kano-go -standalone` serves the whole site from this module: public API,
-operator console, workflows, schedule extraction, MCP and the built frontend.
-From the repository root, `make build && make go-start` runs it against
-`data/`, `dist/` and `.env`; `make go-docker-build` builds its scratch image
-from `go.Dockerfile`. See
-[Go standalone backend](../docs/architecture/go-standalone.md) for startup
-order, route ownership, differences from the TypeScript service, remaining
-work and rollback.
+This module is the backend. `kano-go serve` runs the whole site: public API,
+operator console, workflows and timers, historical source windows, schedule
+extraction, MCP and the built frontend. `kano-go seed`, `sync`, `migrate-llm`
+and `healthcheck` are its maintenance commands.
 
-Without `-standalone` the binary is the original read-only sidecar described
-below. It runs beside the TypeScript service, opens an existing Kano SQLite
-snapshot read-only, and exposes these public reads:
+From the repository root, `make build && make start` runs it against `data/`,
+`dist/` and `.env`; `make dev` runs it behind Vite; `make docker-build` builds
+the release image from the root `Dockerfile`. See
+[Go backend](../docs/architecture/go-standalone.md) for commands, startup
+order, route ownership, differences from the TypeScript implementation and
+rollback.
+
+The rest of this page records the migration phases and the read-only sidecar,
+which is what the binary still is when run with flags only and no command. The
+comparison checks use it beside the TypeScript reference implementation. It
+opens an existing Kano SQLite snapshot read-only and exposes these public
+reads:
 
 ```text
 GET /api/health
@@ -144,13 +149,13 @@ describes earlier phases.
 seeds, requiring explicit development mode and `LLM_SECRETS_KEY`. It retains
 existing current-schema snapshots/settings on reseed and does not enable
 admin/source writes unless their flags are also present. Node is not needed
-for Go initialization; legacy schema upgrades remain a migration gap.
+for Go initialization. `serve` and the maintenance commands additionally
+upgrade older snapshots, including the legacy events layout.
 
 In sidecar mode the Go service does not take over admin, MCP, synchronization,
 workflow scheduling, schedule extraction, LLM routing, media download,
-discovery, upload or cleanup; those belong to standalone mode. The published
-image still runs TypeScript on `:7657`. To roll back a side-by-side
-deployment, stop Go on `:7658` and continue using TypeScript on `:7657`.
+discovery, upload or cleanup; those belong to `kano-go serve`, which the
+published image runs on `:7657`.
 
 The workflow package (`internal/workflow`) persists definitions,
 runs, ordered steps, attempts and leases through the additive SQLite migration

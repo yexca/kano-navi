@@ -11,7 +11,7 @@ area you are changing.
 - [Data model](docs/architecture/data-model.md)
 - [Sources and schedule extraction](docs/architecture/sources.md)
 - [Workflows and fetch windows](docs/architecture/workflows.md)
-- [Backend](docs/architecture/backend.md) or [Frontend](docs/architecture/frontend.md)
+- [Backend](docs/architecture/backend.md) and [Go backend](docs/architecture/go-standalone.md), or [Frontend](docs/architecture/frontend.md)
 - [Design](docs/development/design.md) for UI work
 - [Testing](docs/development/testing.md)
 - [Security policy](SECURITY.md) and [Secure development](docs/development/security.md)
@@ -21,6 +21,10 @@ area you are changing.
 
 The browser reads a prepared SQLite snapshot through the local API.
 External reads belong to server-side synchronization and its helpers.
+The backend is the Go service in backend-go/; releases, development and CI run
+it. The TypeScript files in server/ and the sync/seed scripts are the previous
+implementation, kept as the rollback path and comparison reference. Change
+behavior in Go first and keep the TypeScript reference and its tests passing.
 
 - Page loads, refreshes, and revision requests never fetch X, YouTube, or model
   providers. A failed source retains known snapshots and records its outcome.
@@ -39,9 +43,10 @@ External reads belong to server-side synchronization and its helpers.
 - Timed workflows run only in the API process and share the single-flight queue.
   Fresh initialization keeps source snapshots and LLM providers/models/routes
   empty. Seeding preserves existing snapshots and operator configuration.
-- server/database.ts owns additive schema upgrades, seed/upsert/query behavior.
-  Update the data contract and verification with schema changes; never silently
-  drop columns or clear snapshots. Store parseable ISO timestamps and display
+- backend-go/internal/store/sqlite owns the schema (bootstrap.sql), additive
+  upgrades (schema_upgrade.go), static seeds and query behavior. Update the
+  data contract and verification with schema changes; never silently drop
+  columns or clear snapshots. Store parseable ISO timestamps and display
   Asia/Tokyo times.
 
 ## Security and Media Boundaries
@@ -56,7 +61,8 @@ External reads belong to server-side synchronization and its helpers.
   and never grants manual confirmation/edit/delete, media selection/upload,
   SQL, arbitrary file access, or URL proxying.
 - LLM_SECRETS_KEY, source API credentials, and MCP_CONTROL_TOKEN stay in the
-  environment. OPENAI_API_KEY is accepted only by the explicit migration command.
+  environment. OPENAI_API_KEY is accepted only by the explicit
+  `kano-go migrate-llm` command.
   Model discovery is an operator action; preserve per-route provider/model order
   and original text/image capability requirements.
 - New outbound paths need explicit destinations, timeout and response limits,
@@ -75,18 +81,21 @@ External reads belong to server-side synchronization and its helpers.
 
 ## Code Ownership
 
-| Area                             | Main paths                                                                                            |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Public UI and history            | src/dashboard/, src/history/, src/about/, src/components/ui/                                          |
-| Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                                             |
-| API, authentication, projections | server/app.ts, server/admin-api.ts, server/admin-auth.ts, server/mcp-api.ts, server/public-view.ts    |
-| SQLite and static initialization | server/database.ts, server/seed-data.ts, scripts/seed.ts                                              |
-| Sources and historical windows   | scripts/sync.ts, scripts/source-history.ts, server/fetch-window.ts                                    |
-| Jobs, steps, timers              | server/sync-jobs.ts, server/workflow-catalog.ts, server/workflow-scheduler.ts                         |
-| Model routing and extraction     | server/schedule-extractor.ts, server/schedule-asset.ts, server/llm-catalog.ts, server/secret-store.ts |
-| Dynamic media                    | server/media-cache.ts, server/media-downloader.ts                                                     |
-| Fixed history packaging          | scripts/package-history-media.ts, scripts/import-history-media.ts, public/assets/history/             |
-| Go standalone backend            | backend-go/cmd/kano-go/, backend-go/internal/, go.Dockerfile, docs/architecture/go-standalone.md      |
+Backend paths are relative to backend-go/.
+
+| Area                             | Main paths                                                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Public UI and history            | src/dashboard/, src/history/, src/about/, src/components/ui/                                       |
+| Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                                          |
+| Entry point and commands         | cmd/kano-go/ (serve, seed, sync, migrate-llm, healthcheck), ../Dockerfile                          |
+| API, authentication, projections | internal/httpapi/, internal/adminauth/, internal/mcpapi/, internal/publicview/                     |
+| SQLite and static initialization | internal/store/sqlite/ (bootstrap.sql, static-seed.json, schema_upgrade.go)                        |
+| Sources and historical windows   | internal/source/x/, internal/source/youtube/, internal/source/history/                             |
+| Jobs, steps, timers              | internal/jobs/, internal/workflow/                                                                 |
+| Model routing and extraction     | internal/schedule/, internal/llmadmin/, internal/secretstore/                                      |
+| Dynamic and profile media        | internal/mediadownload/, internal/contentadmin/, internal/httpapi/media.go                         |
+| Fixed history packaging          | ../scripts/package-history-media.ts, ../scripts/import-history-media.ts, ../public/assets/history/ |
+| TypeScript reference (legacy)    | ../server/, ../scripts/sync.ts, ../scripts/seed.ts, ../ts.Dockerfile                               |
 
 ## Validation and Handoff
 
@@ -95,13 +104,15 @@ The Makefile is the canonical validation entry point for local work and Actions.
 - Begin with git status --short and preserve existing user changes. Do not use
   destructive reset or checkout commands.
 - Choose the smallest sufficient target: make docs-check for docs, make ci-style
-  for style/tooling, make ci-backend for data/API/sync, and make ci-frontend for UI.
+  for style/tooling, make go-test for Go-only changes, make ci-backend for
+  data/API/sync (Go and the TypeScript reference), and make ci-frontend for UI.
   Check affected UI in a browser at desktop and mobile widths.
 - Use make smoke for seeded snapshot/API integration and make docker-build plus
   make production-smoke for runtime/container work. Smoke uses disposable state;
   do not run live synchronization to validate CI changes.
-- make check runs installed-dependency checks without Docker. make ci-local adds
-  Docker build/runtime checks. make ci installs first and runs the full sequence.
+- make check runs installed-dependency checks without Docker; it needs Go as
+  well as Node. make ci-local adds Docker build/runtime checks. make ci
+  installs first and runs the full sequence.
 - Before every commit, run make ci and make sensitive-check and review scanner
   findings and git diff --cached manually. Stage only the requested scope.
 - Before handoff, run proportional validation and make sensitive-check. Tests

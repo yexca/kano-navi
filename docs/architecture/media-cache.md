@@ -72,7 +72,7 @@ served as active same-origin content.
    `registerMediaCandidates`.
 2. The candidate is deduplicated by normalized source URL, recorded as
    `pending`, and linked to its owner. Registration does not download bytes.
-3. `downloadPendingMedia` claims a bounded batch during `npm run sync`. It
+3. The media step claims a bounded batch during a synchronization. It
    downloads with a timeout and byte limit, verifies the image magic bytes and
    declared MIME type, writes a temporary file, atomically renames it into the
    source namespace's `sha256/` directory, and calls `upsertMediaAsset` with

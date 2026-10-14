@@ -95,7 +95,8 @@ X 动态、YouTube 视频、日程与 AI 服务配置初始为空。
 
 ## 本地开发
 
-需要 **Node.js 24 LTS（24.19 或更新版本）**、**npm 10+** 和 Git。
+后端需要 **Go 1.26+**，前端需要 **Node.js 24 LTS（24.19 或更新版本）** 与
+**npm 10+**，另需 Git。
 
 ```bash
 git clone https://github.com/yexca/kano-navi.git
@@ -112,11 +113,13 @@ cp .env.example .env
 npm run dev
 ```
 
-前端与 API 共用 [localhost:7657](http://localhost:7657/)。
+`npm run dev` 会构建并启动 Go 后端，并通过 Vite 提供前端；两者共用
+[localhost:7657](http://localhost:7657/)。
 PowerShell 中的复制命令为 `Copy-Item .env.example .env`。
 构建、预览和 Docker 开发环境见[本地开发指南](docs/development/local-dev.md)。
 
-技术栈：**React · TypeScript · Vite · Tailwind CSS · Express · SQLite**。
+技术栈：前端 **React · TypeScript · Vite · Tailwind CSS**，后端 **Go · SQLite**，
+以单个静态二进制发布。
 项目通过 GNU Make 统一运行检查：
 
 ```bash

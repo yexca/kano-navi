@@ -60,11 +60,11 @@ boundary.
 
 ## Seed versus Synchronization
 
-`server/seed-data.ts` initializes the static profile, milestone timeline, and
-resource directory. New environments have no X posts, events, YouTube videos,
-Featured item, schedule assets, or LLM providers/models/routes. `npm run seed`
+`backend-go/internal/store/sqlite/static-seed.json` initializes the static
+profile, milestone timeline, and resource directory. New environments have no X posts, events, YouTube videos,
+Featured item, schedule assets, or LLM providers/models/routes. `kano-go seed` (`npm run seed`)
 only fills missing static IDs by default; it does not recreate deleted providers.
-`npm run sync` reads public sources and upserts updated records. Neither command
+`kano-go sync` (`npm run sync`) reads public sources and upserts updated records. Neither command
 silently deletes existing snapshots or operator-configured providers.
 
 Legacy `events` and `focus` tables are migrated in place. Existing X schedule

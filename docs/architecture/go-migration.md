@@ -1,18 +1,21 @@
 # Go backend migration
 
-The latest implementation is phase twelve:
-[Go standalone backend](go-standalone.md). `kano-go -standalone` serves the
-public API, the complete operator console, workflows and timers, schedule
-extraction, MCP and the built frontend from one process, and upgrades older
-snapshots additively. The published image still runs TypeScript, which remains
-the rollback path; switching it is a separate, explicit release decision.
+The migration is complete. [Go backend](go-standalone.md) describes the
+current service: `kano-go serve` runs the public API, the complete operator
+console, workflows and timers, historical source windows, schedule extraction,
+MCP and the built frontend from one process, upgrades older snapshots, and
+provides the `seed`, `sync` and `migrate-llm` commands. Releases, the
+published image, development and CI run it; the TypeScript implementation is
+kept as the rollback path and comparison reference.
+
+The rest of this page is the record of the earlier phases.
 
 Phase eleven is
 [Go source workflows and media downloads](go-source-workflows.md): YouTube
 recent synchronization, media downloads, asynchronous submission, workflow
 CRUD, opt-in timers, cancellation and recovery. The sections below record the
-earlier read-only sidecar, which is still what the binary is without
-`-standalone`.
+earlier read-only sidecar, which is still what the binary is when it is run
+with flags only and no command.
 
 Phase nine adds the persistent workflow execution core described in
 [Go workflow execution core](go-workflows.md). It remains side-by-side and

@@ -9,7 +9,6 @@ services:
     ports:
       - "${KANO_PORT:-7657}:7657"
     environment:
-      NODE_ENV: production
       PORT: 7657
       APP_MODE: ${APP_MODE:-production}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD to at least 12 characters}

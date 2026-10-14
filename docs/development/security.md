@@ -21,7 +21,7 @@ supported. Every provider request has a timeout, bounded responses/retries, and 
 blocking; a failed provider is skipped in favor of the next configured one.
 Provider keys are encrypted with the `LLM_SECRETS_KEY` master key before they
 reach SQLite. `OPENAI_API_KEY` is accepted only by the explicit one-time
-`npm run migrate:llm` command and is never read by synchronization or the API.
+`kano-go migrate-llm` (`npm run migrate:llm`) command and is never read by synchronization or the API.
 Neither plaintext keys nor ciphertext are returned by the admin API, written to
 `raw_json`, or logged.
 The master key itself exists only in the process environment and must be

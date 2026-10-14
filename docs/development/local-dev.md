@@ -2,21 +2,27 @@
 
 ## Prerequisites
 
+- Go 1.26.4 or newer (the version in `backend-go/go.mod`, matching CI and Docker)
 - Node.js 24.19.0 or newer in the 24 LTS line (matching CI and Docker)
 - npm 10+
 - Git
 
-SQLite uses `better-sqlite3`; installation may require a prebuilt package or a
-local compiler toolchain on the current platform.
+The backend is the Go module in `backend-go/`; it uses the pure-Go
+`modernc.org/sqlite` driver and needs no C toolchain. Its package layout,
+commands and startup order are in
+[Go backend](../architecture/go-standalone.md).
 
-Source, configuration, maintenance scripts, and tests use TypeScript. Node 24
-runs the backend and scripts through native type stripping; Vite transforms
-React `.tsx` files. Runtime imports in the Node layer use explicit `.ts`
+The frontend, maintenance scripts and the TypeScript reference implementation
+in `server/` use TypeScript. The reference tests open SQLite through
+`better-sqlite3`, whose installation may require a prebuilt package or a
+local compiler toolchain on the current platform. Node 24 runs the scripts and
+reference tests through native type stripping; Vite transforms React `.tsx`
+files. Runtime imports in the Node layer use explicit `.ts`
 extensions and type-only imports use `import type`. Avoid enums, parameter
 properties, and other syntax requiring runtime transformation.
 
 `tsconfig.json` checks the browser with bundler module resolution;
-`tsconfig.server.json` checks the backend, scripts, and tests with NodeNext.
+`tsconfig.server.json` checks the reference backend, scripts, and tests with NodeNext.
 Both use `noEmit`, `verbatimModuleSyntax`, and `erasableSyntaxOnly`.
 Run `make typecheck` for a standalone check. The shared
 public snapshot and UI primitive props have explicit types; existing dynamic
@@ -34,17 +40,21 @@ cp .env.example .env
 make dev
 ```
 
-Development mode serves Vite and the Express API on one HTTP listener at
-`http://localhost:7657`. `server/local-api.ts` mounts `/api`, `/media`, and
-`/mcp` before Vite's frontend middleware. `npm run preview` mounts the same API
-alongside the built frontend and also defaults to `7657`, as does production.
+`make dev` (`scripts/run-app.mjs`) builds the Go backend into
+`backend-go/bin/`, starts it on `127.0.0.1:KANO_API_PORT` (default `7658`)
+and starts Vite at `http://localhost:7657`. Vite serves the frontend with hot
+reload and proxies `/api`, `/media`, and `/mcp` to the backend with the
+browser's Host header, so the page and the API stay on one origin. Either
+process ending stops the other, so a refused backend start (for example a
+missing `LLM_SECRETS_KEY`) is visible immediately. `npm run preview` does the
+same with the built frontend and also defaults to `7657`, as does production.
 Set `PORT` in the environment or `.env` to override the default. Development
 and preview use `strictPort` and fail if that port is occupied.
 
-`make dev-client` remains an alias for the shared development server.
-`make dev-server` starts the standalone Express server on the same default
-port; run one of these entry points at a time. Restart the development or
-preview server after changing backend source.
+`make dev-server` builds and starts only the backend on `KANO_API_PORT`, and
+`make dev-client` starts only Vite; use the pair to keep the two logs apart.
+Restart the backend after changing Go source. The backend reads `.env`,
+`data/` and `dist/` relative to the repository root.
 
 The public dashboard is `/`. The admin interface is available only by entering
 `/admin`; no public navigation links to it. The example environment and server
@@ -96,6 +106,11 @@ least 12 characters in the ignored `.env` file, then run:
 npm run build
 npm start
 ```
+
+`npm start` (`make start`) builds the backend and runs `kano-go serve`, which
+serves the API and `dist/` on `PORT`. `make seed` and `make sync` run the
+one-shot maintenance commands; see
+[Database and maintenance](../operations/database.md).
 
 In PowerShell, use Copy-Item .env.example .env. GNU Make is the canonical
 validation entry point; npm scripts remain available for the individual tasks.

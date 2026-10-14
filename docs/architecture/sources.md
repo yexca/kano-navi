@@ -167,7 +167,7 @@ does not create or enable an OpenAI provider. The legacy model preference comes
 from `app_settings.llm_model`. Provider API keys are encrypted with
 `LLM_SECRETS_KEY`; ciphertext is never returned by an API response or written
 to extraction `raw_json`. A legacy `OPENAI_API_KEY` can be imported once with
-`npm run migrate:llm` after creating an `openai-default` provider in `/admin`;
+`kano-go migrate-llm` (`npm run migrate:llm`) after creating an `openai-default` provider in `/admin`;
 synchronization never reads that environment variable.
 Candidates from either X account use the same idempotent fingerprint and
 manual-lock rules. The stage flags are stored as `schedule_keyword_enabled`,

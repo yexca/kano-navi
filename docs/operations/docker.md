@@ -31,8 +31,8 @@ Same-origin browser mutations work even if the proxy rewrites Host. Clients
 without Fetch Metadata need the original public Host and forwarded protocol
 to match any supplied `Origin`.
 
-The production Express listener compresses public JSON and build text directly;
-a proxy is not required for gzip/Brotli. Preserve `Content-Encoding`, `Vary` and
+The production listener gzip-compresses public JSON and build text directly;
+a proxy is not required for gzip. Preserve `Content-Encoding`, `Vary` and
 validators and avoid recompressing an already encoded response. Exclude admin,
 authentication, MCP and runtime media from any additional proxy compression.
 Preserve the admin/MCP `no-transform` directive.
@@ -49,19 +49,28 @@ docker build -t kano-navi:local .
 KANO_IMAGE=kano-navi:local docker compose up -d --pull never
 ```
 
-The Go backend has its own image. It serves the same routes from one static
-binary without a Node runtime and accepts the same environment and `/app/data`
-volume, so the Compose file works unchanged with `KANO_IMAGE` pointed at it:
+The image is built from `scratch`: one static Go binary, the built frontend,
+the bundled assets and a CA bundle. It has no shell and no Node runtime. The
+container health check runs `kano-go healthcheck`. One-shot maintenance
+commands run against the mounted `./data`:
 
 ```bash
-make go-docker-build
-KANO_IMAGE=kano-navi-go-standalone:ci docker compose up -d --pull never
+docker compose run --rm kano seed
+docker compose run --rm kano sync
+docker compose run --rm kano migrate-llm
 ```
 
-Stop the TypeScript container first: only one service may write a snapshot.
-The Go listener compresses with gzip only. See
-[Go standalone backend](../architecture/go-standalone.md) for what it does not
-yet cover and how to roll back.
+### Upgrading from a TypeScript release
+
+Releases up to 0.1.2 shipped a Node image. The Go image accepts the same
+environment and `/app/data` volume, so `docker-compose.yml` and `.env` are
+unchanged. Back up `./data`, then update as usual; the first start upgrades
+the snapshot in place and keeps every record, provider and workflow. Provider
+keys stay readable with the same `LLM_SECRETS_KEY`.
+
+To roll back, stop the container and pin the previous image with
+`KANO_IMAGE=yexca/kano-navi:0.1.2`. Only one service may own a snapshot at a
+time. See [Go backend](../architecture/go-standalone.md#rollback).
 
 Version tags run the Release workflow, which builds once and publishes the
 same image to Docker Hub and GHCR with version, major/minor, and `latest` tags.
@@ -78,13 +87,15 @@ docker compose -f docker-compose.dev.yml up -d --build --renew-anon-volumes
 
 Open `http://localhost:7657` for the dashboard or
 `http://localhost:7657/admin` for the password-free development console.
-The development image mounts Express routes in Vite's HTTP server. Frontend,
-`/api`, `/media`, and `/mcp` share container port `7657`, published on loopback.
+The development image carries the Go toolchain and Node. It builds and starts
+the Go backend and runs Vite, which proxies `/api`, `/media`, and `/mcp` to it;
+everything shares container port `7657`, published on loopback.
 Set `KANO_PORT` to change the host port. The repository is mounted for frontend hot reload,
-while an anonymous volume keeps Linux dependencies separate from any host
-`node_modules`. Rebuild after dependency changes; `--renew-anon-volumes`
-refreshes that dependency volume. API source changes require
-`docker compose -f docker-compose.dev.yml restart`. The existing `./data`
+while anonymous volumes keep Linux dependencies and the Linux backend binary
+separate from any host `node_modules` and `backend-go/bin`. Rebuild after
+dependency changes; `--renew-anon-volumes` refreshes those volumes. Backend
+source changes require `docker compose -f docker-compose.dev.yml restart`,
+which rebuilds the binary. The existing `./data`
 directory persists SQLite and media. A local `.env` is optional and is read
 by the server when present; the Compose file sets development mode and disables
 workflow timers.
@@ -102,12 +113,12 @@ its own data volume and synthetic authentication, checks public pages and API
 contracts, and removes the container and anonymous volume afterwards.
 It does not mount the operator data/ directory or load .env.
 
-The runtime stage copies `server/`, `scripts/`, the shared `src/lib/` directory
-and the history media catalog alongside the built frontend and production
-dependencies. Shared server imports, including stream identity and their local
-dependencies, therefore survive packaging. Production still starts through
-`server/index.ts`, validates authentication before opening SQLite and stores
-runtime state only in the `/app/data` volume.
+The runtime stage copies the `kano-go` binary, `dist/`, `public/` and a CA
+bundle. The embedded schema and static seeds are compiled into the binary.
+Production starts through `kano-go serve`, validates authentication before
+opening SQLite and stores runtime state only in the `/app/data` volume.
+`ts.Dockerfile` (`make ts-docker-build`) still builds the previous TypeScript
+image for a locally built rollback.
 
 ## Related Docs
 

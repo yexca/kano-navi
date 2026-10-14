@@ -7,11 +7,11 @@ DOCKER ?= docker
 DOCKER_BUILD ?= $(DOCKER) build
 DOCKER_BUILD_ARGS ?=
 DOCKER_IMAGE ?= kano-navi:ci
-GO_STANDALONE_IMAGE ?= kano-navi-go-standalone:ci
+TS_DOCKER_IMAGE ?= kano-navi-ts:ci
 GO_BINARY ?= backend-go/bin/kano-go$(if $(filter Windows_NT,$(OS)),.exe,)
 
 .PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-test
-.PHONY: go-build go-start go-docker-build
+.PHONY: go-build go-start go-docker-build ts-start ts-docker-build
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-server
 .PHONY: smoke side-by-side-http public-read-gate public-read-benchmark public-read-deployment-smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
@@ -36,15 +36,22 @@ build:
 preview:
 	$(NPM) run preview
 
-start: export NODE_ENV := production
-start:
+# The Go binary owns the whole site: it reads .env, data/ and dist/ from the
+# repository root. Run `make build` first so dist/ exists.
+start: go-build
+	$(GO_BINARY) serve
+
+seed: go-build
+	$(GO_BINARY) seed
+
+sync: go-build
+	$(GO_BINARY) sync
+
+# Rollback path: the previous TypeScript service on the same data/ directory.
+# Never run it while the Go service is running against that snapshot.
+ts-start: export NODE_ENV := production
+ts-start:
 	$(NODE) server/index.ts
-
-seed:
-	$(NPM) run seed
-
-sync:
-	$(NPM) run sync
 
 go-check:
 	$(NODE) scripts/go-check.mjs
@@ -56,13 +63,9 @@ go-test:
 go-build:
 	$(GO) -C backend-go build -trimpath -o $(patsubst backend-go/%,%,$(GO_BINARY)) ./cmd/kano-go
 
-# The Go binary owns the whole site: it reads .env, data/ and dist/ from the
-# repository root exactly like `make start` does for the TypeScript service.
-go-start: go-build
-	$(GO_BINARY) -standalone
+go-start: start
 
-go-docker-build:
-	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -f go.Dockerfile -t $(GO_STANDALONE_IMAGE) .
+go-docker-build: docker-build
 
 format:
 	$(NPM) run format
@@ -116,13 +119,18 @@ public-read-gate:
 docker-build:
 	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -t $(DOCKER_IMAGE) .
 
+ts-docker-build:
+	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -f ts.Dockerfile -t $(TS_DOCKER_IMAGE) .
+
 production-smoke:
 	$(NODE) scripts/production-smoke.ts $(DOCKER_IMAGE)
 
 # Narrow checks use the existing locked installation and never fetch source data.
 ci-style: format-check docs-check test-sensitive sensitive-check
 
-ci-backend: typecheck test-server
+# go-test covers the shipped backend; typecheck and test-server keep the
+# TypeScript reference implementation and the maintenance scripts honest.
+ci-backend: typecheck test-server go-test
 
 ci-frontend: build
 

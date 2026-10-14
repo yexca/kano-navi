@@ -1,20 +1,24 @@
 # Backend and HTTP
 
-## API: `server/app.ts` and `server/index.ts`
+## API: `backend-go/cmd/kano-go` and `internal/httpapi`
 
-`server/app.ts` builds an Express app around an injected database, while
-`server/index.ts` opens the runtime database and listener. Express exposes the
-health and dashboard read endpoints and serves `dist/` in production.
-Development and bundle preview mount this same Express app through
-`server/local-api.ts` in Vite's HTTP server. `/api`, `/media`, and `/mcp` are
-handled before the frontend middleware, keeping authentication, media access,
-and MCP control on the same origin. All entry points default to port `7657`;
-development and preview refuse to switch ports when it is occupied.
+The backend is the Go service described in [Go backend](go-standalone.md).
+`cmd/kano-go` validates credentials, opens the runtime database and starts
+the listener; `internal/httpapi` builds the handler around an injected store,
+exposes the health and dashboard read endpoints and serves `dist/` in
+production. In development and bundle preview Vite serves the frontend and
+proxies `/api`, `/media`, and `/mcp` to the same backend with the browser's
+Host header, keeping authentication, media access, and MCP control on one
+origin. The site defaults to port `7657`; development and preview refuse to
+switch ports when it is occupied. The contracts on this page are
+implementation-independent; the TypeScript files in `server/` are the previous
+implementation of the same contracts.
 Responses should remain stable and sanitized; do not expose
 `raw_json`, stack traces, credentials, or absolute local paths to the browser.
 Ready runtime media is served only through the opaque-ID `/media/:id` route.
 
-`server/admin-api.ts` exposes session, model/schedule/video settings, provider
+The admin API (`internal/httpapi`, `internal/llmadmin`,
+`internal/contentadmin`) exposes session, model/schedule/video settings, provider
 management, the model catalog (`/providers/:id/models`, `/models/discover`,
 `/models/remove`), route targets (`/routes/:route`), saved workflows
 (`/workflows`, `/workflows/:id/run`), paginated event queries, asynchronous
@@ -53,8 +57,8 @@ The summary contains nextEvent, nextStream, latestVideo, latestPost, and counts;
 latestPost survives an empty requested window. Metadata includes configured
 X accounts and the Featured video ID.
 
-server/public-view.ts owns shared public event, synchronization, and selected
-profile-media projections for HTTP and MCP. A public sync summary contains only
+backend-go/internal/publicview owns shared public event, synchronization, and
+selected profile-media projections for HTTP and MCP. A public sync summary contains only
 id, source, start/finish times, status, and a fixed status message. Public profile
 slots contain only id, slot, source, sourceUrl, status, isActive, and publicUrl.
 Cache paths, source references, download errors, and candidate metadata remain
@@ -69,10 +73,11 @@ Selected profile media uses /media/profile/avatar and /media/profile/banner.
 
 ## Text Transfer and Static Caching
 
-Express compression precedes the response handlers. Successful GET/HEAD public
+Compression precedes the response handlers. Successful GET/HEAD public
 dashboard, revision and health JSON, plus build HTML/JavaScript/CSS, negotiate
-gzip, deflate or Brotli through `Accept-Encoding`. Bodies below 1 KiB remain
-uncompressed; Brotli uses quality 4. `Vary: Accept-Encoding` also accompanies
+gzip through `Accept-Encoding`. Bodies below 1 KiB remain uncompressed. The Go
+listener does not produce Brotli or deflate, which the TypeScript listener
+also offered. `Vary: Accept-Encoding` also accompanies
 eligible identity and conditional responses. Existing weak ETags validate the
 uncompressed representation across encodings; 304 and HEAD have no compressed
 body. Range responses, non-success responses, already encoded bodies and

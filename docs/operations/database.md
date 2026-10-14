@@ -12,10 +12,17 @@ The `/history` visual archive has an offline import command:
 environment. See [History and visual archive](../product/history.md) for details.
 
 ```bash
-npm run seed                 # Idempotently add missing initial records
-npm run seed -- --overwrite # Overwrite records with matching IDs from seed-data
-npm run sync                 # Update the snapshot from public sources
+make seed                    # Idempotently add missing static records
+npm run seed -- -overwrite   # Restore the shipped profile, timeline and resources
+make sync                    # Update the snapshot from public sources once
 ```
+
+These run `kano-go seed` and `kano-go sync`. In a container deployment use
+`docker compose run --rm kano seed` (or `sync`, `migrate-llm`), which runs the
+command against the mounted `./data`. Normal operation does not need them:
+the service seeds at startup, and synchronization is started from `/admin`,
+MCP or a workflow timer. A one-shot `sync` shares the service's single-flight
+reservation and reports a busy queue while the service is synchronizing.
 
 Synchronization accesses the network and is therefore not part of the default
 CI build. To debug one source, set `SKIP_X=1` or `SKIP_YOUTUBE=1`; never put a
@@ -25,7 +32,7 @@ Provider keys are managed in `/admin` and encrypted in SQLite with the
 environment-only `LLM_SECRETS_KEY`. With no configured provider key, the
 schedule-extraction stage reports a safe skip. To import a legacy
 `OPENAI_API_KEY` once, set both environment variables and run
-`npm run migrate:llm`; remove the legacy variable afterwards. `SCHEDULE_MESSAGE_ENABLED` controls the single-message detector;
+`kano-go migrate-llm` (`npm run migrate:llm`); remove the legacy variable afterwards. `SCHEDULE_MESSAGE_ENABLED` controls the single-message detector;
 `SCHEDULE_KEYWORD_ENABLED` and `SCHEDULE_VISION_ENABLED` control the board
 path. `SCHEDULE_EXTRACTION_ENABLED` is retained for initial defaults and old
 API compatibility; the stage flags determine what runs after configuration.
@@ -48,9 +55,13 @@ Restore into a stopped deployment and verify health and the public snapshot
 before enabling workflow timers. Avoid simultaneous Windows/Linux access to
 the same SQLite file.
 
-Use additive schema upgrades in server/database.ts. Seeding fills missing
-static IDs; it is not a database restore. The --overwrite option intentionally
-replaces matching seed records and should only be used for reviewed maintenance.
+Use additive schema upgrades in
+backend-go/internal/store/sqlite/schema_upgrade.go. Startup upgrades a snapshot
+from an earlier release in one transaction and never clears it; back up data/
+before the first start of a new release all the same. Seeding fills missing
+static IDs; it is not a database restore. The -overwrite option intentionally
+replaces the shipped static records and should only be used for reviewed
+maintenance.
 
 ## Manual Maintenance
 

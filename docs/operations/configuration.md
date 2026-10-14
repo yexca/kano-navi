@@ -6,9 +6,10 @@
 | ----------------------------- | -------------------- | ------------------------------------------------------------------ |
 | `APP_MODE`                    | `production`         | Explicit `development` bypasses login; production requires it      |
 | `ADMIN_PASSWORD`              | Empty                | Production startup requires at least 12 non-padding characters     |
-| `ADMIN_ORIGIN`                | Empty                | Optional explicit origin accepted by the Go admin sidecar          |
+| `ADMIN_ORIGIN`                | Empty                | Optional explicit origin accepted for admin mutations              |
 | `LLM_SECRETS_KEY`             | Empty                | Required non-blank encryption master key at startup in every mode  |
 | `PORT`                        | `7657`               | Shared frontend/API port for development, preview, and production  |
+| `KANO_API_PORT`               | `7658`               | Development only: loopback port of the backend behind Vite         |
 | `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Initial legacy default for independent schedule stages             |
 | `SCHEDULE_KEYWORD_ENABLED`    | `1`                  | Enable keyword candidate selection                                 |
 | `SCHEDULE_VISION_ENABLED`     | `1`                  | Enable schedule-board LLM extraction                               |
@@ -53,19 +54,17 @@ models, encrypted keys, routes, source accounts, and workflow windows are
 operator settings managed through /admin. Source windows and timer intervals
 are independent.
 
-The Go canary uses `-database` and listens on `:7658` by default. It is
-read-only unless `-enable-admin-writes` is paired with `APP_MODE=development`;
-that flag is for disposable synthetic fixtures only and refuses production
-startup. The Go canary cookie is separate from the TypeScript admin cookie.
+The backend (`kano-go`) reads `.env` from its working directory; variables
+already present in the environment win. The database path is a command-line
+option (`-database`, default `data/database/kano.sqlite`) rather than an
+environment variable, as are `-static` and `-listen`. `KANO_API_PORT` is read
+only by `make dev`/`make preview` and Vite; production serves everything on
+`PORT`.
 
-The phase-ten X recent slice is separately gated by `-enable-x-sync`. It is
-accepted only with `APP_MODE=development`; production startup rejects it before
-opening SQLite. The development process must use a temporary database and must
-not write the same snapshot concurrently with TypeScript. Trigger it through
-the authenticated `POST /api/admin/sources/x/fetch` endpoint using a recent
-window. `before`, `range`, archive search and all non-X source writes return
-`capability_not_migrated`. Disable the flag to roll back to TypeScript source
-synchronization.
+Run with flags only and no command, the binary is the read-only comparison
+sidecar on `:7658`; its `-enable-*` flags require `APP_MODE=development` and a
+disposable database and are used only by the checks described in
+[Go backend migration](../architecture/go-migration.md).
 
 Set `LLM_SECRETS_KEY` before starting development, preview, or production, even
 when no provider has been added. Missing, empty, or whitespace-only values

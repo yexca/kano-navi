@@ -1,57 +1,80 @@
-FROM node:24.19.0-bookworm-slim AS dependencies
+# One static Go binary serves the public API, the operator console, workflows
+# and timers, MCP and the built frontend. Node only builds the frontend; no
+# Node runtime is shipped.
+FROM node:24.19.0-bookworm-slim AS frontend
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
-RUN npm ci
+# Only the Vite build runs here, so native add-ons are not compiled.
+RUN npm ci --ignore-scripts
 
-FROM dependencies AS development
+COPY . .
+RUN npx vite build
+
+FROM golang:1.26.4-bookworm AS backend
+
+WORKDIR /src
+
+COPY backend-go/go.mod backend-go/go.sum ./
+RUN go mod download
+
+COPY backend-go/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/kano-go ./cmd/kano-go \
+  && mkdir -p /out/data
+
+# Development: the Go toolchain builds and runs the backend, Vite serves the
+# frontend with hot reload and proxies /api, /media and /mcp to it.
+FROM golang:1.26.4-bookworm AS development
+
+COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
+COPY --from=frontend /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+  && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 ENV NODE_ENV=development \
     APP_MODE=development \
     PORT=7657
 
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY backend-go/go.mod backend-go/go.sum ./backend-go/
+RUN go -C backend-go mod download
+
 COPY . .
+# Warm the build cache so the first start does not compile every dependency.
+RUN go -C backend-go build -o /tmp/kano-go ./cmd/kano-go && rm /tmp/kano-go
 EXPOSE 7657
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:7657/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
-FROM dependencies AS build
+FROM scratch AS runtime
 
-COPY . .
-RUN npm run build \
-  && npm prune --omit=dev
-
-FROM node:24.19.0-bookworm-slim AS runtime
-
-ENV NODE_ENV=production \
-    APP_MODE=production \
+ENV APP_MODE=production \
     PORT=7657
 
 WORKDIR /app
 
-COPY --from=build /app/package.json /app/package-lock.json ./
-COPY --from=build /app/LICENSE ./LICENSE
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/public ./public
-COPY --from=build /app/server ./server
-COPY --from=build /app/scripts ./scripts
-COPY --from=build /app/src/history/media.ts /app/src/history/media-catalog.json ./src/history/
-COPY --from=build /app/src/lib ./src/lib
-
-RUN mkdir -p /app/data
+COPY --from=backend /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=backend /out/kano-go /app/kano-go
+COPY --from=backend /out/data /app/data
+COPY --from=frontend /app/dist /app/dist
+# Bundled profile and schedule fallbacks are read from public/assets.
+COPY --from=frontend /app/public /app/public
+COPY LICENSE /app/LICENSE
 
 VOLUME ["/app/data"]
 EXPOSE 7657
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:7657/api/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+  CMD ["/app/kano-go", "healthcheck"]
 
-CMD ["node", "server/index.ts"]
+# `docker run <image> seed|sync|migrate-llm` runs a maintenance command
+# against the mounted /app/data instead of starting the service.
+ENTRYPOINT ["/app/kano-go"]
+CMD ["serve"]

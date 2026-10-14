@@ -26,7 +26,7 @@ date window cannot enlarge these public sources' finite coverage, so the run
 is marked partial and reports the limitation. Historical controls require
 environment-only `X_API_BEARER_TOKEN` (with full-archive access) or
 `YOUTUBE_API_KEY`. These credentials are sent in HTTP headers, never URLs or
-SQLite. The optional adapter in `scripts/source-history.ts` uses
+SQLite. The adapter in `backend-go/internal/source/history` uses
 [X full-archive search](https://docs.x.com/x-api/posts/search/quickstart/full-archive-search)
 and [YouTube date-window search](https://developers.google.com/youtube/v3/docs/search/list).
 Source access, quota, and search coverage still depend on the platform. YouTube
@@ -59,8 +59,9 @@ without fetch windows retains the existing incremental behavior described above.
 ## Modular Steps and Timers
 
 Synchronization is split into modular steps declared in
-`server/workflow-catalog.ts`, executed in this order: `x`, `youtube`, `media`,
-`schedule`. `npm run sync` still runs every step not disabled by `SKIP_*`.
+`backend-go/internal/jobs` (`StepOrder`), executed in this order: `x`,
+`youtube`, `media`, `schedule`. `kano-go sync` (`make sync`) runs every step
+and records the ones disabled by `SKIP_*` as skipped.
 A saved workflow chooses a subset; its run records `sync_runs.source =
 workflow` and exposes per-step progress (`pending`, `running`, `completed`,
 `partial`, `failed`, `skipped`) through `/api/admin/sync/jobs`. When a selected
@@ -84,12 +85,13 @@ its failure status, and always release the single-flight queue after settlement.
 
 ## Implementation Ownership
 
-server/workflow-catalog.ts owns the ordered step catalog. scripts/sync.ts maps
-steps to runners and runSync({ steps }) reports progress for a chosen subset.
-A new module needs one catalog entry and one runner; the console reads the
-catalog rather than maintaining another step list. server/sync-jobs.ts owns
-the single-flight asynchronous queue, and server/workflow-scheduler.ts starts
-due saved workflows through that same manager.
+backend-go/internal/jobs owns the ordered step catalog and presents durable
+workflow runs as operator jobs. internal/workflow maps steps to their adapters
+(`SourceSteps`), executes runs with leases, retries and recovery, and owns the
+single-flight queue and the timer that starts due saved workflows through it.
+A new module needs one catalog entry and one step adapter; the console reads
+the catalog rather than maintaining another step list. See
+[Go backend](go-standalone.md#jobs-and-workflows).
 
 Adapters, candidate selection, model routes, modality, retries, and per-post
 reprocess behavior are defined in [Sources and extraction](sources.md).

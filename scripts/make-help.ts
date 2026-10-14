@@ -1,17 +1,17 @@
 const groups = {
   Development: {
     install: "Install locked npm dependencies",
-    dev: "Start Vite and Express on one port (default 7657)",
-    "dev-client": "Alias for the shared Vite and Express development server",
-    "dev-server": "Start Express only",
+    dev: "Start the Go backend and Vite together (frontend on 7657)",
+    "dev-client": "Start Vite only; it proxies the API to KANO_API_PORT",
+    "dev-server": "Build and start the Go backend only on KANO_API_PORT",
     build: "Build the production frontend",
-    preview: "Preview the Vite bundle with the API (default 7657)",
-    start: "Start the API and serve dist (configure production auth first)",
+    preview: "Preview the built frontend with the Go backend (default 7657)",
+    start:
+      "Build the Go backend and serve the whole site (configure production auth first)",
     seed: "Add missing static seed records to the runtime database",
-    sync: "Fetch configured external sources and update runtime snapshots",
+    sync: "Fetch configured external sources once and update runtime snapshots",
     "go-build": "Build the Go backend binary into backend-go/bin",
-    "go-start":
-      "Start the standalone Go backend serving dist (configure production auth first)",
+    "ts-start": "Rollback: start the previous TypeScript service",
   },
   Validation: {
     format: "Format supported files (writes changes)",
@@ -20,27 +20,27 @@ const groups = {
     "docs-check": "Check local Markdown links",
     "sensitive-check": "Scan workspace source for sensitive information",
     "test-sensitive": "Test scanner behavior",
-    "test-server": "Test SQLite, HTTP, sync, media, and LLM contracts",
+    "test-server": "Test the TypeScript reference implementation's contracts",
     "go-test": "Run Go backend contracts and vet without Docker",
     "go-check":
       "Check Go formatting, contracts, cross-builds, and disposable containers",
-    smoke: "Check a seeded temporary SQLite snapshot through local HTTP",
+    smoke: "Check a seeded temporary SQLite snapshot through the Go backend",
     "public-read-benchmark":
       "Measure TypeScript and Go public reads over 10,000 synthetic records",
     "public-read-deployment-smoke":
       "Run the canary/test TypeScript and Go container rehearsal",
     "ci-style": "Check formatting, documentation, and source privacy",
-    "ci-backend": "Check types and run server contract tests",
+    "ci-backend": "Check types and run the TypeScript and Go contract tests",
     "ci-frontend": "Build the frontend",
     check: "Run installed-dependency checks and local API smoke",
     "public-read-gate":
       "Install, compare TypeScript/Go public reads, check Go, privacy, and docs",
   },
   "Docker and full CI": {
-    "docker-build": "Build DOCKER_IMAGE (default kano-navi:ci)",
+    "docker-build": "Build the Go image DOCKER_IMAGE (default kano-navi:ci)",
     "production-smoke": "Check the built image in a disposable container",
-    "go-docker-build":
-      "Build the standalone Go image GO_STANDALONE_IMAGE (default kano-navi-go-standalone:ci)",
+    "ts-docker-build":
+      "Rollback: build the TypeScript image TS_DOCKER_IMAGE (default kano-navi-ts:ci)",
     "ci-local": "Run checks, build the image, and check production runtime",
     ci: "Install dependencies, then run ci-local (requires Docker)",
   },
@@ -54,5 +54,5 @@ for (const [group, targets] of Object.entries(groups)) {
   console.log("")
 }
 console.log(
-  "Aliases: check-docs -> docs-check; check-sensitive/privacy-check -> sensitive-check",
+  "Aliases: check-docs -> docs-check; check-sensitive/privacy-check -> sensitive-check; go-start -> start; go-docker-build -> docker-build",
 )

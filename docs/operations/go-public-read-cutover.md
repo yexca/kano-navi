@@ -2,7 +2,13 @@
 
 ## Current state and ownership
 
-Production traffic remains on the TypeScript service at `:7657`. Go is a
+> Historical record. The migration is complete: releases run the Go backend
+> described in [Go backend](../architecture/go-standalone.md). This page
+> documents the earlier read-only canary rehearsal, which CI still runs as a
+> comparison check.
+
+At the time of this rehearsal, production traffic remained on the TypeScript
+service at `:7657`. Go is a
 read-only side-by-side/canary process and is not in the production request
 path. It opens a maintained SQLite snapshot with SQLite read-only mode and
 reads runtime media without downloading or replacing files.

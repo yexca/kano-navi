@@ -51,16 +51,16 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: make install
-      - name: Set up Go for dashboard parity
+      - name: Set up Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: backend-go/go.mod
           cache-dependency-path: backend-go/go.sum
-      - name: Run ordered public-read gate
+      - name: Run backend contracts and the ordered public-read gate
         run: make public-read-gate
 
   go:
-    name: Go read-only backend
+    name: Go backend
     needs: style
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -114,9 +114,12 @@ jobs:
         with:
           node-version: "24.19.0"
           cache: npm
-      - name: Install locked dependencies
-        run: make install
-      - name: Check isolated seed and HTTP snapshot
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+      - name: Check isolated seed and HTTP snapshot through the Go backend
         run: make smoke
 
   docker:
@@ -139,9 +142,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/kano-buildx-cache
-          key: docker-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Dockerfile', '.dockerignore', 'package.json', 'package-lock.json', 'server/**', 'scripts/**', 'src/**', 'public/**', 'index.html', 'tsconfig*.json', 'vite.config.ts', 'tailwind.config.ts', 'Makefile', 'LICENSE') }}
+          key: docker-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Dockerfile', '.dockerignore', 'package.json', 'package-lock.json', 'backend-go/**', 'src/**', 'public/**', 'index.html', 'tsconfig*.json', 'vite.config.ts', 'tailwind.config.ts', 'Makefile', 'LICENSE') }}
           restore-keys: docker-${{ runner.os }}-${{ runner.arch }}-
-      - name: Build production image
+      - name: Build production image (Go backend and built frontend)
         run: >-
           make DOCKER_IMAGE=kano-navi:ci
           DOCKER_BUILD="docker buildx build"

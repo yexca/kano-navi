@@ -1,11 +1,16 @@
 # Testing and CI
 
-For Go, `make go-test` runs contracts and vet without Docker. `make go-check`
-also validates formatting, CGO-free operation, Linux/Windows builds and
-disposable read-only/development containers. Source tests use fake transports;
-container workflow smoke executes only an unsupported blocked step and never
-synchronizes sources. See
-[Go source workflows and media downloads](../architecture/go-source-workflows.md).
+The shipped backend is Go. `make go-test` runs its contracts and vet without
+Docker. `make go-check` also validates formatting, CGO-free operation,
+Linux/Windows builds and disposable read-only/development containers. Source
+tests, including the historical-window API adapter, use fake transports and
+synthetic credentials; no check synchronizes live sources. See
+[Go backend](../architecture/go-standalone.md).
+
+`make test-server` runs the TypeScript reference implementation's tests, and
+the comparison scripts (`dashboard-parity`, `side-by-side-http`) hold the Go
+projections to it. Change behavior in Go first, then keep the reference and
+these comparisons passing.
 
 The Makefile is the canonical validation entry point. GitHub Actions invokes
 its targets so local and hosted checks protect the same contracts. Use the
@@ -18,15 +23,16 @@ CI/tooling work, and pre-commit validation.
 | ----------------------------------------------------- | --------------------- | ------------------------------ |
 | Documentation links                                   | make docs-check       | Node.js                        |
 | Formatting, docs, scanner behavior and source privacy | make ci-style         | Locked dependencies            |
-| SQLite, API, sync, media or extraction                | make ci-backend       | Locked dependencies            |
+| Go backend only                                       | make go-test          | Go                             |
+| SQLite, API, sync, media or extraction                | make ci-backend       | Locked dependencies and Go     |
 | TypeScript source, scripts, tests, and config         | make typecheck        | Locked dependencies            |
 | Public or admin UI                                    | make ci-frontend      | Locked dependencies            |
-| Seed and HTTP snapshot integration                    | make smoke            | Locked dependencies            |
+| Seed and HTTP snapshot integration                    | make smoke            | Node.js and Go                 |
 | Production image                                      | make docker-build     | Docker with Linux containers   |
 | Production entry point, pages and guards              | make production-smoke | The locally built DOCKER_IMAGE |
-| All checks without Docker or installation             | make check            | Locked dependencies            |
+| All checks without Docker or installation             | make check            | Locked dependencies and Go     |
 | Full locally portable Actions validation              | make ci-local         | Locked dependencies and Docker |
-| Install then full validation                          | make ci               | Node/npm and Docker            |
+| Install then full validation                          | make ci               | Node/npm, Go and Docker        |
 | Manual privacy review before handoff or commit        | make sensitive-check  | Node and Git                   |
 
 make install uses npm ci. Narrow targets and ci-local do not reinstall.
@@ -96,16 +102,14 @@ access package registries; that is separate from platform-data synchronization.
 
 For UI changes, run the build and review the affected pages at desktop and
 mobile widths, including loading, empty, error, stale, and dialog states.
-For API/schema changes, run server tests and smoke. The smoke helper seeds a
-temporary SQLite file twice, checks fresh snapshot reads, revision polling,
-unready media and unauthenticated admin access, then removes the fixture.
-It never opens the operator database or imports .env. Initialization may create
+For API/schema changes, run the backend tests and smoke. The smoke helper
+builds the Go backend into a temporary directory, runs `kano-go seed` twice
+against a temporary SQLite file, starts `kano-go serve` on a loopback port,
+checks fresh snapshot reads, revision polling, unready media and
+unauthenticated admin access, then removes the fixture. The backend runs from
+that temporary directory with an explicit synthetic environment, so it never
+opens the operator database or reads .env. Initialization may create
 the standard empty cache directories; it does not download media.
-
-`server/local-api.test.ts` checks the shared development and preview listener
-with an injected in-memory snapshot and temporary frontend. It verifies page
-routes, API reads, media and MCP boundaries, and same-origin admin login without
-opening the runtime entry point or loading operator credentials.
 
 `server/http-performance.test.ts` checks wire-level compression negotiation,
 decoded content, weak ETags, conditional/HEAD/range responses, static cache
@@ -130,8 +134,8 @@ for the recorded before/after conditions, results and limitations.
 Production smoke creates a disposable container from the built image, uses
 synthetic production authentication, disables workflow timers, and publishes a
 random loopback-only port. Its anonymous data volume is removed in cleanup.
-It validates server/index.ts startup, fresh SQLite, public API, SPA page routes,
-and the protected admin API. It does not mount host data or pass host secrets.
+It validates the image's `kano-go serve` entry point, fresh SQLite, public API,
+SPA page routes, and the protected admin API. It does not mount host data or pass host secrets.
 This HTTP check does not claim to verify browser interaction.
 
 ## GitHub Actions
@@ -140,23 +144,29 @@ The CI workflow runs on pull requests, pushes to main, and reusable workflow
 calls from Release:
 
 ```text
-Style -> Backend, Frontend, API smoke, Docker image -> Validate
+Style -> Backend, Go backend, Frontend, API smoke, Docker image -> Validate
 ```
 
-Style runs make ci-style. Backend and Frontend run their corresponding narrow
-Make targets. API smoke runs make smoke. Docker image runs make docker-build
-with Buildx cache arguments and then make production-smoke against that image.
+Style runs make ci-style. Backend runs make public-read-gate: the TypeScript
+reference and Go contract tests, the TypeScript/Go comparisons and the Go
+gate. Go backend runs make go-check and the container rehearsal. Frontend runs
+make ci-frontend. API smoke runs make smoke against the Go backend. Docker
+image runs make docker-build, which compiles the Go backend and the frontend
+into the release image, with Buildx cache arguments and then make
+production-smoke against that image.
 Every runner has a timeout, locked installation, and read-only repository
 permissions. Checkout does not persist credentials. Caches speed installation
 and image layers but never skip validation targets. Actions are pinned to
-reviewed commit SHAs; Node 24.19.0 matches the Docker build toolchain.
+reviewed commit SHAs; Node 24.19.0 and the Go version in backend-go/go.mod
+match the Docker build toolchain.
 
-`make ci-backend` checks all TypeScript files before the server tests.
+`make ci-backend` checks all TypeScript files before the reference tests, then
+runs the Go tests and vet.
 `make ci-frontend` runs the same type check before Vite builds the browser bundle.
 Node executes server and test `.ts` files directly; runtime execution alone does
 not check types. No source files are excluded with `@ts-nocheck`.
 
-Validate always evaluates all five job results and fails on failure,
+Validate always evaluates every job result and fails on failure,
 cancellation, or a skipped job. There is no path-based job selection; even
 documentation-only changes run the complete sequence. The existing Validate
 and Docker image check names are preserved. Release calls this workflow rather

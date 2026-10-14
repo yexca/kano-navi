@@ -1,9 +1,10 @@
-import { listeningPort } from "../server/http-address.ts"
 import assert from "node:assert/strict"
+import { execFileSync, spawn } from "node:child_process"
 import fs from "node:fs"
+import { createServer } from "node:net"
 import os from "node:os"
 import path from "node:path"
-import { once } from "node:events"
+import { setTimeout as delay } from "node:timers/promises"
 import { fileURLToPath } from "node:url"
 
 export async function verifySnapshot(
@@ -51,44 +52,82 @@ export async function verifySnapshot(
   }
 }
 
+async function freePort() {
+  const server = createServer()
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const address = server.address()
+  await new Promise<void>((resolve) => server.close(() => resolve()))
+  if (!address || typeof address === "string")
+    throw new Error("No loopback port is available")
+  return address.port
+}
+
 async function runLocalSmoke() {
-  // Do not import dotenv or the runtime entry point: neither local .env nor the
-  // operator database belongs to a validation fixture.
-  const [{ createApp }, { initializeDatabase, seedDatabase }] =
-    await Promise.all([
-      import("../server/app.ts"),
-      import("../server/database.ts"),
-    ])
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+  const go = process.env.GO || "go"
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "kano-smoke-"))
-  let database
+  const binary = path.join(
+    temporaryRoot,
+    process.platform === "win32" ? "kano-go.exe" : "kano-go",
+  )
+  const database = path.join(temporaryRoot, "data", "database", "kano.sqlite")
+  // The backend runs from the temporary directory with an explicit
+  // environment: neither the local .env nor the operator database belongs to
+  // a validation fixture.
+  const env = {
+    PATH: process.env.PATH,
+    SystemRoot: process.env.SystemRoot,
+    APP_MODE: "production",
+    ADMIN_PASSWORD: "synthetic-password",
+    LLM_SECRETS_KEY: "synthetic-encryption-key",
+    WORKFLOW_SCHEDULER_ENABLED: "0",
+    MCP_CONTROL_TOKEN: "",
+  }
   let server
   try {
-    database = initializeDatabase({
-      filename: path.join(temporaryRoot, "snapshot.sqlite"),
+    execFileSync(go, ["build", "-o", binary, "./cmd/kano-go"], {
+      cwd: path.join(root, "backend-go"),
+      stdio: ["ignore", "inherit", "inherit"],
     })
     // A second seed protects the idempotent initialization contract.
-    seedDatabase(database)
-    const app = createApp({
-      database,
-      databaseLabel: "smoke/snapshot.sqlite",
-      adminMode: "production",
-      adminPassword: "synthetic-password",
-      mcpControlToken: "",
-      startWorkflowScheduler: false,
-    })
-    server = app.listen(0, "127.0.0.1")
-    await once(server, "listening")
-    await verifySnapshot(`http://127.0.0.1:${listeningPort(server)}`)
+    for (let pass = 0; pass < 2; pass += 1)
+      execFileSync(binary, ["seed", "-database", database], {
+        cwd: temporaryRoot,
+        env,
+        stdio: ["ignore", "ignore", "inherit"],
+      })
+    const port = await freePort()
+    server = spawn(
+      binary,
+      ["serve", "-database", database, "-listen", `127.0.0.1:${port}`],
+      { cwd: temporaryRoot, env, stdio: ["ignore", "ignore", "inherit"] },
+    )
+    const origin = `http://127.0.0.1:${port}`
+    let healthy = false
+    for (let attempt = 0; attempt < 50 && !healthy; attempt += 1) {
+      if (server.exitCode != null)
+        throw new Error("The backend exited before health was ready")
+      try {
+        const response = await fetch(`${origin}/api/health`, {
+          signal: AbortSignal.timeout(1000),
+          redirect: "error",
+        })
+        healthy = response.ok
+      } catch {
+        // The listener may still be starting; retry within the fixed budget.
+      }
+      if (!healthy) await delay(200)
+    }
+    if (!healthy) throw new Error("Backend health did not become ready")
+    await verifySnapshot(origin)
     console.log("API smoke passed (isolated SQLite, seed, reads, admin guard).")
   } finally {
-    if (server) {
-      server.closeAllConnections()
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      )
+    if (server && server.exitCode == null) {
+      const exited = new Promise((resolve) => server.once("exit", resolve))
+      server.kill()
+      await exited
     }
-    database?.close()
-    fs.rmSync(temporaryRoot, { recursive: true, force: true })
+    fs.rmSync(temporaryRoot, { recursive: true, force: true, maxRetries: 5 })
   }
 }
 

@@ -1,52 +1,84 @@
-# Go standalone backend
+# Go backend
 
-Phase twelve lets the Go binary own the whole site. `kano-go -standalone`
-serves the public API, the operator console, workflows and timers, MCP and the
-built frontend from one process, against the same SQLite snapshot and `data/`
-tree the TypeScript service uses. The TypeScript service and image remain in
-the repository as the rollback path; the published image has not been switched.
+The Go binary in `backend-go/` is the backend. `kano-go serve` runs the public
+API, the operator console, workflows and timers, schedule extraction, MCP and
+the built frontend from one process, against the SQLite snapshot and `data/`
+tree. Releases, the published image, local development and CI all run it; no
+Node runtime is shipped. Node remains the frontend build toolchain.
 
-Without `-standalone` the binary is still the read-only sidecar described in
-[Go backend migration](go-migration.md), with its development-only flags.
+The TypeScript files in `server/` and the sync/seed scripts are the previous
+implementation. They stay in the repository as the rollback path and as the
+reference side of the comparison checks; see [Rollback](#rollback).
 
-## Running
+## Commands
 
-```bash
-make build      # frontend into dist/
-make go-start   # builds backend-go/bin/kano-go and runs it with -standalone
+```text
+kano-go serve        Serve the whole site (API, console, workflows, MCP, frontend)
+kano-go seed         Create the database if missing and add missing static records
+kano-go sync         Run one full synchronization and exit
+kano-go migrate-llm  Seal OPENAI_API_KEY as the key of the openai-default provider
+kano-go healthcheck  Probe the local service and exit
 ```
 
-The process reads `.env` from the working directory (existing environment
-variables win), `data/database/kano.sqlite`, and `dist/`. It listens on `PORT`
-(default `7657`). `-database`, `-static` and `-listen` override those paths.
-`make go-docker-build` builds `go.Dockerfile`: a scratch image containing the
-binary, `dist/`, `public/` and a CA bundle, with `/app/data` as its volume and
-`kano-go -healthcheck` as the container health check. It accepts the same
-environment as the TypeScript image, so the existing Compose file works with
-`KANO_IMAGE` pointed at it.
+Every command reads `.env` from the working directory; variables already in
+the environment win. `-database` overrides `data/database/kano.sqlite`, and
+`serve` also accepts `-static` (default `dist`) and `-listen` (default `PORT`,
+`7657`). `seed -overwrite` restores the shipped profile, timeline and resource
+wording; it never touches source snapshots, events, media or providers.
+`migrate-llm -force` replaces an already stored key.
 
-Do not run the Go and TypeScript services against the same snapshot at the
-same time. Both write SQLite and both would start timed workflows.
+From the repository root:
+
+```bash
+make build   # frontend into dist/
+make start   # builds backend-go/bin/kano-go and runs `kano-go serve`
+make seed    # or: make sync
+```
+
+The npm scripts `start`, `seed`, `sync` and `migrate:llm` run the same commands
+through `scripts/run-app.mjs`. In the image, `docker compose run --rm kano sync`
+(or `seed`, `migrate-llm`) runs a command against the mounted `/app/data`.
+
+`kano-go sync` uses the same executor and SQLite single-flight reservation as
+the service. If the service is already synchronizing, the command reports a
+busy queue instead of starting a second run.
+
+Running the binary with flags only (no command) keeps the read-only sidecar
+described in [Go backend migration](go-migration.md). Only the comparison
+checks use it.
+
+## Development
+
+`make dev` builds the backend, starts it on `127.0.0.1:KANO_API_PORT` (default
+`7658`) and starts Vite on `PORT`. Vite serves the frontend with hot reload and
+proxies `/api`, `/media` and `/mcp` to the backend with the browser's Host
+header, so authentication, media and MCP stay on one origin. `make preview`
+does the same with the built bundle. Restart after changing Go source.
 
 ## Startup order
 
 1. `ADMIN_PASSWORD` (production default, at least 12 non-padding characters)
    and a non-blank `LLM_SECRETS_KEY` are validated before SQLite is opened.
-2. A missing database is created from the embedded schema and public static
-   seeds. Source snapshots, Featured data and providers start empty.
-3. An existing snapshot from an earlier release is upgraded additively: missing
-   tables, columns and indexes are added from the embedded schema, followed by
-   the documented backfills (schedule periods, post account handles, focus
-   video IDs, provider capabilities and retries, the one-time route-target copy,
-   default catalog models, and the message/board route defaults). Nothing is
-   dropped, rebuilt or cleared. A database without the core tables, or one that
-   predates `events.starts_on`, is refused unchanged; start the TypeScript
-   service once to rebuild it.
+2. A missing database is created from the embedded schema
+   (`internal/store/sqlite/bootstrap.sql`) and public static seeds. Source
+   snapshots, Featured data and providers start empty.
+3. An existing snapshot from an earlier release is upgraded in one
+   transaction: missing tables, columns and indexes are added from the embedded
+   schema, followed by the documented backfills (schedule periods, post account
+   handles, focus video IDs, provider capabilities and retries, the one-time
+   route-target copy, default catalog models, and the message/board route
+   defaults). A snapshot whose `events` table predates event sources is rebuilt
+   in place: every row keeps its ID, gains its Japan calendar date and becomes
+   its own source evidence, and events curated from X are locked. Nothing else
+   is dropped or cleared. A database without the core tables is refused
+   unchanged.
 4. Missing static seed rows are inserted; existing rows and settings are kept.
 5. The selected avatar and banner are reconciled with the files on disk
    (`active_sha256`, `active_mime_type`), bumping the dashboard revision only
    when something changed.
-6. Interrupted workflow runs are recovered, then the timer starts unless
+6. A new installation receives the two unscheduled starting workflows
+   (`full-refresh`, `sources-only`) once; deleting them does not recreate them.
+7. Interrupted workflow runs are recovered, then the timer starts unless
    `WORKFLOW_SCHEDULER_ENABLED=0`.
 
 ## Route ownership
@@ -57,6 +89,7 @@ same time. Both write SQLite and both would start timed workflows.
 | Session, login, origin guard                   | `internal/adminauth`                                                     |
 | Events, posts, videos, run reads               | `internal/httpapi` + `store/sqlite`                                      |
 | Workflows, jobs, source fetch                  | `internal/httpapi/admin_compat.go`, `internal/jobs`, `internal/workflow` |
+| Historical source windows                      | `internal/source/history`, `internal/workflow/history_steps.go`          |
 | Config, providers, models, routes              | `internal/llmadmin`                                                      |
 | Profile media, schedule images, post reprocess | `internal/contentadmin`                                                  |
 | Schedule extraction step                       | `internal/schedule`                                                      |
@@ -87,24 +120,52 @@ Differences from the TypeScript job manager that operators can observe:
 
 Each step's counters are merged into the job's `sync_runs.counts_json` row.
 
-## Not yet in Go
+## Historical source windows
 
-- Historical source windows (`before` and `range`) through the X and YouTube
-  APIs. `GET /api/admin/sources/fetch` reports `historyAvailable: false` and
-  those modes are rejected with a validation message.
-- The rebuilding migration for databases that predate event sources.
-- The `seed`, `sync` and `migrate:llm` command-line entry points. Seeding
-  happens at startup; synchronization is started from the console, MCP or a
-  timer.
-- Brotli. Public JSON and build text are gzip-compressed with the same
-  path rules as the Express listener.
-- Vite development still attaches the TypeScript API. Use `make go-start`
-  against a build to exercise the Go backend.
+`POST /api/admin/sources/:source/fetch` accepts `recent`, `before` and `range`
+windows. The selected window is frozen on the run (`workflow_runs.
+fetch_windows_json`), so a recovered or retried run never changes it.
+
+`before` and `range` use the official APIs and need the environment-only
+`X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY`; `GET /api/admin/sources/fetch`
+reports `historyAvailable` per source and the request is rejected with a
+validation message when the credential is missing. With the credential, a
+`recent` window is also served by the API (YouTube still reads the feed to
+refresh reservations); without it, `recent` uses the public page or feed.
+Manual and timed runs of a saved workflow use their `sourceLookbackDays` as
+that rolling `recent` window. A full sync or scan (console, MCP or
+`kano-go sync`) carries no window and stays incremental.
+
+`internal/source/history` calls only `api.x.com/2/tweets/search/all` and
+`www.googleapis.com/youtube/v3/search`. Credentials travel as request headers,
+redirects are rejected, responses are limited to 4 MiB, and failures are
+reduced to controlled codes (`source_api_http_<status>`,
+`source_api_invalid_response`, ...) before they reach run history. Each page
+commits in one transaction with its continuation in `sync_state`
+(`x-window`/`youtube-window`, and `x-backfill`/`youtube-backfill` for `before`),
+so a repeated fetch resumes after the last committed page and the incremental
+cursors are never touched. Checkpoint keys match the ones the TypeScript
+implementation stored. X accounts rotate across runs and share the
+`X_MAX_STATUS_REQUESTS` budget; pages per account are bounded by
+`SOURCE_HISTORY_MAX_PAGES`. The contract is described in
+[Workflows](workflows.md#fetch-windows-and-historical-backfill).
+
+## Transfer
+
+Public JSON and build text are gzip-compressed with the path rules in
+[Backend](backend.md#text-transfer-and-static-caching). The Go listener does
+not produce Brotli or deflate; clients that advertise only those receive the
+identity representation.
 
 ## Rollback
 
-Stop the Go process and start the TypeScript service on the same `data/`
-directory. The additive `workflow_*` tables are ignored by TypeScript, and
+The previous release image (`yexca/kano-navi:0.1.2`) and `make ts-start` run
+the TypeScript service on the same `data/` directory. Stop the Go process
+first: only one process may own a snapshot, since both write SQLite and both
+would start timed workflows.
+
+The additive `workflow_*` tables and columns are ignored by TypeScript, and
 provider secrets use the same encryption format in both directions. Saved
 workflows keep their definitions; their last status may read as an unknown
-value until the next run.
+value until the next run. `make ts-docker-build` builds the TypeScript image
+from `ts.Dockerfile`.
