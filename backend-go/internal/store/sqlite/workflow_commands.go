@@ -89,6 +89,15 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, definition WorkflowDefini
 	if _, e = tx.ExecContext(ctx, `UPDATE workflow_runs SET source_lookback_json=? WHERE id=?`, string(lookback), id); e != nil {
 		return nil, ErrWorkflowStorage
 	}
+	if len(definition.FetchWindows) > 0 {
+		windows, windowErr := json.Marshal(definition.FetchWindows)
+		if windowErr != nil || s.workflowVersion < 3 {
+			return nil, ErrWorkflowValidation
+		}
+		if _, e = tx.ExecContext(ctx, `UPDATE workflow_runs SET fetch_windows_json=? WHERE id=?`, string(windows), id); e != nil {
+			return nil, ErrWorkflowStorage
+		}
+	}
 	var stepSchema string
 	_ = tx.QueryRowContext(ctx, `SELECT COALESCE(sql,'') FROM sqlite_master WHERE type='table' AND name='workflow_run_steps'`).Scan(&stepSchema)
 	supportsXRecent := strings.Contains(stepSchema, "x_recent")

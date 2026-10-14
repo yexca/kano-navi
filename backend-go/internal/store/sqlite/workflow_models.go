@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 )
 
 var (
@@ -29,6 +31,9 @@ type WorkflowDefinition struct {
 	NextRunAt          *string        `json:"nextRunAt"`
 	CreatedAt          string         `json:"createdAt"`
 	UpdatedAt          string         `json:"updatedAt"`
+	// FetchWindows are operator-selected source windows of an unsaved fetch.
+	// They are frozen on the run and never stored with a saved definition.
+	FetchWindows map[string]history.Window `json:"-"`
 }
 type WorkflowAttempt struct {
 	AttemptNumber int     `json:"attemptNumber"`
@@ -52,19 +57,20 @@ type WorkflowStep struct {
 	Attempts   []WorkflowAttempt `json:"attempts"`
 }
 type WorkflowRun struct {
-	ID                      string         `json:"id"`
-	WorkflowID              string         `json:"workflowId"`
-	Status                  string         `json:"status"`
-	TriggerSource           string         `json:"triggerSource"`
-	ExecutionSource         string         `json:"executionSource"`
-	CreatedAt               string         `json:"createdAt"`
-	StartedAt               *string        `json:"startedAt"`
-	FinishedAt              *string        `json:"finishedAt"`
-	ErrorCode               *string        `json:"errorCode"`
-	CancellationRequestedAt *string        `json:"cancellationRequestedAt"`
-	RecoveryCount           int            `json:"recoveryCount"`
-	SourceLookbackDays      map[string]int `json:"sourceLookbackDays,omitempty"`
-	Steps                   []WorkflowStep `json:"steps,omitempty"`
+	ID                      string                    `json:"id"`
+	WorkflowID              string                    `json:"workflowId"`
+	Status                  string                    `json:"status"`
+	TriggerSource           string                    `json:"triggerSource"`
+	ExecutionSource         string                    `json:"executionSource"`
+	CreatedAt               string                    `json:"createdAt"`
+	StartedAt               *string                   `json:"startedAt"`
+	FinishedAt              *string                   `json:"finishedAt"`
+	ErrorCode               *string                   `json:"errorCode"`
+	CancellationRequestedAt *string                   `json:"cancellationRequestedAt"`
+	RecoveryCount           int                       `json:"recoveryCount"`
+	SourceLookbackDays      map[string]int            `json:"sourceLookbackDays,omitempty"`
+	FetchWindows            map[string]history.Window `json:"fetchWindows,omitempty"`
+	Steps                   []WorkflowStep            `json:"steps,omitempty"`
 }
 type WorkflowPage struct {
 	Workflows  []WorkflowDefinition `json:"workflows"`

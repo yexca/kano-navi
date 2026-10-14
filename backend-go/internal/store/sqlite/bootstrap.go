@@ -13,7 +13,8 @@ import (
 )
 
 // Canonical fresh schema and public static seeds are compiled into the binary.
-// Regenerate from the disposable exporter when the TypeScript contract changes.
+// bootstrap.sql and static-seed.json are the source of truth for a new
+// database; schema_upgrade.go brings older snapshots to the same shape.
 //
 //go:embed bootstrap.sql
 var bootstrapSchema string
@@ -83,7 +84,7 @@ func openInitialized(filename string, adminWrites, workflowWrites, upgrade bool)
 			return nil, err
 		}
 	}
-	if err = seedStatic(ctx, tx); err != nil {
+	if err = seedStatic(ctx, tx, false); err != nil {
 		return nil, ErrSchema
 	}
 	if tx.Commit() != nil {
@@ -103,7 +104,9 @@ func openInitialized(filename string, adminWrites, workflowWrites, upgrade bool)
 // use the same transaction so validation cannot race a seed write.
 type dbInTransaction struct{ *sql.Tx }
 
-func seedStatic(ctx context.Context, tx *sql.Tx) error {
+// seedStatic inserts the public static records. Existing rows are kept unless
+// overwrite restores them to the shipped wording.
+func seedStatic(ctx context.Context, tx *sql.Tx, overwrite bool) error {
 	var data struct {
 		Profile   map[string]any   `json:"profile"`
 		Timeline  []map[string]any `json:"timeline"`
@@ -113,16 +116,24 @@ func seedStatic(ctx context.Context, tx *sql.Tx) error {
 		return ErrSchema
 	}
 	p := data.Profile
-	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO profiles(id,display_name,romanized_name,bio,avatar_url,banner_url,x_url,youtube_url,updated_at,raw_json) VALUES(?,?,?,?,?,?,?,?,?,NULL)`, p["id"], p["display_name"], p["romanized_name"], p["bio"], p["avatar_url"], p["banner_url"], p["x_url"], p["youtube_url"], p["updated_at"]); err != nil {
+	profileSQL, timelineSQL, resourceSQL := `INSERT OR IGNORE INTO profiles(id,display_name,romanized_name,bio,avatar_url,banner_url,x_url,youtube_url,updated_at,raw_json) VALUES(?,?,?,?,?,?,?,?,?,NULL)`,
+		`INSERT OR IGNORE INTO timeline(id,year,title,detail,sort_order,raw_json) VALUES(?,?,?,?,?,NULL)`,
+		`INSERT OR IGNORE INTO resources(id,title,detail,icon,tone,url,sort_order,raw_json) VALUES(?,?,?,?,?,?,?,NULL)`
+	if overwrite {
+		profileSQL = `INSERT INTO profiles(id,display_name,romanized_name,bio,avatar_url,banner_url,x_url,youtube_url,updated_at,raw_json) VALUES(?,?,?,?,?,?,?,?,?,NULL) ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,romanized_name=excluded.romanized_name,bio=excluded.bio,avatar_url=excluded.avatar_url,banner_url=excluded.banner_url,x_url=excluded.x_url,youtube_url=excluded.youtube_url,updated_at=excluded.updated_at`
+		timelineSQL = `INSERT INTO timeline(id,year,title,detail,sort_order,raw_json) VALUES(?,?,?,?,?,NULL) ON CONFLICT(id) DO UPDATE SET year=excluded.year,title=excluded.title,detail=excluded.detail,sort_order=excluded.sort_order`
+		resourceSQL = `INSERT INTO resources(id,title,detail,icon,tone,url,sort_order,raw_json) VALUES(?,?,?,?,?,?,?,NULL) ON CONFLICT(id) DO UPDATE SET title=excluded.title,detail=excluded.detail,icon=excluded.icon,tone=excluded.tone,url=excluded.url,sort_order=excluded.sort_order`
+	}
+	if _, err := tx.ExecContext(ctx, profileSQL, p["id"], p["display_name"], p["romanized_name"], p["bio"], p["avatar_url"], p["banner_url"], p["x_url"], p["youtube_url"], p["updated_at"]); err != nil {
 		return err
 	}
 	for _, v := range data.Timeline {
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO timeline(id,year,title,detail,sort_order,raw_json) VALUES(?,?,?,?,?,NULL)`, v["id"], v["year"], v["title"], v["detail"], v["sort_order"]); err != nil {
+		if _, err := tx.ExecContext(ctx, timelineSQL, v["id"], v["year"], v["title"], v["detail"], v["sort_order"]); err != nil {
 			return err
 		}
 	}
 	for _, v := range data.Resources {
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO resources(id,title,detail,icon,tone,url,sort_order,raw_json) VALUES(?,?,?,?,?,?,?,NULL)`, v["id"], v["title"], v["detail"], v["icon"], v["tone"], v["url"], v["sort_order"]); err != nil {
+		if _, err := tx.ExecContext(ctx, resourceSQL, v["id"], v["title"], v["detail"], v["icon"], v["tone"], v["url"], v["sort_order"]); err != nil {
 			return err
 		}
 	}
@@ -132,6 +143,91 @@ func seedStatic(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES(?,?,?)`, key, value, now); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// SeedStatic adds missing public static records. With overwrite it also
+// restores the shipped profile, timeline and resource wording. Source
+// snapshots, events, media and operator configuration are never touched.
+func (s *Store) SeedStatic(ctx context.Context, overwrite bool) error {
+	if s == nil || s.db == nil || !s.writable {
+		return ErrReadOnly
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ErrUnavailable
+	}
+	defer tx.Rollback()
+	if err = seedStatic(ctx, tx, overwrite); err != nil {
+		return ErrSchema
+	}
+	if overwrite {
+		if err = bumpRevision(ctx, tx, workflowTime(time.Now())); err != nil {
+			return ErrUnavailable
+		}
+	}
+	if tx.Commit() != nil {
+		return ErrUnavailable
+	}
+	return nil
+}
+
+// SnapshotCounts reports how many rows each snapshot table holds.
+func (s *Store) SnapshotCounts(ctx context.Context) (map[string]int, error) {
+	if s == nil || s.db == nil {
+		return nil, ErrUnavailable
+	}
+	counts := map[string]int{}
+	for _, table := range []string{"profiles", "posts", "events", "videos", "focus", "timeline", "resources", "assets", "media_assets", "media_links"} {
+		var count int
+		if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
+			return nil, ErrSchema
+		}
+		counts[table] = count
+	}
+	return counts, nil
+}
+
+// seedDefaultWorkflows gives a new installation two starting workflows. They
+// start unscheduled: timed polling of public platforms is an explicit operator
+// decision. An installation that already has, or deleted, its workflows is
+// left alone.
+func (s *Store) seedDefaultWorkflows(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ErrUnavailable
+	}
+	defer tx.Rollback()
+	var seeded, existing int
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM app_settings WHERE key='workflows_seeded'`).Scan(&seeded); err != nil {
+		return ErrSchema
+	}
+	if seeded > 0 {
+		return nil
+	}
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM workflows`).Scan(&existing); err != nil {
+		return ErrSchema
+	}
+	now := workflowTime(time.Now())
+	if existing == 0 {
+		for _, workflow := range []struct {
+			id, name, steps string
+			interval        int
+		}{
+			{"full-refresh", "完整更新", `["x","youtube","media","schedule"]`, 60},
+			{"sources-only", "仅抓取来源", `["x","youtube"]`, 30},
+		} {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO workflows(id,name,steps_json,source_lookback_json,schedule_enabled,interval_minutes,created_at,updated_at) VALUES(?,?,?,'{"x":7,"youtube":14}',0,?,?,?)`, workflow.id, workflow.name, workflow.steps, workflow.interval, now, now); err != nil {
+				return ErrSchema
+			}
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO app_settings(key,value,updated_at) VALUES('workflows_seeded','1',?)`, now); err != nil {
+		return ErrSchema
+	}
+	if tx.Commit() != nil {
+		return ErrUnavailable
 	}
 	return nil
 }

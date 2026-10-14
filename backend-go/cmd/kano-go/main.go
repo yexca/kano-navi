@@ -13,6 +13,7 @@ import (
 
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/config"
+	"github.com/yexca/kano-navi/backend-go/internal/dotenv"
 	"github.com/yexca/kano-navi/backend-go/internal/httpapi"
 	"github.com/yexca/kano-navi/backend-go/internal/mediadownload"
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
@@ -21,8 +22,54 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/workflow"
 )
 
+// usage lists the commands of the process that owns the site. Running the
+// binary with flags only keeps the read-only sidecar used by the comparison
+// checks.
+const usage = `Usage: kano-go <command> [flags]
+
+Commands:
+  serve        Serve the public API, operator console, workflows, MCP and built frontend
+  seed         Create the database if missing and add missing static records (-overwrite restores them)
+  sync         Run one full synchronization and exit
+  migrate-llm  Store OPENAI_API_KEY as the encrypted key of the openai-default provider (-force replaces)
+  healthcheck  Probe the local service and exit
+
+Common flags: -database <path>  -static <directory>  -listen <address>`
+
 func main() {
-	cfg, err := config.Parse(os.Args[1:])
+	args := os.Args[1:]
+	command := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		command, args = args[0], args[1:]
+	}
+	switch command {
+	case "":
+	case "serve":
+		args = append([]string{"-standalone"}, args...)
+	case "healthcheck":
+		args = append([]string{"-healthcheck"}, args...)
+	case "seed", "sync", "migrate-llm":
+		os.Exit(runCommand(command, args))
+	case "help":
+		fmt.Println(usage)
+		return
+	default:
+		fmt.Fprintln(os.Stderr, "kano-go: unknown command")
+		fmt.Fprintln(os.Stderr, usage)
+		os.Exit(2)
+	}
+	// The owning process reads .env before its flags so PORT applies. Existing
+	// environment variables always win.
+	for _, arg := range args {
+		if name := strings.TrimLeft(arg, "-"); name == "standalone" || name == "healthcheck" {
+			if dotenv.Load(".env") != nil {
+				fmt.Fprintln(os.Stderr, "kano-go: environment file could not be read")
+				os.Exit(2)
+			}
+			break
+		}
+	}
+	cfg, err := config.Parse(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "kano-go: invalid configuration")
 		os.Exit(2)

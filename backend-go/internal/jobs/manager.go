@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 	"github.com/yexca/kano-navi/backend-go/internal/workflow"
 )
@@ -66,7 +67,15 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 		if len(steps) == 0 {
 			return StartResult{Reason: reason(ReasonNoSteps)}, nil
 		}
-		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: steps}, trigger, recentDays(options.FetchWindows))
+		windows := map[string]history.Window{}
+		for source, window := range options.FetchWindows {
+			normalized, windowErr := window.Normalize()
+			if windowErr != nil || (source != "x" && source != "youtube") {
+				return StartResult{}, sqlite.ErrWorkflowValidation
+			}
+			windows[source] = normalized
+		}
+		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: steps, FetchWindows: windows}, trigger, recentDays(windows))
 	case kind == KindScan:
 		source = "schedule"
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocScanWorkflow, Steps: []string{"schedule"}}, trigger, nil)
@@ -89,19 +98,13 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 	return StartResult{Accepted: true, Job: job}, nil
 }
 
-// recentDays extracts {source: {mode: "recent", days}} windows.
-func recentDays(windows map[string]any) map[string]int {
+// recentDays gives the incremental synchronization the lookback of a recent
+// window, which it uses when the source API credential is absent.
+func recentDays(windows map[string]history.Window) map[string]int {
 	days := map[string]int{}
-	for source, raw := range windows {
-		window, ok := raw.(map[string]any)
-		if !ok || window["mode"] != "recent" {
-			continue
-		}
-		switch value := window["days"].(type) {
-		case int:
-			days[source] = value
-		case float64:
-			days[source] = int(value)
+	for source, window := range windows {
+		if window.Mode == history.ModeRecent {
+			days[source] = window.Days
 		}
 	}
 	return days
@@ -219,7 +222,12 @@ func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun, names m
 	if job.Kind == KindWorkflow {
 		windows := map[string]any{}
 		for _, step := range job.Steps {
-			if days, ok := run.SourceLookbackDays[step]; ok && (step == "x" || step == "youtube") {
+			if step != "x" && step != "youtube" {
+				continue
+			}
+			if window, selected := run.FetchWindows[step]; selected {
+				windows[step] = window
+			} else if days, ok := run.SourceLookbackDays[step]; ok {
 				windows[step] = map[string]any{"mode": "recent", "days": days}
 			}
 		}

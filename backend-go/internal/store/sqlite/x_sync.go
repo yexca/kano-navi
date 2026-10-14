@@ -29,26 +29,8 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, p := range result.Posts {
-		raw, _ := json.Marshal(p.Raw)
-		media := ""
-		if len(p.MediaURLs) > 0 {
-			media = p.MediaURLs[0]
-		}
-		var written sql.Result
-		written, err = tx.ExecContext(ctx, `INSERT INTO posts(id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,raw_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET account_handle=excluded.account_handle,type=excluded.type,label=excluded.label,text=excluded.text,published_at=excluded.published_at,url=excluded.url,likes=excluded.likes,reposts=excluded.reposts,replies=excluded.replies,media_url=excluded.media_url,media_alt=excluded.media_alt,raw_json=excluded.raw_json WHERE lower(posts.account_handle)=lower(excluded.account_handle) OR posts.account_handle IS NULL`, p.ID, "x", account, p.Type, p.Label, p.Text, p.PublishedAt, p.URL, p.Likes, p.Reposts, p.Replies, nullable(media), nullable(p.MediaAlt), string(raw))
-		if err != nil {
+		if stored, writeErr := writeXPost(ctx, tx, account, p, now); writeErr != nil || !stored {
 			return ErrSourceWrite
-		}
-		if count, e := written.RowsAffected(); e != nil || count != 1 {
-			return ErrSourceWrite
-		}
-		if _, err = tx.ExecContext(ctx, `DELETE FROM media_links WHERE owner_type='post' AND owner_id=? AND role='post-image'`, p.ID); err != nil {
-			return ErrSourceWrite
-		}
-		for i, u := range p.MediaURLs {
-			if err = writeMediaCandidate(ctx, tx, p.ID, u, account, i, now); err != nil {
-				return ErrSourceWrite
-			}
 		}
 	}
 	for _, c := range result.ScheduleCandidates {
@@ -118,6 +100,34 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 		return ErrSourceWrite
 	}
 	return nil
+}
+
+// writeXPost stores one post with its media candidates. It reports false when
+// the ID already belongs to another account, whose row is left unchanged.
+func writeXPost(ctx context.Context, tx *sql.Tx, account string, p xsource.Post, now string) (bool, error) {
+	raw, _ := json.Marshal(p.Raw)
+	media := ""
+	if len(p.MediaURLs) > 0 {
+		media = p.MediaURLs[0]
+	}
+	written, err := tx.ExecContext(ctx, `INSERT INTO posts(id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,raw_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET account_handle=excluded.account_handle,type=excluded.type,label=excluded.label,text=excluded.text,published_at=excluded.published_at,url=excluded.url,likes=excluded.likes,reposts=excluded.reposts,replies=excluded.replies,media_url=excluded.media_url,media_alt=excluded.media_alt,raw_json=excluded.raw_json WHERE lower(posts.account_handle)=lower(excluded.account_handle) OR posts.account_handle IS NULL`, p.ID, "x", account, p.Type, p.Label, p.Text, p.PublishedAt, p.URL, p.Likes, p.Reposts, p.Replies, nullable(media), nullable(p.MediaAlt), string(raw))
+	if err != nil {
+		return false, err
+	}
+	if count, e := written.RowsAffected(); e != nil {
+		return false, e
+	} else if count != 1 {
+		return false, nil
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM media_links WHERE owner_type='post' AND owner_id=? AND role='post-image'`, p.ID); err != nil {
+		return false, err
+	}
+	for i, u := range p.MediaURLs {
+		if err = writeMediaCandidate(ctx, tx, p.ID, u, account, i, now); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 func nullable(v string) any {
 	if strings.TrimSpace(v) == "" {

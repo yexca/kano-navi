@@ -96,5 +96,5 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	if partial {
 		status = "partial"
 	}
-	return AttemptResult{Status: status, Result: map[string]any{"source": "x", "posts": total, "discovered": discovered, "requested": requested, "errors": errorsOut}}, nil
+	return AttemptResult{Status: status, Result: map[string]any{"source": "x", "count": total, "posts": total, "discovered": discovered, "requested": requested, "errors": errorsOut}}, nil
 }

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const WorkflowSchemaVersion = 2
+const WorkflowSchemaVersion = 3
 
 var ErrWorkflowSchema = errors.New("workflow schema invalid")
 
@@ -94,6 +94,8 @@ func migrateWorkflowSchema(ctx context.Context, db *sql.DB) error {
 	for _, column := range []struct{ table, name, ddl string }{
 		{"workflow_runs", "source_lookback_json", `ALTER TABLE workflow_runs ADD COLUMN source_lookback_json TEXT NOT NULL DEFAULT '{}'`},
 		{"workflow_run_steps", "adapter_capability", `ALTER TABLE workflow_run_steps ADD COLUMN adapter_capability TEXT`},
+		// Version 3 freezes an operator's source windows on the run.
+		{"workflow_runs", "fetch_windows_json", `ALTER TABLE workflow_runs ADD COLUMN fetch_windows_json TEXT`},
 	} {
 		rows, e := tx.QueryContext(ctx, "PRAGMA table_info("+column.table+")")
 		if e != nil {
@@ -157,6 +159,9 @@ func verifyWorkflowSchema(ctx context.Context, q workflowQuerier) error {
 	}
 	if version >= 2 {
 		checks = append(checks, `SELECT source_lookback_json FROM workflow_runs LIMIT 0`, `SELECT adapter_capability FROM workflow_run_steps LIMIT 0`)
+	}
+	if version >= 3 {
+		checks = append(checks, `SELECT fetch_windows_json FROM workflow_runs LIMIT 0`)
 	}
 	for _, query := range checks {
 		rows, e := q.QueryContext(ctx, query)

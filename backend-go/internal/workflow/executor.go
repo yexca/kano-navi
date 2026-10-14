@@ -3,9 +3,11 @@ package workflow
 import (
 	"context"
 	"errors"
-	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 	"sync"
 	"time"
+
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
+	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
 type TriggerSource string
@@ -60,6 +62,9 @@ type StepInput struct {
 	RunID, WorkflowID, StepID string
 	Attempt                   int
 	LookbackDays              int
+	// Window is the operator-selected source window frozen on the run, or nil
+	// for the incremental synchronization.
+	Window *history.Window
 }
 type StepExecutor interface {
 	Execute(context.Context, StepInput) (AttemptResult, error)
@@ -274,7 +279,11 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 			if step.Capability == "capability_not_migrated" {
 				execErr = NewStepError("capability_not_migrated", ErrBlocked)
 			} else {
-				out, execErr = e.Steps.Execute(ctx, StepInput{RunID: run.ID, WorkflowID: run.WorkflowID, StepID: step.StepID, Attempt: num, LookbackDays: run.SourceLookbackDays[step.StepID]})
+				input := StepInput{RunID: run.ID, WorkflowID: run.WorkflowID, StepID: step.StepID, Attempt: num, LookbackDays: run.SourceLookbackDays[step.StepID]}
+				if window, selected := run.FetchWindows[step.StepID]; selected {
+					input.Window = &window
+				}
+				out, execErr = e.Steps.Execute(ctx, input)
 			}
 			if ctx.Err() != nil {
 				execErr = NewStepError("cancelled", ErrCancelled)

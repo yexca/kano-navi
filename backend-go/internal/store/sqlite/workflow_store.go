@@ -204,6 +204,15 @@ func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, er
 		}
 		capabilityColumn = "COALESCE(adapter_capability,capability)"
 	}
+	if s.workflowVersion >= 3 {
+		var windows sql.NullString
+		if s.db.QueryRowContext(ctx, `SELECT fetch_windows_json FROM workflow_runs WHERE id=?`, id).Scan(&windows) != nil {
+			return nil, ErrWorkflowStorage
+		}
+		if windows.Valid && windows.String != "" && json.Unmarshal([]byte(windows.String), &x.FetchWindows) != nil {
+			return nil, ErrWorkflowStorage
+		}
+	}
 	rows, e := s.db.QueryContext(ctx, `SELECT id,step_id,step_order,status,`+capabilityColumn+`,started_at,finished_at,error_code,retryable FROM workflow_run_steps WHERE run_id=? ORDER BY step_order LIMIT 16`, id)
 	if e != nil {
 		return nil, ErrWorkflowStorage

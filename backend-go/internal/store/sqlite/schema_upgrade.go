@@ -13,9 +13,11 @@ import (
 
 // OpenStandalone opens the runtime database for the process that owns the
 // site. A missing file is created and seeded. An existing snapshot written by
-// an earlier release receives additive upgrades only: missing tables, columns
-// and indexes are added and their documented backfills run. Nothing is
-// dropped, rebuilt or cleared, and an unrecognized schema is left untouched.
+// an earlier release is upgraded in one transaction: missing tables, columns
+// and indexes are added and their documented backfills run. The only rebuild
+// is the events table of a snapshot that predates event sources, which keeps
+// every row. No snapshot is cleared, and an unrecognized schema is left
+// untouched.
 func OpenStandalone(filename string) (*Store, error) {
 	store, err := openInitialized(filename, true, true, true)
 	if err != nil {
@@ -24,6 +26,10 @@ func OpenStandalone(filename string) (*Store, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err = store.repairSelectedProfiles(ctx); err != nil {
+		store.Close()
+		return nil, err
+	}
+	if err = store.seedDefaultWorkflows(ctx); err != nil {
 		store.Close()
 		return nil, err
 	}
@@ -84,21 +90,12 @@ func upgradeSchema(ctx context.Context, tx *sql.Tx) error {
 	if err != nil {
 		return ErrSchema
 	}
-	// Only a recognizable snapshot is upgraded. The pre-event-source layout
-	// needs the original rebuilding migration and is refused unchanged.
+	// Only a recognizable snapshot is upgraded.
 	for _, table := range []string{"profiles", "posts", "events", "videos", "app_settings", "sync_runs"} {
 		if _, ok := existingTables[table]; !ok {
 			return fmt.Errorf("%w: snapshot is not a recognized schema", ErrSchema)
 		}
 	}
-	eventColumns, err := tableColumns(ctx, tx, "events")
-	if err != nil {
-		return ErrSchema
-	}
-	if !hasColumn(eventColumns, "starts_on") {
-		return fmt.Errorf("%w: snapshot predates additive upgrades", ErrSchema)
-	}
-
 	reference, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		return ErrSchema
@@ -111,6 +108,16 @@ func upgradeSchema(ctx context.Context, tx *sql.Tx) error {
 	wantTables, tableOrder, err := schemaObjects(ctx, reference, "table")
 	if err != nil {
 		return ErrSchema
+	}
+	eventColumns, err := tableColumns(ctx, tx, "events")
+	if err != nil {
+		return ErrSchema
+	}
+	if !hasColumn(eventColumns, "starts_on") {
+		if err = rebuildLegacyEvents(ctx, tx, eventColumns, wantTables["events"], wantTables["event_sources"]); err != nil {
+			return err
+		}
+		existingTables["event_sources"] = wantTables["event_sources"]
 	}
 	added := map[string]bool{}
 	for _, table := range tableOrder {
@@ -165,6 +172,83 @@ func upgradeSchema(ctx context.Context, tx *sql.Tx) error {
 		if _, err = tx.ExecContext(ctx, wantIndexes[index]); err != nil {
 			return fmt.Errorf("%w: index %s could not be created", ErrSchema, index)
 		}
+	}
+	return nil
+}
+
+// rebuildLegacyEvents converts the first events layout, which had one source
+// per event and no calendar date, into the current tables. Every row is kept
+// under its ID and becomes its own source evidence. Events that were curated
+// from X are locked so automatic extraction cannot replace them.
+func rebuildLegacyEvents(ctx context.Context, tx *sql.Tx, legacy []schemaColumn, eventsDDL, sourcesDDL string) error {
+	fail := func() error { return fmt.Errorf("%w: legacy events could not be rebuilt", ErrSchema) }
+	if eventsDDL == "" || sourcesDDL == "" {
+		return fail()
+	}
+	names := []string{"id", "source", "title", "detail", "starts_at", "ends_at", "status", "event_type", "url", "is_upcoming", "raw_json"}
+	selected := make([]string, len(names))
+	for i, name := range names {
+		selected[i] = "NULL"
+		if hasColumn(legacy, name) {
+			selected[i] = `"` + name + `"`
+		}
+	}
+	rows, err := tx.QueryContext(ctx, "SELECT "+strings.Join(selected, ",")+" FROM events ORDER BY id")
+	if err != nil {
+		return fail()
+	}
+	type legacyEvent struct {
+		id, source, title                                     string
+		detail, startsAt, endsAt, status, eventType, url, raw sql.NullString
+		upcoming                                              sql.NullInt64
+	}
+	events := []legacyEvent{}
+	for rows.Next() {
+		var event legacyEvent
+		var id, source, title sql.NullString
+		if err = rows.Scan(&id, &source, &title, &event.detail, &event.startsAt, &event.endsAt, &event.status, &event.eventType, &event.url, &event.upcoming, &event.raw); err != nil {
+			rows.Close()
+			return fail()
+		}
+		event.id, event.source, event.title = id.String, source.String, title.String
+		events = append(events, event)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return fail()
+	}
+	for _, statement := range []string{
+		`DROP TABLE IF EXISTS event_sources`, `DROP INDEX IF EXISTS events_starts_at_idx`,
+		`ALTER TABLE events RENAME TO events_legacy`, eventsDDL, sourcesDDL,
+	} {
+		if _, err = tx.ExecContext(ctx, statement); err != nil {
+			return fail()
+		}
+	}
+	now := workflowTime(time.Now())
+	for _, event := range events {
+		startsOn := event.startsAt.String
+		if instant, parseErr := time.Parse(time.RFC3339Nano, startsOn); parseErr == nil {
+			startsOn = instant.In(time.FixedZone("JST", 9*3600)).Format("2006-01-02")
+		} else if len(startsOn) > 10 {
+			startsOn = startsOn[:10]
+		}
+		provenance, locked := "automatic", 0
+		if event.source == "x" {
+			provenance, locked = "manual", 1
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO events(id,source,source_item_id,source_key,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,is_upcoming,provenance,manual_locked,created_at,updated_at,raw_json) VALUES(?,?,?,?,?,?,?,?,?,'Asia/Tokyo','exact',?,?,?,?,?,?,?,?,?)`,
+			event.id, event.source, event.id, event.id, event.title, event.detail, startsOn, event.startsAt, event.endsAt, event.status, event.eventType, event.url, event.upcoming.Int64, provenance, locked, now, now, event.raw); err != nil {
+			return fail()
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO event_sources(event_id,source,source_item_id,source_key,url,raw_json,deleted_at,created_at,updated_at) VALUES(?,?,?,?,?,?,NULL,?,?)`,
+			event.id, event.source, event.id, event.id, event.url, event.raw, now, now); err != nil {
+			return fail()
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `DROP TABLE events_legacy`); err != nil {
+		return fail()
 	}
 	return nil
 }

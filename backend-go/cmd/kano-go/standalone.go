@@ -14,7 +14,6 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/config"
 	"github.com/yexca/kano-navi/backend-go/internal/contentadmin"
-	"github.com/yexca/kano-navi/backend-go/internal/dotenv"
 	"github.com/yexca/kano-navi/backend-go/internal/httpapi"
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/jobs"
@@ -22,6 +21,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/mcpapi"
 	"github.com/yexca/kano-navi/backend-go/internal/mediadownload"
 	"github.com/yexca/kano-navi/backend-go/internal/schedule"
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
@@ -40,9 +40,6 @@ func fail(message string, code int) int {
 // operator console, workflows and timers, MCP and the built frontend.
 // Credentials are validated before the runtime database is opened or created.
 func runStandalone(cfg config.Config) int {
-	if err := dotenv.Load(".env"); err != nil {
-		return fail("environment file could not be read", 2)
-	}
 	adminConfig, err := adminauth.ResolveEnv()
 	if err != nil {
 		return fail("invalid admin configuration", 2)
@@ -61,32 +58,9 @@ func runStandalone(cfg config.Config) int {
 	}
 	defer store.Close()
 
-	skip := map[string]bool{}
-	skipped := []string{}
-	for _, step := range jobs.StepOrder {
-		if os.Getenv(stepSkipFlags[step]) == "1" {
-			skip[step] = true
-			skipped = append(skipped, step)
-		}
-	}
-	xOptions := xsource.OptionsFromEnv()
-	steps := &workflow.SourceSteps{
-		Store:   store,
-		Skip:    skip,
-		X:       &workflow.XRecentExecutor{Store: store, Adapter: xsource.NewAdapter(xsource.NewClient(&http.Client{Timeout: 10 * time.Second}), xOptions), Options: xOptions},
-		Youtube: ytsource.NewAdapter(nil, ytsource.OptionsFromEnv()),
-		Media:   mediadownload.NewClient(nil),
-	}
-	modules := standaloneModules(store, adminConfig.Mode, secretsKey, steps)
-	executor := &workflow.Executor{
-		Store: store,
-		Steps: steps,
-		// Every catalog step has a real adapter here; none is synthetic.
-		SyntheticSteps: map[string]bool{"x": false, "youtube": false, "media": false, "schedule": false},
-		// One unavailable source keeps the other source and post-processing.
-		TolerateFailure: map[string]bool{"x": true, "youtube": true},
-	}
-	queue := &workflow.Queue{Store: store, Executor: executor}
+	run := newPipeline(store, secretsKey)
+	modules := standaloneModules(store, adminConfig.Mode, secretsKey)
+	queue := &workflow.Queue{Store: store, Executor: run.executor}
 	defer queue.Close()
 	if err = queue.Recover(context.Background()); err != nil {
 		return fail("workflow recovery unavailable", 1)
@@ -98,21 +72,15 @@ func runStandalone(cfg config.Config) int {
 	defer scheduler.Stop()
 
 	manager := &jobs.QueueManager{Store: store, Queue: queue}
-	credential := func(source string) bool {
-		if source == "x" {
-			return strings.TrimSpace(os.Getenv("X_API_BEARER_TOKEN")) != ""
-		}
-		return strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY")) != ""
-	}
 	handler := httpapi.NewStandaloneHandler(store, nil, auth, httpapi.Standalone{
 		Queue: queue,
 		Compat: &httpapi.Compat{
-			Jobs:              manager,
-			Modules:           modules,
-			SchedulerStatus:   scheduler.Status,
-			SkippedSteps:      skipped,
-			XHandles:          xOptions.Handles,
-			HistoryCredential: credential,
+			Jobs:             manager,
+			Modules:          modules,
+			SchedulerStatus:  scheduler.Status,
+			SkippedSteps:     run.skipped,
+			XHandles:         run.xOptions.Handles,
+			HistoryAvailable: run.steps.History.Available,
 		},
 		Static: httpapi.NewStaticSite(cfg.StaticDirectory),
 		MCP:    standaloneMCP(store, manager),
@@ -160,14 +128,64 @@ func runHealthCheck(cfg config.Config) int {
 	return 0
 }
 
-// standaloneModules attaches the operator feature modules and the schedule
-// extraction step. key is the LLM_SECRETS_KEY that seals provider credentials.
-func standaloneModules(store *sqlite.Store, mode, key string, steps *workflow.SourceSteps) []httpx.AdminModule {
-	steps.Schedule = scheduleStep{schedule.New(store, schedule.Options{SecretsKey: key})}
+// standaloneModules attaches the operator feature modules. key is the
+// LLM_SECRETS_KEY that seals provider credentials.
+func standaloneModules(store *sqlite.Store, mode, key string) []httpx.AdminModule {
 	return []httpx.AdminModule{
 		llmadmin.New(store, llmadmin.Options{Mode: mode, SecretsKey: key}),
 		contentadmin.New(store, contentadmin.Options{}),
 	}
+}
+
+// pipeline is the synchronization machinery shared by the service and the
+// one-shot sync command: every catalog step with its real adapter.
+type pipeline struct {
+	steps    *workflow.SourceSteps
+	executor *workflow.Executor
+	skipped  []string
+	xOptions xsource.Options
+}
+
+// newPipeline wires the source, media and schedule steps. key is the
+// LLM_SECRETS_KEY that unseals provider credentials for schedule extraction.
+// Source API credentials are read from the environment and stay in memory.
+func newPipeline(store *sqlite.Store, key string) pipeline {
+	skip := map[string]bool{}
+	skipped := []string{}
+	for _, step := range jobs.StepOrder {
+		if os.Getenv(stepSkipFlags[step]) == "1" {
+			skip[step] = true
+			skipped = append(skipped, step)
+		}
+	}
+	xOptions := xsource.OptionsFromEnv()
+	youtubeOptions := ytsource.OptionsFromEnv()
+	steps := &workflow.SourceSteps{
+		Store:    store,
+		Skip:     skip,
+		X:        &workflow.XRecentExecutor{Store: store, Adapter: xsource.NewAdapter(xsource.NewClient(&http.Client{Timeout: 10 * time.Second}), xOptions), Options: xOptions},
+		Youtube:  ytsource.NewAdapter(nil, youtubeOptions),
+		Media:    mediadownload.NewClient(nil),
+		Schedule: scheduleStep{schedule.New(store, schedule.Options{SecretsKey: key})},
+		History: &workflow.HistorySource{
+			Fetcher:      history.NewFetcher(store, history.OptionsFromEnv(os.Getenv), nil),
+			Store:        store,
+			XToken:       strings.TrimSpace(os.Getenv("X_API_BEARER_TOKEN")),
+			YoutubeKey:   strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY")),
+			Handles:      xOptions.Handles,
+			ChannelID:    youtubeOptions.ChannelID,
+			RequestLimit: max(1, xOptions.MaxDetailRequests),
+		},
+	}
+	executor := &workflow.Executor{
+		Store: store,
+		Steps: steps,
+		// Every catalog step has a real adapter here; none is synthetic.
+		SyntheticSteps: map[string]bool{"x": false, "youtube": false, "media": false, "schedule": false},
+		// One unavailable source keeps the other source and post-processing.
+		TolerateFailure: map[string]bool{"x": true, "youtube": true},
+	}
+	return pipeline{steps: steps, executor: executor, skipped: skipped, xOptions: xOptions}
 }
 
 // scheduleStep adapts the schedule extractor to the workflow step contract.

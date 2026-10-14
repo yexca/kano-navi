@@ -5,13 +5,12 @@ import (
 	"errors"
 	"math"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/jobs"
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
@@ -30,10 +29,9 @@ type Compat struct {
 	// SkippedSteps lists steps disabled for the process through SKIP_* flags.
 	SkippedSteps []string
 	XHandles     []string
-	// HistoryAvailable reports whether a source can search past windows.
+	// HistoryAvailable reports whether a source can search past windows,
+	// which needs its official API credential.
 	HistoryAvailable func(source string) bool
-	// HistoryCredential reports whether the source API credential is present.
-	HistoryCredential func(source string) bool
 }
 
 var workflowStepGroups = []map[string]string{
@@ -382,54 +380,6 @@ func (h *adminHandler) sourceFetchStatus(r *http.Request) (map[string]any, error
 	}, nil
 }
 
-var fetchDatePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-
-// japanMidnight parses an inclusive Japan calendar date.
-func japanMidnight(raw json.RawMessage) (time.Time, error) {
-	var value string
-	if json.Unmarshal(raw, &value) != nil || !fetchDatePattern.MatchString(value) {
-		return time.Time{}, httpx.Invalid("dates must use YYYY-MM-DD")
-	}
-	parsed, err := time.ParseInLocation("2006-01-02", value, time.FixedZone("JST", 9*3600))
-	if err != nil {
-		return time.Time{}, httpx.Invalid("date is invalid")
-	}
-	return parsed, nil
-}
-
-// normalizeFetchWindow validates {mode, days} or {mode, startDate, endDate}.
-func normalizeFetchWindow(raw json.RawMessage) (map[string]any, error) {
-	var window map[string]json.RawMessage
-	if jsonNull(raw) || json.Unmarshal(raw, &window) != nil || window == nil {
-		return nil, httpx.Invalid("fetch window is required")
-	}
-	var mode string
-	_ = json.Unmarshal(window["mode"], &mode)
-	switch mode {
-	case "recent", "before":
-		var days float64
-		if jsonNull(window["days"]) || json.Unmarshal(window["days"], &days) != nil || math.Trunc(days) != days || days < 1 || days > 365 {
-			return nil, httpx.Invalid("days must be an integer from 1 to 365")
-		}
-		return map[string]any{"mode": mode, "days": int(days)}, nil
-	case "range":
-		start, err := japanMidnight(window["startDate"])
-		if err != nil {
-			return nil, err
-		}
-		end, err := japanMidnight(window["endDate"])
-		if err != nil {
-			return nil, err
-		}
-		end = end.Add(24 * time.Hour)
-		if !end.After(start) || end.Sub(start) > 365*24*time.Hour {
-			return nil, httpx.Invalid("date range must cover 1 to 365 days")
-		}
-		return map[string]any{"mode": mode, "startDate": start.Format("2006-01-02"), "endDate": end.Add(-24 * time.Hour).Format("2006-01-02")}, nil
-	}
-	return nil, httpx.Invalid("unsupported fetch mode")
-}
-
 func (h *adminHandler) compatFetchSource(w http.ResponseWriter, r *http.Request, source string) {
 	if source != "x" && source != "youtube" {
 		httpx.WriteError(w, httpx.Invalid("unsupported source"))
@@ -440,29 +390,23 @@ func (h *adminHandler) compatFetchSource(w http.ResponseWriter, r *http.Request,
 		httpx.WriteError(w, err)
 		return
 	}
-	window, err := normalizeFetchWindow(body["window"])
+	window, err := history.Parse(body["window"])
 	if err != nil {
-		httpx.WriteError(w, err)
+		httpx.WriteError(w, httpx.Invalid("%s", err.Error()))
 		return
 	}
-	if window["mode"] != "recent" {
-		credential := h.compat.HistoryCredential != nil && h.compat.HistoryCredential(source)
-		available := h.compat.HistoryAvailable != nil && h.compat.HistoryAvailable(source)
-		switch {
-		case !credential && source == "x":
-			httpx.WriteError(w, httpx.Invalid("X_API_BEARER_TOKEN is required for history search"))
-			return
-		case !credential:
-			httpx.WriteError(w, httpx.Invalid("YOUTUBE_API_KEY is required for history search"))
-			return
-		case !available:
-			httpx.WriteError(w, httpx.Invalid("history search is not available in this backend yet"))
-			return
+	// Past windows exist only behind the official API credential.
+	if window.Mode != history.ModeRecent && (h.compat.HistoryAvailable == nil || !h.compat.HistoryAvailable(source)) {
+		credential := "YOUTUBE_API_KEY"
+		if source == "x" {
+			credential = "X_API_BEARER_TOKEN"
 		}
+		httpx.WriteError(w, httpx.Invalid("%s is required for history search", credential))
+		return
 	}
 	result, ok := h.compatStart(w, r, jobs.KindWorkflow, jobs.Options{
 		Steps:        []string{source, "media"},
-		FetchWindows: map[string]any{source: window},
+		FetchWindows: map[string]history.Window{source: window},
 	})
 	if ok {
 		httpx.WriteJSON(w, startStatus(result), result)

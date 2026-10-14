@@ -3,7 +3,11 @@
 // implements Manager; consumers depend only on these types.
 package jobs
 
-import "context"
+import (
+	"context"
+
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
+)
 
 const (
 	KindSync     = "sync"
@@ -53,7 +57,7 @@ type StartResult struct {
 type Options struct {
 	WorkflowID   string
 	Steps        []string
-	FetchWindows map[string]any
+	FetchWindows map[string]history.Window
 }
 
 type Manager interface {

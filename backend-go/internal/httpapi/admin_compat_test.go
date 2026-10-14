@@ -80,11 +80,11 @@ func newConsole(t *testing.T, mode, password string, steps *gatedSteps) consoleF
 		t.Fatal(err)
 	}
 	handler := NewStandaloneHandler(store, nil, auth, Standalone{Queue: queue, Compat: &Compat{
-		Jobs:              &jobs.QueueManager{Store: store, Queue: queue},
-		Modules:           []httpx.AdminModule{pingModule{}},
-		SkippedSteps:      []string{"media"},
-		XHandles:          []string{"synthetic_one"},
-		HistoryCredential: func(source string) bool { return source == "youtube" },
+		Jobs:             &jobs.QueueManager{Store: store, Queue: queue},
+		Modules:          []httpx.AdminModule{pingModule{}},
+		SkippedSteps:     []string{"media"},
+		XHandles:         []string{"synthetic_one"},
+		HistoryAvailable: func(source string) bool { return source == "youtube" },
 	}})
 	return consoleFixture{handler: handler, steps: steps, store: store}
 }
@@ -273,8 +273,14 @@ func TestConsoleSourceFetchWindows(t *testing.T) {
 			t.Fatalf("%s => %d %v", body, code, payload)
 		}
 	}
-	if code, payload = c.call(t, "POST", "/api/admin/sources/youtube/fetch", `{"window":{"mode":"before","days":7}}`); code != 400 || payload["message"] != "history search is not available in this backend yet" {
+	// A past window is accepted once the source credential is configured and
+	// stays frozen on the job exactly as the operator selected it.
+	if code, payload = c.call(t, "POST", "/api/admin/sources/youtube/fetch", `{"window":{"mode":"range","startDate":"2026-03-01","endDate":"2026-03-07"}}`); code != 202 {
 		t.Fatalf("history=%d %v", code, payload)
+	}
+	past := c.waitForJob(t, payload["job"].(map[string]any)["id"].(string), "completed")
+	if window := past["fetchWindows"].(map[string]any)["youtube"].(map[string]any); window["mode"] != "range" || window["startDate"] != "2026-03-01" || window["endDate"] != "2026-03-07" || window["days"] != nil {
+		t.Fatalf("past window=%v", window)
 	}
 	if code, payload = c.call(t, "POST", "/api/admin/sources/rss/fetch", `{"window":{"mode":"recent","days":7}}`); code != 400 || payload["message"] != "unsupported source" {
 		t.Fatalf("source=%d %v", code, payload)
