@@ -24,6 +24,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
+	"github.com/yexca/kano-navi/backend-go/internal/source/youtube/websub"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 	"github.com/yexca/kano-navi/backend-go/internal/workflow"
 )
@@ -72,18 +73,27 @@ func runStandalone(cfg config.Config) int {
 	defer scheduler.Stop()
 
 	manager := &jobs.QueueManager{Store: store, Queue: queue}
+	// YouTube push is configured in /admin; it stays inactive until enabled
+	// there and while SKIP_YOUTUBE disables the source.
+	push := websub.New(ytsource.OptionsFromEnv().ChannelID, nil, youtubePushTrigger(manager))
+	pushAdmin := websub.NewAdmin(store, push, secretsKey, os.Getenv(stepSkipFlags["youtube"]) != "1")
+	if err = pushAdmin.Load(context.Background()); err != nil {
+		return fail("YouTube push settings unavailable", 1)
+	}
 	handler := httpapi.NewStandaloneHandler(store, nil, auth, httpapi.Standalone{
 		Queue: queue,
 		Compat: &httpapi.Compat{
-			Jobs:             manager,
-			Modules:          modules,
-			SchedulerStatus:  scheduler.Status,
-			SkippedSteps:     run.skipped,
-			XHandles:         run.xOptions.Handles,
-			HistoryAvailable: run.steps.History.Available,
+			Jobs:              manager,
+			Modules:           append(modules, pushAdmin),
+			SchedulerStatus:   scheduler.Status,
+			YoutubePushStatus: pushAdmin.Status,
+			SkippedSteps:      run.skipped,
+			XHandles:          run.xOptions.Handles,
+			HistoryAvailable:  run.steps.History.Available,
 		},
 		Static: httpapi.NewStaticSite(cfg.StaticDirectory),
 		MCP:    standaloneMCP(store, manager),
+		WebSub: push,
 	})
 	server := httpapi.NewServer(httpapi.RequestLog(httpapi.Compress(handler), os.Stdout), cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -95,8 +105,13 @@ func runStandalone(cfg config.Config) int {
 		}
 	}()
 	fmt.Fprintf(os.Stderr, "kano-go: standalone service listening on %s\n", cfg.ListenAddress)
+	// The hub verifies the callback asynchronously, so subscribe once the
+	// listener is running.
+	push.Start()
+	defer push.Stop()
 	select {
 	case <-ctx.Done():
+		push.Stop()
 		scheduler.Stop()
 		queue.Close()
 		shutdown, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
@@ -194,6 +209,16 @@ type scheduleStep struct{ extractor *schedule.Extractor }
 func (s scheduleStep) RunSchedule(ctx context.Context) (string, map[string]any, error) {
 	result, err := s.extractor.Run(ctx)
 	return result.Status, result.Counts, err
+}
+
+// youtubePushTrigger queues the YouTube source and its thumbnail downloads
+// through the operator job path, so a push shares the single-flight queue and
+// is labelled "websub" in the run history. A busy queue leaves it pending.
+func youtubePushTrigger(manager *jobs.QueueManager) websub.TriggerFunc {
+	return func(ctx context.Context) (bool, error) {
+		result, err := manager.Start(ctx, jobs.KindWorkflow, "websub", jobs.Options{Steps: []string{"youtube", "media"}})
+		return result.Accepted, err
+	}
 }
 
 // standaloneMCP mounts the public MCP reads; control tools additionally need

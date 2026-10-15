@@ -7,6 +7,9 @@
   timeouts, limits, and failure handling.
 - Never embed usernames, passwords, tokens, or cookies in a URL. Do not write credentials from a response into `raw_json`, logs, or the UI.
 - Register a new source host and its purpose in `scripts/privacy-allowlist.json` first. The allowlist is a reviewable source record, not a comment-based way to bypass secret detection.
+- An inbound push endpoint (currently only the YouTube WebSub callback) must
+  verify a shared-secret signature in constant time, bound its body, coalesce
+  bursts, and only enqueue existing workflow steps rather than write data.
 - Extract only the fields needed from external HTML/JSON. Filter stack traces, absolute paths, and raw responses before displaying anything.
   The HTTP error handler uses an allowlisted event/code/status log shape. Never
   log a caught error object or its message/stack: body-parser and downstream clients

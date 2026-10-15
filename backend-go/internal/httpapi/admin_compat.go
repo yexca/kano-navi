@@ -26,6 +26,8 @@ type Compat struct {
 	Modules []httpx.AdminModule
 	// SchedulerStatus reports the in-process workflow timer.
 	SchedulerStatus func() map[string]any
+	// YoutubePushStatus reports the YouTube WebSub settings and subscription.
+	YoutubePushStatus func() map[string]any
 	// SkippedSteps lists steps disabled for the process through SKIP_* flags.
 	SkippedSteps []string
 	XHandles     []string
@@ -162,6 +164,10 @@ func (h *adminHandler) compatWrite(w http.ResponseWriter, r *http.Request, statu
 	if h.compat.SchedulerStatus != nil {
 		scheduler = h.compat.SchedulerStatus()
 	}
+	youtubePush := map[string]any{"enabled": false}
+	if h.compat.YoutubePushStatus != nil {
+		youtubePush = h.compat.YoutubePushStatus()
+	}
 	skipped := h.compat.SkippedSteps
 	if skipped == nil {
 		skipped = []string{}
@@ -176,6 +182,7 @@ func (h *adminHandler) compatWrite(w http.ResponseWriter, r *http.Request, statu
 		"skippedByEnvironment": skipped,
 		"limits":               map[string]int{"minIntervalMinutes": workflowMinIntervalMinutes, "maxIntervalMinutes": workflowMaxIntervalMinutes},
 		"scheduler":            scheduler,
+		"youtubePush":          youtubePush,
 		"activeJob":            active,
 	}
 	for key, value := range extra {

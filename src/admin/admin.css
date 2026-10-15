@@ -21,6 +21,34 @@
   margin: 0;
 }
 
+.adm-push-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.adm-push-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-push-facts dt {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-push-facts dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .adm-lookback-fields {
   margin: 12px 0;
 }

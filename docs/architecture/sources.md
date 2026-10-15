@@ -71,6 +71,64 @@ Video thumbnails are registered and linked to their rows, then the bounded media
 stage downloads pending files from YouTube's `*.ytimg.com` thumbnail CDN
 subdomains (including `i.ytimg.com` and its numbered hosts).
 
+#### WebSub Push
+
+Polling remains the baseline. The operator turns push on in `/admin` (Content
+& media → YouTube push) by entering a public HTTPS callback URL that forwards to
+`/api/websub/youtube`. The standalone process then subscribes the channel's
+feed topic at Google's hub (`https://pubsubhubbub.appspot.com/subscribe`)
+within seconds, without a restart, and again at every startup.
+`backend-go/internal/source/youtube/websub` owns the protocol and its admin
+module:
+
+- `GET /api/admin/youtube-push` returns the settings and runtime status:
+  enabled, callback URL and required path, whether a secret exists,
+  verification, lease expiry, next renewal, pending notification, last
+  notification/trigger, the last fixed error code, and `available` (false
+  while `SKIP_YOUTUBE=1`). `GET /api/admin/workflows` carries the same object
+  as `youtubePush` for polling. Neither ever includes the secret.
+- `PUT /api/admin/youtube-push` accepts `{ "enabled": boolean, "callbackUrl":
+string | null }`; omitted fields keep their value. The callback must be an
+  absolute HTTPS URL of at most 2048 characters without credentials or a
+  fragment. Enabling generates a 256-bit signing secret when none exists.
+  `POST /api/admin/youtube-push/rotate-secret` replaces it and resubscribes.
+  Settings live in `app_settings` (`youtube_websub_enabled`,
+  `youtube_websub_callback_url`, `youtube_websub_secret`); the secret is sealed
+  with `LLM_SECRETS_KEY` like provider keys. A secret that no longer decrypts
+  after a key change is replaced at startup.
+- Disabling push or moving the callback sends an `unsubscribe` for the previous
+  callback (at most three attempts; its lease expires anyway). While disabled,
+  the callback route answers like an unknown API path, except to confirm that
+  withdrawal once within an hour.
+- The subscribe request asks for asynchronous verification, a five-day lease,
+  and the HMAC secret. It has a 10-second timeout, rejects redirects, discards
+  the response body after 64 KiB, and records only fixed codes
+  (`websub_hub_timeout`, `websub_hub_http_error`, `websub_hub_denied`, and so on).
+  A failed request is retried after 15 minutes.
+- `GET /api/websub/youtube` echoes `hub.challenge` (at most 1 KiB) only for this
+  channel's topic, and only for a subscription while enabled or the withdrawal
+  this process just requested. Only the verification of a request sent within
+  the last hour updates the lease, so renewal happens at half the granted lease
+  but no more than hourly. When no verification arrives within an hour, the
+  status records `websub_verification_missing` and the subscription is
+  requested again.
+- `POST /api/websub/youtube` reads at most 256 KiB and verifies
+  `X-Hub-Signature` (`sha1`, `sha256`, `sha384` or `sha512`) in constant time.
+  Unsigned, mis-signed, malformed, deleted-entry, or other-channel bodies are
+  acknowledged with `202` and ignored, as WebSub requires.
+- A verified notification for a valid video ID only marks a sync as pending.
+  After one quiet minute (which also lets the public RSS list the entry), and at
+  least two minutes after the previous push-triggered run, it starts the
+  `youtube` and `media` steps through the operator job path. The run is labelled
+  `websub` and shares the single-flight queue; a busy queue keeps it pending and
+  retries every 30 seconds.
+
+The notification never writes snapshots; the RSS and stream-page reads above
+do. Live start/end and reservation-time changes are not reliably pushed, so
+reservation rechecks still depend on saved workflow timers. Runtime state is in
+memory: a restart subscribes again, and a missed push is caught by the next
+poll.
+
 ### Schedule Extraction Pipeline
 
 Schedule extraction has two independent candidate paths:

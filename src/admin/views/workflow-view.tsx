@@ -137,6 +137,7 @@ function triggerLabel(triggeredBy, t) {
     scheduler: "admin.trigger.scheduler",
     mcp: "admin.trigger.mcp",
     cli: "admin.trigger.cli",
+    websub: "admin.trigger.websub",
   }
   return t(keys[triggeredBy] || "admin.trigger.other")
 }

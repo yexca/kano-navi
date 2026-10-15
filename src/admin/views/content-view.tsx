@@ -13,6 +13,7 @@ import {
 
 import { useAppSettings } from "@/app-settings"
 import { SourceFetchCard } from "@/admin/components/source-fetch-card"
+import { YoutubePushCard } from "@/admin/components/youtube-push-card"
 import { adminMessage, formatAdminError, jsonBody, request } from "@/admin/api"
 import {
   Btn,
@@ -410,6 +411,7 @@ export function ContentView({ data }: { data: any }) {
         description={t("admin.content.description")}
       />
       <SourceFetchCard source="youtube" data={data} />
+      <YoutubePushCard data={data} />
       <FeaturedVideoCard
         config={config}
         videos={videos}

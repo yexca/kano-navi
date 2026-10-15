@@ -31,6 +31,15 @@ seeding SQLite. An explicit `APP_MODE=development` bypasses
 authentication for local work. Production uses in-memory HttpOnly cookie sessions;
 restarting the process invalidates all sessions. The API exposes provider-key availability, never plaintext or ciphertext.
 
+## YouTube WebSub Callback: `/api/websub/youtube`
+
+The route is active only while YouTube push is enabled in `/admin`
+(`/api/admin/youtube-push`); otherwise it answers like an unknown API path. It
+answers Google's hub verification for this channel's topic and accepts signed
+Atom notifications, which only wake a queued YouTube sync. See
+[Sources](sources.md#websub-push) for the settings, verification, signature,
+debounce and queue rules.
+
 ## MCP Boundary: `/mcp`
 
 `/mcp` uses stateless Streamable HTTP. `dashboard_read`, `schedule_list`,

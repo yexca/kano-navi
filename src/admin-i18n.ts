@@ -91,6 +91,7 @@ export const adminMessages = {
     "admin.trigger.scheduler": "Scheduler",
     "admin.trigger.mcp": "MCP",
     "admin.trigger.cli": "Command line",
+    "admin.trigger.websub": "YouTube push",
     "admin.trigger.other": "Other",
 
     "admin.workflow.title": "Workflows",
@@ -574,6 +575,50 @@ export const adminMessages = {
     "admin.content.featuredVideo": "Video",
     "admin.content.notSet": "Not set",
     "admin.content.featuredSaved": "Featured video saved",
+    "admin.push.title": "YouTube push (WebSub)",
+    "admin.push.description":
+      "Google's hub notifies this server about new uploads and reservations, which queues a YouTube sync. Polling continues as a fallback.",
+    "admin.push.enabled": "Receive push notifications",
+    "admin.push.callback": "Public callback URL",
+    "admin.push.callbackHint": ({ path }: { path: string }) =>
+      `An HTTPS address reachable from the internet that forwards to ${path} on this server.`,
+    "admin.push.useOrigin": "Use this site's address",
+    "admin.push.skipped":
+      "YouTube synchronization is disabled by SKIP_YOUTUBE, so push cannot be enabled.",
+    "admin.push.secret": "Signing secret",
+    "admin.push.secretReady": "Generated and stored encrypted",
+    "admin.push.secretMissing": "Generated when enabled",
+    "admin.push.lease": "Subscription expires",
+    "admin.push.renewal": "Next renewal",
+    "admin.push.notification": "Last notification",
+    "admin.push.pending": "sync pending",
+    "admin.push.triggered": "Last push-triggered sync",
+    "admin.push.never": "—",
+    "admin.push.footnote":
+      "Live start/end and reservation time changes are not pushed reliably; keep a workflow timer for those.",
+    "admin.push.rotate": "Rotate secret",
+    "admin.push.rotateConfirm":
+      "Generate a new signing secret and resubscribe? Notifications signed with the old secret are ignored.",
+    "admin.push.saved": "YouTube push settings saved",
+    "admin.push.rotated": "Signing secret rotated",
+    "admin.push.state.off": "Off",
+    "admin.push.state.verified": "Subscribed",
+    "admin.push.state.waiting": "Awaiting verification",
+    "admin.push.state.failed": "Needs attention",
+    "admin.push.error.websub_hub_timeout": "The hub did not respond in time.",
+    "admin.push.error.websub_hub_unavailable": "The hub could not be reached.",
+    "admin.push.error.websub_hub_http_error":
+      "The hub rejected the subscription request.",
+    "admin.push.error.websub_hub_rate_limited":
+      "The hub is rate limiting requests; retrying later.",
+    "admin.push.error.websub_hub_redirect_rejected":
+      "The hub answered with a redirect, which is not followed.",
+    "admin.push.error.websub_invalid_request":
+      "The subscription request could not be built.",
+    "admin.push.error.websub_hub_denied": "The hub denied the subscription.",
+    "admin.push.error.websub_verification_missing":
+      "The hub never verified the callback. Check that the URL is public and forwards to this server.",
+    "admin.push.error.other": "The subscription failed.",
 
     "admin.profile.title": "Avatar and banner",
     "admin.profile.help":
@@ -715,6 +760,7 @@ export const adminMessages = {
     "admin.trigger.scheduler": "定时",
     "admin.trigger.mcp": "MCP",
     "admin.trigger.cli": "命令行",
+    "admin.trigger.websub": "YouTube 推送",
     "admin.trigger.other": "其他",
 
     "admin.workflow.title": "工作流",
@@ -1174,6 +1220,46 @@ export const adminMessages = {
     "admin.content.featuredVideo": "视频",
     "admin.content.notSet": "未设置",
     "admin.content.featuredSaved": "精选视频已保存",
+    "admin.push.title": "YouTube 推送（WebSub）",
+    "admin.push.description":
+      "由 Google 的 hub 通知本服务器有新上传或直播预约，随后排入一次 YouTube 同步。轮询仍作为兜底保留。",
+    "admin.push.enabled": "接收推送通知",
+    "admin.push.callback": "公网回调地址",
+    "admin.push.callbackHint": ({ path }: { path: string }) =>
+      `可从公网访问的 HTTPS 地址，并转发到本服务器的 ${path}。`,
+    "admin.push.useOrigin": "使用当前站点地址",
+    "admin.push.skipped": "SKIP_YOUTUBE 已停用 YouTube 同步，无法启用推送。",
+    "admin.push.secret": "签名密钥",
+    "admin.push.secretReady": "已生成并加密保存",
+    "admin.push.secretMissing": "启用时自动生成",
+    "admin.push.lease": "订阅到期",
+    "admin.push.renewal": "下次续订",
+    "admin.push.notification": "最近通知",
+    "admin.push.pending": "等待同步",
+    "admin.push.triggered": "最近由推送触发的同步",
+    "admin.push.never": "—",
+    "admin.push.footnote":
+      "开播、下播和预约时间变更不会可靠推送，请继续为它们保留工作流定时器。",
+    "admin.push.rotate": "更换密钥",
+    "admin.push.rotateConfirm":
+      "生成新的签名密钥并重新订阅？使用旧密钥签名的通知将被忽略。",
+    "admin.push.saved": "YouTube 推送设置已保存",
+    "admin.push.rotated": "签名密钥已更换",
+    "admin.push.state.off": "未启用",
+    "admin.push.state.verified": "已订阅",
+    "admin.push.state.waiting": "等待验证",
+    "admin.push.state.failed": "需要处理",
+    "admin.push.error.websub_hub_timeout": "hub 未在时限内响应。",
+    "admin.push.error.websub_hub_unavailable": "无法连接到 hub。",
+    "admin.push.error.websub_hub_http_error": "hub 拒绝了订阅请求。",
+    "admin.push.error.websub_hub_rate_limited": "hub 正在限流，稍后会重试。",
+    "admin.push.error.websub_hub_redirect_rejected":
+      "hub 返回了重定向，已按策略拒绝跟随。",
+    "admin.push.error.websub_invalid_request": "无法构建订阅请求。",
+    "admin.push.error.websub_hub_denied": "hub 拒绝了这项订阅。",
+    "admin.push.error.websub_verification_missing":
+      "hub 一直没有完成回调验证。请确认地址可从公网访问并转发到本服务器。",
+    "admin.push.error.other": "订阅失败。",
 
     "admin.profile.title": "头像与横幅",
     "admin.profile.help":

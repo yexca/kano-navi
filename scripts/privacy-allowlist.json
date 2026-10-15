@@ -26,6 +26,10 @@
       "reason": "Optional server-side YouTube Data API date-window search and pagination; API credentials are sent only in headers."
     },
     {
+      "host": "pubsubhubbub.appspot.com",
+      "reason": "Google's public WebSub hub; the server sends subscribe requests for the configured YouTube channel feed only when an operator sets a callback URL."
+    },
+    {
       "host": "github.com",
       "reason": "Public repository and documentation links."
     },

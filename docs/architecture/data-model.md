@@ -27,7 +27,7 @@ belong to the TypeScript initializer. See
 | `media_links`            | Links from cached media to posts, videos, profiles, and focus items                                       |
 | `sync_runs`              | Status, counts, error summaries, trigger, and asynchronous job identity                                   |
 | `sync_state`             | Durable per-account X and YouTube cursors                                                                 |
-| `app_settings`           | Non-secret model, schedule-extractor, X-account, and Featured settings                                    |
+| `app_settings`           | Model, schedule-extractor, X-account, Featured, and YouTube push settings (push secret sealed)            |
 | `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                            |
 | `post_llm_states`        | Per-post LLM status, last attempt, error, and reprocess queue state                                       |
 | `schedule_asset_reviews` | Per-schedule-image LLM verdict, skip reason, and optional manual label with its reason                    |

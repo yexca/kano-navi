@@ -7,6 +7,13 @@
 - `/mcp` is a separate integration boundary: public tools expose only prepared
   read-only facts, while mutation tools require a dedicated bearer token. The
   token never grants the browser admin session or arbitrary server access.
+- `/api/websub/youtube` is active only while YouTube push is enabled in
+  `/admin`. It accepts unauthenticated hub traffic by design, so it trusts only
+  bodies whose `X-Hub-Signature` matches the server-generated signing secret,
+  and even those can only queue a debounced YouTube sync; it never writes
+  snapshots or reveals whether a signature was valid. The secret is sealed with
+  `LLM_SECRETS_KEY` in SQLite and never returned by the admin API; rotate it
+  from the YouTube push card, which resubscribes with the new value.
 - Cached media is runtime state. The only file read route is `/media/:id`; it
   validates an opaque database ID, a ready status, and a resolved path below the
   cache root.

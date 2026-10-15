@@ -12,6 +12,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/config"
 	"github.com/yexca/kano-navi/backend-go/internal/publicview"
+	"github.com/yexca/kano-navi/backend-go/internal/source/youtube/websub"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 	"github.com/yexca/kano-navi/backend-go/internal/workflow"
 )
@@ -24,6 +25,8 @@ type Handler struct {
 	// of the site instead of a read-only sidecar.
 	static http.Handler
 	mcp    http.Handler
+	// websub receives YouTube hub verifications and signed notifications.
+	websub http.Handler
 }
 
 // Standalone carries everything the single-process owner serves beyond the
@@ -33,6 +36,9 @@ type Standalone struct {
 	Queue  *workflow.Queue
 	Static http.Handler
 	MCP    http.Handler
+	// WebSub answers the YouTube hub; it reports the route as absent while
+	// push is disabled in /admin.
+	WebSub http.Handler
 }
 
 // NewStandaloneHandler serves the whole product from this process.
@@ -46,6 +52,7 @@ func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, auth *admin
 		admin:  &adminHandler{store: store, auth: auth, queue: options.Queue, compat: options.Compat},
 		static: options.Static,
 		mcp:    options.MCP,
+		websub: options.WebSub,
 	}
 }
 
@@ -145,6 +152,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.media(w, r, strings.TrimPrefix(r.URL.Path, "/media/"))
 		case strings.HasPrefix(r.URL.Path, "/media"):
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"}, "")
+		case h.websub != nil && r.URL.Path == websub.CallbackPath:
+			h.websub.ServeHTTP(w, r)
 		case strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/api":
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
 		case h.mcp != nil && (r.URL.Path == "/mcp" || strings.HasPrefix(r.URL.Path, "/mcp/")):
