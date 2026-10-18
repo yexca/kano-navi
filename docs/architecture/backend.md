@@ -116,8 +116,9 @@ introduce a dashboard response cache.
 ## Bounded Public Calendar
 
 `GET /api/calendar?from=2026-10-05&to=2026-10-11&page=1&pageSize=100`
-reads an inclusive range of at most seven Japan dates, with 1–100 events per
-page in stable chronological order. It returns sanitized `items` / `events`,
+reads an inclusive range of at most 42 Japan dates (six Monday-first weeks,
+enough for a month grid), with 1–100 events per page in stable chronological
+order. It returns sanitized `items` / `events`,
 `total`, `totalPages`, `hasNext`, `dayCounts`, `revision`, matching approved
 schedule images and `adjacent.previous` / `adjacent.next` event dates. Invalid
 ranges return 400. Every read uses the same public event projection as the

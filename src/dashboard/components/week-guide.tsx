@@ -1,0 +1,662 @@
+import type { Locale, ScheduleAsset, ScheduleEvent, Translator } from "@/types"
+import { useMemo } from "react"
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  ChevronLeft,
+  ChevronRight,
+  ImageIcon,
+  Sparkles,
+} from "lucide-react"
+
+import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
+import { ExternalLink } from "@/site/links"
+import {
+  addDays,
+  cleanVideoTitle,
+  dateKey,
+  eventDateKey,
+  eventIsManual,
+  eventStatus,
+  eventTypeKey,
+  formatJapanTime,
+  formatLongDate,
+  formatWeekRange,
+  intlLocale,
+  japanToday,
+  localDateKey,
+  sortEvents,
+  startOfWeek,
+} from "../format"
+import type { CalendarView } from "../use-dashboard"
+
+function keyToDate(key: string) {
+  const [year, month, day] = key.split("-").map(Number)
+  return new Date(year, month - 1, day)
+}
+
+const typeTones: Record<string, string> = {
+  stream: "berry",
+  member: "lavender",
+  event: "sky",
+  release: "honey",
+  video: "leaf",
+}
+
+function GuideEvent({
+  event,
+  now,
+  t,
+}: {
+  event: ScheduleEvent
+  now: number
+  t: Translator
+}) {
+  const status = eventStatus(event, now)
+  const typeKey = eventTypeKey(event)
+  const tone = typeTones[String(event.eventType || "").toLowerCase()] || "sky"
+  const time = event.startsAt ? formatJapanTime(event.startsAt) : null
+  const manual = eventIsManual(event)
+  const Wrapper = event.url ? ExternalLink : "div"
+  const cancellationNote =
+    event.cancellationStatus === "llm_suspected"
+      ? [
+          t("schedule.cancellationReview"),
+          event.cancellationReason,
+          event.cancellationEvidence,
+        ]
+      : event.cancellationStatus === "manual_confirmed"
+        ? [
+            event.cancellationReason || t("schedule.cancellationManual"),
+            event.cancellationEvidence,
+          ]
+        : null
+
+  return (
+    <li>
+      <Wrapper
+        className={`guide-event tone-${tone} is-${status}`}
+        href={event.url || undefined}
+      >
+        <span className="guide-event-time">
+          {time ? (
+            <>
+              <strong>{time}</strong>
+              <small>{t("common.timezoneShort")}</small>
+            </>
+          ) : (
+            <small>{t("common.pendingConfirmation")}</small>
+          )}
+          {event.url ? <ArrowUpRight aria-hidden="true" /> : null}
+        </span>
+        <span className="guide-event-title">
+          {cleanVideoTitle(event.title)}
+        </span>
+        {event.detail ? (
+          <span className="guide-event-detail">{event.detail}</span>
+        ) : null}
+        <span className="guide-event-tags">
+          {typeKey ? <span className="tag">{t(typeKey)}</span> : null}
+          {status !== "upcoming" ? (
+            <span
+              className={`tag tone-${
+                status === "cancelled"
+                  ? "danger"
+                  : status === "cancellation_review"
+                    ? "honey"
+                    : "muted"
+              }`}
+            >
+              {t(`schedule.status.${status}`)}
+            </span>
+          ) : null}
+          <span
+            className={`guide-provenance${manual ? " is-manual" : ""}`}
+            title={t(
+              manual ? "schedule.sourceManual" : "schedule.sourceAutomatic",
+            )}
+          >
+            {manual ? (
+              <BadgeCheck aria-hidden="true" />
+            ) : (
+              <Sparkles aria-hidden="true" />
+            )}
+            {t(manual ? "schedule.sourceManual" : "schedule.sourceAutomatic")}
+          </span>
+        </span>
+        {cancellationNote ? (
+          <span className="guide-event-note">
+            {cancellationNote.filter(Boolean).join(" · ")}
+          </span>
+        ) : null}
+      </Wrapper>
+    </li>
+  )
+}
+
+function WeekDays({
+  weekStart,
+  byDay,
+  dayCounts,
+  todayKey,
+  locale,
+  now,
+  t,
+}: {
+  weekStart: Date
+  byDay: Map<string, ScheduleEvent[]>
+  dayCounts: Record<string, number>
+  todayKey: string
+  locale: Locale
+  now: number
+  t: Translator
+}) {
+  const days = Array.from({ length: 7 }, (_, index) =>
+    addDays(weekStart, index),
+  )
+  return (
+    <ol className="guide-days">
+      {days.map((day, index) => {
+        const key = localDateKey(day)
+        const items = byDay.get(key) || []
+        const count = dayCounts[key] ?? items.length
+        const isToday = key === todayKey
+        const isPast = key < todayKey
+        return (
+          <li
+            key={key}
+            className={`guide-day${isToday ? " is-today" : ""}${isPast ? " is-past" : ""}${count ? "" : " is-empty"}${index >= 5 ? " is-weekend" : ""}`}
+            aria-current={isToday ? "date" : undefined}
+          >
+            <div className="guide-day-head">
+              <span className="sr-only">
+                {t("schedule.dayEvents", {
+                  date: formatLongDate(day, locale),
+                  count,
+                })}
+              </span>
+              <span className="guide-day-name" aria-hidden="true">
+                {t("schedule.weekdays")[index]}
+              </span>
+              <span className="guide-day-number" aria-hidden="true">
+                {day.getDate()}
+              </span>
+              {isToday ? (
+                <span className="guide-day-today">{t("schedule.today")}</span>
+              ) : null}
+            </div>
+            {items.length ? (
+              <ol className="guide-day-events">
+                {items.map((event) => (
+                  <GuideEvent key={event.id} event={event} now={now} t={t} />
+                ))}
+              </ol>
+            ) : (
+              <span className="guide-day-none" aria-hidden="true">
+                —
+              </span>
+            )}
+            {count > items.length ? (
+              <span className="guide-day-more">
+                {t("schedule.moreOnDay", { count: count - items.length })}
+              </span>
+            ) : null}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+const MONTH_CHIPS = 3
+
+/**
+ * Month overview: Monday-first weeks covering the month. Each day shows up to
+ * three compact entries (dots on phones); its date opens that day's week.
+ */
+function MonthGrid({
+  monthStart,
+  byDay,
+  dayCounts,
+  todayKey,
+  onOpenWeek,
+  locale,
+  now,
+  t,
+}: {
+  monthStart: Date
+  byDay: Map<string, ScheduleEvent[]>
+  dayCounts: Record<string, number>
+  todayKey: string
+  onOpenWeek: (day: Date) => void
+  locale: Locale
+  now: number
+  t: Translator
+}) {
+  const month = monthStart.getMonth()
+  const first = startOfWeek(monthStart)
+  const last = new Date(monthStart.getFullYear(), month + 1, 0)
+  const length =
+    Math.round(
+      (addDays(startOfWeek(last), 7).getTime() - first.getTime()) / 86400000,
+    ) || 35
+  const days = Array.from({ length }, (_, index) => addDays(first, index))
+  const weekdays = t("schedule.weekdays") as unknown as string[]
+
+  return (
+    <div className="month">
+      <div className="month-weekdays" aria-hidden="true">
+        {weekdays.map((name, index) => (
+          <span key={index} className={index >= 5 ? "is-weekend" : undefined}>
+            {name}
+          </span>
+        ))}
+      </div>
+      <ol className="month-days">
+        {days.map((day, index) => {
+          const key = localDateKey(day)
+          const items = byDay.get(key) || []
+          const count = dayCounts[key] ?? items.length
+          const isToday = key === todayKey
+          const outside = day.getMonth() !== month
+          const weekday = index % 7
+          return (
+            <li
+              key={key}
+              className={`month-day${isToday ? " is-today" : ""}${key < todayKey ? " is-past" : ""}${outside ? " is-outside" : ""}${count ? " has-events" : ""}${weekday === 5 ? " is-saturday" : ""}${weekday === 6 ? " is-sunday" : ""}`}
+              aria-current={isToday ? "date" : undefined}
+            >
+              <button
+                type="button"
+                className="month-day-number"
+                onClick={() => onOpenWeek(day)}
+                aria-label={`${t("schedule.dayEvents", {
+                  date: formatLongDate(day, locale),
+                  count,
+                })} · ${t("schedule.openWeek")}`}
+              >
+                {day.getDate()}
+              </button>
+              {items.length ? (
+                <ol className="month-events">
+                  {items.slice(0, MONTH_CHIPS).map((event) => {
+                    const status = eventStatus(event, now)
+                    const tone =
+                      typeTones[String(event.eventType || "").toLowerCase()] ||
+                      "sky"
+                    const time = event.startsAt
+                      ? formatJapanTime(event.startsAt)
+                      : null
+                    const label = `${time || t("common.pendingConfirmation")} ${cleanVideoTitle(event.title)} · ${t(`schedule.status.${status}`)}`
+                    const Wrapper = event.url ? ExternalLink : "span"
+                    return (
+                      <li key={event.id}>
+                        <Wrapper
+                          className={`month-event tone-${tone} is-${status}`}
+                          href={event.url || undefined}
+                          title={label}
+                        >
+                          <span className="sr-only">{label}</span>
+                          <span aria-hidden="true">
+                            {time ? <strong>{time}</strong> : null}
+                            {cleanVideoTitle(event.title)}
+                          </span>
+                        </Wrapper>
+                      </li>
+                    )
+                  })}
+                </ol>
+              ) : null}
+              {count > Math.min(items.length, MONTH_CHIPS) ? (
+                <span className="month-more">
+                  {t("schedule.moreOnDay", {
+                    count: count - Math.min(items.length, MONTH_CHIPS),
+                  })}
+                </span>
+              ) : null}
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
+function formatMonth(date: Date, locale: Locale) {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
+    year: "numeric",
+    month: "long",
+  }).format(date)
+}
+
+/**
+ * The schedule guide: a Monday-first week (seven day columns on wide screens,
+ * a day list on narrow ones) that can widen to the whole month. Every time is
+ * Japan time; date-only entries never get a synthetic start.
+ */
+export function WeekGuide({
+  view,
+  setView,
+  events,
+  scheduleImages,
+  weekStart,
+  setWeekStart,
+  monthStart,
+  setMonthStart,
+  range,
+  adjacent,
+  error,
+  onRetry,
+  total,
+  hasNext,
+  onLoadMore,
+  dayCounts = {},
+  isLoading,
+  onOpenImage,
+  locale,
+  now,
+  t,
+}: {
+  view: CalendarView
+  setView: (view: CalendarView) => void
+  events: ScheduleEvent[]
+  scheduleImages: ScheduleAsset[]
+  weekStart: Date
+  setWeekStart: (value: Date | ((value: Date) => Date)) => void
+  monthStart: Date
+  setMonthStart: (value: Date | ((value: Date) => Date)) => void
+  range: { from: string; to: string }
+  adjacent: { previous: string | null; next: string | null }
+  error: Error | null
+  onRetry: () => unknown
+  total: number
+  hasNext: boolean
+  onLoadMore: () => unknown
+  dayCounts: Record<string, number>
+  isLoading: boolean
+  onOpenImage: (asset: ScheduleAsset) => void
+  locale: Locale
+  now: number
+  t: Translator
+}) {
+  const todayKey = dateKey(new Date(now))
+  const isMonth = view === "month"
+  const byDay = useMemo(() => {
+    const grouped = new Map<string, ScheduleEvent[]>()
+    for (const event of sortEvents(events)) {
+      const key = eventDateKey(event)
+      if (key < range.from || key > range.to) continue
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key).push(event)
+    }
+    return grouped
+  }, [events, range.from, range.to])
+  const loaded = [...byDay.values()].reduce(
+    (count, items) => count + items.length,
+    0,
+  )
+  const today = japanToday()
+  const isCurrent = isMonth
+    ? monthStart.getFullYear() === today.getFullYear() &&
+      monthStart.getMonth() === today.getMonth()
+    : localDateKey(weekStart) === localDateKey(startOfWeek(today))
+  const adjacentKey = adjacent.next || adjacent.previous
+  const jumpTarget =
+    !loaded && !total && adjacentKey ? keyToDate(adjacentKey) : null
+  const weekStartId = localDateKey(weekStart)
+  const weekEndId = localDateKey(addDays(weekStart, 6))
+  const scheduleImage = isMonth
+    ? null
+    : scheduleImages.find((asset) =>
+        asset.url && asset.periodStart && asset.periodEnd
+          ? asset.periodStart <= weekEndId && asset.periodEnd >= weekStartId
+          : asset.url && asset.weekStart === weekStartId,
+      )
+  const label = isMonth
+    ? formatMonth(monthStart, locale)
+    : formatWeekRange(weekStart, locale)
+
+  const step = (offset: number) =>
+    isMonth
+      ? setMonthStart(
+          (current) =>
+            new Date(current.getFullYear(), current.getMonth() + offset, 1),
+        )
+      : setWeekStart((current) => addDays(current, offset * 7))
+  const goToday = () =>
+    isMonth
+      ? setMonthStart(new Date(today.getFullYear(), today.getMonth(), 1))
+      : setWeekStart(startOfWeek(today))
+  const jump = (day: Date) =>
+    isMonth
+      ? setMonthStart(new Date(day.getFullYear(), day.getMonth(), 1))
+      : setWeekStart(startOfWeek(day))
+  const switchView = (next: CalendarView) => {
+    if (next === view) return
+    // Keep the reader in place: the month follows the visible week (or
+    // today, when it is inside that week); the week follows the month.
+    if (next === "month") {
+      const anchor =
+        todayKey >= weekStartId && todayKey <= weekEndId
+          ? today
+          : addDays(weekStart, 3)
+      setMonthStart(new Date(anchor.getFullYear(), anchor.getMonth(), 1))
+    } else {
+      const inMonth =
+        today.getFullYear() === monthStart.getFullYear() &&
+        today.getMonth() === monthStart.getMonth()
+      setWeekStart(startOfWeek(inMonth ? today : monthStart))
+    }
+    setView(next)
+  }
+
+  return (
+    <section
+      className={`section guide is-${view}`}
+      id="schedule"
+      aria-labelledby="guide-title"
+    >
+      <SectionTitle
+        id="guide-title"
+        kicker={label}
+        title={t(isMonth ? "schedule.monthTitle" : "schedule.title")}
+        note={t("schedule.note")}
+      >
+        <div
+          className="segmented"
+          role="group"
+          aria-label={t("schedule.viewLabel")}
+        >
+          {(["week", "month"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={view === option}
+              onClick={() => switchView(option)}
+            >
+              {t(
+                option === "week" ? "schedule.viewWeek" : "schedule.viewMonth",
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="guide-nav" role="group" aria-label={label}>
+          <button
+            type="button"
+            className="round-button"
+            onClick={() => step(-1)}
+            aria-label={t(
+              isMonth ? "schedule.previousMonth" : "schedule.previousWeek",
+            )}
+            title={t(
+              isMonth ? "schedule.previousMonth" : "schedule.previousWeek",
+            )}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="pill-button"
+            disabled={isCurrent}
+            onClick={goToday}
+          >
+            {t(isMonth ? "schedule.thisMonth" : "schedule.thisWeek")}
+          </button>
+          <button
+            type="button"
+            className="round-button"
+            onClick={() => step(1)}
+            aria-label={t(isMonth ? "schedule.nextMonth" : "schedule.nextWeek")}
+            title={t(isMonth ? "schedule.nextMonth" : "schedule.nextWeek")}
+          >
+            <ChevronRight aria-hidden="true" />
+          </button>
+        </div>
+      </SectionTitle>
+
+      {error ? (
+        <div className="inline-alert" role="alert">
+          <span>{t("error.api")}</span>
+          <button type="button" className="pill-button" onClick={onRetry}>
+            {t("common.retry")}
+          </button>
+        </div>
+      ) : null}
+
+      {isLoading && !loaded ? (
+        <Placeholder lines={4} />
+      ) : !loaded && !total && !isMonth ? (
+        <EmptyNote
+          title={t("schedule.emptyWeek")}
+          hint={t("schedule.emptyHint")}
+        >
+          {jumpTarget ? (
+            <button
+              type="button"
+              className="pill-button"
+              onClick={() => jump(jumpTarget)}
+            >
+              {t("schedule.jumpTo", {
+                range: formatWeekRange(startOfWeek(jumpTarget), locale),
+              })}
+              <ChevronRight aria-hidden="true" />
+            </button>
+          ) : null}
+        </EmptyNote>
+      ) : isMonth ? (
+        <>
+          {!loaded && !total ? (
+            <EmptyNote
+              title={t("schedule.emptyMonth")}
+              hint={t("schedule.emptyHint")}
+            >
+              {jumpTarget ? (
+                <button
+                  type="button"
+                  className="pill-button"
+                  onClick={() => jump(jumpTarget)}
+                >
+                  {t("schedule.jumpTo", {
+                    range: formatMonth(jumpTarget, locale),
+                  })}
+                  <ChevronRight aria-hidden="true" />
+                </button>
+              ) : null}
+            </EmptyNote>
+          ) : null}
+          <MonthGrid
+            monthStart={monthStart}
+            byDay={byDay}
+            dayCounts={dayCounts}
+            todayKey={todayKey}
+            onOpenWeek={(day) => {
+              setWeekStart(startOfWeek(day))
+              setView("week")
+            }}
+            locale={locale}
+            now={now}
+            t={t}
+          />
+        </>
+      ) : (
+        <WeekDays
+          weekStart={weekStart}
+          byDay={byDay}
+          dayCounts={dayCounts}
+          todayKey={todayKey}
+          locale={locale}
+          now={now}
+          t={t}
+        />
+      )}
+
+      <div className="guide-foot">
+        <p className="guide-legend">
+          <span className="guide-provenance">
+            <Sparkles aria-hidden="true" />
+            {t("schedule.sourceAutomatic")}
+          </span>
+          <span className="guide-provenance is-manual">
+            <BadgeCheck aria-hidden="true" />
+            {t("schedule.sourceManual")}
+          </span>
+          <span>{t("schedule.weekCount", { count: total })}</span>
+          {isMonth ? <span>{t("schedule.monthHint")}</span> : null}
+        </p>
+        {hasNext ? (
+          <button type="button" className="pill-button" onClick={onLoadMore}>
+            {t(isMonth ? "schedule.moreInMonth" : "schedule.moreEvents")}
+          </button>
+        ) : null}
+      </div>
+
+      {isMonth ? null : (
+        <div className="guide-image">
+          {scheduleImage ? (
+            <>
+              <button
+                type="button"
+                className="guide-image-thumb"
+                onClick={() => onOpenImage(scheduleImage)}
+                aria-label={t("schedule.imageView")}
+              >
+                <img
+                  src={scheduleImage.url}
+                  alt={scheduleImage.alt || t("schedule.imageAlt")}
+                  loading="lazy"
+                />
+              </button>
+              <div className="guide-image-copy">
+                <p className="kicker">{t("schedule.imageTitle")}</p>
+                <p>{t("schedule.imageNote")}</p>
+                <div className="guide-image-actions">
+                  <button
+                    type="button"
+                    className="pill-button"
+                    onClick={() => onOpenImage(scheduleImage)}
+                  >
+                    {t("schedule.imageView")}
+                  </button>
+                  {scheduleImage.sourceUrl ? (
+                    <ExternalLink
+                      className="text-link"
+                      href={scheduleImage.sourceUrl}
+                    >
+                      {t("schedule.imageOpen")}
+                      <ArrowUpRight aria-hidden="true" />
+                    </ExternalLink>
+                  ) : null}
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="guide-image-empty">
+              <ImageIcon aria-hidden="true" />
+              {t("schedule.imageEmpty")}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}

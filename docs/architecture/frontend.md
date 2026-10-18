@@ -7,12 +7,18 @@ page in `src/history/`, the static `/about` page in `src/about/`, and `/admin`. 
 static; verified fixed images ship in `public/assets/history/` and `dist/`.
 `scripts/package-history-media.ts` updates these files from a local reference
 archive without network requests.
-See [History and visual archive](../product/history.md). The board
-lives in `src/dashboard/`: `use-dashboard.ts` owns the snapshot request and
-revision polling, `format.ts` owns Japan-time and event-status helpers,
-`content.ts` holds static public links, and `components/` renders the header,
-hero and spotlight, weekly schedule, X feed, videos, and archive. Its styles are
-in `src/dashboard/dashboard.css` on top of the shared tokens in `src/index.css`. The hidden `/admin` console
+See [History and visual archive](../product/history.md). The three public
+pages share `src/site/`: `site-shell.tsx` (header with page navigation and
+Japan clock, footer, skip link, section title, empty and loading states),
+`media-dialog.tsx` (the native modal image viewer), `links.tsx` (external
+links and platform marks), and `site.css` (shell, controls, tone classes and
+the dialog). The board lives in `src/dashboard/`: `use-dashboard.ts` owns the
+snapshot request and revision polling, `format.ts` owns Japan-time and
+event-status helpers, `content.ts` holds static public links, and
+`components/` renders the next-up stage and profile card, the week guide,
+the video shelf, the post wall, and the link directory. Its styles are in
+`src/dashboard/board.css` on top of `src/site/site.css` and the shared tokens
+in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/`: `index.tsx` registers the views and renders the shell,
 `use-admin-data.ts` owns every admin request and job polling, `views/` holds
 the workflow, schedule, detection-rule, LLM-provider, and content views, and
@@ -100,12 +106,13 @@ continue to pause while hidden. A failed initial snapshot retries even before
 any revision has been recorded; manual retry remains available. Admin 401 stops
 polling and requires login. Failed initial admin loads also retry.
 
-The calendar's selected week lives in `use-dashboard.ts`. It reads one bounded
-page, shows the complete week/day counts, and offers more-event pagination.
-Changing weeks cancels old work and begins at page one; errors keep a retry control.
-Same-week refreshes with an unchanged revision retain every already loaded page.
+The calendar's view (week or month), selected week and selected month live in
+`use-dashboard.ts`; a month reads the Monday-first weeks that cover it. It reads
+one bounded page, shows the complete range/day counts, and offers more-event
+pagination. Changing the range cancels old work and begins at page one; errors keep a retry control.
+Same-range refreshes with an unchanged revision retain every already loaded page.
 A revision change rereads the loaded page range and replaces it atomically, stopping
-at the new last page if the week shrank. A change while reading that range restarts
+at the new last page if the range shrank. A change while reading that range restarts
 from page one, with at most three attempts under the shared request deadline.
 Failed or repeatedly changing reads retain the complete known generation for retry;
 they never append pages from different revisions. Automatic snapshot refresh waits

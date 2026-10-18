@@ -83,7 +83,7 @@ Backend paths are relative to backend-go/.
 
 | Area                             | Main paths                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------ |
-| Public UI and history            | src/dashboard/, src/history/, src/about/, src/components/ui/                   |
+| Public UI and history            | src/site/, src/dashboard/, src/history/, src/about/, src/components/ui/        |
 | Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                      |
 | Entry point and commands         | cmd/kano-go/ (serve, seed, sync, migrate-llm, healthcheck), ../Dockerfile      |
 | API, authentication, projections | internal/httpapi/, internal/adminauth/, internal/mcpapi/, internal/publicview/ |

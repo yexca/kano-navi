@@ -146,7 +146,8 @@ Event totals and upcoming counts use SQL aggregates over all visible records;
 post counts describe the requested date window, even if its preview exceeds
 100 posts. Media cache totals aggregate recorded statuses; each displayed asset
 is independently checked for file availability. Calendar pages contain at most
-100 events in an inclusive seven-day range, total/day counts, the snapshot
+100 events in an inclusive range of at most 42 days (a Monday-first month
+grid), total/day counts, the snapshot
 revision and adjacent dates. Tombstones are excluded on every public path.
 
 Additive indexes on `(source, source_item_id, id)` and locally normalized

@@ -27,29 +27,38 @@ YouTube, or any other original source.
 
 ## Page Information Architecture
 
-1. Sticky header: avatar, name, section navigation, snapshot time and health,
-   language and theme controls.
-2. Now: the gingham banner, identity (avatar, name, catchphrase, main links),
-   a spotlight card for the next stream or event with a Japan-time countdown
-   (falling back to the latest video), and a strip of counts plus a reload
-   button.
-3. Weekly schedule: a Monday-first week strip with per-day event dots, a week
-   agenda that can be narrowed to one day, a shortcut to the nearest week with
-   events, and the week's schedule image from X.
-4. Posts on X: roughly three days of posts from both accounts with an account
-   filter, image lightbox, and engagement counts. When the window is empty the
-   most recent stored post is still shown.
-5. YouTube: the manually selected Featured video with its focus copy, plus
-   recent uploads and reservations.
-6. Archive: a milestone timeline, the resource directory, and common hashtags,
-   with a link to the full journey page.
+Every public page shares one shell: a sticky header with the site name, page
+navigation (Now, Journey, About), a live Japan-time clock, and language and
+theme controls, plus a common footer. On the board the header also carries a
+snapshot health dot.
+
+1. Now: a ticket for what airs next (artwork, Japan date and time, the
+   visitor's local time, and an hours/minutes countdown, or an on-air state
+   while a stream is live), falling back to the latest video. Beside it, the
+   profile card: banner, avatar, name, catchphrase, main links, counts, and
+   the snapshot state with a reload button.
+2. Weekly schedule: a Monday-first program guide with seven day columns on
+   wide screens and a day list on narrow ones. Each entry shows its Japan
+   time (or "time TBA" for date-only records), type, status, and automatic or
+   confirmed provenance. Week navigation, a shortcut to the nearest week with
+   events, more-event pagination, and the week's schedule image from X. A
+   Week/Month switch widens it to a month grid (compact entries, dots on
+   phones); picking a date opens that week.
+3. YouTube: the manually selected Featured video with its focus copy, then
+   reservations (soonest first) and recent uploads.
+4. Posts on X: roughly three days of posts from both accounts in a masonry
+   wall with an account filter, an image viewer, and engagement counts. When
+   the window is empty the most recent stored post is still shown.
+5. Links: the resource directory, a milestone summary linking to the full
+   journey page, and common hashtags.
 
 A separate `/history` page lists Kano's public milestones from the first 2010
 covers to joining Milpro SONA in 2026. It is static, curated content in
 `src/history/milestones.ts`: every entry keeps its original date precision
 (year, month, day, or range), names its activity identity (singer, Hanayori
 Joshiryo, Kano Mahoro, MKLNtic, Milpro SONA), and links the strongest public
-source. Visitors can filter by identity and jump to a year. A visual archive
+source. Visitors can filter by identity and jump to a year from a year rail
+(a sticky side rail on wide screens, a sticky strip on phones). A visual archive
 adds 59 bundled local images with image-type filtering, full-image dialogs,
 dimensions, date basis, recorded credits, and original-site links. Official
 stream frames explicitly identify the third-party archive and frame timestamp.

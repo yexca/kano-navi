@@ -42,7 +42,7 @@ The screenshots show a fresh local instance; source feeds populate after a workf
 | Area                     | What you can do                                                                                                       |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | Status board             | See the next stream or event, a Japan-time countdown, and recent activity at a glance.                                |
-| Weekly schedule          | Browse the week's agenda and schedule image, with labels for automatic extraction and manual confirmation.            |
+| Weekly schedule          | Browse a seven-day program guide or a month grid, with labels for automatic extraction and manual confirmation.       |
 | X & YouTube              | Read posts from both X accounts, browse uploads and scheduled streams, and highlight a Featured video.                |
 | Journey & visual archive | Explore milestones by identity and year, and browse bundled images with source links and credits.                     |
 | Operator console         | Run or schedule update workflows, curate events, manage profile media, and configure optional AI schedule extraction. |

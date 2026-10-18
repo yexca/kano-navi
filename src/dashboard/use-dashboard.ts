@@ -32,6 +32,33 @@ const emptyDashboard: Dashboard = {
   },
 }
 
+export type CalendarView = "week" | "month"
+
+/**
+ * Inclusive Japan-date range of the visible calendar: one Monday-first week,
+ * or the Monday-first weeks that cover a month (at most six, the API bound).
+ */
+export function calendarRange(
+  view: CalendarView,
+  weekStart: Date,
+  monthStart: Date,
+) {
+  if (view === "month") {
+    const first = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1)
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0)
+    return {
+      from: localDateKey(startOfWeek(first)),
+      to: localDateKey(addDays(startOfWeek(last), 6)),
+    }
+  }
+  return {
+    from: localDateKey(weekStart),
+    to: localDateKey(addDays(weekStart, 6)),
+  }
+}
+
+const rangeKey = ({ from, to }: { from: string; to: string }) => `${from}/${to}`
+
 const REVISION_POLL_MS = 8000
 const REQUEST_TIMEOUT_MS = 15000
 const MAX_RETRY_MS = 60000
@@ -55,6 +82,13 @@ export function useDashboard(now = Date.now()) {
   })
   const scope = useMemo(() => createRequestScope(), [])
   const [weekStart, setWeekStart] = useState(() => startOfWeek(japanToday()))
+  const [monthStart, setMonthStart] = useState(() => {
+    const today = japanToday()
+    return new Date(today.getFullYear(), today.getMonth(), 1)
+  })
+  const [calendarView, setCalendarView] = useState<CalendarView>("week")
+  const range = calendarRange(calendarView, weekStart, monthStart)
+  const visibleKey = rangeKey(range)
   const [calendar, setCalendar] = useState<CalendarSnapshot>({
     events: [],
     scheduleImages: [],
@@ -67,11 +101,11 @@ export function useDashboard(now = Date.now()) {
   })
   const [calendarLoading, setCalendarLoading] = useState(true)
   const [calendarError, setCalendarError] = useState<Error | null>(null)
-  const weekRef = useRef(weekStart)
-  weekRef.current = weekStart
+  const rangeRef = useRef(range)
+  rangeRef.current = range
   const calendarRef = useRef(calendar)
   calendarRef.current = calendar
-  const calendarWeekRef = useRef<string | null>(null)
+  const calendarKeyRef = useRef<string | null>(null)
   const readJson = async (url: string, signal: AbortSignal) => {
     const response = await fetch(url, {
       signal,
@@ -81,10 +115,9 @@ export function useDashboard(now = Date.now()) {
     return response.json()
   }
   const loadCalendar = useCallback(async () => {
-    const from = localDateKey(weekRef.current),
-      to = localDateKey(addDays(weekRef.current, 6))
-    const current =
-      calendarWeekRef.current === from ? calendarRef.current : null
+    const { from, to } = rangeRef.current
+    const key = rangeKey(rangeRef.current)
+    const current = calendarKeyRef.current === key ? calendarRef.current : null
     setCalendarLoading(true)
     try {
       const payload = await scope.run("calendar", async (signal) => {
@@ -124,8 +157,8 @@ export function useDashboard(now = Date.now()) {
         }
         throw new Error("Calendar changed during refresh")
       })
-      if (from !== localDateKey(weekRef.current)) return
-      calendarWeekRef.current = from
+      if (key !== rangeKey(rangeRef.current)) return
+      calendarKeyRef.current = key
       calendarRef.current = payload
       setCalendar(payload)
       setCalendarError(null)
@@ -134,7 +167,7 @@ export function useDashboard(now = Date.now()) {
     } catch (error) {
       if (
         scope.active &&
-        from === localDateKey(weekRef.current) &&
+        key === rangeKey(rangeRef.current) &&
         error.name !== "AbortError"
       ) {
         setCalendarError(error)
@@ -146,9 +179,9 @@ export function useDashboard(now = Date.now()) {
   const loadMoreCalendar = useCallback(async () => {
     const current = calendarRef.current
     if (!current.hasNext || scope.busy("calendar")) return
-    const from = localDateKey(weekRef.current),
-      to = localDateKey(addDays(weekRef.current, 6))
-    if (calendarWeekRef.current !== from) return
+    const { from, to } = rangeRef.current
+    const key = rangeKey(rangeRef.current)
+    if (calendarKeyRef.current !== key) return
     try {
       const next = await scope.run("calendar", (signal) =>
         readJson(
@@ -156,7 +189,7 @@ export function useDashboard(now = Date.now()) {
           signal,
         ),
       )
-      if (from !== localDateKey(weekRef.current)) return
+      if (key !== rangeKey(rangeRef.current)) return
       if (next.revision !== current.revision) {
         await loadCalendar()
         return
@@ -168,7 +201,7 @@ export function useDashboard(now = Date.now()) {
     } catch (error) {
       if (
         scope.active &&
-        from === localDateKey(weekRef.current) &&
+        key === rangeKey(rangeRef.current) &&
         error.name !== "AbortError"
       )
         setCalendarError(error)
@@ -295,7 +328,7 @@ export function useDashboard(now = Date.now()) {
             if (
               !scope.busy("calendar") &&
               !calendarRetryRef.current &&
-              (calendarWeekRef.current !== localDateKey(weekRef.current) ||
+              (calendarKeyRef.current !== rangeKey(rangeRef.current) ||
                 revision !== calendarRef.current.revision)
             )
               void loadCalendar()
@@ -388,7 +421,7 @@ export function useDashboard(now = Date.now()) {
       stop()
       scope.cancelKey("calendar")
     }
-  }, [weekStart, loadCalendar, scope])
+  }, [visibleKey, loadCalendar, scope])
   const currentDashboard = useMemo(
     () => deriveDashboardAt(dashboard, now),
     [dashboard, now],
@@ -404,6 +437,11 @@ export function useDashboard(now = Date.now()) {
     loadMoreCalendar,
     weekStart,
     setWeekStart,
+    monthStart,
+    setMonthStart,
+    calendarView,
+    setCalendarView,
+    calendarRange: range,
   }
 }
 

@@ -87,12 +87,27 @@ func TestCalendarRangePaginationAndPublicProjection(t *testing.T) {
 	for _, path := range []string{
 		"/api/calendar?from=2026-10-11&to=2026-10-03",
 		"/api/calendar?from=2026-02-30&to=2026-03-01",
-		"/api/calendar?from=2026-10-01&to=2026-10-08",
+		"/api/calendar?from=2026-09-28&to=2026-11-09",
 	} {
 		bad := request(t, handler, http.MethodGet, path)
 		if bad.Code != http.StatusBadRequest || bad.Body.String() != `{"error":"invalid_calendar_range"}` {
 			t.Fatalf("invalid calendar %s: status=%d body=%s", path, bad.Code, bad.Body)
 		}
+	}
+}
+
+func TestCalendarAcceptsAMonthGrid(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	store, err := sqlite.OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	handler := NewHandler(store)
+	// A six-week Monday-first grid is the widest public window.
+	month := request(t, handler, http.MethodGet, "/api/calendar?from=2026-09-28&to=2026-11-08")
+	if month.Code != http.StatusOK {
+		t.Fatalf("month grid status=%d body=%s", month.Code, month.Body)
 	}
 }
 

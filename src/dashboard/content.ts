@@ -13,14 +13,6 @@ export const fallbackProfile = {
   youtubeUrl: "https://www.youtube.com/channel/UCShXNLMXCfstmWKH_q86B8w",
 }
 
-export const sections = [
-  { id: "now", labelKey: "nav.now" },
-  { id: "schedule", labelKey: "nav.schedule" },
-  { id: "feed", labelKey: "nav.feed" },
-  { id: "videos", labelKey: "nav.videos" },
-  { id: "archive", labelKey: "nav.archive" },
-]
-
 export const hashtags = [
   {
     tag: "鹿乃まほろ",

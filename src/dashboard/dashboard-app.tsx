@@ -1,26 +1,34 @@
-import type { Post, ScheduleEvent } from "@/types"
+import type { Dashboard, ScheduleAsset, Translator } from "@/types"
 import { useCallback, useEffect, useState } from "react"
-import { ArrowUp, WifiOff } from "lucide-react"
+import { WifiOff } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
+import { MediaDialog, stepIndex } from "@/site/media-dialog"
+import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
 import { POST_WINDOW_DAYS } from "./content"
 import { formatStamp } from "./format"
 import { useDashboard, useNow } from "./use-dashboard"
-import { ArchiveSection } from "./components/archive-section"
-import { FeedPanel } from "./components/feed-panel"
-import { Hero } from "./components/hero"
-import { Lightbox } from "./components/lightbox"
-import { SchedulePanel } from "./components/schedule-panel"
-import { SiteHeader } from "./components/site-header"
-import { VideoSection } from "./components/video-section"
-import "./dashboard.css"
+import { LinkDirectory } from "./components/link-directory"
+import { NowStage, type SyncState } from "./components/now-stage"
+import { PostWall } from "./components/post-wall"
+import { VideoShelf } from "./components/video-shelf"
+import { WeekGuide } from "./components/week-guide"
+import "./board.css"
 
-function syncStateFor(meta, error, t) {
+interface ViewerImage {
+  url: string
+  alt?: string
+}
+
+function syncStateFor(
+  meta: Dashboard["meta"],
+  error: Error | null,
+  t: Translator,
+): SyncState {
   if (error) return { tone: "danger", label: t("sync.apiUnavailable") }
   const status = meta?.lastSync?.status
   if (!status) return { tone: "muted", label: t("sync.waiting") }
-  if (!status || status === "success")
-    return { tone: "leaf", label: t("sync.snapshot") }
+  if (status === "success") return { tone: "leaf", label: t("sync.snapshot") }
   if (status === "partial") return { tone: "honey", label: t("sync.partial") }
   return { tone: "danger", label: t("sync.needsReview") }
 }
@@ -41,9 +49,20 @@ export function DashboardApp() {
     loadMoreCalendar,
     weekStart,
     setWeekStart,
+    monthStart,
+    setMonthStart,
+    calendarView,
+    setCalendarView,
+    calendarRange,
   } = useDashboard(now)
-  const [toast, setToast] = useState(null)
-  const [lightbox, setLightbox] = useState(null)
+  const [toast, setToast] = useState<{
+    key: string
+    values?: Record<string, string>
+  } | null>(null)
+  const [viewer, setViewer] = useState<{
+    items: ViewerImage[]
+    index: number
+  } | null>(null)
 
   useEffect(() => {
     document.title = t("meta.title")
@@ -67,22 +86,31 @@ export function DashboardApp() {
     )
   }, [reload])
 
-  const openMedia = useCallback((media, index) => {
-    if (media?.length) setLightbox({ media, index })
+  const openImages = useCallback((items: ViewerImage[], index: number) => {
+    const ready = items.filter((item) => item.url)
+    if (ready.length) setViewer({ items: ready, index: Math.max(0, index) })
   }, [])
-  const closeLightbox = useCallback(() => setLightbox(null), [])
-  const stepLightbox = useCallback((offset) => {
-    setLightbox((current) =>
-      current
-        ? {
-            ...current,
-            index:
-              (current.index + offset + current.media.length) %
-              current.media.length,
-          }
-        : current,
-    )
-  }, [])
+  const openScheduleImage = useCallback(
+    (asset: ScheduleAsset) =>
+      openImages(
+        [{ url: asset.url, alt: asset.alt || t("schedule.imageAlt") }],
+        0,
+      ),
+    [openImages, t],
+  )
+  const closeViewer = useCallback(() => setViewer(null), [])
+  const stepViewer = useCallback(
+    (offset: number) =>
+      setViewer((current) =>
+        current
+          ? {
+              ...current,
+              index: stepIndex(current.index, offset, current.items.length),
+            }
+          : current,
+      ),
+    [],
+  )
 
   const { profile, summary, meta } = dashboard
   const windowDays = meta.postWindowDays || POST_WINDOW_DAYS
@@ -94,86 +122,82 @@ export function DashboardApp() {
     upcomingEvents: 0,
     videos: dashboard.videos.length,
   }
+  const featuredVideoId = Object.hasOwn(meta, "featuredVideoId")
+    ? meta.featuredVideoId
+    : dashboard.focus?.videoId
 
   return (
-    <div className="board">
-      <a className="skip-link" href="#schedule">
-        {t("nav.schedule")}
-      </a>
+    <div className="site board" id="top">
+      <SkipLink href="#schedule">{t("nav.schedule")}</SkipLink>
       <SiteHeader
-        profile={profile}
-        syncState={syncState}
-        syncTime={syncTime}
-        syncIso={syncIso}
-        t={t}
+        page="board"
+        avatarUrl={profile.avatarUrl}
+        status={
+          <span
+            className={`header-sync tone-${syncState.tone}`}
+            title={syncState.label}
+          >
+            <span className="sync-dot" aria-hidden="true" />
+            <span className="sr-only">{syncState.label}</span>
+          </span>
+        }
       />
 
-      <main className="board-main">
+      <main className="site-main">
         {error ? (
-          <div className="api-alert" role="status">
+          <div className="inline-alert board-alert" role="status">
             <WifiOff aria-hidden="true" />
             <span>{t("error.api")}</span>
-            <button type="button" onClick={refresh}>
+            <button type="button" className="pill-button" onClick={refresh}>
               {t("common.retry")}
             </button>
           </div>
         ) : null}
 
-        <Hero
+        <NowStage
           profile={profile}
           summary={summary}
+          resources={dashboard.resources}
           counts={counts}
           postWindowDays={windowDays}
           syncState={syncState}
           syncTime={syncTime}
+          syncIso={syncIso}
           isLoading={isLoading}
           isRefreshing={isRefreshing}
           onRefresh={refresh}
-          resources={dashboard.resources}
           locale={locale}
           now={now}
           t={t}
         />
 
-        <div className="board-grid">
-          <SchedulePanel
-            events={calendar.events}
-            scheduleImages={calendar.scheduleImages}
-            isLoading={calendarLoading}
-            error={calendarError}
-            onRetry={reloadCalendar}
-            weekStart={weekStart}
-            setWeekStart={setWeekStart}
-            adjacent={calendar.adjacent}
-            total={calendar.total}
-            hasNext={calendar.hasNext}
-            onLoadMore={loadMoreCalendar}
-            dayCounts={calendar.dayCounts}
-            locale={locale}
-            now={now}
-            t={t}
-          />
-          <FeedPanel
-            posts={dashboard.posts}
-            latestPost={summary.latestPost}
-            accounts={meta.xAccounts || []}
-            avatarUrl={profile.avatarUrl}
-            windowDays={windowDays}
-            isLoading={isLoading}
-            locale={locale}
-            now={now}
-            t={t}
-            onOpenMedia={openMedia}
-          />
-        </div>
+        <WeekGuide
+          view={calendarView}
+          setView={setCalendarView}
+          monthStart={monthStart}
+          setMonthStart={setMonthStart}
+          range={calendarRange}
+          events={calendar.events}
+          scheduleImages={calendar.scheduleImages}
+          isLoading={calendarLoading}
+          error={calendarError}
+          onRetry={reloadCalendar}
+          weekStart={weekStart}
+          setWeekStart={setWeekStart}
+          adjacent={calendar.adjacent}
+          total={calendar.total}
+          hasNext={calendar.hasNext}
+          onLoadMore={loadMoreCalendar}
+          dayCounts={calendar.dayCounts}
+          onOpenImage={openScheduleImage}
+          locale={locale}
+          now={now}
+          t={t}
+        />
 
-        <VideoSection
+        <VideoShelf
           videos={dashboard.videos}
-          featuredVideoId={
-            Object.hasOwn(meta, "featuredVideoId")
-              ? meta.featuredVideoId
-              : dashboard.focus?.videoId
-          }
+          featuredVideoId={featuredVideoId}
           focus={dashboard.focus}
           channelUrl={profile.youtubeUrl}
           isLoading={isLoading}
@@ -182,27 +206,27 @@ export function DashboardApp() {
           t={t}
         />
 
-        <ArchiveSection
+        <PostWall
+          posts={dashboard.posts}
+          latestPost={summary.latestPost}
+          accounts={meta.xAccounts || []}
+          avatarUrl={profile.avatarUrl}
+          windowDays={windowDays}
+          isLoading={isLoading}
+          locale={locale}
+          now={now}
+          t={t}
+          onOpenMedia={openImages}
+        />
+
+        <LinkDirectory
           timeline={dashboard.timeline}
           resources={dashboard.resources}
           t={t}
         />
       </main>
 
-      <footer className="site-footer">
-        <div className="site-footer-brand">
-          <span aria-hidden="true">🍓🦌</span>
-          <strong>{t("footer.fanMade")}</strong>
-        </div>
-        <p>{t("footer.disclaimer")}</p>
-        <a href="/about" className="soft-button">
-          {t("about.label")}
-        </a>
-        <a href="#now" className="soft-button">
-          <ArrowUp aria-hidden="true" />
-          {t("footer.backToTop")}
-        </a>
-      </footer>
+      <SiteFooter disclaimer={t("footer.disclaimer")} />
 
       <div
         className={`toast${toast ? " is-visible" : ""}`}
@@ -211,12 +235,13 @@ export function DashboardApp() {
       >
         {toast ? t(toast.key, toast.values) : ""}
       </div>
-      <Lightbox
-        media={lightbox?.media}
-        index={lightbox?.index || 0}
-        onClose={closeLightbox}
-        onStep={stepLightbox}
-        t={t}
+      <MediaDialog
+        items={viewer?.items}
+        index={viewer?.index || 0}
+        label={t("feed.openMedia")}
+        onClose={closeViewer}
+        onStep={stepViewer}
+        renderImage={(item) => <img src={item.url} alt={item.alt || ""} />}
       />
     </div>
   )

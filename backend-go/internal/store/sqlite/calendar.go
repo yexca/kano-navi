@@ -38,13 +38,17 @@ func validCalendarDate(value string) bool {
 	return err == nil && parsed.Format("2006-01-02") == value
 }
 
+// maxCalendarDays covers a Monday-first month grid: six weeks of inclusive
+// Japan dates. Events stay paginated at 100 per page.
+const maxCalendarDays = 42
+
 func validateCalendarRange(from, to string) error {
 	if !validCalendarDate(from) || !validCalendarDate(to) {
 		return ErrInvalidCalendarRange
 	}
 	start, _ := time.Parse("2006-01-02", from)
 	end, _ := time.Parse("2006-01-02", to)
-	if end.Before(start) || end.Sub(start) > 6*24*time.Hour {
+	if end.Before(start) || end.Sub(start) > (maxCalendarDays-1)*24*time.Hour {
 		return ErrInvalidCalendarRange
 	}
 	return nil

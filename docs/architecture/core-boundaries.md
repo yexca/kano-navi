@@ -22,7 +22,7 @@ data/database/kano.sqlite  -- snapshot, cursors, settings, and media metadata
           v
 kano-go serve     -- dashboard, admin API, health, /media/<id>, and /mcp
           |
-          +--> src/dashboard/ -- public dashboard
+          +--> src/site/, src/dashboard/, src/history/, src/about/ -- public pages
           +--> src/admin/ -- hidden operator console
           |
           +--> internal/jobs, internal/workflow -- single-flight durable jobs

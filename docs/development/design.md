@@ -1,8 +1,12 @@
 # Design and Interaction
 
 The public board should be easy to scan and keep source provenance visible.
-Use the shared semantic tokens in src/index.css and the existing shadcn/ui-style
-primitives in src/components/ui/. Preserve light/dark themes and Japanese,
+Use the shared semantic tokens in src/index.css, the public shell and controls
+in src/site/, and the existing shadcn/ui-style primitives in
+src/components/ui/. Public pages use cream paper with hairline rules rather
+than boxing everything, a rounded display face for names and titles, tabular
+numerals for times, and strawberry gingham as the signature edge. Admin keeps
+its own adm- styles on the same tokens. Preserve light/dark themes and Japanese,
 English, and Chinese interface copy. Do not introduce a separate token system
 for a single page.
 
