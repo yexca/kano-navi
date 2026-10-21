@@ -90,7 +90,7 @@ compatible major version.
 `/mcp` exposes public read-only tools without a key. Set `MCP_CONTROL_TOKEN` to
 enable the protected control tools; send it only as an `Authorization: Bearer`
 header. MCP-triggered sync and automatic scans are asynchronous jobs and can be
-inspected through the status tool or `/api/admin/sync/jobs` after admin login.
+inspected through the status tool or `/api/admin/runs` after admin login.
 Human confirmation and editing are intentionally unavailable through MCP.
 
 For production, set `APP_MODE=production` and an `ADMIN_PASSWORD` containing at

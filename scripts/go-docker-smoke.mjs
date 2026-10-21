@@ -143,19 +143,19 @@ try {
   })
   assert.equal(created.status, 201)
   const workflow = (await created.json()).workflow
-  const submitted = await send(
-    `/api/admin/workflows/${workflow.id}/run`,
-    "POST",
-    {},
-  )
+  const submitted = await send("/api/admin/runs", "POST", {
+    kind: "workflow",
+    workflowId: workflow.id,
+  })
   assert.equal(submitted.status, 202)
   const runID = (await submitted.json()).run.id
   let finished = false
   for (let attempt = 0; attempt < 100; attempt++) {
     const response = await fetch(`${writableOrigin}/api/admin/runs/${runID}`)
     assert.equal(response.status, 200)
-    const run = await response.json()
-    if (run.status === "blocked") {
+    const { run } = await response.json()
+    // A blocked capability ends the run as failed without fetching.
+    if (run.status === "failed") {
       finished = true
       break
     }

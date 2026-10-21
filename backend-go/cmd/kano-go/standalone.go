@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yexca/kano-navi/backend-go/internal/adminapi"
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/config"
 	"github.com/yexca/kano-navi/backend-go/internal/contentadmin"
@@ -80,17 +81,18 @@ func runStandalone(cfg config.Config) int {
 	if err = pushAdmin.Load(context.Background()); err != nil {
 		return fail("YouTube push settings unavailable", 1)
 	}
-	handler := httpapi.NewStandaloneHandler(store, nil, auth, httpapi.Standalone{
-		Queue: queue,
-		Compat: &httpapi.Compat{
-			Jobs:              manager,
-			Modules:           append(modules, pushAdmin),
-			SchedulerStatus:   scheduler.Status,
-			YoutubePushStatus: pushAdmin.Status,
-			SkippedSteps:      run.skipped,
-			XHandles:          run.xOptions.Handles,
-			HistoryAvailable:  run.steps.History.Available,
-		},
+	handler := httpapi.NewStandaloneHandler(store, nil, httpapi.Standalone{
+		Admin: adminapi.New(adminapi.Options{
+			Store:            store,
+			Auth:             auth,
+			Runs:             manager,
+			Modules:          append(modules, pushAdmin),
+			Scheduler:        scheduler.Status,
+			YoutubePush:      pushAdmin.Status,
+			SkippedSteps:     run.skipped,
+			XHandles:         run.xOptions.Handles,
+			HistoryAvailable: run.steps.History.Available,
+		}),
 		Static: httpapi.NewStaticSite(cfg.StaticDirectory),
 		MCP:    standaloneMCP(store, manager),
 		WebSub: push,

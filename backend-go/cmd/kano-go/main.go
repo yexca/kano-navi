@@ -11,10 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yexca/kano-navi/backend-go/internal/adminapi"
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/config"
 	"github.com/yexca/kano-navi/backend-go/internal/dotenv"
 	"github.com/yexca/kano-navi/backend-go/internal/httpapi"
+	"github.com/yexca/kano-navi/backend-go/internal/jobs"
 	"github.com/yexca/kano-navi/backend-go/internal/mediadownload"
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
@@ -127,7 +129,6 @@ func main() {
 	defer store.Close()
 
 	var queue *workflow.Queue
-	triggers := map[string]httpapi.XSyncTrigger{}
 	if enableSources {
 		if err = store.EnsureSourceWorkflows(context.Background(), cfg.EnableXSync, cfg.EnableYoutubeSync, cfg.EnableMediaDownloads); err != nil {
 			fmt.Fprintln(os.Stderr, "kano-go: workflow unavailable")
@@ -156,17 +157,21 @@ func main() {
 			os.Exit(1)
 		}
 		queue.StartRecovery()
-		if cfg.EnableXSync {
-			triggers["x"] = &workflow.RecentTrigger{Queue: queue, WorkflowID: "x-recent", Source: "x"}
-		}
-		if cfg.EnableYoutubeSync {
-			triggers["youtube"] = &workflow.RecentTrigger{Queue: queue, WorkflowID: "youtube-recent", Source: "youtube"}
-		}
 	}
 	scheduler := &workflow.Scheduler{Store: store, Queue: queue, Enabled: cfg.EnableScheduler}
 	scheduler.Start()
 	defer scheduler.Stop()
-	server := httpapi.NewServer(httpapi.RequestLog(httpapi.NewHandlerWithSources(store, nil, admin, triggers, queue), os.Stdout), cfg)
+	// The sidecar attaches the operator API only with a valid admin
+	// configuration; run routes need the development source queue.
+	var adminHandler http.Handler
+	if admin != nil {
+		options := adminapi.Options{Store: store, Auth: admin, Scheduler: scheduler.Status}
+		if queue != nil {
+			options.Runs = &jobs.QueueManager{Store: store, Queue: queue}
+		}
+		adminHandler = adminapi.New(options)
+	}
+	server := httpapi.NewServer(httpapi.RequestLog(httpapi.NewHandlerWithAdmin(store, nil, adminHandler), os.Stdout), cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)

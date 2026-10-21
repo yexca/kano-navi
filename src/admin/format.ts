@@ -1,54 +1,74 @@
-const japanDateTime = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Tokyo",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-})
+import type { Translator } from "@/types"
 
+// All operator times are shown in Asia/Tokyo, whatever the browser zone.
 const intlLocales = { "zh-CN": "zh-CN", ja: "ja-JP", en: "en-US" }
-const dateTimeFormatters = new Map()
-const relativeFormatters = new Map()
+const formatters = new Map<string, Intl.DateTimeFormat>()
+const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>()
 
-export function japanParts(value) {
-  if (!value) return null
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return japanDateTime
-    .formatToParts(date)
-    .reduce<Record<string, string>>((result, part) => {
-      result[part.type] = part.value
-      return result
-    }, {})
-}
-
-export function formatDateTime(value, locale) {
-  if (!value) return ""
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ""
-  if (!dateTimeFormatters.has(locale)) {
-    dateTimeFormatters.set(
-      locale,
+function formatter(locale: string, options: Intl.DateTimeFormatOptions) {
+  const key = `${locale}:${JSON.stringify(options)}`
+  if (!formatters.has(key)) {
+    formatters.set(
+      key,
       new Intl.DateTimeFormat(intlLocales[locale] || intlLocales.en, {
         timeZone: "Asia/Tokyo",
+        ...options,
+      }),
+    )
+  }
+  return formatters.get(key)
+}
+
+function valid(value: string | null | undefined) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+export function formatDateTime(
+  value: string | null | undefined,
+  locale: string,
+) {
+  const date = valid(value)
+  return date
+    ? formatter(locale, {
         month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
         hourCycle: "h23",
-      }),
-    )
-  }
-  return dateTimeFormatters.get(locale).format(date)
+      }).format(date)
+    : ""
 }
 
-/** Relative time such as "in 12 min" or "3 hours ago". */
-export function formatRelative(value, locale, now = Date.now()) {
-  if (!value) return ""
-  const time = Date.parse(value)
-  if (Number.isNaN(time)) return ""
+export function formatTime(value: string | null | undefined, locale: string) {
+  const date = valid(value)
+  return date
+    ? formatter(locale, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).format(date)
+    : ""
+}
+
+/** A stored Japan date (YYYY-MM-DD) shown with its weekday. */
+export function formatDay(day: string | null | undefined, locale: string) {
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/u.test(day)) return day || ""
+  return formatter(locale, {
+    month: "short",
+    day: "numeric",
+    weekday: "short",
+  }).format(new Date(`${day}T12:00:00+09:00`))
+}
+
+export function formatRelative(
+  value: string | null | undefined,
+  locale: string,
+  now = Date.now(),
+) {
+  const date = valid(value)
+  if (!date) return ""
   if (!relativeFormatters.has(locale)) {
     relativeFormatters.set(
       locale,
@@ -58,23 +78,24 @@ export function formatRelative(value, locale, now = Date.now()) {
       }),
     )
   }
-  const formatter = relativeFormatters.get(locale)
-  const seconds = Math.round((time - now) / 1000)
-  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+  const relative = relativeFormatters.get(locale)
+  const seconds = Math.round((date.getTime() - now) / 1000)
+  for (const [unit, size] of [
     ["day", 86_400],
     ["hour", 3_600],
     ["minute", 60],
-  ]
-  for (const [unit, size] of units) {
-    if (Math.abs(seconds) >= size) {
-      return formatter.format(Math.round(seconds / size), unit)
-    }
+  ] as [Intl.RelativeTimeFormatUnit, number][]) {
+    if (Math.abs(seconds) >= size)
+      return relative.format(Math.round(seconds / size), unit)
   }
-  return formatter.format(0, "minute")
+  return relative.format(0, "minute")
 }
 
-export function formatDuration(startedAt, finishedAt) {
-  const start = Date.parse(startedAt)
+export function formatDuration(
+  startedAt: string | null | undefined,
+  finishedAt: string | null | undefined,
+) {
+  const start = Date.parse(startedAt || "")
   const end = finishedAt ? Date.parse(finishedAt) : Date.now()
   if (Number.isNaN(start) || Number.isNaN(end)) return ""
   const seconds = Math.max(0, Math.round((end - start) / 1000))
@@ -82,46 +103,77 @@ export function formatDuration(startedAt, finishedAt) {
   return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`
 }
 
-export function formatInterval(minutes, t) {
+export function formatInterval(minutes: number, t: Translator) {
   if (minutes % 1440 === 0)
-    return t("admin.workflow.interval.days", { count: minutes / 1440 })
+    return t("admin.interval.days", { count: minutes / 1440 })
   if (minutes % 60 === 0)
-    return t("admin.workflow.interval.hours", { count: minutes / 60 })
-  return t("admin.workflow.interval.minutes", { count: minutes })
+    return t("admin.interval.hours", { count: minutes / 60 })
+  return t("admin.interval.minutes", { count: minutes })
 }
 
-/** Normalize sync/job statuses into one small vocabulary for the UI. */
-export function statusTone(status) {
+/** Today's date in Asia/Tokyo as YYYY-MM-DD. */
+export function japanToday(now = new Date()) {
+  return japanDay(now.toISOString())
+}
+
+/** An ISO instant as its Japan date "YYYY-MM-DD". */
+export function japanDay(value: string | null | undefined) {
+  const date = valid(value)
+  if (!date) return ""
+  const parts = formatter("en", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date)
+  const get = (type: string) => parts.find((part) => part.type === type)?.value
+  return `${get("year")}-${get("month")}-${get("day")}`
+}
+
+/** An ISO instant as the Japan wall-clock time "HH:mm". */
+export function japanClock(value: string | null | undefined) {
+  const date = valid(value)
+  if (!date) return ""
+  const parts = formatter("en", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date)
+  const get = (type: string) => parts.find((part) => part.type === type)?.value
+  return `${get("hour")}:${get("minute")}`
+}
+
+/** Combine a Japan date and wall-clock time into an ISO instant. */
+export function japanInstant(day: string, clock: string) {
+  if (!day || !clock) return ""
+  return `${day}T${clock}:00+09:00`
+}
+
+const tones: Record<string, string> = {
+  running: "running",
+  queued: "running",
+  pending: "neutral",
+  completed: "success",
+  succeeded: "success",
+  success: "success",
+  processed: "success",
+  schedule: "success",
+  partial: "warning",
+  skipped: "neutral",
+  uncertain: "warning",
+  never: "neutral",
+  unreviewed: "neutral",
+  not_schedule: "neutral",
+  failed: "danger",
+  blocked: "danger",
+  cancelled: "danger",
+}
+
+/** Normalize run, step, model and review statuses to one tone vocabulary. */
+export function statusTone(status: string | null | undefined): any {
+  return tones[String(status || "").toLowerCase()] || "neutral"
+}
+
+export function statusLabel(status: string | null | undefined, t: Translator) {
   const value = String(status || "").toLowerCase()
-  if (["running", "queued"].includes(value)) return "running"
-  if (["completed", "success"].includes(value)) return "success"
-  if (["partial", "skipped"].includes(value)) return "warning"
-  if (["failed", "failure", "cancelled"].includes(value)) return "danger"
-  return "neutral"
-}
-
-export function statusLabel(status, t) {
-  const value = String(status || "").toLowerCase()
-  const keys = {
-    running: "admin.status.running",
-    queued: "admin.status.queued",
-    completed: "admin.status.completed",
-    success: "admin.status.completed",
-    partial: "admin.status.partial",
-    failed: "admin.status.failed",
-    failure: "admin.status.failed",
-    skipped: "admin.status.skipped",
-    cancelled: "admin.status.cancelled",
-    pending: "admin.status.pending",
-  }
-  return t(keys[value] || "admin.status.unknown")
-}
-
-/** Hash a string into one of the palette hues used for provider avatars. */
-export function paletteIndex(value, size = 6) {
-  let hash = 0
-  for (const character of String(value || "")) {
-    hash = (hash * 31 + character.codePointAt(0)) >>> 0
-  }
-  return hash % size
+  return value in tones ? t(`admin.status.${value}`) : t("admin.status.unknown")
 }

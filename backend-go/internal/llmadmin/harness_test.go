@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
@@ -152,10 +153,7 @@ func (h *harness) call(method, target string, body any) reply {
 		request.Header.Set("Content-Type", "application/json")
 	}
 	recorder := httptest.NewRecorder()
-	path, _, _ := strings.Cut(target, "?")
-	if !h.module.ServeAdmin(recorder, request, path) {
-		h.t.Fatalf("%s %s was not handled", method, target)
-	}
+	httpx.NewAdminMux(h.module.AdminRoutes()).ServeHTTP(recorder, request)
 	result := reply{Status: recorder.Code, Raw: recorder.Body.String(), Header: recorder.Header()}
 	if strings.TrimSpace(result.Raw) != "" {
 		if err := json.Unmarshal(recorder.Body.Bytes(), &result.JSON); err != nil {
@@ -189,7 +187,7 @@ func (h *harness) createProvider(id string, extra map[string]any) map[string]any
 	for key, value := range extra {
 		body[key] = value
 	}
-	return object(h.t, h.ok(http.MethodPost, "/providers", body, http.StatusCreated).JSON["provider"])
+	return object(h.t, h.ok(http.MethodPost, "/llm/providers", body, http.StatusCreated).JSON["provider"])
 }
 
 func (h *harness) scalar(query string, args ...any) string {

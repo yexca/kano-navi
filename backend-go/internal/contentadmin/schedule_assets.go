@@ -243,7 +243,7 @@ func (m *Module) listScheduleAssetsRoute(w http.ResponseWriter, r *http.Request)
 		writeFailure(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"assets": assets})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": assets})
 }
 
 func (m *Module) writeScheduleAsset(w http.ResponseWriter, r *http.Request, id string) {
@@ -253,10 +253,10 @@ func (m *Module) writeScheduleAsset(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 	if asset == nil {
-		httpx.WriteCode(w, http.StatusNotFound, "schedule_asset_not_found")
+		httpx.WriteCode(w, http.StatusNotFound, "schedule_image_not_found")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"asset": asset})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"image": asset})
 }
 
 var errScheduleAssetNotFound = errors.New("schedule asset not found")
@@ -319,7 +319,7 @@ func (m *Module) manualReviewRoute(w http.ResponseWriter, r *http.Request, id st
 		return sqlite.BumpRevisionTx(ctx, tx, now)
 	})
 	if errors.Is(err, errScheduleAssetNotFound) {
-		httpx.WriteCode(w, http.StatusNotFound, "schedule_asset_not_found")
+		httpx.WriteCode(w, http.StatusNotFound, "schedule_image_not_found")
 		return
 	}
 	if err != nil {
@@ -363,7 +363,7 @@ func (m *Module) periodRoute(w http.ResponseWriter, r *http.Request, id string) 
 		return sqlite.BumpRevisionTx(ctx, tx, now)
 	})
 	if errors.Is(err, errScheduleAssetNotFound) {
-		httpx.WriteCode(w, http.StatusNotFound, "schedule_asset_not_found")
+		httpx.WriteCode(w, http.StatusNotFound, "schedule_image_not_found")
 		return
 	}
 	if err != nil {

@@ -61,11 +61,11 @@ func scheduleKeywords(value any) ([]string, error) {
 	}
 	normalized := uniqueStrings(trimmed)
 	if len(normalized) > 30 {
-		return nil, httpx.Invalid("scheduleKeywords contains too many entries")
+		return nil, httpx.Invalid("keywords contains too many entries")
 	}
 	for _, keyword := range normalized {
 		if utf16Len(keyword) > 80 {
-			return nil, httpx.Invalid("scheduleKeywords contains an entry that is too long")
+			return nil, httpx.Invalid("keywords contains an entry that is too long")
 		}
 	}
 	return normalized, nil

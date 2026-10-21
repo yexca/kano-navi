@@ -19,10 +19,15 @@ event-status helpers, `content.ts` holds static public links, and
 the video shelf, the post wall, and the link directory. Its styles are in
 `src/dashboard/board.css` on top of `src/site/site.css` and the shared tokens
 in `src/index.css`. The hidden `/admin` console
-lives in `src/admin/`: `index.tsx` registers the views and renders the shell,
-`use-admin-data.ts` owns every admin request and job polling, `views/` holds
-the workflow, schedule, detection-rule, LLM-provider, and content views, and
-`admin.css` styles them with `adm-` prefixed selectors. `src/components/ui/` contains
+lives in `src/admin/` and is organized around operator tasks: `index.tsx`
+registers the views (Overview, Review queue, Schedule, Content, Runs &
+workflows, Sources, Models & detection) and renders the shell with hash
+routing (`#view/tab`); `use-admin-data.ts` owns every
+[Admin API](admin-api.md) call, the session and the overview poll that tracks
+the active run; `api.ts` is the transport and error mapping; `types.ts` holds
+the wire shapes; `ui.tsx` the console primitives (buttons, panels, native
+modal dialog, toasts); `views/` one file per section; and `admin.css` styles
+them with `adm-` prefixed selectors. `src/components/ui/` contains
 basic UI primitives, while the CSS files contain layout and design tokens. The
 presentation layer must not open SQLite or call X, YouTube, OpenAI,
 or a third-party proxy directly.

@@ -82,21 +82,24 @@ does the same with the built bundle. Restart after changing Go source.
 
 ## Route ownership
 
-| Area                                           | Package                                                                  |
-| ---------------------------------------------- | ------------------------------------------------------------------------ |
-| Public reads, media, health                    | `internal/httpapi`, `publicview`                                         |
-| Session, login, origin guard                   | `internal/adminauth`                                                     |
-| Events, posts, videos, run reads               | `internal/httpapi` + `store/sqlite`                                      |
-| Workflows, jobs, source fetch                  | `internal/httpapi/admin_compat.go`, `internal/jobs`, `internal/workflow` |
-| Historical source windows                      | `internal/source/history`, `internal/workflow/history_steps.go`          |
-| Config, providers, models, routes              | `internal/llmadmin`                                                      |
-| Profile media, schedule images, post reprocess | `internal/contentadmin`                                                  |
-| Schedule extraction step                       | `internal/schedule`                                                      |
-| `/mcp`                                         | `internal/mcpapi`                                                        |
-| Built frontend and SPA fallback                | `internal/httpapi/static.go`                                             |
+| Area                                           | Package                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| Public reads, media, health                    | `internal/httpapi`, `publicview`                                |
+| Session, login, origin guard                   | `internal/adminauth`                                            |
+| Admin route table, overview, events, lists     | `internal/adminapi` + `store/sqlite`                            |
+| Runs, workflows, source fetch                  | `internal/adminapi`, `internal/jobs`, `internal/workflow`       |
+| Historical source windows                      | `internal/source/history`, `internal/workflow/history_steps.go` |
+| Extraction, providers, models, routes          | `internal/llmadmin`                                             |
+| Profile media, schedule images, post reprocess | `internal/contentadmin`                                         |
+| Schedule extraction step                       | `internal/schedule`                                             |
+| `/mcp`                                         | `internal/mcpapi`                                               |
+| Built frontend and SPA fallback                | `internal/httpapi/static.go`                                    |
 
-Admin feature packages implement `httpx.AdminModule`. The router authenticates
-the session and applies the origin guard before a module sees a request.
+`internal/adminapi` owns the single `/api/admin` route table described in the
+[Admin API](admin-api.md). Feature packages implement `httpx.AdminModule` by
+returning their routes; the router authenticates the session, applies the
+origin guard and refuses writes to a read-only database before a module
+handler runs.
 
 ## Jobs and workflows
 
@@ -105,7 +108,7 @@ workflow runs under its own ID. A full sync, an automatic scan and a
 single-source fetch run from unsaved definitions with the reserved IDs
 `@sync`, `@scan` and `@fetch`; they never appear among saved workflows. All of
 them share the SQLite single-flight reservation, so a second start answers
-`409` with `already_running` and the active job.
+`409` with `busy` and the active run.
 
 Differences from releases up to 0.1.3 that operators can observe:
 
@@ -121,12 +124,12 @@ Each step's counters are merged into the job's `sync_runs.counts_json` row.
 
 ## Historical source windows
 
-`POST /api/admin/sources/:source/fetch` accepts `recent`, `before` and `range`
-windows. The selected window is frozen on the run (`workflow_runs.
+`POST /api/admin/runs` with `{"kind": "fetch", "source", "window"}` accepts
+`recent`, `before` and `range` windows. The selected window is frozen on the run (`workflow_runs.
 fetch_windows_json`), so a recovered or retried run never changes it.
 
 `before` and `range` use the official APIs and need the environment-only
-`X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY`; `GET /api/admin/sources/fetch`
+`X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY`; `GET /api/admin/sources`
 reports `historyAvailable` per source and the request is rejected with a
 validation message when the credential is missing. With the credential, a
 `recent` window is also served by the API (YouTube still reads the feed to

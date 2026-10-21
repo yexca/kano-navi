@@ -81,17 +81,17 @@ within seconds, without a restart, and again at every startup.
 `backend-go/internal/source/youtube/websub` owns the protocol and its admin
 module:
 
-- `GET /api/admin/youtube-push` returns the settings and runtime status:
+- `GET /api/admin/sources/youtube/push` returns the settings and runtime status:
   enabled, callback URL and required path, whether a secret exists,
   verification, lease expiry, next renewal, pending notification, last
   notification/trigger, the last fixed error code, and `available` (false
-  while `SKIP_YOUTUBE=1`). `GET /api/admin/workflows` carries the same object
-  as `youtubePush` for polling. Neither ever includes the secret.
-- `PUT /api/admin/youtube-push` accepts `{ "enabled": boolean, "callbackUrl":
+  while `SKIP_YOUTUBE=1`). `GET /api/admin/sources` carries the same object
+  as `youtube.push`. Neither ever includes the secret.
+- `PUT /api/admin/sources/youtube/push` accepts `{ "enabled": boolean, "callbackUrl":
 string | null }`; omitted fields keep their value. The callback must be an
   absolute HTTPS URL of at most 2048 characters without credentials or a
   fragment. Enabling generates a 256-bit signing secret when none exists.
-  `POST /api/admin/youtube-push/rotate-secret` replaces it and resubscribes.
+  `POST /api/admin/sources/youtube/push/rotate-secret` replaces it and resubscribes.
   Settings live in `app_settings` (`youtube_websub_enabled`,
   `youtube_websub_callback_url`, `youtube_websub_secret`); the secret is sealed
   with `LLM_SECRETS_KEY` like provider keys. A secret that no longer decrypts
@@ -154,8 +154,7 @@ is used as the compatibility fallback when a new route has no explicit order.
 Each route is an ordered list of targets: a provider plus one of its catalog
 models. An empty model ID means "the provider's default model" (`llm_providers.model`)
 and uses the provider-level capabilities; this is how legacy provider-only
-routes were migrated and how the old `PUT /api/admin/providers/order` endpoint
-still writes. The default model's catalog tags and the provider capability
+routes were migrated and how a route target without a model is saved. The default model's catalog tags and the provider capability
 columns are kept identical whichever side is edited. Target selection follows
 the original post modality. Text-only input requires `text`; image-only input
 requires `image`; mixed input requires a model with both tags. Only ready cached images are sent to the model. A post that
@@ -211,7 +210,7 @@ and can run again when their input or provider configuration changes. Date-only 
 `time_precision = unknown`; the model must not invent a specific time.
 
 Every stored post has an LLM processing state. Failed, skipped, and uncertain
-attempts remain visible to operators, and `/api/admin/posts/:id/llm/reprocess`
+attempts remain visible to operators, and `POST /api/admin/posts/:id/reprocess`
 queues a forced pass that bypasses the successful-result cache. The automatic
 scan consumes queued posts even when they no longer match the current keyword
 heuristic; a missing provider or pending image keeps the queue request pending,

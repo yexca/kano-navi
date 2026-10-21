@@ -1,6 +1,5 @@
 // Package contentadmin owns the operator routes for profile media, schedule
-// image reviews and post reprocess requests. Wire shapes follow the original
-// admin API so the existing console works unchanged.
+// image reviews and post reprocess requests; see docs/architecture/admin-api.md.
 package contentadmin
 
 import (
@@ -8,9 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"net/url"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -74,148 +71,43 @@ func failure(message string) error { return &opError{message: message} }
 
 func (m *Module) timestamp() string { return sqlite.ISOTime(m.now()) }
 
-// ServeAdmin dispatches the routes owned by this module. The router has
-// already authenticated the session and applied the origin guard.
-func (m *Module) ServeAdmin(w http.ResponseWriter, r *http.Request, path string) bool {
-	segments, ok := routeSegments(r, path)
-	if !ok || len(segments) == 0 {
-		return false
+// AdminRoutes lists the profile media, schedule image and post reprocess
+// endpoints. The router has already authenticated the session and applied the
+// origin guard.
+func (m *Module) AdminRoutes() []httpx.Route {
+	id := func(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) { next(w, r, r.PathValue("id")) }
 	}
-	if m == nil || m.db == nil {
-		return false
+	return []httpx.Route{
+		{Method: http.MethodGet, Path: "/profile-media", Handler: m.guard(m.listProfileMediaRoute)},
+		{Method: http.MethodPost, Path: "/profile-media", Handler: m.guard(m.addProfileMedia)},
+		{Method: http.MethodPost, Path: "/profile-media/discover", Handler: m.guard(m.discoverProfileMediaRoute)},
+		{Method: http.MethodPost, Path: "/profile-media/upload", Handler: m.guard(func(w http.ResponseWriter, r *http.Request) {
+			m.uploadProfileMedia(w, r, r.URL.Query().Get("slot"))
+		})},
+		{Method: http.MethodGet, Path: "/profile-media/{id}/preview", Handler: m.guard(id(m.previewProfileMedia))},
+		{Method: http.MethodPost, Path: "/profile-media/{id}/download", Handler: m.guard(id(m.downloadProfileMediaRoute))},
+		{Method: http.MethodPost, Path: "/profile-media/{id}/select", Handler: m.guard(id(m.selectProfileMediaRoute))},
+		{Method: http.MethodGet, Path: "/schedule-images", Handler: m.guard(m.listScheduleAssetsRoute)},
+		{Method: http.MethodPost, Path: "/schedule-images/{id}/review", Handler: m.guard(id(m.manualReviewRoute))},
+		{Method: http.MethodPut, Path: "/schedule-images/{id}/period", Handler: m.guard(id(m.periodRoute))},
+		{Method: http.MethodPost, Path: "/posts/{id}/reprocess", Handler: m.guard(id(m.reprocessPost))},
 	}
-	switch segments[0] {
-	case "profile-media":
-		return m.serveProfileMedia(w, r, segments[1:])
-	case "schedule-assets":
-		return m.serveScheduleAssets(w, r, segments[1:])
-	case "posts":
-		if len(segments) == 4 && segments[2] == "llm" && segments[3] == "reprocess" {
-			if m.mutation(w, r) {
-				m.reprocessPost(w, r, segments[1])
-			}
-			return true
-		}
-	}
-	return false
 }
 
-func (m *Module) serveProfileMedia(w http.ResponseWriter, r *http.Request, rest []string) bool {
-	switch {
-	case len(rest) == 0:
-		switch r.Method {
-		case http.MethodGet, http.MethodHead:
-			m.listProfileMediaRoute(w, r)
-		case http.MethodPost:
-			if m.writable(w) {
-				m.addProfileMedia(w, r)
-			}
+// guard rejects every route without a database and every write against a
+// read-only one.
+func (m *Module) guard(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case m == nil || m.db == nil:
+			httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		case r.Method != http.MethodGet && r.Method != http.MethodHead && !m.store.Writable():
+			httpx.ReadOnly(w)
 		default:
-			httpx.MethodNotAllowed(w, "GET, POST")
-		}
-		return true
-	case len(rest) == 1 && rest[0] == "discover":
-		if m.mutation(w, r) {
-			m.discoverProfileMediaRoute(w, r)
-		}
-		return true
-	case len(rest) == 2 && rest[0] == "upload":
-		// Registered before the :id routes, exactly like the Express table.
-		if m.mutation(w, r) {
-			m.uploadProfileMedia(w, r, rest[1])
-		}
-		return true
-	case len(rest) == 2 && rest[1] == "preview":
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			httpx.MethodNotAllowed(w, "GET")
-			return true
-		}
-		m.previewProfileMedia(w, r, rest[0])
-		return true
-	case len(rest) == 2 && rest[1] == "download":
-		if m.mutation(w, r) {
-			m.downloadProfileMediaRoute(w, r, rest[0])
-		}
-		return true
-	case len(rest) == 2 && rest[1] == "select":
-		if m.mutation(w, r) {
-			m.selectProfileMediaRoute(w, r, rest[0])
-		}
-		return true
-	}
-	return false
-}
-
-func (m *Module) serveScheduleAssets(w http.ResponseWriter, r *http.Request, rest []string) bool {
-	switch {
-	case len(rest) == 0:
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			httpx.MethodNotAllowed(w, "GET")
-			return true
-		}
-		m.listScheduleAssetsRoute(w, r)
-		return true
-	case len(rest) == 2 && rest[1] == "manual-review":
-		if m.mutation(w, r) {
-			m.manualReviewRoute(w, r, rest[0])
-		}
-		return true
-	case len(rest) == 2 && rest[1] == "period":
-		if m.mutation(w, r) {
-			m.periodRoute(w, r, rest[0])
-		}
-		return true
-	}
-	return false
-}
-
-// mutation accepts only POST and only when operator writes are enabled.
-func (m *Module) mutation(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method != http.MethodPost {
-		httpx.MethodNotAllowed(w, "POST")
-		return false
-	}
-	return m.writable(w)
-}
-
-func (m *Module) writable(w http.ResponseWriter) bool {
-	if !m.store.Writable() {
-		httpx.WriteCode(w, http.StatusNotImplemented, "capability_not_migrated")
-		return false
-	}
-	return true
-}
-
-// routeSegments splits the module path into decoded segments. The escaped
-// request path is preferred so an encoded slash stays inside its parameter,
-// which is how Express decodes route parameters.
-func routeSegments(r *http.Request, path string) ([]string, bool) {
-	const prefix = "/api/admin"
-	raw, escaped := path, false
-	if r != nil && r.URL != nil {
-		if full := r.URL.EscapedPath(); strings.HasPrefix(full, prefix+"/") {
-			raw, escaped = strings.TrimPrefix(full, prefix), true
+			next(w, r)
 		}
 	}
-	raw = strings.TrimSuffix(strings.TrimPrefix(raw, "/"), "/")
-	if raw == "" {
-		return nil, false
-	}
-	segments := strings.Split(raw, "/")
-	for i, segment := range segments {
-		if escaped {
-			decoded, err := url.PathUnescape(segment)
-			if err != nil {
-				return nil, false
-			}
-			segment = decoded
-			segments[i] = decoded
-		}
-		if segment == "" {
-			return nil, false
-		}
-	}
-	return segments, true
 }
 
 // writeFailure reports validation failures with their message and everything

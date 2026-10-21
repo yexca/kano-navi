@@ -11,12 +11,62 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/jsonbody"
 )
 
-// AdminModule owns a group of /api/admin routes. The router has already
-// authenticated the session and applied the origin guard. path is the request
-// path without the "/api/admin" prefix. ServeAdmin returns false when the
-// path belongs to another module.
+// AdminPrefix is the mount point of the operator API.
+const AdminPrefix = "/api/admin"
+
+// Route is one operator endpoint. Path is relative to AdminPrefix and may use
+// http.ServeMux wildcards such as {id}; handlers read them with PathValue.
+type Route struct {
+	Method  string
+	Path    string
+	Handler http.HandlerFunc
+}
+
+// AdminModule contributes a group of /api/admin routes. The router has
+// already authenticated the session and applied the origin guard.
 type AdminModule interface {
-	ServeAdmin(w http.ResponseWriter, r *http.Request, path string) bool
+	AdminRoutes() []Route
+}
+
+// NewAdminMux registers routes under AdminPrefix. Unknown paths and methods
+// answer with the JSON error shape instead of the plain-text mux defaults.
+func NewAdminMux(groups ...[]Route) http.Handler {
+	mux := http.NewServeMux()
+	for _, routes := range groups {
+		for _, route := range routes {
+			mux.HandleFunc(route.Method+" "+AdminPrefix+route.Path, route.Handler)
+		}
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler, pattern := mux.Handler(r)
+		if pattern != "" {
+			mux.ServeHTTP(w, r)
+			return
+		}
+		// The fallback reports 404 or 405 (with Allow); keep its status and
+		// Allow header but answer in JSON.
+		probe := &statusProbe{header: http.Header{}}
+		handler.ServeHTTP(probe, r)
+		if probe.status == http.StatusMethodNotAllowed {
+			MethodNotAllowed(w, probe.header.Get("Allow"))
+			return
+		}
+		WriteCode(w, http.StatusNotFound, "not_found")
+	})
+}
+
+type statusProbe struct {
+	header http.Header
+	status int
+}
+
+func (p *statusProbe) Header() http.Header         { return p.header }
+func (p *statusProbe) Write(b []byte) (int, error) { return len(b), nil }
+func (p *statusProbe) WriteHeader(status int)      { p.status = status }
+
+// ReadOnly reports a write against a database opened without write access.
+func ReadOnly(w http.ResponseWriter) {
+	WriteCode(w, http.StatusServiceUnavailable, "read_only")
 }
 
 // InputError is an operator-facing validation failure. Its message is safe to

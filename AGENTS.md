@@ -11,7 +11,7 @@ area you are changing.
 - [Data model](docs/architecture/data-model.md)
 - [Sources and schedule extraction](docs/architecture/sources.md)
 - [Workflows and fetch windows](docs/architecture/workflows.md)
-- [Backend](docs/architecture/backend.md) and [Go backend](docs/architecture/go-standalone.md), or [Frontend](docs/architecture/frontend.md)
+- [Backend](docs/architecture/backend.md), [Admin API](docs/architecture/admin-api.md) and [Go backend](docs/architecture/go-standalone.md), or [Frontend](docs/architecture/frontend.md)
 - [Design](docs/development/design.md) for UI work
 - [Testing](docs/development/testing.md)
 - [Security policy](SECURITY.md) and [Secure development](docs/development/security.md)
@@ -81,19 +81,19 @@ it. TypeScript is the frontend and the maintenance scripts only.
 
 Backend paths are relative to backend-go/.
 
-| Area                             | Main paths                                                                     |
-| -------------------------------- | ------------------------------------------------------------------------------ |
-| Public UI and history            | src/site/, src/dashboard/, src/history/, src/about/, src/components/ui/        |
-| Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                      |
-| Entry point and commands         | cmd/kano-go/ (serve, seed, sync, migrate-llm, healthcheck), ../Dockerfile      |
-| API, authentication, projections | internal/httpapi/, internal/adminauth/, internal/mcpapi/, internal/publicview/ |
-| SQLite and static initialization | internal/store/sqlite/ (bootstrap.sql, static-seed.json, schema_upgrade.go)    |
-| Sources and historical windows   | internal/source/x/, internal/source/youtube/, internal/source/history/         |
-| Jobs, steps, timers              | internal/jobs/, internal/workflow/                                             |
-| Model routing and extraction     | internal/schedule/, internal/llmadmin/, internal/secretstore/                  |
-| Dynamic and profile media        | internal/mediadownload/, internal/contentadmin/, internal/httpapi/media.go     |
-| Fixed history packaging          | ../scripts/package-history-media.ts, ../public/assets/history/                 |
-| Frontend tests                   | ../tests/ (request hooks, polling, history catalog)                            |
+| Area                             | Main paths                                                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Public UI and history            | src/site/, src/dashboard/, src/history/, src/about/, src/components/ui/                            |
+| Operator UI and requests         | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                                          |
+| Entry point and commands         | cmd/kano-go/ (serve, seed, sync, migrate-llm, healthcheck), ../Dockerfile                          |
+| API, authentication, projections | internal/httpapi/, internal/adminapi/, internal/adminauth/, internal/mcpapi/, internal/publicview/ |
+| SQLite and static initialization | internal/store/sqlite/ (bootstrap.sql, static-seed.json, schema_upgrade.go)                        |
+| Sources and historical windows   | internal/source/x/, internal/source/youtube/, internal/source/history/                             |
+| Jobs, steps, timers              | internal/jobs/, internal/workflow/                                                                 |
+| Model routing and extraction     | internal/schedule/, internal/llmadmin/, internal/secretstore/                                      |
+| Dynamic and profile media        | internal/mediadownload/, internal/contentadmin/, internal/httpapi/media.go                         |
+| Fixed history packaging          | ../scripts/package-history-media.ts, ../public/assets/history/                                     |
+| Frontend tests                   | ../tests/ (request hooks, polling, history catalog)                                                |
 
 ## Validation and Handoff
 

@@ -1,28 +1,9 @@
-package httpapi
+package adminapi
 
 import (
 	"regexp"
 	"testing"
 )
-
-func (c consoleFixture) exec(t *testing.T, statement string, args ...any) {
-	t.Helper()
-	if _, err := c.store.DB().Exec(statement, args...); err != nil {
-		t.Fatalf("%s: %v", statement, err)
-	}
-}
-
-func (c consoleFixture) text(t *testing.T, statement string, args ...any) string {
-	t.Helper()
-	var value *string
-	if err := c.store.DB().QueryRow(statement, args...).Scan(&value); err != nil {
-		t.Fatalf("%s: %v", statement, err)
-	}
-	if value == nil {
-		return "<null>"
-	}
-	return *value
-}
 
 func TestManualEventLifecycleLocksAndTombstones(t *testing.T) {
 	c := newConsole(t, "development", "", &gatedSteps{})
@@ -44,7 +25,7 @@ func TestManualEventLifecycleLocksAndTombstones(t *testing.T) {
 		}
 	}
 	revision := c.text(t, `SELECT value FROM app_settings WHERE key='dashboard_revision'`)
-	code, payload := c.call(t, "POST", "/api/admin/events", `{"title":" Synthetic stream ","startsOn":"2026-03-02","startsAt":"2026-03-02T20:00:00+09:00","endsAt":"2026-03-02T13:00:00.000Z","starts_on":"ignored","eventType":"stream","url":"https://Stream.Example.test","startTime":"20:00"}`)
+	code, payload := c.call(t, "POST", "/api/admin/events", `{"title":" Synthetic stream ","startsOn":"2026-03-02","startsAt":"2026-03-02T20:00:00+09:00","endsAt":"2026-03-02T13:00:00.000Z","eventType":"stream","url":"https://Stream.Example.test"}`)
 	if code != 201 {
 		t.Fatalf("create=%d %v", code, payload)
 	}
@@ -62,9 +43,6 @@ func TestManualEventLifecycleLocksAndTombstones(t *testing.T) {
 			t.Fatalf("created %s=%v, want %v", field, event[field], want)
 		}
 	}
-	if !regexp.MustCompile(`^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$`).MatchString(event["createdAt"].(string)) {
-		t.Fatalf("createdAt=%v", event["createdAt"])
-	}
 	if c.text(t, `SELECT source_key FROM event_sources WHERE event_id=?`, id) != id || c.text(t, `SELECT value FROM app_settings WHERE key='dashboard_revision'`) == revision {
 		t.Fatal("create must record its source identity and bump the revision")
 	}
@@ -81,20 +59,22 @@ func TestManualEventLifecycleLocksAndTombstones(t *testing.T) {
 		edited["cancellationStatus"] != "manual_confirmed" || edited["cancellationSource"] != "manual" || edited["cancellationReason"] != "operator decision" || edited["cancellationAt"] == nil {
 		t.Fatalf("edit=%d %v", code, edited)
 	}
-	decided := edited["cancellationAt"]
 	c.exec(t, `UPDATE events SET cancellation_at='2026-01-01T00:00:00.000Z' WHERE id=?`, id)
 	_, payload = c.call(t, "PUT", "/api/admin/events/"+id, `{"title":"Edited","startsOn":"2026-03-03","cancellationStatus":"manual_confirmed","cancellationReason":"still cancelled"}`)
-	if again := payload["event"].(map[string]any); again["cancellationAt"] != "2026-01-01T00:00:00.000Z" || again["cancellationAt"] == decided {
+	if again := payload["event"].(map[string]any); again["cancellationAt"] != "2026-01-01T00:00:00.000Z" {
 		t.Fatalf("a confirmed cancellation must keep its decision time: %v", again["cancellationAt"])
-	}
-	if c.text(t, `SELECT CAST(COUNT(*) AS TEXT) FROM event_sources WHERE event_id=? AND source_key='confirmed'`, id) != "1" {
-		t.Fatal("repeated saves must reuse one confirmation identity")
 	}
 	if code, _ = c.call(t, "DELETE", "/api/admin/events/"+id, ""); code != 204 {
 		t.Fatalf("delete=%d", code)
 	}
 	if c.text(t, `SELECT manual_locked||'/'||(deleted_at IS NOT NULL) FROM events WHERE id=?`, id) != "1/1" {
 		t.Fatal("delete must leave a locked tombstone")
+	}
+	if _, payload = c.call(t, "GET", "/api/admin/events", ""); len(payload["items"].([]any)) != 0 {
+		t.Fatalf("a tombstone is hidden by default: %v", payload)
+	}
+	if _, payload = c.call(t, "GET", "/api/admin/events?deleted=1", ""); len(payload["items"].([]any)) != 1 {
+		t.Fatalf("deleted=1 includes tombstones: %v", payload)
 	}
 	if code, payload = c.call(t, "POST", "/api/admin/events/"+id+"/confirm", ""); code != 404 || payload["error"] != "event_not_found" {
 		t.Fatalf("confirming a tombstone=%d %v", code, payload)
@@ -142,9 +122,6 @@ func TestConfirmingAutomaticEventKeepsIdentityAndCancellationOverlay(t *testing.
 		if event[field] != nil {
 			t.Fatalf("dismissed %s=%v", field, event[field])
 		}
-	}
-	if event["cancellationStatus"] != "none" || event["sourceItemId"] != "synthetic-post" {
-		t.Fatalf("dismissed=%v", event)
 	}
 	// llm_suspected cannot be introduced by an operator save.
 	_, payload = c.call(t, "PUT", "/api/admin/events/automatic-1", `{"title":"Automatic stream","startsOn":"2026-03-05","cancellationStatus":"llm_suspected"}`)

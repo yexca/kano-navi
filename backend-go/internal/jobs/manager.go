@@ -161,6 +161,58 @@ func (m *QueueManager) List(ctx context.Context, limit int) ([]Job, error) {
 	return out, nil
 }
 
+// Page lists jobs newest first and reports the total number of runs.
+func (m *QueueManager) Page(ctx context.Context, page, pageSize int) ([]Job, int, error) {
+	if m == nil || m.Store == nil {
+		return nil, 0, sqlite.ErrWorkflowUnavailable
+	}
+	listed, err := m.Store.ListWorkflowRuns(ctx, page, pageSize, "", "")
+	if err != nil {
+		return nil, 0, err
+	}
+	names, err := m.Store.WorkflowNames(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]Job, 0, len(listed.Runs))
+	for _, header := range listed.Runs {
+		run, err := m.Store.GetWorkflowRun(ctx, header.ID)
+		if err != nil {
+			return nil, 0, err
+		}
+		job, err := m.job(ctx, run, names)
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, *job)
+	}
+	return out, listed.Total, nil
+}
+
+// Cancel requests cancellation of a queued or running job.
+func (m *QueueManager) Cancel(ctx context.Context, id string) (*Job, error) {
+	if m == nil || m.Queue == nil {
+		return nil, sqlite.ErrWorkflowUnavailable
+	}
+	if err := m.Queue.Cancel(ctx, id); err != nil {
+		return nil, err
+	}
+	return m.Get(ctx, id)
+}
+
+// Retry queues a new attempt of a failed job; a busy queue reports
+// sqlite.ErrWorkflowBusy.
+func (m *QueueManager) Retry(ctx context.Context, id string) (*Job, error) {
+	if m == nil || m.Queue == nil {
+		return nil, sqlite.ErrWorkflowUnavailable
+	}
+	run, err := m.Queue.Retry(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return m.Get(ctx, run.ID)
+}
+
 func (m *QueueManager) Active(ctx context.Context) (*Job, error) {
 	if m == nil || m.Store == nil {
 		return nil, sqlite.ErrWorkflowUnavailable

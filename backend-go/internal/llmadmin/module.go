@@ -7,9 +7,6 @@ import (
 	"errors"
 	"net/http"
 	"os"
-	"slices"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
@@ -86,7 +83,7 @@ func (m *Module) fail(w http.ResponseWriter, err error) {
 	case errors.As(err, &missing):
 		httpx.WriteCode(w, http.StatusNotFound, string(missing))
 	case errors.Is(err, sqlite.ErrReadOnly):
-		httpx.WriteCode(w, http.StatusNotImplemented, "capability_not_migrated")
+		httpx.ReadOnly(w)
 	default:
 		httpx.WriteError(w, err)
 	}
@@ -125,148 +122,73 @@ func (m *Module) body(w http.ResponseWriter, r *http.Request) (map[string]any, e
 	return body, nil
 }
 
-func segments(path string) ([]string, bool) {
-	if !strings.HasPrefix(path, "/") {
-		return nil, false
+type handler = http.HandlerFunc
+
+// AdminRoutes lists the extraction settings, provider catalog, model routing
+// and featured-video endpoints. The router has already authenticated the
+// operator and applied the origin guard.
+func (m *Module) AdminRoutes() []httpx.Route {
+	id := func(build func(string) handler) handler {
+		return func(w http.ResponseWriter, r *http.Request) { build(r.PathValue("id"))(w, r) }
 	}
-	trimmed := strings.TrimSuffix(path[1:], "/")
-	if trimmed == "" {
-		return nil, false
+	return []httpx.Route{
+		{Method: http.MethodGet, Path: "/extraction", Handler: m.guard(m.getExtraction)},
+		{Method: http.MethodPut, Path: "/extraction", Handler: m.guard(m.putExtraction)},
+		{Method: http.MethodGet, Path: "/llm", Handler: m.guard(m.getLLM)},
+		{Method: http.MethodPost, Path: "/llm/providers", Handler: m.guard(m.postProvider)},
+		{Method: http.MethodPut, Path: "/llm/providers/{id}", Handler: m.guard(id(m.putProvider))},
+		{Method: http.MethodDelete, Path: "/llm/providers/{id}", Handler: m.guard(id(m.deleteProvider))},
+		{Method: http.MethodPost, Path: "/llm/providers/{id}/test", Handler: m.guard(id(m.testProvider))},
+		{Method: http.MethodPost, Path: "/llm/providers/{id}/discover", Handler: m.guard(id(m.discoverModels))},
+		{Method: http.MethodPost, Path: "/llm/providers/{id}/models", Handler: m.guard(id(m.postModels))},
+		{Method: http.MethodPut, Path: "/llm/providers/{id}/models", Handler: m.guard(id(m.putModel))},
+		{Method: http.MethodPost, Path: "/llm/providers/{id}/models/remove", Handler: m.guard(id(m.removeModels))},
+		{Method: http.MethodPut, Path: "/llm/routes/{route}", Handler: m.guard(func(w http.ResponseWriter, r *http.Request) {
+			m.putRoute(r.PathValue("route"))(w, r)
+		})},
+		{Method: http.MethodPut, Path: "/videos/featured", Handler: m.guard(m.putFeatured)},
 	}
-	parts := strings.Split(trimmed, "/")
-	if slices.Contains(parts, "") {
-		return nil, false
-	}
-	return parts, true
 }
 
-type handler func(http.ResponseWriter, *http.Request)
-
-// ServeAdmin routes the LLM configuration paths. The caller has already
-// authenticated the operator and applied the origin guard.
-func (m *Module) ServeAdmin(w http.ResponseWriter, r *http.Request, path string) bool {
-	parts, ok := segments(path)
-	if !ok {
-		return false
-	}
-	is := func(index int, name string) bool { return strings.EqualFold(parts[index], name) }
-	var routes map[string]handler
-	switch {
-	case len(parts) == 1 && is(0, "config"):
-		routes = map[string]handler{http.MethodGet: m.getConfig, http.MethodPut: m.putConfig}
-	case len(parts) == 1 && is(0, "providers"):
-		routes = map[string]handler{http.MethodGet: m.getProviders, http.MethodPost: m.postProvider}
-	case len(parts) == 1 && is(0, "models"):
-		routes = map[string]handler{http.MethodGet: m.getModels}
-	case len(parts) == 1 && is(0, "routes"):
-		routes = map[string]handler{http.MethodGet: m.getRoutes}
-	case len(parts) == 2 && is(0, "routes"):
-		routes = map[string]handler{http.MethodPut: m.putRoute(parts[1])}
-	case len(parts) == 2 && is(0, "providers"):
-		routes = map[string]handler{http.MethodPut: m.putProvider(parts[1]), http.MethodDelete: m.deleteProvider(parts[1])}
-		if is(1, "order") {
-			routes[http.MethodPut] = m.putProviderOrder
+// guard rejects every route without a database and every write against a
+// read-only one before the handler parses its body.
+func (m *Module) guard(next handler) handler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case m.db == nil:
+			httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		case r.Method != http.MethodGet && r.Method != http.MethodHead && !m.store.Writable():
+			httpx.ReadOnly(w)
+		default:
+			next(w, r)
 		}
-	case len(parts) == 3 && is(0, "providers") && is(2, "test"):
-		test := m.testProvider(parts[1])
-		routes = map[string]handler{http.MethodPut: test, http.MethodPost: test}
-	case len(parts) == 3 && is(0, "providers") && is(2, "models"):
-		routes = map[string]handler{http.MethodPost: m.postModels(parts[1]), http.MethodPut: m.putModel(parts[1])}
-	case len(parts) == 4 && is(0, "providers") && is(2, "models") && is(3, "discover"):
-		routes = map[string]handler{http.MethodPost: m.discoverModels(parts[1])}
-	case len(parts) == 4 && is(0, "providers") && is(2, "models") && is(3, "remove"):
-		routes = map[string]handler{http.MethodPost: m.removeModels(parts[1])}
-	default:
-		return false
 	}
-	method := r.Method
-	if method == http.MethodHead {
-		method = http.MethodGet
-	}
-	handle, known := routes[method]
-	switch {
-	case m.db == nil:
-		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
-	case !known:
-		allowed := make([]string, 0, len(routes))
-		for name := range routes {
-			allowed = append(allowed, name)
-		}
-		sort.Strings(allowed)
-		httpx.MethodNotAllowed(w, strings.Join(allowed, ", "))
-	case method != http.MethodGet && !m.store.Writable():
-		m.fail(w, sqlite.ErrReadOnly)
-	default:
-		handle(w, r)
-	}
-	return true
 }
 
-// --- configuration ----------------------------------------------------------
+// --- extraction settings ----------------------------------------------------
 
-type configResponse struct {
-	LLMModel                  string                  `json:"llmModel"`
-	OpenAIKeyConfigured       bool                    `json:"openAiKeyConfigured"`
-	ScheduleExtractionEnabled bool                    `json:"scheduleExtractionEnabled"`
-	ScheduleKeywordEnabled    bool                    `json:"scheduleKeywordEnabled"`
-	ScheduleVisionEnabled     bool                    `json:"scheduleVisionEnabled"`
-	ScheduleMessageEnabled    bool                    `json:"scheduleMessageEnabled"`
-	ScheduleKeywords          []string                `json:"scheduleKeywords"`
-	ProviderOrder             []string                `json:"providerOrder"`
-	ProviderOrders            RouteMap[[]string]      `json:"providerOrders"`
-	Routes                    RouteMap[[]string]      `json:"routes"`
-	Providers                 []Provider              `json:"providers"`
-	Models                    []Model                 `json:"models"`
-	ModelTags                 []string                `json:"modelTags"`
-	RouteTargets              RouteMap[[]RouteTarget] `json:"routeTargets"`
-	ConfiguredRouteTargets    RouteMap[[]RouteTarget] `json:"configuredRouteTargets"`
-	FeaturedVideoID           *string                 `json:"featuredVideoId"`
-	UpdatedAt                 string                  `json:"updatedAt,omitempty"`
+type extractionResponse struct {
+	// Enabled is derived: the message detector alone, or keyword plus vision.
+	Enabled        bool     `json:"enabled"`
+	KeywordEnabled bool     `json:"keywordEnabled"`
+	VisionEnabled  bool     `json:"visionEnabled"`
+	MessageEnabled bool     `json:"messageEnabled"`
+	Keywords       []string `json:"keywords"`
 }
 
-func (m *Module) configPayload(ctx context.Context, db Querier, updatedAt string) (configResponse, error) {
-	response := configResponse{ModelTags: llmModelTags, UpdatedAt: updatedAt}
+func (m *Module) extractionPayload(ctx context.Context, db Querier) (extractionResponse, error) {
 	schedule, err := ScheduleExtractionConfig(ctx, db, m.env)
-	if err != nil {
-		return response, err
-	}
-	response.ScheduleExtractionEnabled = schedule.Enabled
-	response.ScheduleKeywordEnabled = schedule.KeywordEnabled
-	response.ScheduleVisionEnabled = schedule.VisionEnabled
-	response.ScheduleMessageEnabled = schedule.MessageEnabled
-	response.ScheduleKeywords = schedule.Keywords
-	if response.ProviderOrders, err = ScheduleProviderOrders(ctx, db); err != nil {
-		return response, err
-	}
-	response.Routes = response.ProviderOrders
-	response.ProviderOrder = response.ProviderOrders.Vision
-	if response.Providers, err = ListProviders(ctx, db); err != nil {
-		return response, err
-	}
-	for _, provider := range response.Providers {
-		if provider.ID == "openai-default" {
-			response.OpenAIKeyConfigured = provider.APIKeyConfigured
-		}
-	}
-	if response.LLMModel, err = GetAppSetting(ctx, db, "llm_model", DefaultScheduleModel); err != nil {
-		return response, err
-	}
-	if response.Models, err = ListModels(ctx, db, ""); err != nil {
-		return response, err
-	}
-	if response.RouteTargets, err = ScheduleRouteTargets(ctx, db); err != nil {
-		return response, err
-	}
-	if response.ConfiguredRouteTargets, err = configuredRouteTargets(ctx, db); err != nil {
-		return response, err
-	}
-	featured, err := FeaturedVideoID(ctx, db)
-	response.FeaturedVideoID = nullableString(featured)
-	return response, err
+	return extractionResponse{
+		Enabled:        schedule.Enabled,
+		KeywordEnabled: schedule.KeywordEnabled,
+		VisionEnabled:  schedule.VisionEnabled,
+		MessageEnabled: schedule.MessageEnabled,
+		Keywords:       schedule.Keywords,
+	}, err
 }
 
-func (m *Module) getConfig(w http.ResponseWriter, r *http.Request) {
-	response, err := m.configPayload(r.Context(), m.db, "")
+func (m *Module) getExtraction(w http.ResponseWriter, r *http.Request) {
+	response, err := m.extractionPayload(r.Context(), m.db)
 	if err != nil {
 		m.fail(w, err)
 		return
@@ -274,22 +196,27 @@ func (m *Module) getConfig(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, response)
 }
 
-func (m *Module) putConfig(w http.ResponseWriter, r *http.Request) {
+var extractionStages = []struct{ field, key string }{
+	{"keywordEnabled", "schedule_keyword_enabled"},
+	{"visionEnabled", "schedule_vision_enabled"},
+	{"messageEnabled", "schedule_message_enabled"},
+}
+
+func (m *Module) putExtraction(w http.ResponseWriter, r *http.Request) {
 	body, err := m.body(w, r)
 	if err != nil {
 		m.fail(w, err)
 		return
 	}
 	ctx := r.Context()
-	var response configResponse
+	var response extractionResponse
 	err = m.write(ctx, func(tx *sql.Tx) error {
-		updatedAt := ""
-		flag := func(field string, keys ...string) error {
-			raw, present := body[field]
+		for _, stage := range extractionStages {
+			raw, present := body[stage.field]
 			if !present {
-				return nil
+				continue
 			}
-			enabled, flagErr := booleanValue(raw, field)
+			enabled, flagErr := booleanValue(raw, stage.field)
 			if flagErr != nil {
 				return flagErr
 			}
@@ -297,78 +224,21 @@ func (m *Module) putConfig(w http.ResponseWriter, r *http.Request) {
 			if enabled {
 				value = "1"
 			}
-			for index, key := range keys {
-				stamp, setErr := m.setSetting(ctx, tx, key, value)
-				if setErr != nil {
-					return setErr
-				}
-				if index == 0 {
-					updatedAt = stamp
-				}
-			}
-			return nil
-		}
-		if raw, present := body["llmModel"]; present {
-			model, modelErr := text(raw, "llmModel", true, 128)
-			if modelErr != nil {
-				return modelErr
-			}
-			if !llmModelPattern.MatchString(model) {
-				return httpx.Invalid("llmModel contains unsupported characters")
-			}
-			if updatedAt, err = m.setSetting(ctx, tx, "llm_model", model); err != nil {
-				return err
+			if _, setErr := m.setSetting(ctx, tx, stage.key, value); setErr != nil {
+				return setErr
 			}
 		}
-		// The legacy switch writes every stage, then explicit stage fields win.
-		if err := flag("scheduleExtractionEnabled", "schedule_extraction_enabled",
-			"schedule_keyword_enabled", "schedule_vision_enabled", "schedule_message_enabled"); err != nil {
-			return err
-		}
-		if err := flag("scheduleKeywordEnabled", "schedule_keyword_enabled"); err != nil {
-			return err
-		}
-		if err := flag("scheduleVisionEnabled", "schedule_vision_enabled"); err != nil {
-			return err
-		}
-		if err := flag("scheduleMessageEnabled", "schedule_message_enabled"); err != nil {
-			return err
-		}
-		if raw, present := body["scheduleKeywords"]; present {
+		if raw, present := body["keywords"]; present {
 			keywords, keywordErr := scheduleKeywords(raw)
 			if keywordErr != nil {
 				return keywordErr
 			}
-			if updatedAt, err = m.setSetting(ctx, tx, "schedule_keywords", compactJSON(keywords)); err != nil {
-				return err
-			}
-		}
-		if raw, present := body["featuredVideoId"]; present {
-			videoID, videoErr := text(raw, "featuredVideoId", false, 64)
-			if videoErr != nil {
-				return videoErr
-			}
-			previous, lookupErr := FeaturedVideoID(ctx, tx)
-			if lookupErr != nil {
-				return lookupErr
-			}
-			if err := m.setFeaturedVideoID(ctx, tx, videoID); err != nil {
-				return err
-			}
-			current, lookupErr := FeaturedVideoID(ctx, tx)
-			if lookupErr != nil {
-				return lookupErr
-			}
-			updatedAt = m.stamp()
-			if previous != current {
-				// Polling browsers reload the board when the revision moves.
-				if err := sqlite.BumpRevisionTx(ctx, tx, updatedAt); err != nil {
-					return err
-				}
+			if _, setErr := m.setSetting(ctx, tx, "schedule_keywords", compactJSON(keywords)); setErr != nil {
+				return setErr
 			}
 		}
 		var payloadErr error
-		response, payloadErr = m.configPayload(ctx, tx, updatedAt)
+		response, payloadErr = m.extractionPayload(ctx, tx)
 		return payloadErr
 	})
 	if err != nil {
@@ -378,41 +248,100 @@ func (m *Module) putConfig(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, response)
 }
 
-// --- providers --------------------------------------------------------------
+// --- featured video ---------------------------------------------------------
 
-type providersResponse struct {
-	Providers      []Provider         `json:"providers"`
-	Route          string             `json:"route"`
-	ProviderOrder  []string           `json:"providerOrder"`
-	ProviderOrders RouteMap[[]string] `json:"providerOrders"`
-	Routes         RouteMap[[]string] `json:"routes"`
-}
-
-func (m *Module) providersPayload(ctx context.Context, db Querier, route string) (providersResponse, error) {
-	response := providersResponse{Route: route}
-	var err error
-	if response.ProviderOrders, err = ScheduleProviderOrders(ctx, db); err != nil {
-		return response, err
-	}
-	response.Routes = response.ProviderOrders
-	response.ProviderOrder = response.ProviderOrders.Get(route)
-	response.Providers, err = ListProviders(ctx, db)
-	return response, err
-}
-
-func (m *Module) getProviders(w http.ResponseWriter, r *http.Request) {
-	route, err := validProviderRoute(strings.Join(r.URL.Query()["route"], ","))
+// putFeatured pins the board's featured video; null or "" restores the
+// automatic choice. A change advances the dashboard revision.
+func (m *Module) putFeatured(w http.ResponseWriter, r *http.Request) {
+	body, err := m.body(w, r)
 	if err != nil {
 		m.fail(w, err)
 		return
 	}
-	response, err := m.providersPayload(r.Context(), m.db, route)
+	raw, present := body["videoId"]
+	if !present {
+		m.fail(w, httpx.Invalid("videoId is required"))
+		return
+	}
+	ctx := r.Context()
+	var featured string
+	err = m.write(ctx, func(tx *sql.Tx) error {
+		videoID, videoErr := text(raw, "videoId", false, 64)
+		if videoErr != nil {
+			return videoErr
+		}
+		previous, lookupErr := FeaturedVideoID(ctx, tx)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		if err := m.setFeaturedVideoID(ctx, tx, videoID); err != nil {
+			return err
+		}
+		if featured, lookupErr = FeaturedVideoID(ctx, tx); lookupErr != nil {
+			return lookupErr
+		}
+		if previous != featured {
+			// Polling browsers reload the board when the revision moves.
+			return sqlite.BumpRevisionTx(ctx, tx, m.stamp())
+		}
+		return nil
+	})
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]*string{"featuredVideoId": nullableString(featured)})
+}
+
+// --- catalog ----------------------------------------------------------------
+
+type routeState struct {
+	// Targets is the effective order extraction uses; Configured is the
+	// operator's saved list, which is empty while a fallback applies.
+	Targets    []RouteTarget `json:"targets"`
+	Configured []RouteTarget `json:"configured"`
+}
+
+type llmResponse struct {
+	Providers []Provider           `json:"providers"`
+	Models    []Model              `json:"models"`
+	Routes    RouteMap[routeState] `json:"routes"`
+	ModelTags []string             `json:"modelTags"`
+}
+
+func routesPayload(ctx context.Context, db Querier) (RouteMap[routeState], error) {
+	var routes RouteMap[routeState]
+	effective, err := ScheduleRouteTargets(ctx, db)
+	if err != nil {
+		return routes, err
+	}
+	configured, err := configuredRouteTargets(ctx, db)
+	if err != nil {
+		return routes, err
+	}
+	routes.Vision = routeState{Targets: effective.Vision, Configured: configured.Vision}
+	routes.Message = routeState{Targets: effective.Message, Configured: configured.Message}
+	routes.Board = routeState{Targets: effective.Board, Configured: configured.Board}
+	return routes, nil
+}
+
+func (m *Module) getLLM(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	response := llmResponse{ModelTags: llmModelTags}
+	var err error
+	if response.Providers, err = ListProviders(ctx, m.db); err == nil {
+		if response.Models, err = ListModels(ctx, m.db, ""); err == nil {
+			response.Routes, err = routesPayload(ctx, m.db)
+		}
+	}
 	if err != nil {
 		m.fail(w, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, response)
 }
+
+// --- providers --------------------------------------------------------------
 
 func (m *Module) postProvider(w http.ResponseWriter, r *http.Request) {
 	body, err := m.body(w, r)
@@ -448,52 +377,6 @@ func (m *Module) postProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, map[string]*Provider{"provider": provider})
-}
-
-func (m *Module) putProviderOrder(w http.ResponseWriter, r *http.Request) {
-	body, err := m.body(w, r)
-	if err != nil {
-		m.fail(w, err)
-		return
-	}
-	ctx := r.Context()
-	var response providersResponse
-	err = m.write(ctx, func(tx *sql.Tx) error {
-		route, routeErr := validProviderRoute(body["route"])
-		if routeErr != nil {
-			return routeErr
-		}
-		ids, isArray := coalesce(body["providerOrder"], body["ids"]).([]any)
-		if !isArray || len(ids) > 100 {
-			return httpx.Invalid("providerOrder must be an array")
-		}
-		targets := make([]RouteTarget, 0, len(ids))
-		for _, id := range ids {
-			targets = append(targets, RouteTarget{ProviderID: jsTrim(jsString(id))})
-		}
-		if err := m.setRouteTargets(ctx, tx, route, targets); err != nil {
-			return err
-		}
-		var payloadErr error
-		if response, payloadErr = m.providersPayload(ctx, tx, route); payloadErr != nil {
-			return payloadErr
-		}
-		// The saved route's own order, without the vision fallback.
-		response.ProviderOrder, payloadErr = routeProviders(ctx, tx, route)
-		return payloadErr
-	})
-	if err != nil {
-		m.fail(w, err)
-		return
-	}
-	// Same fields as the listing, in the order the save reply always used.
-	httpx.WriteJSON(w, http.StatusOK, struct {
-		Route          string             `json:"route"`
-		ProviderOrder  []string           `json:"providerOrder"`
-		ProviderOrders RouteMap[[]string] `json:"providerOrders"`
-		Routes         RouteMap[[]string] `json:"routes"`
-		Providers      []Provider         `json:"providers"`
-	}{response.Route, response.ProviderOrder, response.ProviderOrders, response.Routes, response.Providers})
 }
 
 func (m *Module) putProvider(id string) handler {
@@ -659,18 +542,6 @@ type discoveredModel struct {
 	SuggestedTags []string `json:"suggestedTags"`
 	Added         bool     `json:"added"`
 	Tags          []string `json:"tags"`
-}
-
-func (m *Module) getModels(w http.ResponseWriter, r *http.Request) {
-	models, err := ListModels(r.Context(), m.db, strings.Join(r.URL.Query()["providerId"], ","))
-	if err != nil {
-		m.fail(w, err)
-		return
-	}
-	httpx.WriteJSON(w, http.StatusOK, struct {
-		Models    []Model  `json:"models"`
-		ModelTags []string `json:"modelTags"`
-	}{models, llmModelTags})
 }
 
 func (m *Module) discoverModels(id string) handler {
@@ -902,24 +773,6 @@ func (m *Module) removeModels(id string) handler {
 
 // --- routes -----------------------------------------------------------------
 
-func (m *Module) getRoutes(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	effective, err := ScheduleRouteTargets(ctx, m.db)
-	if err != nil {
-		m.fail(w, err)
-		return
-	}
-	configured, err := configuredRouteTargets(ctx, m.db)
-	if err != nil {
-		m.fail(w, err)
-		return
-	}
-	httpx.WriteJSON(w, http.StatusOK, struct {
-		Routes     RouteMap[[]RouteTarget] `json:"routes"`
-		Configured RouteMap[[]RouteTarget] `json:"configured"`
-	}{effective, configured})
-}
-
 func (m *Module) putRoute(name string) handler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := m.body(w, r)
@@ -928,7 +781,7 @@ func (m *Module) putRoute(name string) handler {
 			return
 		}
 		ctx := r.Context()
-		var response configResponse
+		var routes RouteMap[routeState]
 		err = m.write(ctx, func(tx *sql.Tx) error {
 			route, routeErr := validProviderRoute(name)
 			if routeErr != nil {
@@ -942,13 +795,13 @@ func (m *Module) putRoute(name string) handler {
 				return err
 			}
 			var payloadErr error
-			response, payloadErr = m.configPayload(ctx, tx, m.stamp())
+			routes, payloadErr = routesPayload(ctx, tx)
 			return payloadErr
 		})
 		if err != nil {
 			m.fail(w, err)
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, response)
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"routes": routes})
 	}
 }

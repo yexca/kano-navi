@@ -40,7 +40,7 @@ export async function verifySnapshot(
 
   const session = await (await request("/api/admin/session")).json()
   assert.equal(session.authenticated, false)
-  await request("/api/admin/config", 401)
+  await request("/api/admin/overview", 401)
   await request("/media/not-an-id", 404)
 
   if (staticPages) {

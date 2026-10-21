@@ -1,424 +1,482 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 
 import { createRequestScope, startPolling } from "../lib/polling"
 
-import { adminMessage, formatAdminError, jsonBody, request } from "@/admin/api"
+import {
+  errorMessage,
+  message,
+  request,
+  type Message,
+  type RequestOptions,
+} from "@/admin/api"
+import type {
+  AdminEvent,
+  AdminPost,
+  AdminVideo,
+  DiscoveredModel,
+  EventInput,
+  Extraction,
+  FetchWindow,
+  LlmCatalog,
+  Model,
+  Overview,
+  Page,
+  ProfileMedia,
+  ProfileMediaState,
+  Provider,
+  RouteId,
+  RouteState,
+  RouteTarget,
+  Run,
+  ScheduleImage,
+  Session,
+  Sources,
+  Workflow,
+  WorkflowCatalog,
+} from "@/admin/types"
 
-const emptyFilters = {
-  search: "",
-  provenance: "",
-  from: "",
-  to: "",
-  includeDeleted: false,
+type Runner = <T>(
+  key: string,
+  path: string,
+  options?: RequestOptions,
+) => Promise<T>
+
+const enc = encodeURIComponent
+
+function query(values: Record<string, any>) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(values)) {
+    if (
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      value === false
+    )
+      continue
+    params.set(key, value === true ? "1" : String(value))
+  }
+  const text = params.toString()
+  return text ? `?${text}` : ""
 }
 
-function eventsQuery(query: Record<string, any> = {}) {
-  const params = new URLSearchParams({
-    page: String(query.page || 1),
-    pageSize: String(query.pageSize || 20),
-  })
-  if (query.search) params.set("search", query.search)
-  if (query.provenance) params.set("provenance", query.provenance)
-  if (query.from) params.set("from", query.from)
-  if (query.to) params.set("to", query.to)
-  if (query.includeDeleted) params.set("includeDeleted", "1")
-  return params.toString()
+export type StartRun =
+  | { kind: "sync" | "scan" }
+  | { kind: "workflow"; workflowId: string }
+  | { kind: "fetch"; source: "x" | "youtube"; window: FetchWindow }
+
+/**
+ * Every /api/admin endpoint the console calls. Reads are keyed by path so a
+ * newer read supersedes an older one; writes never cancel each other.
+ */
+function createClient(run: Runner, slow: Runner) {
+  let writes = 0
+  const get = <T>(path: string) => run<T>(path.split("?")[0], path)
+  const send = <T>(method: string, path: string, body?: unknown) =>
+    run<T>(`write:${++writes}`, path, { method, body })
+  const sendSlow = <T>(method: string, path: string, body?: unknown) =>
+    slow<T>(`slow:${++writes}`, path, { method, body })
+  return {
+    session: () => get<Session>("/session"),
+    login: (password: string) =>
+      send<Session>("POST", "/session", { password }),
+    logout: () => send<null>("DELETE", "/session"),
+
+    overview: () => get<Overview>("/overview"),
+    runs: (page: number) =>
+      get<Page<Run>>(`/runs${query({ page, pageSize: 15 })}`),
+    run: (id: string) => get<{ run: Run }>(`/runs/${enc(id)}`),
+    startRun: (body: StartRun) => send<{ run: Run }>("POST", "/runs", body),
+    cancelRun: (id: string) =>
+      send<{ run: Run }>("POST", `/runs/${enc(id)}/cancel`),
+    retryRun: (id: string) =>
+      send<{ run: Run }>("POST", `/runs/${enc(id)}/retry`),
+
+    workflows: () => get<WorkflowCatalog>("/workflows"),
+    createWorkflow: (body: Partial<Workflow>) =>
+      send<{ workflow: Workflow }>("POST", "/workflows", body),
+    updateWorkflow: (id: string, body: Partial<Workflow>) =>
+      send<{ workflow: Workflow }>("PUT", `/workflows/${enc(id)}`, body),
+    deleteWorkflow: (id: string) =>
+      send<null>("DELETE", `/workflows/${enc(id)}`),
+
+    sources: () => get<Sources>("/sources"),
+    updatePush: (body: { enabled?: boolean; callbackUrl?: string | null }) =>
+      send<Sources["youtube"]["push"]>("PUT", "/sources/youtube/push", body),
+    rotatePushSecret: () =>
+      send<Sources["youtube"]["push"]>(
+        "POST",
+        "/sources/youtube/push/rotate-secret",
+      ),
+
+    events: (filters: Record<string, any>) =>
+      get<Page<AdminEvent>>(`/events${query(filters)}`),
+    createEvent: (body: EventInput) =>
+      send<{ event: AdminEvent }>("POST", "/events", body),
+    updateEvent: (id: string, body: EventInput) =>
+      send<{ event: AdminEvent }>("PUT", `/events/${enc(id)}`, body),
+    confirmEvent: (id: string, body?: Partial<EventInput>) =>
+      send<{ event: AdminEvent }>("POST", `/events/${enc(id)}/confirm`, body),
+    deleteEvent: (id: string) => send<null>("DELETE", `/events/${enc(id)}`),
+
+    scheduleImages: () =>
+      get<{ items: ScheduleImage[] }>("/schedule-images?limit=100"),
+    reviewImage: (id: string, status: string, reason: string) =>
+      send<{ image: ScheduleImage }>(
+        "POST",
+        `/schedule-images/${enc(id)}/review`,
+        { status, reason },
+      ),
+    setImagePeriod: (id: string, start: string, end: string, reason: string) =>
+      send<{ image: ScheduleImage }>(
+        "PUT",
+        `/schedule-images/${enc(id)}/period`,
+        { start, end, reason },
+      ),
+
+    posts: (filters: Record<string, any>) =>
+      get<Page<AdminPost>>(`/posts${query(filters)}`),
+    reprocessPost: (id: string, route?: string) =>
+      send<{ state: unknown }>(
+        "POST",
+        `/posts/${enc(id)}/reprocess`,
+        route ? { route } : {},
+      ),
+
+    videos: (filters: Record<string, any>) =>
+      get<Page<AdminVideo> & { featuredVideoId: string | null }>(
+        `/videos${query(filters)}`,
+      ),
+    setFeatured: (videoId: string | null) =>
+      send<{ featuredVideoId: string | null }>("PUT", "/videos/featured", {
+        videoId,
+      }),
+
+    profileMedia: () => get<ProfileMediaState>("/profile-media"),
+    addProfileMedia: (slot: string, source: string, sourceUrl: string) =>
+      send<ProfileMediaState>("POST", "/profile-media", {
+        slot,
+        source,
+        sourceUrl,
+      }),
+    discoverProfileMedia: (slot: string, source: string) =>
+      sendSlow<ProfileMediaState & { candidates: ProfileMedia[] }>(
+        "POST",
+        "/profile-media/discover",
+        { slot, source },
+      ),
+    uploadProfileMedia: (slot: string, file: Blob) =>
+      sendSlow<ProfileMediaState>(
+        "POST",
+        `/profile-media/upload${query({ slot })}`,
+        file,
+      ),
+    downloadProfileMedia: (id: string) =>
+      sendSlow<ProfileMediaState>("POST", `/profile-media/${enc(id)}/download`),
+    selectProfileMedia: (id: string) =>
+      send<ProfileMediaState>("POST", `/profile-media/${enc(id)}/select`),
+
+    extraction: () => get<Extraction>("/extraction"),
+    updateExtraction: (body: Partial<Extraction>) =>
+      send<Extraction>("PUT", "/extraction", body),
+    llm: () => get<LlmCatalog>("/llm"),
+    createProvider: (body: Record<string, any>) =>
+      send<{ provider: Provider }>("POST", "/llm/providers", body),
+    updateProvider: (id: string, body: Record<string, any>) =>
+      send<{ provider: Provider }>("PUT", `/llm/providers/${enc(id)}`, body),
+    deleteProvider: (id: string) =>
+      send<null>("DELETE", `/llm/providers/${enc(id)}`),
+    testProvider: (id: string, model?: string) =>
+      sendSlow<{ ok: boolean; method: string; model?: string }>(
+        "POST",
+        `/llm/providers/${enc(id)}/test`,
+        model ? { model } : {},
+      ),
+    discoverModels: (id: string) =>
+      sendSlow<{ provider: Provider; models: DiscoveredModel[] }>(
+        "POST",
+        `/llm/providers/${enc(id)}/discover`,
+      ),
+    addModels: (id: string, models: Partial<Model>[], origin = "manual") =>
+      send<{ provider: Provider; models: Model[] }>(
+        "POST",
+        `/llm/providers/${enc(id)}/models`,
+        { models, origin },
+      ),
+    updateModel: (id: string, model: Partial<Model>) =>
+      send<{ provider: Provider; models: Model[] }>(
+        "PUT",
+        `/llm/providers/${enc(id)}/models`,
+        model,
+      ),
+    removeModels: (id: string, ids: string[]) =>
+      send<{ provider: Provider; models: Model[] }>(
+        "POST",
+        `/llm/providers/${enc(id)}/models/remove`,
+        { ids },
+      ),
+    updateRoute: (route: RouteId, targets: RouteTarget[]) =>
+      send<{ routes: Record<RouteId, RouteState> }>(
+        "PUT",
+        `/llm/routes/${route}`,
+        { targets },
+      ),
+  }
 }
 
-function isActiveJob(job) {
-  return job?.status === "running" || job?.status === "queued"
+export type AdminClient = ReturnType<typeof createClient>
+
+export interface Toast {
+  id: number
+  message: Message
+  tone: "success" | "danger"
 }
 
 /**
- * Owns every admin request and the polling of job state. Views receive data
- * and narrow callbacks; they do not keep their own copies of server state.
+ * Owns every admin request: the session, the overview poll that also tracks
+ * the active run, and the endpoint client the views use. When a run finishes
+ * `revision` advances so views reload what the run may have changed.
  */
 export function useAdminData() {
-  const [session, setSession] = useState(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [config, setConfig] = useState(null)
-  const [workflowState, setWorkflowState] = useState(null)
-  const [jobs, setJobs] = useState([])
-  const [runs, setRuns] = useState([])
-  const [eventsPage, setEventsPage] = useState(null)
-  const [eventFilters, setEventFilters] = useState(emptyFilters)
-  const [videos, setVideos] = useState([])
-  const [sourceFetch, setSourceFetch] = useState(null)
-  const [postLlm, setPostLlm] = useState([])
-  const [scheduleAssets, setScheduleAssets] = useState([])
-  const [profileMedia, setProfileMedia] = useState({
-    items: [],
-    active: { avatar: null, banner: null },
-  })
-  const [toasts, setToasts] = useState([])
+  const [session, setSession] = useState<Session | null>(null)
+  const [overview, setOverview] = useState<Overview | null>(null)
+  const [revision, setRevision] = useState(0)
+  const [toasts, setToasts] = useState<Toast[]>([])
   const toastId = useRef(0)
-  const filtersRef = useRef(emptyFilters)
-  const pageRef = useRef(1)
-  const wasActiveRef = useRef(false)
-  const workflowReadRef = useRef(0)
+  const activeRef = useRef<string | null>(null)
   const scope = useMemo(() => createRequestScope(), [])
-  const scopedRequest = useCallback(
-    (path, options: Record<string, any> = {}) =>
-      scope.run(path.split("?")[0], (signal) =>
-        request(path, { ...options, signal }),
-      ),
-    [scope],
-  )
+  const slowScope = useMemo(() => createRequestScope(130_000), [])
+
   useEffect(() => {
     scope.activate()
-    return () => scope.dispose()
-  }, [scope])
+    slowScope.activate()
+    return () => {
+      scope.dispose()
+      slowScope.dispose()
+    }
+  }, [scope, slowScope])
 
-  const dismissToast = useCallback(
-    (id) => {
-      if (scope.active)
-        setToasts((current) => current.filter((toast) => toast.id !== id))
-    },
-    [scope],
-  )
+  const signedOut = useCallback(() => {
+    scope.cancel()
+    slowScope.cancel()
+    setSession((current) =>
+      current ? { ...current, authenticated: false } : current,
+    )
+  }, [scope, slowScope])
+
+  const api = useMemo(() => {
+    const runner =
+      (target: typeof scope): Runner =>
+      async (key, path, options = {}) => {
+        try {
+          return await target.run(key, (signal) =>
+            request(path, { ...options, signal }),
+          )
+        } catch (error) {
+          if (error?.status === 401 && !path.startsWith("/session")) signedOut()
+          throw error
+        }
+      }
+    return createClient(runner(scope), runner(slowScope))
+  }, [scope, slowScope, signedOut])
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((current) => current.filter((toast) => toast.id !== id))
+  }, [])
 
   const pushToast = useCallback(
-    (message, tone = "success") => {
-      if (!message || !scope.active) return
-      toastId.current += 1
-      const id = toastId.current
-      setToasts((current) => [...current.slice(-3), { id, message, tone }])
-      if (tone !== "danger") {
-        window.setTimeout(() => dismissToast(id), 4200)
-      }
+    (value: Message, tone: Toast["tone"]) => {
+      if (!scope.active) return
+      const id = ++toastId.current
+      setToasts((current) => [
+        ...current.slice(-3),
+        { id, message: value, tone },
+      ])
+      if (tone === "success") window.setTimeout(() => dismissToast(id), 4200)
     },
-    [dismissToast],
+    [dismissToast, scope],
   )
 
-  const notify = useCallback((message) => pushToast(message), [pushToast])
+  const notify = useCallback(
+    (key: string, values?: Record<string, any>) =>
+      pushToast(message(key, values), "success"),
+    [pushToast],
+  )
   const fail = useCallback(
-    (error) =>
-      pushToast(
-        error && (error.key || error.text) ? error : formatAdminError(error),
-        "danger",
-      ),
+    (error: any) => {
+      if (error?.name === "AbortError" || error?.status === 401) return
+      pushToast(errorMessage(error), "danger")
+    },
     [pushToast],
   )
 
-  const loadEventsPage = useCallback(
-    async (query: Record<string, any> = {}) => {
-      const filters = query.filters || filtersRef.current
-      const page = query.page || 1
-      const payload = await scopedRequest(
-        `/events?${eventsQuery({ ...filters, page })}`,
-      )
-      pageRef.current = payload.page || page
-      setEventsPage(payload)
-      return payload
-    },
-    [scopedRequest],
-  )
-
-  const loadConfig = useCallback(async () => {
-    const payload = await scopedRequest("/config")
-    setConfig(payload)
-    return payload
-  }, [scopedRequest])
-
-  const loadWorkflows = useCallback(async () => {
-    const read = ++workflowReadRef.current
-    const payload = await scopedRequest("/workflows")
-    if (read === workflowReadRef.current) setWorkflowState(payload)
-    return payload
-  }, [scopedRequest])
-
-  const loadActivity = useCallback(async () => {
-    const workflowRead = ++workflowReadRef.current
-    const [jobPayload, runPayload, workflowPayload] = await scope.run(
-      "activity",
-      (signal) =>
-        Promise.all([
-          request("/sync/jobs?limit=10", { signal }),
-          request("/sync/runs?limit=12", { signal }),
-          request("/workflows", { signal }),
-        ]),
-    )
-    if (!scope.active) return []
-    setJobs(jobPayload.jobs || [])
-    setRuns(runPayload.runs || [])
-    if (workflowRead === workflowReadRef.current)
-      setWorkflowState(workflowPayload)
-    return jobPayload.jobs || []
-  }, [scopedRequest])
-
-  const loadVideos = useCallback(async () => {
-    const payload = await scopedRequest("/videos")
-    setVideos(payload.videos || [])
-  }, [scopedRequest])
-  const loadSourceFetch = useCallback(async () => {
-    setSourceFetch(await scopedRequest("/sources/fetch"))
-  }, [scopedRequest])
-
-  const loadPostLlm = useCallback(async () => {
-    const payload = await scopedRequest("/posts/llm?limit=60")
-    setPostLlm(payload.posts || [])
-    return payload.posts || []
-  }, [scopedRequest])
-
-  const loadScheduleAssets = useCallback(async () => {
-    const payload = await scopedRequest("/schedule-assets?limit=100")
-    setScheduleAssets(payload.assets || [])
-    return payload.assets || []
-  }, [scopedRequest])
-
-  const loadProfileMedia = useCallback(async () => {
-    setProfileMedia(await scopedRequest("/profile-media"))
-  }, [scopedRequest])
-
-  const loadAll = useCallback(async () => {
-    await Promise.all([
-      loadConfig(),
-      loadActivity(),
-      loadEventsPage({ page: 1 }),
-      loadVideos(),
-      loadSourceFetch(),
-      loadPostLlm(),
-      loadScheduleAssets(),
-      loadProfileMedia(),
-    ])
-  }, [
-    loadActivity,
-    loadConfig,
-    loadEventsPage,
-    loadPostLlm,
-    loadScheduleAssets,
-    loadProfileMedia,
-    loadVideos,
-    loadSourceFetch,
-  ])
-
-  useEffect(() => {
-    let active = true,
-      loaded = false,
-      initialInFlight = false
-    const initialLoad = async () => {
-      if (initialInFlight) return
-      initialInFlight = true
-      try {
-        const payload = await scopedRequest("/session")
-        if (!active) return
-        setSession(payload)
-        if (payload.authenticated) await loadAll()
-        loaded = true
-      } finally {
-        initialInFlight = false
-      }
+  const refreshOverview = useCallback(async () => {
+    const next = await api.overview()
+    setOverview(next)
+    const active = next.activeRun?.id || null
+    if (activeRef.current && activeRef.current !== active) {
+      setRevision((value) => value + 1)
     }
-    void initialLoad()
+    activeRef.current = active
+    return next
+  }, [api])
+
+  // Session first; the overview poll starts once authenticated.
+  useEffect(() => {
+    let cancelled = false
+    api
+      .session()
+      .then((next) => !cancelled && setSession(next))
       .catch((error) => {
-        if (active && error.name !== "AbortError") fail(error)
+        if (cancelled || error?.name === "AbortError") return
+        fail(error)
+        setSession({
+          authenticated: false,
+          mode: "production",
+          requiresPassword: true,
+        })
       })
-      .finally(() => active && setIsLoading(false))
-    const stop = startPolling(
-      async () => {
-        if (!loaded) await initialLoad()
-      },
-      {
-        delay: () => 6000,
-        onError: (error) => {
-          if (error?.status === 401) {
-            loaded = true
-            scope.cancel()
-            setSession((current) => ({ ...current, authenticated: false }))
-          }
-        },
-      },
-    )
     return () => {
-      active = false
-      stop()
+      cancelled = true
     }
-  }, [fail, loadAll, scopedRequest, scope])
+  }, [api, fail])
 
-  const activeJob = jobs.find(isActiveJob) || null
-
-  const activeJobRef = useRef(false)
-  activeJobRef.current = Boolean(activeJob)
-  // The loop owns its timer, independent of successful React state updates.
+  const authenticated = Boolean(session?.authenticated)
   useEffect(() => {
-    if (!session?.authenticated) return undefined
-    return startPolling(
-      async () => {
-        if (scope.busy("activity")) return
-        const latestJobs = await loadActivity()
-        const stillActive = latestJobs.some(isActiveJob)
-        if (wasActiveRef.current && !stillActive) {
-          await Promise.all([
-            loadEventsPage({ page: pageRef.current }),
-            loadConfig(),
-            loadVideos(),
-            loadSourceFetch(),
-            loadPostLlm(),
-            loadScheduleAssets(),
-          ])
-        }
-        wasActiveRef.current = stillActive
-      },
-      {
-        delay: () => (activeJobRef.current ? 1500 : 6000),
-        onError: (error) => {
-          if (error?.status === 401) {
-            scope.cancel()
-            setSession((current) => ({ ...current, authenticated: false }))
-          }
-        },
-      },
-    )
-  }, [
-    session?.authenticated,
-    scope,
-    loadActivity,
-    loadConfig,
-    loadEventsPage,
-    loadVideos,
-    loadSourceFetch,
-    loadPostLlm,
-    loadScheduleAssets,
-  ])
+    if (!authenticated) return undefined
+    void refreshOverview().catch(fail)
+    return startPolling(refreshOverview, {
+      delay: () => (activeRef.current ? 1500 : 8000),
+    })
+  }, [authenticated, refreshOverview, fail])
 
   const login = useCallback(
-    async (password) => {
-      const payload = await scopedRequest("/login", {
-        method: "POST",
-        body: jsonBody({ password }),
-      })
-      setSession(payload)
-      await loadAll()
+    async (password: string) => {
+      setSession(await api.login(password))
     },
-    [loadAll],
+    [api],
   )
 
   const logout = useCallback(async () => {
     try {
-      await scopedRequest("/logout", { method: "POST" })
-      setSession((current) => ({ ...current, authenticated: false }))
-      setConfig(null)
+      await api.logout()
+      signedOut()
+      setOverview(null)
     } catch (error) {
       fail(error)
     }
-  }, [fail])
+  }, [api, fail, signedOut])
 
-  const updateFilters = useCallback(
-    (name, value) => {
-      setEventFilters((current) => {
-        const next = { ...current, [name]: value }
-        filtersRef.current = next
-        return next
-      })
-    },
-    [scopedRequest],
-  )
-
-  const resetFilters = useCallback(() => {
-    filtersRef.current = emptyFilters
-    setEventFilters(emptyFilters)
-  }, [scopedRequest])
-
-  /** Start a job and report whether it was accepted. */
-  const startJob = useCallback(
-    async (path, body = null) => {
+  /**
+   * Run an operator action, report its outcome and return its result, or
+   * undefined when it failed.
+   */
+  const act = useCallback(
+    async <T>(
+      work: () => Promise<T>,
+      success?: string,
+      values?: Record<string, any>,
+    ): Promise<T | undefined> => {
       try {
-        const payload = await scopedRequest(path, {
-          method: "POST",
-          ...(body ? { body: jsonBody(body) } : {}),
-        })
-        await loadActivity()
-        wasActiveRef.current = true
-        notify(adminMessage("admin.notice.queued"))
-        return payload
+        const result = await work()
+        if (success) notify(success, values)
+        // Review counts and the queue badge follow the change at once.
+        void refreshOverview().catch(() => {})
+        return result
       } catch (error) {
-        if (error.status === 409) {
-          await loadActivity().catch(() => {})
-          notify(adminMessage("admin.notice.alreadyRunning"))
-          return null
-        }
         fail(error)
-        return null
+        return undefined
       }
     },
-    [fail, loadActivity, notify],
+    [fail, notify, refreshOverview],
   )
 
-  const reprocessPostLlm = useCallback(
-    async (postId, route = null) => {
-      const payload = await scopedRequest(
-        `/posts/${encodeURIComponent(postId)}/llm/reprocess`,
-        { method: "POST", body: jsonBody(route ? { route } : {}) },
-      )
-      await loadPostLlm()
-      return payload.state
+  /** Start a run; a busy queue reports the run that holds it. */
+  const start = useCallback(
+    async (body: StartRun) => {
+      try {
+        const { run } = await api.startRun(body)
+        notify("admin.notice.runQueued")
+        activeRef.current = run.id
+        void refreshOverview().catch(() => {})
+        return run
+      } catch (error) {
+        if (error?.status === 409) notify("admin.notice.busy")
+        else fail(error)
+        return undefined
+      }
     },
-    [loadPostLlm],
-  )
-
-  const reviewScheduleAsset = useCallback(
-    async (assetId, status, reason) => {
-      const payload = await scopedRequest(
-        `/schedule-assets/${encodeURIComponent(assetId)}/manual-review`,
-        {
-          method: "POST",
-          body: jsonBody({ status, reason }),
-        },
-      )
-      await loadScheduleAssets()
-      return payload.asset
-    },
-    [loadScheduleAssets],
-  )
-
-  const correctSchedulePeriod = useCallback(
-    async (assetId, start, end, reason) => {
-      const payload = await scopedRequest(
-        `/schedule-assets/${encodeURIComponent(assetId)}/period`,
-        { method: "POST", body: jsonBody({ start, end, reason }) },
-      )
-      await loadScheduleAssets()
-      return payload.asset
-    },
-    [scopedRequest, loadScheduleAssets],
+    [api, fail, notify, refreshOverview],
   )
 
   return {
     session,
-    isLoading,
-    config,
-    setConfig,
-    workflowState,
-    setWorkflowState,
-    jobs,
-    runs,
-    activeJob,
-    eventsPage,
-    eventFilters,
-    videos,
-    sourceFetch,
-    postLlm,
-    scheduleAssets,
-    profileMedia,
-    setProfileMedia,
+    overview,
+    revision,
     toasts,
-    dismissToast,
-    notify,
-    fail,
+    api,
     login,
     logout,
-    loadAll,
-    loadConfig,
-    loadWorkflows,
-    loadActivity,
-    loadEventsPage,
-    updateFilters,
-    resetFilters,
-    startJob,
-    loadPostLlm,
-    loadScheduleAssets,
-    reprocessPostLlm,
-    reviewScheduleAsset,
-    correctSchedulePeriod,
+    act,
+    start,
+    notify,
+    fail,
+    dismissToast,
+    refreshOverview,
   }
+}
+
+export type AdminData = ReturnType<typeof useAdminData>
+
+export const AdminContext = createContext<AdminData | null>(null)
+
+export function useAdmin() {
+  const value = useContext(AdminContext)
+  if (!value) throw new Error("useAdmin must be used inside the admin console")
+  return value
+}
+
+/**
+ * Load one view resource and reload it when `deps` change or a run finishes.
+ * A failed reload keeps the last good data.
+ */
+export function useResource<T>(load: () => Promise<T>, deps: unknown[]) {
+  const { revision, fail } = useAdmin()
+  const [data, setData] = useState<T | undefined>(undefined)
+  const [error, setError] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const loader = useRef(load)
+  loader.current = load
+
+  const reload = useCallback(async () => {
+    setLoading(true)
+    try {
+      const next = await loader.current()
+      setData(next)
+      setError(null)
+      setLoading(false)
+      return next
+    } catch (failure) {
+      // A superseded read leaves the newer one in charge of the state.
+      if (failure?.name === "AbortError") return undefined
+      setError(failure)
+      setLoading(false)
+      fail(failure)
+      return undefined
+    }
+  }, [fail])
+
+  useEffect(() => {
+    void reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reload, revision, ...deps])
+
+  return { data, setData, error, loading, reload }
 }

@@ -12,24 +12,6 @@ export const modelTags = [
   { id: "embedding", tone: "leaf", icon: Layers, routing: false },
 ]
 
-export const scheduleRoutes = [
-  {
-    id: "schedule_board",
-    labelKey: "admin.route.board",
-    hintKey: "admin.route.boardHint",
-  },
-  {
-    id: "schedule_message",
-    labelKey: "admin.route.message",
-    hintKey: "admin.route.messageHint",
-  },
-  {
-    id: "schedule_vision",
-    labelKey: "admin.route.legacy",
-    hintKey: "admin.route.legacyHint",
-  },
-]
-
 /*
  * Provider presets. They only pre-fill the connection form; nothing
  * is requested until an operator saves a key and fetches models. Every host

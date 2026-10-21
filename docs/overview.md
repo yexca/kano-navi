@@ -78,14 +78,16 @@ and cream gingham from the banner, the outfit's sky blue as a secondary hue,
 rounded cards, and a rounded Japanese display face where the system has one.
 Light and dark themes share the same tokens in `src/index.css`.
 
-A separate, unlinked `/admin` route presents a maintainer console that opens on
-one-click workflows: an operator chooses which modules to refresh (X, YouTube,
-media cache, AI schedule scan), runs them immediately with live per-module
-progress, or saves the selection with a server-side timer. It also offers
-paginated schedule curation, detection rules with an ordered model list per
-route, a central LLM provider page in the style of desktop LLM clients (API
-host and key, fetched model list, capability tags), Featured-video selection,
-and profile media. The public calendar labels
+A separate, unlinked `/admin` route presents a maintainer console organized
+around operator tasks. Its overview shows what waits for a decision, the active
+run with per-step progress, source health and recent runs. A review queue
+collects schedule images, suspected cancellations and failed post extractions;
+the schedule page curates entries with durable locks; runs and workflows start
+syncs or save step lists on a server-side timer; sources run recent or
+historical fetch windows and YouTube push; content covers posts, the featured
+video and profile media; and models & detection holds the extraction stages,
+an ordered model list per route and a provider catalog in the style of desktop
+LLM clients (API host and key, fetched model list, capability tags). The public calendar labels
 automatic extraction and manual confirmation so visitors can distinguish their
 provenance. A `/mcp` integration endpoint
 offers sanitized read tools without a key and narrowly scoped, bearer-protected

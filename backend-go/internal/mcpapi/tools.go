@@ -467,18 +467,16 @@ func (h *handler) scheduleList(ctx context.Context, arguments map[string]any) (a
 	if h.store == nil {
 		return nil, failureSnapshot
 	}
-	page, err := h.store.ListAdminEventsPage(
-		ctx,
-		integerArgumentValue(arguments, "page", 1),
-		integerArgumentValue(arguments, "pageSize", 25),
-		false, // newest first
-		false, // never include deleted tombstones
-		stringArgumentValue(arguments, "search"),
-		stringArgumentValue(arguments, "provenance"),
-		stringArgumentValue(arguments, "source"),
-		stringArgumentValue(arguments, "from"),
-		stringArgumentValue(arguments, "to"),
-	)
+	// Newest first, never including deleted tombstones.
+	page, err := h.store.ListAdminEvents(ctx, sqlite.AdminEventFilter{
+		Page:       integerArgumentValue(arguments, "page", 1),
+		PageSize:   integerArgumentValue(arguments, "pageSize", 25),
+		Search:     stringArgumentValue(arguments, "search"),
+		Provenance: stringArgumentValue(arguments, "provenance"),
+		Source:     stringArgumentValue(arguments, "source"),
+		From:       stringArgumentValue(arguments, "from"),
+		To:         stringArgumentValue(arguments, "to"),
+	})
 	if err != nil {
 		return nil, failureSnapshot
 	}
@@ -496,7 +494,7 @@ func (h *handler) scheduleList(ctx context.Context, arguments map[string]any) (a
 	}
 	return schedulePage{
 		Items: items, Events: items, Page: page.Page, PageSize: page.PageSize, Total: page.Total,
-		TotalPages: page.TotalPages, HasPrevious: page.HasPrevious, HasNext: page.HasNext,
+		TotalPages: page.TotalPages, HasPrevious: page.Page > 1, HasNext: page.Page < page.TotalPages,
 	}, nil
 }
 

@@ -72,16 +72,16 @@ func TestGoSourceWorkflowProducesPostsReservationsAndReadableMedia(t *testing.T)
 	if done.Status != "succeeded" || len(done.Steps) != 3 || done.Steps[1].Capability != "youtube_recent" || done.Steps[2].Capability != "media_download" {
 		t.Fatalf("run=%#v", done)
 	}
-	posts, err := s.ListAdminPosts(context.Background(), 1, 10, "", "", "", "", "", "", "", false)
-	if err != nil || len(posts.Posts) != 1 {
+	posts, err := s.ListAdminPosts(context.Background(), sqlite.AdminPostFilter{Page: 1, PageSize: 10})
+	if err != nil || len(posts.Items) != 1 {
 		t.Fatalf("posts=%#v err=%v", posts, err)
 	}
 	state, err := s.YoutubeRecentState(context.Background(), yt.Options.ChannelID)
 	if err != nil || state.Videos["AAAAAAAAAAA"].ScheduledAt != "2026-01-04T00:00:00Z" {
 		t.Fatalf("videos=%#v err=%v", state, err)
 	}
-	events, err := s.ListAdminEventsPage(context.Background(), 1, 10, false, false, "", "", "", "", "", false)
-	if err != nil || len(events.Events) != 1 {
+	events, err := s.ListAdminEvents(context.Background(), sqlite.AdminEventFilter{Page: 1, PageSize: 10})
+	if err != nil || len(events.Items) != 1 {
 		t.Fatalf("events=%#v err=%v", events, err)
 	}
 	latest, err := s.GetLatestSync(context.Background())

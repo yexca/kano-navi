@@ -12,7 +12,7 @@ const upstreamDetail = "synthetic-upstream-detail"
 func TestDiscoverModels(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	h.createProvider("alpha", nil)
-	h.ok(http.MethodPost, "/providers/alpha/models", map[string]any{"models": []any{map[string]any{"id": "zeta-vision", "tags": []string{"text"}}}}, http.StatusCreated)
+	h.ok(http.MethodPost, "/llm/providers/alpha/models", map[string]any{"models": []any{map[string]any{"id": "zeta-vision", "tags": []string{"text"}}}}, http.StatusCreated)
 	h.transport.respond = func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusOK, `{"data":[
 			{"id":"zeta-vision","owned_by":" synthetic "},
@@ -22,7 +22,7 @@ func TestDiscoverModels(t *testing.T) {
 		]}`), nil
 	}
 
-	result := h.ok(http.MethodPost, "/providers/alpha/models/discover", nil, http.StatusOK)
+	result := h.ok(http.MethodPost, "/llm/providers/alpha/discover", nil, http.StatusOK)
 	models := list(t, result.JSON["models"])
 	ids := []string{}
 	for _, model := range models {
@@ -71,7 +71,7 @@ func TestDiscoverModelsFollowsAnthropicCursors(t *testing.T) {
 		}
 		return jsonResponse(http.StatusOK, `{"data":[{"id":"model-a"},{"id":"model-b"}],"has_more":false}`), nil
 	}
-	result := h.ok(http.MethodPost, "/providers/alpha/models/discover", nil, http.StatusOK)
+	result := h.ok(http.MethodPost, "/llm/providers/alpha/discover", nil, http.StatusOK)
 	equal(t, "models", len(list(t, result.JSON["models"])), 2)
 	requests := h.transport.recorded()
 	equal(t, "pages", len(requests), 2)
@@ -85,7 +85,7 @@ func TestDiscoverModelsFollowsAnthropicCursors(t *testing.T) {
 	h.transport.respond = func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusOK, `{"data":[],"has_more":true,"last_id":"model-b"}`), nil
 	}
-	h.invalid(http.MethodPost, "/providers/alpha/models/discover", nil, messageListFailed)
+	h.invalid(http.MethodPost, "/llm/providers/alpha/discover", nil, messageListFailed)
 	equal(t, "bounded pages", len(h.transport.recorded()), 4)
 }
 
@@ -124,10 +124,10 @@ func TestProviderRequestFailuresAreSanitized(t *testing.T) {
 			h.createProvider("beta", map[string]any{"model": "beta-chat"})
 			h.transport.respond = respond
 
-			listing := h.invalid(http.MethodPost, "/providers/alpha/models/discover", nil, messageListFailed)
-			viaTest := h.invalid(http.MethodPost, "/providers/alpha/test", nil, messageListFailed)
-			inference := h.invalid(http.MethodPut, "/providers/beta/test", map[string]any{}, messageRequestFailed)
-			providers := h.ok(http.MethodGet, "/providers", nil, http.StatusOK)
+			listing := h.invalid(http.MethodPost, "/llm/providers/alpha/discover", nil, messageListFailed)
+			viaTest := h.invalid(http.MethodPost, "/llm/providers/alpha/test", nil, messageListFailed)
+			inference := h.invalid(http.MethodPost, "/llm/providers/beta/test", map[string]any{}, messageRequestFailed)
+			providers := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
 			alpha := byID(t, providers.JSON["providers"], "alpha")
 			equal(t, "alpha status", alpha["lastStatus"], "failed")
 			equal(t, "alpha error", alpha["lastError"], messageListFailed)
@@ -158,8 +158,8 @@ func TestProviderTestWithoutModelListsModels(t *testing.T) {
 	h.transport.respond = func(*http.Request) (*http.Response, error) {
 		return jsonResponse(http.StatusOK, `{"models":[{"name":"models/one"},{"name":"models/two"}]}`), nil
 	}
-	for _, method := range []string{http.MethodPost, http.MethodPut} {
-		result := h.ok(method, "/providers/alpha/test", nil, http.StatusOK)
+	for _, method := range []string{http.MethodPost} {
+		result := h.ok(method, "/llm/providers/alpha/test", nil, http.StatusOK)
 		equal(t, "ok", result.JSON["ok"], true)
 		equal(t, "method", result.JSON["method"], "models")
 		equal(t, "count", result.JSON["remoteModelCount"], float64(2))
@@ -190,7 +190,7 @@ func TestProviderTestInference(t *testing.T) {
 			h.transport.respond = func(*http.Request) (*http.Response, error) {
 				return jsonResponse(http.StatusOK, `{"id":"synthetic","output":"`+upstreamDetail+`"}`), nil
 			}
-			result := h.ok(http.MethodPost, "/providers/beta/test", map[string]any{}, http.StatusOK)
+			result := h.ok(http.MethodPost, "/llm/providers/beta/test", map[string]any{}, http.StatusOK)
 			equal(t, "ok", result.JSON["ok"], true)
 			equal(t, "method", result.JSON["method"], "inference")
 			equal(t, "model", result.JSON["model"], "beta-chat")
@@ -225,29 +225,29 @@ func TestProviderTestInference(t *testing.T) {
 func TestProviderTestModelSelectionAndPreconditions(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	h.createProvider("beta", map[string]any{"model": "beta-chat"})
-	h.ok(http.MethodPost, "/providers/beta/models", map[string]any{"models": []any{map[string]any{"id": "beta-fast"}}}, http.StatusCreated)
+	h.ok(http.MethodPost, "/llm/providers/beta/models", map[string]any{"models": []any{map[string]any{"id": "beta-fast"}}}, http.StatusCreated)
 
-	chosen := h.ok(http.MethodPost, "/providers/beta/test", map[string]any{"model": "beta-fast"}, http.StatusOK)
+	chosen := h.ok(http.MethodPost, "/llm/providers/beta/test", map[string]any{"model": "beta-fast"}, http.StatusOK)
 	equal(t, "chosen model", chosen.JSON["model"], "beta-fast")
 	if !strings.Contains(h.transport.recorded()[0].Body, `"model":"beta-fast"`) {
 		t.Fatal("the requested catalog model is the one that is probed")
 	}
-	h.invalid(http.MethodPost, "/providers/beta/test", map[string]any{"model": "absent"}, "model is not in the provider catalog")
-	h.invalid(http.MethodPost, "/providers/beta/test", map[string]any{"model": "bad id"}, "model contains unsupported characters")
+	h.invalid(http.MethodPost, "/llm/providers/beta/test", map[string]any{"model": "absent"}, "model is not in the provider catalog")
+	h.invalid(http.MethodPost, "/llm/providers/beta/test", map[string]any{"model": "bad id"}, "model contains unsupported characters")
 
-	missing := h.call(http.MethodPost, "/providers/ghost/test", nil)
+	missing := h.call(http.MethodPost, "/llm/providers/ghost/test", nil)
 	equal(t, "404", missing.Status, http.StatusNotFound)
 	equal(t, "404 code", missing.JSON["error"], "llm_provider_not_found")
-	missing = h.call(http.MethodPost, "/providers/ghost/models/discover", nil)
+	missing = h.call(http.MethodPost, "/llm/providers/ghost/discover", nil)
 	equal(t, "discover 404", missing.Status, http.StatusNotFound)
 
 	// Without a usable credential no request leaves the process.
 	before := len(h.transport.recorded())
-	h.ok(http.MethodPut, "/providers/beta", map[string]any{"apiKey": ""}, http.StatusOK)
-	h.invalid(http.MethodPost, "/providers/beta/test", nil, "provider API key is not configured")
-	h.invalid(http.MethodPost, "/providers/beta/models/discover", nil, "provider API key is not configured")
+	h.ok(http.MethodPut, "/llm/providers/beta", map[string]any{"apiKey": ""}, http.StatusOK)
+	h.invalid(http.MethodPost, "/llm/providers/beta/test", nil, "provider API key is not configured")
+	h.invalid(http.MethodPost, "/llm/providers/beta/discover", nil, "provider API key is not configured")
 	h.exec(`UPDATE llm_providers SET api_key_ciphertext = ? WHERE id = ?`, "v1:not:a:credential", "beta")
-	h.invalid(http.MethodPost, "/providers/beta/test", nil, "provider API key is not configured")
+	h.invalid(http.MethodPost, "/llm/providers/beta/test", nil, "provider API key is not configured")
 	equal(t, "no outbound request", len(h.transport.recorded()), before)
 }
 
@@ -259,9 +259,9 @@ func TestProviderTestTimeout(t *testing.T) {
 		<-request.Context().Done()
 		return nil, request.Context().Err()
 	}
-	h.invalid(http.MethodPost, "/providers/beta/test", nil, messageRequestTimeout)
-	h.invalid(http.MethodPost, "/providers/alpha/models/discover", nil, messageListTimeout)
-	providers := h.ok(http.MethodGet, "/providers", nil, http.StatusOK)
+	h.invalid(http.MethodPost, "/llm/providers/beta/test", nil, messageRequestTimeout)
+	h.invalid(http.MethodPost, "/llm/providers/alpha/discover", nil, messageListTimeout)
+	providers := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
 	equal(t, "beta error", byID(t, providers.JSON["providers"], "beta")["lastError"], messageRequestTimeout)
 	equal(t, "alpha error", byID(t, providers.JSON["providers"], "alpha")["lastError"], messageListTimeout)
 }

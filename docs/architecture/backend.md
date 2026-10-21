@@ -15,12 +15,11 @@ Responses should remain stable and sanitized; do not expose
 `raw_json`, stack traces, credentials, or absolute local paths to the browser.
 Ready runtime media is served only through the opaque-ID `/media/:id` route.
 
-The admin API (`internal/httpapi`, `internal/llmadmin`,
-`internal/contentadmin`) exposes session, model/schedule/video settings, provider
-management, the model catalog (`/providers/:id/models`, `/models/discover`,
-`/models/remove`), route targets (`/routes/:route`), saved workflows
-(`/workflows`, `/workflows/:id/run`), paginated event queries, asynchronous
-job status, video listing, and event CRUD endpoints. Mutating requests reject
+The [Admin API](admin-api.md) (`internal/adminapi`, with routes contributed by
+`internal/llmadmin`, `internal/contentadmin` and the YouTube `websub` package)
+exposes the session, the console overview, runs and saved workflows, source
+windows, events, schedule images, posts, videos, profile media, extraction
+settings, providers, the model catalog and route targets. Mutating requests reject
 cross-site Fetch Metadata. Browser `Sec-Fetch-Site: same-origin` requests remain
 valid when a reverse proxy rewrites Host or terminates HTTPS; other requests
 with an `Origin` must match the observed local origin. Production also requires
@@ -34,7 +33,7 @@ restarting the process invalidates all sessions. The API exposes provider-key av
 ## YouTube WebSub Callback: `/api/websub/youtube`
 
 The route is active only while YouTube push is enabled in `/admin`
-(`/api/admin/youtube-push`); otherwise it answers like an unknown API path. It
+(`/api/admin/sources/youtube/push`); otherwise it answers like an unknown API path. It
 answers Google's hub verification for this channel's topic and accepts signed
 Atom notifications, which only wake a queued YouTube sync. See
 [Sources](sources.md#websub-push) for the settings, verification, signature,

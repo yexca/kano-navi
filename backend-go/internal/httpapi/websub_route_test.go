@@ -7,13 +7,13 @@ import (
 
 func TestYoutubeWebSubRouteIsMountedOnlyWhenConfigured(t *testing.T) {
 	store, _ := openFixture(t)
-	without := NewStandaloneHandler(store, nil, nil, Standalone{})
+	without := NewStandaloneHandler(store, nil, Standalone{})
 	if got := request(t, without, http.MethodGet, "/api/websub/youtube"); got.Code != http.StatusNotFound || decodeObject(t, got)["error"] != "api_not_found" {
 		t.Fatalf("unconfigured route: status=%d body=%q", got.Code, got.Body.String())
 	}
 
 	reached := 0
-	with := NewStandaloneHandler(store, nil, nil, Standalone{WebSub: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	with := NewStandaloneHandler(store, nil, Standalone{WebSub: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reached++
 		w.WriteHeader(http.StatusAccepted)
 	})})

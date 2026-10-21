@@ -9,12 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/config"
 	"github.com/yexca/kano-navi/backend-go/internal/publicview"
 	"github.com/yexca/kano-navi/backend-go/internal/source/youtube/websub"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
-	"github.com/yexca/kano-navi/backend-go/internal/workflow"
 )
 
 type Handler struct {
@@ -30,10 +28,10 @@ type Handler struct {
 }
 
 // Standalone carries everything the single-process owner serves beyond the
-// public reads: the full operator console, MCP and the built frontend.
+// public reads: the operator API, MCP and the built frontend.
 type Standalone struct {
-	Compat *Compat
-	Queue  *workflow.Queue
+	// Admin serves /api/admin (internal/adminapi).
+	Admin  http.Handler
 	Static http.Handler
 	MCP    http.Handler
 	// WebSub answers the YouTube hub; it reports the route as absent while
@@ -42,53 +40,36 @@ type Standalone struct {
 }
 
 // NewStandaloneHandler serves the whole product from this process.
-func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, auth *adminauth.Auth, options Standalone) http.Handler {
+func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, options Standalone) http.Handler {
 	if now == nil {
 		now = time.Now
 	}
 	return &Handler{
 		store:  store,
 		now:    now,
-		admin:  &adminHandler{store: store, auth: auth, queue: options.Queue, compat: options.Compat},
+		admin:  options.Admin,
 		static: options.Static,
 		mcp:    options.MCP,
 		websub: options.WebSub,
 	}
 }
 
+// NewHandler serves the public reads only; /api/admin answers unavailable.
 func NewHandler(store *sqlite.Store) http.Handler {
 	return NewHandlerWithClock(store, time.Now)
 }
 
 func NewHandlerWithClock(store *sqlite.Store, now func() time.Time) http.Handler {
+	return NewHandlerWithAdmin(store, now, nil)
+}
+
+// NewHandlerWithAdmin serves the public reads plus an operator API handler,
+// which the read-only sidecar attaches once its admin configuration is valid.
+func NewHandlerWithAdmin(store *sqlite.Store, now func() time.Time, admin http.Handler) http.Handler {
 	if now == nil {
 		now = time.Now
 	}
-	// The legacy constructor serves public reads only. Admin authentication is
-	// attached explicitly through NewHandlerWithAdmin after configuration.
-	return &Handler{store: store, now: now, admin: newAdminHandler(store, nil)}
-}
-
-// NewHandlerWithAdmin attaches the independent in-memory admin session store.
-// The separate NewHandlerWithAdminAndX constructor can attach the explicitly
-// gated development X recent trigger.
-func NewHandlerWithAdmin(store *sqlite.Store, now func() time.Time, auth *adminauth.Auth) http.Handler {
-	return NewHandlerWithAdminAndX(store, now, auth, nil)
-}
-
-// NewHandlerWithAdminAndX attaches the development-only X recent trigger.
-func NewHandlerWithAdminAndX(store *sqlite.Store, now func() time.Time, auth *adminauth.Auth, trigger XSyncTrigger) http.Handler {
-	if now == nil {
-		now = time.Now
-	}
-	return &Handler{store: store, now: now, admin: newAdminHandlerWithX(store, auth, trigger)}
-}
-
-func NewHandlerWithSources(store *sqlite.Store, now func() time.Time, auth *adminauth.Auth, triggers map[string]XSyncTrigger, queue *workflow.Queue) http.Handler {
-	if now == nil {
-		now = time.Now
-	}
-	return &Handler{store: store, now: now, admin: &adminHandler{store: store, auth: auth, sourceTriggers: triggers, queue: queue}}
+	return &Handler{store: store, now: now, admin: admin}
 }
 
 func NewServer(handler http.Handler, cfg config.Config) *http.Server {
@@ -103,10 +84,16 @@ func NewServer(handler http.Handler, cfg config.Config) *http.Server {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch r.URL.Path {
-	case "/api/admin", "/api/admin/", "/api/admin/session", "/api/admin/login", "/api/admin/logout", "/api/admin/videos", "/api/admin/posts/llm", "/api/admin/events", "/api/admin/sync/runs", "/api/admin/sync/jobs", "/api/admin/activity", "/api/admin/overview", "/api/admin/workflows", "/api/admin/runs":
+	if r.URL.Path == "/api/admin" || strings.HasPrefix(r.URL.Path, "/api/admin/") {
+		if h.admin == nil {
+			w.Header().Set("Cache-Control", "no-store, no-transform")
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "admin_unavailable"}, "")
+			return
+		}
 		h.admin.ServeHTTP(w, r)
 		return
+	}
+	switch r.URL.Path {
 	case "/api/health":
 		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
@@ -136,8 +123,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.calendar(w, r)
 	default:
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/api/admin/"):
-			h.admin.ServeHTTP(w, r)
 		case strings.HasPrefix(r.URL.Path, "/media/profile/"):
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {
 				writeMethodNotAllowed(w, "GET, HEAD")

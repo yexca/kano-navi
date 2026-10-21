@@ -126,42 +126,29 @@ func newSecret() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// ServeAdmin routes GET/PUT /youtube-push and POST /youtube-push/rotate-secret.
-func (a *Admin) ServeAdmin(w http.ResponseWriter, r *http.Request, path string) bool {
-	switch strings.TrimSuffix(path, "/") {
-	case "/youtube-push":
-		switch r.Method {
-		case http.MethodGet, http.MethodHead:
+// AdminRoutes lists the push settings endpoints. The same status is also part
+// of the source overview (Status).
+func (a *Admin) AdminRoutes() []httpx.Route {
+	return []httpx.Route{
+		{Method: http.MethodGet, Path: "/sources/youtube/push", Handler: func(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteJSON(w, http.StatusOK, a.payload())
-		case http.MethodPut:
-			if a.writable(w) {
-				a.mu.Lock()
-				defer a.mu.Unlock()
-				a.update(w, r)
-			}
-		default:
-			httpx.MethodNotAllowed(w, "GET, PUT")
-		}
-	case "/youtube-push/rotate-secret":
-		if r.Method != http.MethodPost {
-			httpx.MethodNotAllowed(w, "POST")
-		} else if a.writable(w) {
-			a.mu.Lock()
-			defer a.mu.Unlock()
-			a.rotate(w, r)
-		}
-	default:
-		return false
+		}},
+		{Method: http.MethodPut, Path: "/sources/youtube/push", Handler: a.locked(a.update)},
+		{Method: http.MethodPost, Path: "/sources/youtube/push/rotate-secret", Handler: a.locked(a.rotate)},
 	}
-	return true
 }
 
-func (a *Admin) writable(w http.ResponseWriter) bool {
-	if !a.store.Writable() {
-		httpx.WriteCode(w, http.StatusNotImplemented, "capability_not_migrated")
-		return false
+// locked serializes settings writes against a writable store.
+func (a *Admin) locked(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !a.store.Writable() {
+			httpx.ReadOnly(w)
+			return
+		}
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		next(w, r)
 	}
-	return true
 }
 
 // payload is the service status plus whether the source can be enabled.

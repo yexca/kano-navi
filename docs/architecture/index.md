@@ -5,6 +5,7 @@ Read core boundaries before changing the relationship between page reads, synchr
 - [Core boundaries](core-boundaries.md)
 - [Frontend](frontend.md)
 - [Backend and HTTP](backend.md)
+- [Admin API](admin-api.md): the `/api/admin` contract used by the console
 - [Go backend](go-standalone.md): commands, startup, route ownership, rollback
 - Migration record: [phases](go-migration.md),
   [workflow core](go-workflows.md), [X recent sync](go-x-sync.md),

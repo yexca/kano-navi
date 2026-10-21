@@ -174,15 +174,3 @@ func (q *Queue) Close() {
 	q.mu.Unlock()
 	q.wg.Wait()
 }
-
-type RecentTrigger struct {
-	Queue              *Queue
-	WorkflowID, Source string
-}
-
-func (t *RecentTrigger) Trigger(ctx context.Context, days int) (*sqlite.WorkflowRun, error) {
-	if days < 1 || days > 365 {
-		return nil, NewStepError("invalid_recent_days", ErrValidation)
-	}
-	return t.Queue.Submit(ctx, t.WorkflowID, TriggerOperator, "", map[string]int{t.Source: days})
-}

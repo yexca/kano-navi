@@ -2,11 +2,12 @@
 
 ## Fetch Windows and Historical Backfill
 
-The Post management page and Content & media page offer `recent`, `before`, and
-`range` fetches for X and YouTube. `POST /api/admin/sources/:source/fetch` accepts
-`{ "window": { "mode": "recent", "days": 30 } }`,
-`{ "window": { "mode": "before", "days": 30 } }`, or
-`{ "window": { "mode": "range", "startDate": "2026-09-01", "endDate": "2026-09-30" } }`.
+The console's Sources page offers `recent`, `before`, and `range` fetches for
+X and YouTube. `POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }`
+plus `"window": { "mode": "recent", "days": 30 }`,
+`"window": { "mode": "before", "days": 30 }`, or
+`"window": { "mode": "range", "startDate": "2026-09-01", "endDate": "2026-09-30" }`
+starts one.
 Days must be integers from 1 to 365; date ranges cover at most 365 days. Both
 selected dates are inclusive in `Asia/Tokyo`; internal timestamp bounds are
 start-inclusive and end-exclusive. `before` uses the oldest persisted post
@@ -17,7 +18,7 @@ records are skipped and reported while other accounts can backfill.
 These requests run the chosen source and media stages through the existing
 single-flight queue; opening a page does not fetch platforms. They do not run
 schedule extraction on historical posts or overwrite the regular incremental
-source cursor. `GET /api/admin/sources/fetch` reports oldest timestamps and
+source cursor. `GET /api/admin/sources` reports oldest timestamps and
 credential-availability flags only, never keys.
 
 Without official API credentials, recent X fetches filter IDs discoverable on
@@ -64,7 +65,7 @@ Synchronization is split into modular steps declared in
 and records the ones disabled by `SKIP_*` as skipped.
 A saved workflow chooses a subset; its run records `sync_runs.source =
 workflow` and exposes per-step progress (`pending`, `running`, `completed`,
-`partial`, `failed`, `skipped`) through `/api/admin/sync/jobs`. When a selected
+`partial`, `failed`, `skipped`) through `/api/admin/runs`. When a selected
 step is disabled by `SKIP_*`, its result records `{ skipped: true, reason:
 "environment" }` instead of silently disappearing.
 

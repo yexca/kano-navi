@@ -1,0 +1,361 @@
+import assert from "node:assert/strict"
+import path from "node:path"
+import test from "node:test"
+import { createElement } from "react"
+import { act, create, type ReactTestRenderer } from "react-test-renderer"
+import { createServer } from "vite"
+
+test("admin hook gates polling on the session, tracks runs and coordinates requests", async (t) => {
+  // Load the actual hook with its normal frontend imports, without the runtime
+  // Vite plugin, .env loading, a listener or the operator database.
+  const vite = await createServer({
+    configFile: false,
+    envDir: false,
+    server: { middlewareMode: true, watch: null, ws: false },
+    optimizeDeps: { noDiscovery: true, include: [] },
+    resolve: { alias: { "@": path.resolve("src") } },
+  })
+  try {
+    const { AdminContext, useAdmin, useAdminData, useResource } =
+      await vite.ssrLoadModule("/src/admin/use-admin-data.ts")
+    // Keep Vite's real watcher/optimizer timers outside the mocked clock.
+    await vite.close()
+    const setup = async (context, { resource = false } = {}) => {
+      context.mock.timers.enable({
+        apis: ["Date", "setTimeout"],
+        now: new Date("2025-01-01T00:00:00Z"),
+      })
+      const win = Object.assign(new EventTarget(), { setTimeout, clearTimeout })
+      const previous = {
+        window: globalThis.window,
+        act: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
+      }
+      Object.assign(globalThis, { window: win, IS_REACT_ACT_ENVIRONMENT: true })
+      type Pending = {
+        path: string
+        method: string
+        body: any
+        signal: AbortSignal
+        settled: boolean
+        resolve: (response: Response) => void
+      }
+      const requests: Pending[] = []
+      context.mock.method(globalThis, "fetch", (url, options) => {
+        return new Promise<Response>((resolve) =>
+          requests.push({
+            path: String(url).replace(/^\/api\/admin/, ""),
+            method: options.method,
+            body:
+              options.body === undefined ? undefined : JSON.parse(options.body),
+            signal: options.signal,
+            settled: false,
+            resolve,
+          }),
+        )
+      })
+      let value: ReturnType<typeof useAdminData>
+      let loaded: ReturnType<typeof useResource>
+      let root: ReactTestRenderer
+      function Resource() {
+        const { api } = useAdmin()
+        loaded = useResource(() => api.sources(), [])
+        return null
+      }
+      function Probe() {
+        value = useAdminData()
+        return createElement(
+          AdminContext.Provider,
+          { value },
+          resource ? createElement(Resource) : null,
+        )
+      }
+      await act(async () => {
+        root = create(createElement(Probe))
+      })
+      const all = (route: string, method = "GET") =>
+        requests.filter((item) => item.path === route && item.method === method)
+      const open = (route: string, method = "GET") => {
+        const found = all(route, method).find((item) => !item.settled)
+        assert.ok(found, `expected an open ${method} ${route}`)
+        return found
+      }
+      const respond = async (item: Pending, payload: any, status = 200) => {
+        item.settled = true
+        return act(async () =>
+          item.resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            json: async () => payload,
+          } as Response),
+        )
+      }
+      const tick = async (ms: number) =>
+        act(async () => context.mock.timers.tick(ms))
+      const unmount = async () => {
+        await act(async () => root.unmount())
+        Object.assign(globalThis, {
+          window: previous.window,
+          IS_REACT_ACT_ENVIRONMENT: previous.act,
+        })
+      }
+      return {
+        requests,
+        all,
+        open,
+        respond,
+        tick,
+        unmount,
+        current: () => value,
+        resource: () => loaded,
+      }
+    }
+    const signedIn = {
+      authenticated: true,
+      mode: "production",
+      requiresPassword: true,
+    }
+    const signedOut = { ...signedIn, authenticated: false }
+    const run = (id: string) => ({
+      id,
+      kind: "sync",
+      status: "running",
+      steps: [],
+      progress: {},
+    })
+    const overview = (activeRun = null) => ({ activeRun, recentRuns: [] })
+    const failure = (code: string) => ({ error: code, message: code })
+
+    await t.test(
+      "the session loads first and overview polling starts only once authenticated",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          assert.deepEqual(
+            fixture.requests.map((item) => item.path),
+            ["/session"],
+          )
+          await fixture.respond(fixture.open("/session"), signedOut)
+          assert.equal(fixture.current().session.authenticated, false)
+          await fixture.tick(60000)
+          assert.equal(fixture.all("/overview").length, 0)
+
+          let login: Promise<void>
+          await act(async () => {
+            login = fixture.current().login("synthetic-password")
+          })
+          const post = fixture.open("/session", "POST")
+          assert.deepEqual(post.body, { password: "synthetic-password" })
+          await fixture.respond(post, signedIn)
+          await login
+          assert.equal(fixture.current().session.authenticated, true)
+          // The first overview read is immediate; idle polling waits 8s.
+          await fixture.respond(fixture.open("/overview"), overview())
+          await fixture.tick(7999)
+          assert.equal(fixture.all("/overview").length, 1)
+          await fixture.tick(1)
+          assert.equal(fixture.all("/overview").length, 2)
+          // An active run shortens the cadence to 1.5s.
+          await fixture.respond(
+            fixture.open("/overview"),
+            overview(run("run-synthetic-1")),
+          )
+          await fixture.tick(1499)
+          assert.equal(fixture.all("/overview").length, 2)
+          await fixture.tick(1)
+          assert.equal(fixture.all("/overview").length, 3)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a 401 outside /session signs the operator out, cancels reads and stops polling",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          await fixture.respond(fixture.open("/session"), signedIn)
+          await fixture.respond(fixture.open("/overview"), overview())
+
+          // A rejected password on /session itself leaves other reads alone.
+          const sources = fixture.current().api.sources()
+          const sourcesOutcome = sources.then(
+            () => "resolved",
+            (error) => error.name,
+          )
+          const login = fixture.current().api.login("wrong-synthetic")
+          const loginOutcome = login.then(
+            () => "resolved",
+            (error) => error.status,
+          )
+          await fixture.respond(
+            fixture.open("/session", "POST"),
+            failure("invalid_credentials"),
+            401,
+          )
+          assert.equal(await loginOutcome, 401)
+          assert.equal(fixture.open("/sources").signal.aborted, false)
+          assert.equal(fixture.current().session.authenticated, true)
+
+          // The next poll is in flight when another read is refused.
+          await fixture.tick(8000)
+          const poll = fixture.open("/overview")
+          await fixture.respond(
+            fixture.open("/sources"),
+            failure("admin_auth_required"),
+            401,
+          )
+          assert.equal(await sourcesOutcome, "ApiError")
+          assert.equal(fixture.current().session.authenticated, false)
+          assert.equal(poll.signal.aborted, true)
+          assert.deepEqual(fixture.current().toasts, [])
+          await fixture.tick(120000)
+          assert.equal(fixture.all("/overview").length, 2)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a finished run advances revision and useResource reloads its data",
+      async (context) => {
+        const fixture = await setup(context, { resource: true })
+        try {
+          await fixture.respond(fixture.open("/sources"), { label: "first" })
+          assert.deepEqual(fixture.resource().data, { label: "first" })
+          await fixture.respond(fixture.open("/session"), signedIn)
+          await fixture.respond(
+            fixture.open("/overview"),
+            overview(run("run-synthetic-2")),
+          )
+          assert.equal(fixture.current().revision, 0)
+
+          // Polls arrive at the active cadence; the same run changes nothing.
+          await fixture.tick(8000)
+          await fixture.respond(
+            fixture.open("/overview"),
+            overview(run("run-synthetic-2")),
+          )
+          assert.equal(fixture.current().revision, 0)
+          assert.equal(fixture.all("/sources").length, 1)
+
+          await fixture.tick(1500)
+          await fixture.respond(fixture.open("/overview"), overview())
+          assert.equal(fixture.current().revision, 1)
+          assert.equal(fixture.all("/sources").length, 2)
+          assert.equal(fixture.resource().loading, true)
+          await fixture.respond(fixture.open("/sources"), { label: "second" })
+          assert.deepEqual(fixture.resource().data, { label: "second" })
+          assert.equal(fixture.resource().loading, false)
+
+          // An idle overview does not advance revision again.
+          await fixture.tick(8000)
+          await fixture.respond(fixture.open("/overview"), overview())
+          assert.equal(fixture.current().revision, 1)
+          assert.equal(fixture.all("/sources").length, 2)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "start() reports a busy queue on 409 without throwing",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          await fixture.respond(fixture.open("/session"), signedIn)
+          await fixture.respond(fixture.open("/overview"), overview())
+
+          let started: Promise<any>
+          await act(async () => {
+            started = fixture.current().start({ kind: "sync" })
+          })
+          const post = fixture.open("/runs", "POST")
+          assert.deepEqual(post.body, { kind: "sync" })
+          await fixture.respond(
+            post,
+            { ...failure("busy"), run: run("run-synthetic-3") },
+            409,
+          )
+          assert.equal(await started, undefined)
+          assert.deepEqual(
+            fixture
+              .current()
+              .toasts.map((toast) => [toast.tone, toast.message]),
+            [["success", { key: "admin.notice.busy", values: {} }]],
+          )
+          assert.equal(fixture.current().session.authenticated, true)
+
+          // An accepted run is returned and the overview follows it at once.
+          await act(async () => {
+            started = fixture.current().start({ kind: "scan" })
+          })
+          await fixture.respond(fixture.open("/runs", "POST"), {
+            run: run("run-synthetic-4"),
+          })
+          assert.equal((await started).id, "run-synthetic-4")
+          assert.equal(
+            fixture.current().toasts.at(-1).message.key,
+            "admin.notice.runQueued",
+          )
+          assert.equal(fixture.all("/overview").length, 2)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "reads on the same path supersede each other while writes never cancel",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          await fixture.respond(fixture.open("/session"), signedOut)
+          const { api } = fixture.current()
+          const outcome = (promise: Promise<any>) =>
+            promise.then(
+              (payload) => payload,
+              (error) => error.name,
+            )
+
+          const older = outcome(api.events({ page: 1 }))
+          const other = outcome(api.sources())
+          const newer = outcome(api.events({ page: 2 }))
+          const [olderRead, newerRead] = fixture
+            .all("/events?page=1")
+            .concat(fixture.all("/events?page=2"))
+          assert.equal(olderRead.signal.aborted, true)
+          assert.equal(newerRead.signal.aborted, false)
+          assert.equal(fixture.open("/sources").signal.aborted, false)
+          assert.equal(await older, "AbortError")
+          // A transport that ignores the signal cannot deliver the old page.
+          await fixture.respond(olderRead, { items: [], page: 1 })
+          await fixture.respond(newerRead, { items: [], page: 2 })
+          assert.deepEqual(await newer, { items: [], page: 2 })
+          await fixture.respond(fixture.open("/sources"), { label: "kept" })
+          assert.deepEqual(await other, { label: "kept" })
+
+          const event = { title: "Synthetic event" }
+          const first = outcome(api.createEvent(event))
+          const second = outcome(api.createEvent(event))
+          const writes = fixture.all("/events", "POST")
+          assert.equal(writes.length, 2)
+          assert.deepEqual(
+            writes.map((item) => item.signal.aborted),
+            [false, false],
+          )
+          await fixture.respond(writes[1], { event: { id: "event-2" } })
+          await fixture.respond(writes[0], { event: { id: "event-1" } })
+          assert.deepEqual(await first, { event: { id: "event-1" } })
+          assert.deepEqual(await second, { event: { id: "event-2" } })
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+  } finally {
+    await vite.close()
+  }
+})

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
@@ -126,9 +127,7 @@ func (f *fixture) request(method, path, contentType string, body []byte) result 
 		request.Header.Set("Content-Type", contentType)
 	}
 	response := httptest.NewRecorder()
-	if !f.module.ServeAdmin(response, request, strings.SplitN(path, "?", 2)[0]) {
-		f.t.Fatalf("%s %s was not handled", method, path)
-	}
+	httpx.NewAdminMux(f.module.AdminRoutes()).ServeHTTP(response, request)
 	out := result{status: response.Code, header: response.Header(), raw: response.Body.Bytes()}
 	if strings.HasPrefix(response.Header().Get("Content-Type"), "application/json") {
 		if err := json.Unmarshal(out.raw, &out.json); err != nil {
@@ -148,6 +147,15 @@ func (f *fixture) post(path string, body any) result {
 		f.t.Fatal(err)
 	}
 	return f.request(http.MethodPost, path, "application/json", encoded)
+}
+
+func (f *fixture) put(path string, body any) result {
+	f.t.Helper()
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return f.request(http.MethodPut, path, "application/json", encoded)
 }
 
 func (r result) expect(t *testing.T, status int, code string) {
@@ -199,13 +207,10 @@ func (f *fixture) serveImage(address, contentType string, body []byte) {
 	}
 }
 
-func TestForeignPathsAreLeftToOtherModules(t *testing.T) {
+func TestUnknownRoutesAnswerJSON(t *testing.T) {
 	f := newFixture(t, true)
-	for _, path := range []string{"/videos", "/posts/llm", "/profile-media/a/b/c", "/schedule-assets/a", "/"} {
-		request := httptest.NewRequest(http.MethodGet, "/api/admin"+path, nil)
-		if f.module.ServeAdmin(httptest.NewRecorder(), request, path) {
-			t.Fatalf("%s must not be claimed", path)
-		}
+	for _, path := range []string{"/videos", "/posts/llm", "/profile-media/a/b/c", "/schedule-images/a", "/"} {
+		f.request(http.MethodGet, path, "", nil).expect(t, http.StatusNotFound, "not_found")
 	}
 	f.request(http.MethodDelete, "/profile-media", "", nil).expect(t, http.StatusMethodNotAllowed, "method_not_allowed")
 	f.request(http.MethodGet, "/profile-media/discover", "", nil).expect(t, http.StatusMethodNotAllowed, "method_not_allowed")
@@ -218,17 +223,18 @@ func TestReadOnlyStoreRejectsEveryMutation(t *testing.T) {
 	if !strings.Contains(string(listing.raw), `"items":[]`) || !strings.Contains(string(listing.raw), `"avatar":null`) || !strings.Contains(string(listing.raw), `"banner":null`) {
 		t.Fatalf("empty list shape changed: %s", listing.raw)
 	}
-	assets := f.request(http.MethodGet, "/schedule-assets", "", nil)
-	if assets.status != http.StatusOK || !strings.Contains(string(assets.raw), `"assets":[]`) {
+	assets := f.request(http.MethodGet, "/schedule-images", "", nil)
+	if assets.status != http.StatusOK || !strings.Contains(string(assets.raw), `"items":[]`) {
 		t.Fatalf("empty schedule list shape changed: %s", assets.raw)
 	}
 	for _, path := range []string{
-		"/profile-media", "/profile-media/discover", "/profile-media/upload/avatar",
+		"/profile-media", "/profile-media/discover", "/profile-media/upload?slot=avatar",
 		"/profile-media/abc/download", "/profile-media/abc/select",
-		"/schedule-assets/abc/manual-review", "/schedule-assets/abc/period", "/posts/abc/llm/reprocess",
+		"/schedule-images/abc/review", "/posts/abc/reprocess",
 	} {
-		f.request(http.MethodPost, path, "application/json", []byte(`{}`)).expect(t, http.StatusNotImplemented, "capability_not_migrated")
+		f.request(http.MethodPost, path, "application/json", []byte(`{}`)).expect(t, http.StatusServiceUnavailable, "read_only")
 	}
+	f.put("/schedule-images/abc/period", map[string]any{}).expect(t, http.StatusServiceUnavailable, "read_only")
 	if len(f.network.visited) != 0 {
 		t.Fatalf("read-only requests reached the network: %v", f.network.visited)
 	}
@@ -450,7 +456,7 @@ func TestOutboundAllowlists(t *testing.T) {
 func TestUploadSelectAndPublicRead(t *testing.T) {
 	f := newFixture(t, true)
 	first, second := syntheticPNG(10), syntheticPNG(11)
-	uploaded := f.request(http.MethodPost, "/profile-media/upload/avatar", "image/png", first)
+	uploaded := f.request(http.MethodPost, "/profile-media/upload?slot=avatar", "image/png", first)
 	uploaded.expect(t, http.StatusCreated, "")
 	item := object(t, uploaded.json["item"])
 	firstID, firstHash := item["id"].(string), sha256Hex(first)
@@ -482,7 +488,7 @@ func TestUploadSelectAndPublicRead(t *testing.T) {
 	}
 
 	// Selecting another candidate atomically replaces the slot file.
-	uploaded = f.request(http.MethodPost, "/profile-media/upload/avatar", "application/octet-stream", second)
+	uploaded = f.request(http.MethodPost, "/profile-media/upload?slot=avatar", "application/octet-stream", second)
 	uploaded.expect(t, http.StatusCreated, "")
 	secondID := object(t, uploaded.json["item"])["id"].(string)
 	f.request(http.MethodPost, "/profile-media/"+secondID+"/select", "", nil).expect(t, http.StatusOK, "")
@@ -507,16 +513,16 @@ func TestUploadSelectAndPublicRead(t *testing.T) {
 func TestUploadValidation(t *testing.T) {
 	f := newFixture(t, true)
 	image := syntheticPNG(20)
-	f.request(http.MethodPost, "/profile-media/upload/cover", "image/png", image).expectInvalid(t, "slot is invalid")
-	f.request(http.MethodPost, "/profile-media/upload/avatar", "text/plain", image).expectInvalid(t, "image body is required")
-	f.request(http.MethodPost, "/profile-media/upload/avatar", "image/png", nil).expectInvalid(t, "image body is required")
+	f.request(http.MethodPost, "/profile-media/upload?slot=cover", "image/png", image).expectInvalid(t, "slot is invalid")
+	f.request(http.MethodPost, "/profile-media/upload?slot=avatar", "text/plain", image).expectInvalid(t, "image body is required")
+	f.request(http.MethodPost, "/profile-media/upload?slot=avatar", "image/png", nil).expectInvalid(t, "image body is required")
 	// Bytes must be a supported image and agree with the declared type.
-	f.request(http.MethodPost, "/profile-media/upload/avatar", "image/png", []byte("<svg><script>synthetic</script></svg>")).expect(t, http.StatusInternalServerError, "internal_error")
-	f.request(http.MethodPost, "/profile-media/upload/avatar", "image/jpeg", image).expect(t, http.StatusInternalServerError, "internal_error")
-	large := httptest.NewRequest(http.MethodPost, "/api/admin/profile-media/upload/banner", bytes.NewReader(make([]byte, maxProfileImageBytes+1)))
+	f.request(http.MethodPost, "/profile-media/upload?slot=avatar", "image/png", []byte("<svg><script>synthetic</script></svg>")).expect(t, http.StatusInternalServerError, "internal_error")
+	f.request(http.MethodPost, "/profile-media/upload?slot=avatar", "image/jpeg", image).expect(t, http.StatusInternalServerError, "internal_error")
+	large := httptest.NewRequest(http.MethodPost, "/api/admin/profile-media/upload?slot=banner", bytes.NewReader(make([]byte, maxProfileImageBytes+1)))
 	large.Header.Set("Content-Type", "image/png")
 	response := httptest.NewRecorder()
-	f.module.ServeAdmin(response, large, "/profile-media/upload/banner")
+	httpx.NewAdminMux(f.module.AdminRoutes()).ServeHTTP(response, large)
 	if response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), "request_too_large") {
 		t.Fatalf("oversized upload answered %d %s", response.Code, response.Body.String())
 	}
@@ -735,9 +741,9 @@ func TestScheduleAssetListAndManualReview(t *testing.T) {
 	f := newFixture(t, true)
 	boardURL, thumbURL, thumbHash := seedScheduleAssets(f)
 
-	listing := f.request(http.MethodGet, "/schedule-assets", "", nil)
+	listing := f.request(http.MethodGet, "/schedule-images", "", nil)
 	listing.expect(t, http.StatusOK, "")
-	assets := list(t, listing.json["assets"])
+	assets := list(t, listing.json["items"])
 	if len(assets) != 2 {
 		t.Fatalf("only schedule images are listed: %s", listing.raw)
 	}
@@ -764,17 +770,17 @@ func TestScheduleAssetListAndManualReview(t *testing.T) {
 			t.Fatalf("%s must be present as null", key)
 		}
 	}
-	if limited := f.request(http.MethodGet, "/schedule-assets?limit=1", "", nil); len(list(t, limited.json["assets"])) != 1 {
+	if limited := f.request(http.MethodGet, "/schedule-images?limit=1", "", nil); len(list(t, limited.json["items"])) != 1 {
 		t.Fatalf("limit was ignored: %s", limited.raw)
 	}
-	if fallback := f.request(http.MethodGet, "/schedule-assets?limit=abc", "", nil); len(list(t, fallback.json["assets"])) != 2 {
+	if fallback := f.request(http.MethodGet, "/schedule-images?limit=abc", "", nil); len(list(t, fallback.json["items"])) != 2 {
 		t.Fatalf("an unparseable limit uses the default: %s", fallback.raw)
 	}
 
 	before := f.revision()
-	reviewed := f.post("/schedule-assets/thumb/manual-review", map[string]any{"status": "schedule", "reason": "  confirmed board  "})
+	reviewed := f.post("/schedule-images/thumb/review", map[string]any{"status": "schedule", "reason": "  confirmed board  "})
 	reviewed.expect(t, http.StatusOK, "")
-	asset := object(t, reviewed.json["asset"])
+	asset := object(t, reviewed.json["image"])
 	if asset["approved"] != true || asset["manualStatus"] != "schedule" || asset["manualReason"] != "confirmed board" || asset["manualCheckedAt"] == nil ||
 		asset["llmStatus"] != "schedule" || asset["llmConfidence"] != 0.7 || asset["previewUrl"] == nil {
 		t.Fatalf("unexpected manual approval: %#v", asset)
@@ -782,22 +788,22 @@ func TestScheduleAssetListAndManualReview(t *testing.T) {
 	if f.revision() == before {
 		t.Fatal("a manual review must bump the dashboard revision")
 	}
-	rejected := f.post("/schedule-assets/board/manual-review", map[string]any{"status": "not_schedule", "reason": "thumbnail"})
-	if asset = object(t, rejected.json["asset"]); asset["approved"] != false || asset["effectiveStatus"] != "not_schedule" {
+	rejected := f.post("/schedule-images/board/review", map[string]any{"status": "not_schedule", "reason": "thumbnail"})
+	if asset = object(t, rejected.json["image"]); asset["approved"] != false || asset["effectiveStatus"] != "not_schedule" {
 		t.Fatalf("a manual rejection overrides the image check: %#v", asset)
 	}
-	cleared := f.post("/schedule-assets/board/manual-review", map[string]any{"status": "unreviewed", "reason": "ignored"})
-	if asset = object(t, cleared.json["asset"]); asset["approved"] != true || asset["manualReason"] != nil || asset["manualCheckedAt"] != nil {
+	cleared := f.post("/schedule-images/board/review", map[string]any{"status": "unreviewed", "reason": "ignored"})
+	if asset = object(t, cleared.json["image"]); asset["approved"] != true || asset["manualReason"] != nil || asset["manualCheckedAt"] != nil {
 		t.Fatalf("clearing the label restores the automatic decision: %#v", asset)
 	}
 
 	before = f.revision()
-	f.post("/schedule-assets/thumb/manual-review", map[string]any{}).expectInvalid(t, "status is required")
-	f.post("/schedule-assets/thumb/manual-review", map[string]any{"status": "Schedule", "reason": "x"}).expectInvalid(t, "status is invalid")
-	f.post("/schedule-assets/thumb/manual-review", map[string]any{"status": "schedule"}).expectInvalid(t, "reason is required")
-	f.post("/schedule-assets/thumb/manual-review", map[string]any{"status": "schedule", "reason": strings.Repeat("r", 501)}).expectInvalid(t, "reason is too long")
-	f.post("/schedule-assets/logo/manual-review", map[string]any{"status": "schedule", "reason": "x"}).expect(t, http.StatusNotFound, "schedule_asset_not_found")
-	f.post("/schedule-assets/unknown/manual-review", map[string]any{"status": "unreviewed"}).expect(t, http.StatusNotFound, "schedule_asset_not_found")
+	f.post("/schedule-images/thumb/review", map[string]any{}).expectInvalid(t, "status is required")
+	f.post("/schedule-images/thumb/review", map[string]any{"status": "Schedule", "reason": "x"}).expectInvalid(t, "status is invalid")
+	f.post("/schedule-images/thumb/review", map[string]any{"status": "schedule"}).expectInvalid(t, "reason is required")
+	f.post("/schedule-images/thumb/review", map[string]any{"status": "schedule", "reason": strings.Repeat("r", 501)}).expectInvalid(t, "reason is too long")
+	f.post("/schedule-images/logo/review", map[string]any{"status": "schedule", "reason": "x"}).expect(t, http.StatusNotFound, "schedule_image_not_found")
+	f.post("/schedule-images/unknown/review", map[string]any{"status": "unreviewed"}).expect(t, http.StatusNotFound, "schedule_image_not_found")
 	if f.revision() != before || f.text(`SELECT CAST(COUNT(*) AS TEXT) FROM schedule_asset_reviews`) != "2" {
 		t.Fatal("rejected reviews must not change the snapshot")
 	}
@@ -807,9 +813,9 @@ func TestScheduleAssetPeriod(t *testing.T) {
 	f := newFixture(t, true)
 	seedScheduleAssets(f)
 	before := f.revision()
-	updated := f.post("/schedule-assets/thumb/period", map[string]any{"start": "2026-10-07", "end": "2026-10-20", "reason": " corrected range "})
+	updated := f.put("/schedule-images/thumb/period", map[string]any{"start": "2026-10-07", "end": "2026-10-20", "reason": " corrected range "})
 	updated.expect(t, http.StatusOK, "")
-	asset := object(t, updated.json["asset"])
+	asset := object(t, updated.json["image"])
 	if asset["periodStart"] != "2026-10-07" || asset["periodEnd"] != "2026-10-20" || asset["periodBasis"] != "manual" ||
 		asset["periodReason"] != "corrected range" || asset["weekStart"] != "2026-10-05" || asset["inferredPeriodStart"] != nil {
 		t.Fatalf("unexpected manual period: %#v", asset)
@@ -828,15 +834,15 @@ func TestScheduleAssetPeriod(t *testing.T) {
 		{"end": "2026-10-08", "reason": "r"},
 	}
 	for _, body := range invalid {
-		f.post("/schedule-assets/thumb/period", body).expectInvalid(t, "period is invalid")
+		f.put("/schedule-images/thumb/period", body).expectInvalid(t, "period is invalid")
 	}
-	f.post("/schedule-assets/thumb/period", map[string]any{"start": "2026-10-07", "end": "2026-10-08"}).expectInvalid(t, "reason is required")
-	f.post("/schedule-assets/logo/period", map[string]any{"start": "2026-10-07", "end": "2026-10-08", "reason": "r"}).expect(t, http.StatusNotFound, "schedule_asset_not_found")
+	f.put("/schedule-images/thumb/period", map[string]any{"start": "2026-10-07", "end": "2026-10-08"}).expectInvalid(t, "reason is required")
+	f.put("/schedule-images/logo/period", map[string]any{"start": "2026-10-07", "end": "2026-10-08", "reason": "r"}).expect(t, http.StatusNotFound, "schedule_image_not_found")
 	if f.revision() != before || f.text(`SELECT manual_period_end FROM assets WHERE id='thumb'`) != "2026-10-20" {
 		t.Fatal("rejected periods must not change the snapshot")
 	}
 	// Exactly 366 days is the widest accepted span.
-	f.post("/schedule-assets/thumb/period", map[string]any{"start": "2025-01-01", "end": "2026-01-02", "reason": "r"}).expect(t, http.StatusOK, "")
+	f.put("/schedule-images/thumb/period", map[string]any{"start": "2025-01-01", "end": "2026-01-02", "reason": "r"}).expect(t, http.StatusOK, "")
 }
 
 func TestPostReprocessRequest(t *testing.T) {
@@ -847,7 +853,7 @@ func TestPostReprocessRequest(t *testing.T) {
 	module.now = func() time.Time { return time.Date(2026, 10, 13, 1, 2, 3, 4_000_000, time.UTC) }
 
 	// The identifier travels as one encoded path segment.
-	queued := f.post("/posts/p%2F1/llm/reprocess", map[string]any{"route": "schedule_board"})
+	queued := f.post("/posts/p%2F1/reprocess", map[string]any{"route": "schedule_board"})
 	queued.expect(t, http.StatusOK, "")
 	state := object(t, queued.json["state"])
 	if state["postId"] != "p/1" || state["status"] != "queued" || state["route"] != "schedule_board" || state["reprocessRequested"] != true ||
@@ -856,12 +862,12 @@ func TestPostReprocessRequest(t *testing.T) {
 		t.Fatalf("unexpected reprocess state: %#v", state)
 	}
 	// An unknown route never replaces the stored one.
-	kept := f.post("/posts/p%2F1/llm/reprocess", map[string]any{"route": "anything"})
+	kept := f.post("/posts/p%2F1/reprocess", map[string]any{"route": "anything"})
 	if object(t, kept.json["state"])["route"] != "schedule_board" {
 		t.Fatalf("stored route was replaced: %s", kept.raw)
 	}
-	f.request(http.MethodPost, "/posts/p%2F1/llm/reprocess", "", nil).expect(t, http.StatusOK, "")
-	f.post("/posts/unknown/llm/reprocess", map[string]any{}).expect(t, http.StatusNotFound, "post_not_found")
+	f.request(http.MethodPost, "/posts/p%2F1/reprocess", "", nil).expect(t, http.StatusOK, "")
+	f.post("/posts/unknown/reprocess", map[string]any{}).expect(t, http.StatusNotFound, "post_not_found")
 	if f.text(`SELECT CAST(COUNT(*) AS TEXT) FROM post_llm_states`) != "1" {
 		t.Fatal("an unknown post must not create state")
 	}
