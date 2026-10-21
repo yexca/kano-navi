@@ -10,6 +10,7 @@
 //   start                the whole site from the backend on PORT
 //   seed | sync | migrate-llm [flags]  one-shot maintenance commands
 import { spawn, spawnSync } from "node:child_process"
+import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
 const root = join(import.meta.dirname, "..")
@@ -20,6 +21,9 @@ const binary = join(
   "bin",
   process.platform === "win32" ? "kano-go.exe" : "kano-go",
 )
+// package.json owns the version; the binary reports it in MCP serverInfo.
+const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
+const versionFlag = `-X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version=${version}`
 const [first = "dev", ...rest] = process.argv.slice(2)
 const modes = [
   "dev",
@@ -47,7 +51,15 @@ if (!Number.isInteger(apiPort) || apiPort < 1 || apiPort > 65535) {
 
 const build = spawnSync(
   go,
-  ["build", "-trimpath", "-o", binary, "./cmd/kano-go"],
+  [
+    "build",
+    "-trimpath",
+    "-ldflags",
+    versionFlag,
+    "-o",
+    binary,
+    "./cmd/kano-go",
+  ],
   { cwd: moduleRoot, stdio: "inherit" },
 )
 if (build.error || build.status !== 0) {

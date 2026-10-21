@@ -8,6 +8,9 @@ DOCKER_BUILD ?= $(DOCKER) build
 DOCKER_BUILD_ARGS ?=
 DOCKER_IMAGE ?= kano-navi:ci
 GO_BINARY ?= backend-go/bin/kano-go$(if $(filter Windows_NT,$(OS)),.exe,)
+# package.json owns the version; Go builds receive it at link time.
+APP_VERSION = $(shell $(NODE) -p "require('./package.json').version")
+GO_LDFLAGS = -X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version=$(APP_VERSION)
 
 .PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-test
 .PHONY: go-build go-start go-docker-build
@@ -54,7 +57,7 @@ go-test:
 	$(GO) -C backend-go vet ./...
 
 go-build:
-	$(GO) -C backend-go build -trimpath -o $(patsubst backend-go/%,%,$(GO_BINARY)) ./cmd/kano-go
+	$(GO) -C backend-go build -trimpath -ldflags "$(GO_LDFLAGS)" -o $(patsubst backend-go/%,%,$(GO_BINARY)) ./cmd/kano-go
 
 go-start: start
 

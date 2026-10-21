@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/yexca/kano-navi/backend-go/internal/buildinfo"
 )
 
 const (
@@ -21,9 +23,8 @@ const (
 )
 
 const (
-	serverName    = "kano-status-board"
-	serverVersion = "0.1.2"
-	instructions  = "Public tools are read-only. Control tools can refresh the dashboard or start automatic jobs; human confirmation and editing remain available only in /admin."
+	serverName   = "kano-status-board"
+	instructions = "Public tools are read-only. Control tools can refresh the dashboard or start automatic jobs; human confirmation and editing remain available only in /admin."
 
 	latestProtocolVersion = "2025-11-25"
 )
@@ -177,7 +178,7 @@ func (h *handler) dispatch(ctx context.Context, m message, controlAuthorized boo
 		return resultResponse(m.id, initializeResult{
 			ProtocolVersion: version,
 			Capabilities:    serverCapabilities{Tools: toolCapabilities{ListChanged: true}},
-			ServerInfo:      serverInfo{Name: serverName, Version: serverVersion},
+			ServerInfo:      serverInfo{Name: serverName, Version: buildinfo.Version},
 			Instructions:    instructions,
 		})
 	case "ping":

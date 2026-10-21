@@ -19,31 +19,90 @@ Never stage runtime state, secrets, or unrelated user changes. Agents create
 commits and push only on an explicit user request. Keep the configured signing
 path when committing; do not disable signing to work around a missing signer.
 
-## Version and Release Validation
+## Version Source
 
-package.json owns the application version. Release tags use v<major>.<minor>.<patch>.
-Read the current version and workflow rather than embedding a release number in
-agent instructions or deployment guidance.
+package.json owns the application version as `<major>.<minor>.<patch>`; keep
+package-lock.json in step with it. The About page imports it, and every Go
+build (the image, `make go-build` and `scripts/run-app.mjs`) injects it into
+`internal/buildinfo.Version` with `-ldflags`, which MCP reports in
+`serverInfo`. A plain `go build` or `go test` reports `0.0.0-dev`. Read the
+current version and workflow rather than embedding a release number in agent
+instructions or deployment guidance.
 
-The Release workflow reuses .github/workflows/ci.yml for the tagged revision.
-The full read-only validation, including the production image and runtime smoke,
-must pass before publishing. CI is intentionally rerun for the tag; there is no
-lookup or wait for a previous main-branch run.
+Release tags use `v<major>.<minor>.<patch>`. The tag must equal `v` plus the
+package.json version and point to a commit on `main`.
+
+## Release Validation
+
+The Release workflow first verifies its source: the tag matches package.json,
+`docs/history/<tag>.md` exists, and the tagged commit is on `main`. It then
+reuses .github/workflows/ci.yml for the tagged revision. The full read-only
+validation, including the production image and runtime smoke, must pass before
+publishing. CI is intentionally rerun for the tag; there is no lookup or wait
+for a previous main-branch run.
 
 ## Release Notes
 
-Store user-facing release notes and upgrade guidance in
-`docs/history/v<major>.<minor>.<patch>.md`, then add the page to
-`docs/history/index.md`. Start the page with upgrade notes when a release
-changes configuration or public API behavior; keep current system contracts in
-the focused architecture, product, operations, and development documents.
+A release note shows its area titles and folds the changes under them, so a
+reader sees what the release touches before expanding any detail. Its parts
+appear in this order:
+
+1. Upgrade notes as GitHub alerts (`> [!IMPORTANT]`, `> [!NOTE]`,
+   `> [!WARNING]`) when the release changes configuration, public or admin API
+   behavior, or the upgrade path.
+2. A short summary paragraph.
+3. One folded block per user-facing area.
+4. A `## Known Issue` section, when the release has one.
+
+Only the area blocks are folded; upgrade notes, the summary and known issues
+stay expanded because a reader must not miss them. Each area is a `<details>`
+block whose summary is the area title, in place of a `##` heading:
+
+```markdown
+<details>
+<summary><strong>Public pages</strong></summary>
+
+- One change per bullet.
+
+</details>
+```
+
+Keep the blank line after `<summary>` and the one before `</details>`; GitHub
+renders the list as literal text without them. The usual areas are Public
+pages, Operator console, Synchronization and extraction, and Runtime and
+development; name an area after what the release changes when none fits.
+
+`docs/history/unreleased.md` holds pending changes in the same area blocks
+under its heading. Add a pending change as a bullet in the block of its area,
+and create the block when the area has none.
+
+Store each release note at `docs/history/<tag>.md` and add it to the
+[history index](../history/index.md). The Release workflow requires the file
+and uses it as the GitHub Release body; rerunning a release synchronizes the
+existing body with the tracked file. The file starts directly with the release
+body and does not repeat the tag as a level-one heading. Keep current system
+contracts in the focused architecture, product, operations and development
+documents.
+
+## Release Steps
+
+1. Set the version in package.json and package-lock.json.
+2. Move the area blocks of `docs/history/unreleased.md` into
+   `docs/history/<tag>.md`, add the upgrade notes and summary above them,
+   leave `unreleased.md` with only its heading, and add the page to the
+   history index.
+3. Update version examples in .env.example and the Docker deployment guide.
+4. Run make ci and make sensitive-check, commit as
+   `chore(release): prepare <tag> release`, and push the commit to `main`.
+5. Push the tag; the Release workflow verifies and publishes it.
 
 ## Publication Order and Credentials
 
-1. Complete the reusable CI workflow.
+1. Verify the release source and complete the reusable CI workflow.
 2. Build one publication image and push it to Docker Hub and GHCR with version,
    major/minor, and latest tags. Preserve provenance and SBOM generation.
-3. Create or publish the GitHub Release with generated notes after image publication.
+3. Create or publish the GitHub Release from `docs/history/<tag>.md` after
+   image publication.
 
 The publisher uses DOCKERHUB_TOKEN and an optional DOCKERHUB_USERNAME repository
 variable (otherwise the repository owner). GHCR uses the package-write

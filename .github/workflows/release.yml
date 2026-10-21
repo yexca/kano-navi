@@ -17,8 +17,44 @@ env:
   DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME || github.repository_owner }}
 
 jobs:
+  verify-source:
+    name: Verify release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Full history, so the tag can be compared with main.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Verify tag and version
+        run: |
+          expected_tag="v$(jq -r .version package.json)"
+          if [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $expected_tag." >&2
+            exit 1
+          fi
+
+      - name: Verify release notes
+        run: |
+          notes_file="docs/history/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$notes_file" ]; then
+            echo "Missing release notes: $notes_file" >&2
+            exit 1
+          fi
+
+      - name: Verify the tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tag $GITHUB_REF_NAME points to $GITHUB_SHA, which is not on main." >&2
+            exit 1
+          fi
+
   verify:
     name: Verify release
+    needs: verify-source
     uses: ./.github/workflows/ci.yml
 
   publish-image:
@@ -88,12 +124,19 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Publish release with generated notes
+      # The tracked release note is the Release body; a rerun synchronizes it.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Publish release with the tracked notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          notes_file="docs/history/${GITHUB_REF_NAME}.md"
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --title "$GITHUB_REF_NAME" --notes-file "$notes_file"
           else
-            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$notes_file"
           fi

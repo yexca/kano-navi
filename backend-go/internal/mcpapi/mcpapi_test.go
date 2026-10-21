@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yexca/kano-navi/backend-go/internal/buildinfo"
 	"github.com/yexca/kano-navi/backend-go/internal/jobs"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
@@ -337,7 +338,7 @@ func TestInitializeNegotiatesProtocolVersion(t *testing.T) {
 	if result["protocolVersion"] != "2025-11-25" {
 		t.Fatalf("unknown version negotiated %v", result["protocolVersion"])
 	}
-	want := map[string]any{"name": "kano-status-board", "version": "0.1.2"}
+	want := map[string]any{"name": "kano-status-board", "version": buildinfo.Version}
 	if !reflect.DeepEqual(result["serverInfo"], want) {
 		t.Fatalf("serverInfo = %v", result["serverInfo"])
 	}

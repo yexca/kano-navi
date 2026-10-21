@@ -20,7 +20,13 @@ COPY backend-go/go.mod backend-go/go.sum ./
 RUN go mod download
 
 COPY backend-go/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/kano-go ./cmd/kano-go \
+# package.json owns the version; the binary reports it in MCP serverInfo.
+COPY package.json /tmp/package.json
+RUN VERSION="$(grep -m1 '^  "version"' /tmp/package.json | sed 's/.*"version": "\([^"]*\)".*/\1/')" \
+  && echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
+  && CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags "-X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version=${VERSION}" \
+    -o /out/kano-go ./cmd/kano-go \
   && mkdir -p /out/data
 
 # Development: the Go toolchain builds and runs the backend, Vite serves the

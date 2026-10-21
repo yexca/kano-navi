@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process"
+import { readFileSync } from "node:fs"
 import { setTimeout as delay } from "node:timers/promises"
 
 import { verifySnapshot } from "./smoke.ts"
@@ -63,12 +64,46 @@ async function runProductionSmoke() {
     }
     if (!healthy) throw new Error("Production health did not become ready")
     await verifySnapshot(origin, { staticPages: true })
+    await verifyReportedVersion(origin)
     console.log(
       "Production smoke passed (entry point, fresh volume, API, pages, auth).",
     )
   } finally {
     if (container) docker(["rm", "--force", "--volumes", container])
   }
+}
+
+// The image build injects the package.json version into the binary.
+async function verifyReportedVersion(origin) {
+  const { version } = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  )
+  const response = await fetch(`${origin}/mcp`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json, text/event-stream",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-11-25",
+        capabilities: {},
+        clientInfo: { name: "production-smoke", version: "1" },
+      },
+    }),
+    signal: AbortSignal.timeout(5000),
+    redirect: "error",
+  })
+  const reported = response.ok
+    ? (await response.json()).result?.serverInfo?.version
+    : undefined
+  if (reported !== version)
+    throw new Error(
+      `MCP reported version ${reported}, expected ${version} from package.json`,
+    )
 }
 
 function assertLoopbackAddress(address) {
