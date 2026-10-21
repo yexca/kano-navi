@@ -10,12 +10,14 @@ import {
   CalendarDays,
   Clapperboard,
   ExternalLink,
+  FileText,
   KeyRound,
   LayoutDashboard,
   ListChecks,
   LockKeyhole,
   LogOut,
   Radio,
+  UserRound,
   Workflow,
 } from "lucide-react"
 
@@ -25,13 +27,15 @@ import { errorMessage, renderMessage, type Message } from "@/admin/api"
 import type { Overview } from "@/admin/types"
 import { Badge, Button, Spinner, Toasts } from "@/admin/ui"
 import { AdminContext, useAdminData } from "@/admin/use-admin-data"
-import { ContentView } from "@/admin/views/content"
 import { ModelsView } from "@/admin/views/models"
 import { OverviewView } from "@/admin/views/overview"
+import { PostsView } from "@/admin/views/posts"
+import { ProfileView } from "@/admin/views/profile"
 import { ReviewView } from "@/admin/views/review"
 import { RunsView } from "@/admin/views/runs"
 import { ScheduleView } from "@/admin/views/schedule"
 import { SourcesView } from "@/admin/views/sources"
+import { VideosView } from "@/admin/views/videos"
 import { cn } from "@/lib/utils"
 import "./admin.css"
 
@@ -70,17 +74,28 @@ const views: ViewEntry[] = [
     icon: CalendarDays,
     component: ScheduleView,
   },
-  { id: "content", group: "data", icon: Clapperboard, component: ContentView },
+  { id: "posts", group: "data", icon: FileText, component: PostsView },
+  { id: "videos", group: "data", icon: Clapperboard, component: VideosView },
+  { id: "profile", group: "data", icon: UserRound, component: ProfileView },
   { id: "runs", group: "system", icon: Workflow, component: RunsView },
   { id: "sources", group: "system", icon: Radio, component: SourcesView },
   { id: "models", group: "system", icon: Bot, component: ModelsView },
 ]
 const groups = ["today", "data", "system"] as const
 
+// Links saved before Content was split into separate views.
+const legacyContent: Record<string, string> = {
+  posts: "posts",
+  videos: "videos",
+  profile: "profile",
+}
+
 function readHash() {
   const [view = "", tab = ""] = window.location.hash
     .replace(/^#/u, "")
     .split("/")
+  if (view === "content")
+    return { view: legacyContent[tab] || "posts", tab: "" }
   return views.some((entry) => entry.id === view)
     ? { view, tab }
     : { view: "overview", tab: "" }

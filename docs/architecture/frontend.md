@@ -20,9 +20,10 @@ the video shelf, the post wall, and the link directory. Its styles are in
 `src/dashboard/board.css` on top of `src/site/site.css` and the shared tokens
 in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`
-registers the views (Overview, Review queue, Schedule, Content, Runs &
-workflows, Sources, Models & detection) and renders the shell with hash
-routing (`#view/tab`); `use-admin-data.ts` owns every
+registers the views (Overview, Review queue, Schedule, Posts, Videos, Profile
+images, Runs & workflows, Sources, Models & detection) and renders the shell
+with hash routing (`#view/tab`; older `#content/<tab>` links open the matching
+view); `use-admin-data.ts` owns every
 [Admin API](admin-api.md) call, the session and the overview poll that tracks
 the active run; `api.ts` is the transport and error mapping; `types.ts` holds
 the wire shapes; `ui.tsx` the console primitives (buttons, panels, native

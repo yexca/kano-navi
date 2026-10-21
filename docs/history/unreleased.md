@@ -29,6 +29,10 @@
   request settings on the right. Discovering models saves the connection
   first; on save, ticked models join the catalog and models marked Queue join
   the end of the queue. The models dialog queues and tests one model at a time.
+- Content is split into separate Posts, Videos and Profile images pages; older
+  `#content/...` links open the matching page. Posts and Videos each have a
+  quick fetch for their source: one-click recent windows of 24 hours, 3, 7 or
+  30 days, and a date range when the source's official API credential is set.
 
 </details>
 

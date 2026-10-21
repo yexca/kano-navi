@@ -3,7 +3,9 @@
 ## Fetch Windows and Historical Backfill
 
 The console's Sources page offers `recent`, `before`, and `range` fetches for
-X and YouTube. `POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }`
+X and YouTube. The Posts (X) and Videos (YouTube) pages repeat the common ones
+as shortcuts: one-click `recent` windows of 1, 3, 7 or 30 days and a `range`
+form, which needs the source's official API credential. `POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }`
 plus `"window": { "mode": "recent", "days": 30 }`,
 `"window": { "mode": "before", "days": 30 }`, or
 `"window": { "mode": "range", "startDate": "2026-09-01", "endDate": "2026-09-30" }`
