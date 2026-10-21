@@ -9,3 +9,12 @@
   and the latest video follows it as a small card.
 
 </details>
+
+<details>
+<summary><strong>Runtime and development</strong></summary>
+
+- `make sensitive-check` scans only the files Git can see, so ignored local
+  state such as `.env`, `data/` and tool indexes no longer fails it. Tracked
+  files are still scanned even when an ignore rule matches them.
+
+</details>

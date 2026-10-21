@@ -43,9 +43,10 @@ opening SQLite, including in development mode.
 - `.env`, `.npmrc`, private-key, and database files. The committed
   `.env.example` contains only empty credentials and public/local defaults.
 
-The generated `.codegraph/codegraph.db` index is the one database-path
-exception because it is local tooling state; other database paths remain
-findings.
+The scan covers the files Git can see: tracked files and untracked files that
+no ignore rule matches. Ignored local state such as `.env`, `data/`, and tool
+indexes like `.codegraph/` is skipped. A tracked file stays in the scan even
+when an ignore rule matches it, so a force-added secret is still reported.
 
 `LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, `ADMIN_PASSWORD`, and provider API keys
 must remain in the ignored runtime environment. Example values are intentionally

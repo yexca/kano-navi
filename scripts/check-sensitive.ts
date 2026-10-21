@@ -49,9 +49,6 @@ const ignoredDirectoryNames = new Set([
   "data",
 ])
 
-// CodeGraph's local index is generated tooling state, not project data.
-const ignoredSensitivePaths = new Set([".codegraph/codegraph.db"])
-
 const binaryExtensions = new Set([
   ".7z",
   ".avi",
@@ -79,11 +76,8 @@ function normalizePath(file) {
   return file.replaceAll("\\", "/")
 }
 
-function runGit(argumentsList) {
-  return spawnSync("git", argumentsList, {
-    cwd: repositoryRoot,
-    encoding: "buffer",
-  })
+function runGit(argumentsList, cwd = repositoryRoot) {
+  return spawnSync("git", argumentsList, { cwd, encoding: "buffer" })
 }
 
 function walkFiles(directory, relativeDirectory = "") {
@@ -108,14 +102,14 @@ function walkFiles(directory, relativeDirectory = "") {
   return files
 }
 
-function repositoryFiles() {
-  const result = runGit([
-    "ls-files",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-    "-z",
-  ])
+// Tracked files plus untracked files that Git does not ignore. A tracked file
+// stays listed even when an ignore rule matches it, so a force-added secret is
+// still scanned; ignored local state (.env, data/, tool indexes) is not.
+export function repositoryFiles(root = repositoryRoot) {
+  const result = runGit(
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+    root,
+  )
   if (result.status === 0) {
     return result.stdout
       .toString("utf8")
@@ -123,7 +117,7 @@ function repositoryFiles() {
       .filter(Boolean)
       .map(normalizePath)
   }
-  return walkFiles(repositoryRoot)
+  return walkFiles(root)
 }
 
 function isIgnoredPath(file) {
@@ -139,7 +133,6 @@ function isBinaryPath(file) {
 
 export function isSensitivePath(file) {
   const normalized = normalizePath(file)
-  if (ignoredSensitivePaths.has(normalized.toLowerCase())) return false
   if (isIgnoredPath(normalized)) return false
   const baseName = path.posix.basename(normalized).toLowerCase()
 
@@ -160,34 +153,12 @@ export function isSensitivePath(file) {
   )
 }
 
-function findSensitiveFiles(directory, relativeDirectory = "") {
-  const findings = []
-  let entries
-  try {
-    entries = fs.readdirSync(directory, { withFileTypes: true })
-  } catch {
-    return findings
-  }
-
-  for (const entry of entries) {
-    const relativePath = normalizePath(path.join(relativeDirectory, entry.name))
-    if (entry.isDirectory()) {
-      if (!ignoredDirectoryNames.has(entry.name)) {
-        findings.push(
-          ...findSensitiveFiles(path.join(directory, entry.name), relativePath),
-        )
-      }
-      continue
-    }
-    if (entry.isFile() && isSensitivePath(relativePath)) {
-      findings.push({
-        file: relativePath,
-        line: null,
-        kind: "sensitive runtime or credential file",
-      })
-    }
-  }
-  return findings
+function findSensitiveFiles(files) {
+  return files.filter(isSensitivePath).map((file) => ({
+    file,
+    line: null,
+    kind: "sensitive runtime or credential file",
+  }))
 }
 
 function canonicalHost(value) {
@@ -420,7 +391,8 @@ function readText(file) {
 export function runSensitiveCheck() {
   const approvedHosts = loadPrivacyAllowlist()
   const files = repositoryFiles().filter((file) => !isIgnoredPath(file))
-  const findings = findSensitiveFiles(repositoryRoot)
+  const findings = []
+  findings.push(...findSensitiveFiles(files))
   let scannedTextFiles = 0
   let skippedBinaryFiles = 0
 

@@ -1,4 +1,8 @@
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import test from "node:test"
 
 import {
@@ -6,6 +10,7 @@ import {
   isSensitivePath,
   isSafePlaceholder,
   parsePrivacyAllowlist,
+  repositoryFiles,
   scanLine,
 } from "./check-sensitive.ts"
 
@@ -119,8 +124,28 @@ test("rejects malformed allowlist documents", () => {
   )
 })
 
-test("ignores the local CodeGraph database but keeps other databases protected", () => {
-  assert.equal(isSensitivePath(".codegraph/codegraph.db"), false)
-  assert.equal(isSensitivePath(".CODEGRAPH/CODEGRAPH.DB"), false)
+test("lists Git-visible files, skipping ignored ones but keeping tracked ones", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "kano-sensitive-"))
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const git = (...args) =>
+    assert.equal(spawnSync("git", args, { cwd: root }).status, 0)
+  git("init", "--quiet")
+  fs.writeFileSync(path.join(root, ".gitignore"), "*.log\n.tool/\n")
+  fs.mkdirSync(path.join(root, ".tool"))
+  fs.writeFileSync(path.join(root, ".tool", "index.db"), "")
+  fs.writeFileSync(path.join(root, "daemon.log"), "")
+  fs.writeFileSync(path.join(root, "forced.log"), "")
+  fs.writeFileSync(path.join(root, "notes.txt"), "")
+  git("add", "--force", "forced.log")
+
+  const files = repositoryFiles(root).sort()
+  assert.deepEqual(files, [".gitignore", "forced.log", "notes.txt"])
+  assert.deepEqual(files.filter(isSensitivePath), ["forced.log"])
+})
+
+test("flags sensitive file names", () => {
+  assert.equal(isSensitivePath(".env"), true)
+  assert.equal(isSensitivePath(".env.example"), false)
   assert.equal(isSensitivePath("runtime/database.db"), true)
+  assert.equal(isSensitivePath("logs/daemon.log"), true)
 })
