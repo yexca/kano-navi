@@ -1844,29 +1844,288 @@ button.adm-run-line:hover,
   height: 22px;
 }
 
-.adm-preset-grid {
+/* Provider dialog: presets and identity on the left, the form on the right. */
+
+.adm-modal.adm-provider-modal {
+  width: min(980px, calc(100vw - 32px));
+}
+
+.adm-provider-modal .adm-modal-content {
+  padding: 0;
+}
+
+.adm-provider-form {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 8px;
+  grid-template-columns: 264px minmax(0, 1fr);
+}
+
+.adm-provider-side {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  padding: 20px;
+  border-right: 1px solid var(--adm-line);
+  background: var(--adm-sunken);
+}
+
+.adm-preset-list {
+  display: grid;
+  gap: 6px;
 }
 
 .adm-preset {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--adm-line);
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
   border-radius: var(--adm-radius-sm);
   background: transparent;
   color: inherit;
   font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.adm-preset:hover:not(:disabled) {
+  background: var(--adm-surface);
+  border-color: var(--adm-line);
+}
+
+.adm-preset:focus-visible {
+  outline: none;
+  box-shadow: var(--adm-focus);
+}
+
+.adm-preset:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.adm-preset.is-active,
+.adm-preset.is-active:disabled {
+  border-color: color-mix(in oklab, var(--adm-accent) 45%, transparent);
+  background: var(--adm-surface);
+  box-shadow: 0 0 0 3px var(--adm-accent-soft);
+  opacity: 1;
+}
+
+.adm-preset-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.adm-preset-text strong {
+  font-size: 13px;
   font-weight: 650;
+}
+
+.adm-preset-text small {
+  overflow: hidden;
+  color: var(--adm-muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-shell .adm-preset-check {
+  color: var(--adm-accent);
+}
+
+.adm-provider-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  padding: 14px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface);
+}
+
+.adm-provider-identity div {
+  display: grid;
+  min-width: 0;
+}
+
+.adm-provider-identity strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-provider-identity small {
+  overflow: hidden;
+  color: var(--adm-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-provider-identity .adm-chip-row {
+  grid-column: 1 / -1;
+}
+
+.adm-provider-main {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+
+.adm-form-section {
+  display: grid;
+  gap: 14px;
+  padding: 20px 24px;
+}
+
+.adm-form-section + .adm-form-section {
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-form-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.adm-form-section h3 svg {
+  color: var(--adm-accent);
+}
+
+.adm-form-section > .adm-field-hint {
+  margin: -8px 0 0;
+}
+
+.adm-discovered {
+  display: grid;
+  gap: 8px;
+}
+
+.adm-discovered-list {
+  display: grid;
+  max-height: 280px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+  list-style: none;
+}
+
+.adm-discovered-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.adm-discovered-list li:hover {
+  background: var(--adm-sunken);
+}
+
+.adm-discovered-list li.is-queued {
+  background: var(--adm-accent-soft);
+}
+
+.adm-discovered-list label {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.adm-queue-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 92px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--adm-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--adm-muted);
+  font: inherit;
+  font-size: 12px;
   cursor: pointer;
 }
 
-.adm-preset.is-active {
-  border-color: var(--adm-accent);
+.adm-shell .adm-queue-pick svg {
+  width: 13px;
+  height: 13px;
+}
+
+.adm-queue-pick:hover:not(:disabled) {
+  color: var(--adm-text);
+}
+
+.adm-queue-pick:disabled {
+  cursor: default;
+}
+
+.adm-queue-pick[aria-pressed="true"] {
+  border-color: color-mix(in oklab, var(--adm-accent) 45%, transparent);
   background: var(--adm-accent-soft);
+  color: var(--adm-accent);
+  font-weight: 650;
+}
+
+.adm-discovered-summary {
+  margin: 0;
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-provider-actions {
+  position: sticky;
+  bottom: 0;
+  padding: 14px 24px;
+  border-top: 1px solid var(--adm-line);
+  background: var(--adm-surface);
+}
+
+.adm-provider-actions .adm-muted {
+  margin-right: auto;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .adm-provider-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-provider-side {
+    padding: 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--adm-line);
+  }
+
+  .adm-preset-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adm-preset-text small,
+  .adm-provider-side .adm-fieldset + .adm-provider-identity {
+    display: none;
+  }
+
+  .adm-form-section {
+    padding: 16px;
+  }
+
+  .adm-provider-actions {
+    padding: 12px 16px;
+  }
 }
 
 .adm-model-section {

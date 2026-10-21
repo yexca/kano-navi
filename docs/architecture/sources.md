@@ -171,10 +171,13 @@ board path is not sent a second time through the message path in the same scan.
 
 Both paths, and the schedule-image check below, draw from one model priority
 queue: an ordered list of targets, each a provider plus one of its catalog
-models. An empty model ID means "the provider's default model" (`llm_providers.model`)
-and uses the provider-level capabilities; this is how legacy provider-only
-routes were migrated and how a queue target without a model is saved. The default model's catalog tags and the provider capability
-columns are kept identical whichever side is edited. Target selection follows
+models, and a target's capabilities are its model's `text`/`image` tags.
+Providers have no default model. The retired `llm_providers.model` column is
+kept but no longer read. A one-time upgrade (`llm_default_model_retired`)
+rewrites each queue target that followed it, including legacy provider-only
+routes, to name that model. Where the pair was already queued, the earlier
+position stays, and a target whose provider had no default is dropped
+because it could never be called. Target selection follows
 the original post modality. Text-only input requires `text`; image-only input
 requires `image`; mixed input requires a model with both tags. Only ready cached images are sent to the model. A post that
 declares an image but whose cache is not ready is recorded as `media_pending`
@@ -195,7 +198,7 @@ timeout, `redirect: "error"`, and a 4 MB response limit; it accepts OpenAI-style
 `{ data: [{ id }] }`, `{ models: [...] }`, or bare arrays. Upstream bodies and
 errors are reduced to fixed messages. Tags for newly added models are suggested
 from the model ID and stay editable. Removing a model removes its queue
-targets; removing the default model clears `llm_providers.model`. The private
+targets. The private
 and loopback address guard for provider URLs applies to model discovery too.
 
 API hosts can omit `/v1`: bare origins use `/v1`, while OpenRouter and Gemini

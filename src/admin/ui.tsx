@@ -379,6 +379,7 @@ export function Modal({
   children,
   footer,
   wide,
+  className,
 }: {
   open: boolean
   title: ReactNode
@@ -386,6 +387,7 @@ export function Modal({
   children: ReactNode
   footer?: ReactNode
   wide?: boolean
+  className?: string
 }) {
   const { t } = useAppSettings()
   const ref = useRef<HTMLDialogElement>(null)
@@ -406,7 +408,7 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      className={cn("adm-modal", wide && "is-wide")}
+      className={cn("adm-modal", wide && "is-wide", className)}
       onClose={onClose}
       onClick={(event) => {
         if (event.target === ref.current) onClose()

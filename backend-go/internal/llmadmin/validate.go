@@ -349,7 +349,6 @@ type providerWrite struct {
 	Name             string
 	Protocol         string
 	BaseURL          string
-	Model            string
 	Enabled          bool
 	Capabilities     []string
 	TimeoutMs        int64
@@ -390,11 +389,9 @@ func (m *Module) providerInput(body map[string]any, existing *Provider) (provide
 	if input.BaseURL, err = providerBaseURL(coalesce(body["baseUrl"], existingValue(func(p *Provider) any { return p.BaseURL })), m.mode); err != nil {
 		return input, err
 	}
-	// The provider model is an optional default (connection test and legacy
-	// routes); catalog models live in llm_models.
-	if input.Model, err = modelID(coalesce(body["model"], existingValue(func(p *Provider) any { return p.Model })), "model", false); err != nil {
-		return input, err
-	}
+	// Providers have no default model: queue targets and tests name a
+	// catalog model from llm_models. A "model" field from an older client is
+	// ignored.
 	if input.Name, err = text(coalesce(body["name"], existingValue(func(p *Provider) any { return p.Name }), input.ID), "name", true, 120); err != nil {
 		return input, err
 	}
@@ -538,7 +535,7 @@ func routeTargetsInput(value any) ([]RouteTarget, error) {
 		if err != nil {
 			return nil, err
 		}
-		model, err := modelID(object["modelId"], "modelId", false)
+		model, err := modelID(object["modelId"], "modelId", true)
 		if err != nil {
 			return nil, err
 		}

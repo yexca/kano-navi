@@ -96,6 +96,13 @@ they never require a browser CDN request. The license ships in
 name, or stable ID to identify a mark; unknown custom providers retain their
 initial. Removing a preset does not delete saved providers.
 
+The provider dialog lists presets beside the connection form. Model discovery
+there is still an explicit operator action: it saves the connection first, so a
+new provider exists before its key is used, and later saves in the same dialog
+update that row. There is no default model: on save, ticked models join the
+catalog and models marked for the queue are appended to its end. The models
+dialog queues, dequeues and tests one catalog model at a time.
+
 ## Related Docs
 
 - [Design and interaction](../development/design.md)

@@ -235,14 +235,12 @@ func queueProviders(ctx context.Context, q queryer) ([]string, error) {
 }
 
 type providerRow struct {
-	id           string
-	protocol     string
-	baseURL      string
-	model        string
-	enabled      bool
-	capabilities []string
-	timeoutMs    float64
-	ciphertext   string
+	id         string
+	protocol   string
+	baseURL    string
+	enabled    bool
+	timeoutMs  float64
+	ciphertext string
 }
 
 func columnNumber(value any) float64 {
@@ -261,21 +259,20 @@ func columnNumber(value any) float64 {
 
 func llmProvider(ctx context.Context, q queryer, id string) (*providerRow, error) {
 	var row providerRow
-	var protocol, baseURL, model, capabilities, ciphertext sql.NullString
-	var enabled, vision sql.NullInt64
+	var protocol, baseURL, ciphertext sql.NullString
+	var enabled sql.NullInt64
 	var timeout any
-	err := q.QueryRowContext(ctx, `SELECT id, protocol, base_url, model, enabled, vision_capable,
-		capabilities_json, timeout_ms, api_key_ciphertext FROM llm_providers WHERE id = ?`, id).
-		Scan(&row.id, &protocol, &baseURL, &model, &enabled, &vision, &capabilities, &timeout, &ciphertext)
+	err := q.QueryRowContext(ctx, `SELECT id, protocol, base_url, enabled, timeout_ms, api_key_ciphertext
+		FROM llm_providers WHERE id = ?`, id).
+		Scan(&row.id, &protocol, &baseURL, &enabled, &timeout, &ciphertext)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	row.protocol, row.baseURL, row.model = protocol.String, baseURL.String, model.String
+	row.protocol, row.baseURL = protocol.String, baseURL.String
 	row.enabled = enabled.Int64 != 0
-	row.capabilities = providerCapabilities(capabilities.String, vision.Int64 != 0)
 	row.timeoutMs = columnNumber(timeout)
 	row.ciphertext = ciphertext.String
 	return &row, nil

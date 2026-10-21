@@ -331,11 +331,54 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 			return err
 		}
 	}
-	// Every provider default model also appears in the model catalog.
-	if err := exec(`INSERT OR IGNORE INTO llm_models(provider_id,model_id,name,tags_json,enabled,origin,owned_by,created_at,updated_at) SELECT id,model,NULL,capabilities_json,1,'legacy',NULL,created_at,created_at FROM llm_providers WHERE model<>''`); err != nil {
+	var retired int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM app_settings WHERE key='llm_default_model_retired'`).Scan(&retired); err != nil {
+		return ErrSchema
+	}
+	// Until the provider default model is retired, it also appears in the
+	// model catalog. Afterwards a removed catalog model stays removed.
+	if retired == 0 {
+		if err := exec(`INSERT OR IGNORE INTO llm_models(provider_id,model_id,name,tags_json,enabled,origin,owned_by,created_at,updated_at) SELECT id,model,NULL,capabilities_json,1,'legacy',NULL,created_at,created_at FROM llm_providers WHERE model<>''`); err != nil {
+			return err
+		}
+	}
+	if err := mergeRouteQueue(ctx, tx, now); err != nil {
 		return err
 	}
-	return mergeRouteQueue(ctx, tx, now)
+	if retired == 0 {
+		return retireDefaultModel(ctx, tx, now)
+	}
+	return nil
+}
+
+// retireDefaultModel runs once: queue targets that followed the provider
+// default name that model explicitly, and when that pair is queued twice the
+// earlier position stays. A target whose provider never had a default is
+// dropped because it could not be called. llm_providers.model is kept as it
+// was.
+func retireDefaultModel(ctx context.Context, tx *sql.Tx, now string) error {
+	for _, statement := range []string{
+		`DELETE FROM llm_route_targets WHERE model_id<>'' AND EXISTS (SELECT 1 FROM llm_route_targets e
+ JOIN llm_providers p ON p.id=e.provider_id
+ WHERE e.route=llm_route_targets.route AND e.provider_id=llm_route_targets.provider_id AND e.model_id=''
+ AND p.model=llm_route_targets.model_id AND e.priority<llm_route_targets.priority)`,
+		`DELETE FROM llm_route_targets WHERE model_id='' AND EXISTS (SELECT 1 FROM llm_providers p
+ JOIN llm_route_targets t ON t.route=llm_route_targets.route AND t.provider_id=p.id AND t.model_id=p.model
+ WHERE p.id=llm_route_targets.provider_id AND p.model<>'')`,
+		`UPDATE llm_route_targets SET model_id=(SELECT p.model FROM llm_providers p WHERE p.id=llm_route_targets.provider_id), updated_at=?1
+ WHERE model_id='' AND EXISTS (SELECT 1 FROM llm_providers p WHERE p.id=llm_route_targets.provider_id AND p.model<>'')`,
+		`DELETE FROM llm_route_targets WHERE model_id=''`,
+		`INSERT INTO app_settings(key,value,updated_at) VALUES('llm_default_model_retired','1',?1)`,
+	} {
+		args := []any{}
+		if strings.Contains(statement, "?1") {
+			args = append(args, now)
+		}
+		if _, err := tx.ExecContext(ctx, statement, args...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // mergeRouteQueue folds the older per-stage routes into the single priority

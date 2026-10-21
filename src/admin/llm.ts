@@ -79,25 +79,21 @@ export function providerSlug(name, existingIds = []) {
  */
 export function describeTarget(target, providers, models) {
   const provider = providers.find((item) => item.id === target.providerId)
-  const modelId = target.modelId || provider?.model || ""
+  const modelId = target.modelId || ""
   const model = models.find(
     (item) => item.providerId === target.providerId && item.id === modelId,
   )
-  const capabilities = target.modelId
-    ? model?.capabilities || []
-    : provider?.capabilities || []
+  const capabilities = model?.capabilities || []
   let issue = null
   if (!provider) issue = "providerMissing"
   else if (!provider.enabled) issue = "providerDisabled"
   else if (!provider.apiKeyConfigured) issue = "keyMissing"
-  else if (!modelId) issue = "modelMissing"
-  else if (target.modelId && !model) issue = "modelMissing"
+  else if (!model) issue = "modelMissing"
   else if (model && !model.enabled) issue = "modelDisabled"
   return {
     provider,
     model,
     modelId,
-    followsDefault: !target.modelId,
     capabilities,
     tags: model?.tags || capabilities,
     issue,

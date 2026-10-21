@@ -17,6 +17,10 @@ func TestProviderLifecycleNeverReturnsTheCredential(t *testing.T) {
 		"apiKey": "  " + testAPIKey + "  ", "model": "alpha-chat",
 	}, http.StatusCreated)
 	provider := object(t, created.JSON["provider"])
+	// Providers have no default model; an older client's field is ignored.
+	if _, present := provider["model"]; present {
+		t.Fatal("a provider must not report a default model")
+	}
 	equal(t, "name", provider["name"], "Alpha")
 	equal(t, "baseUrl", provider["baseUrl"], testBaseURL)
 	equal(t, "protocol", provider["protocol"], "openai-responses")
@@ -45,11 +49,11 @@ func TestProviderLifecycleNeverReturnsTheCredential(t *testing.T) {
 
 	listed := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
 	equal(t, "listed provider", byID(t, listed.JSON["providers"], "alpha")["apiKeyConfigured"], true)
-	legacy := byID(t, listed.JSON["models"], "alpha-chat")
-	equal(t, "default model origin", legacy["origin"], "legacy")
-	equal(t, "default model tags", stringsOf(t, legacy["tags"]), []string{"text", "image"})
+	equal(t, "no implicit catalog model", len(list(t, listed.JSON["models"])), 0)
+	equal(t, "no implicit queue target", len(list(t, listed.JSON["queue"])), 0)
+	equal(t, "retired model column", h.scalar(`SELECT model FROM llm_providers WHERE id = 'alpha'`), "")
 
-	// An edit without apiKey keeps the credential and syncs the default model.
+	// An edit without apiKey keeps the credential.
 	edited := h.ok(http.MethodPut, "/llm/providers/alpha", map[string]any{"name": "Alpha 2", "capabilities": []string{"text"}, "id": "ignored"}, http.StatusOK)
 	provider = object(t, edited.JSON["provider"])
 	equal(t, "id", provider["id"], "alpha")
@@ -58,7 +62,6 @@ func TestProviderLifecycleNeverReturnsTheCredential(t *testing.T) {
 	equal(t, "visionCapable", provider["visionCapable"], false)
 	equal(t, "capabilities", stringsOf(t, provider["capabilities"]), []string{"text"})
 	models := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
-	equal(t, "synced tags", stringsOf(t, byID(t, models.JSON["models"], "alpha-chat")["tags"]), []string{"text"})
 	equal(t, "modelTags", stringsOf(t, models.JSON["modelTags"]), llmModelTags)
 
 	h.assertNoSecret(created, listed, edited, models)
@@ -118,7 +121,6 @@ func TestProviderValidation(t *testing.T) {
 		{"local name", base(map[string]any{"baseUrl": secureURL("printer.local", "")}), private},
 		{"http in production", base(map[string]any{"baseUrl": "http://provider.example.test/v1"}), "baseUrl must use HTTPS in production"},
 		{"protocol", base(map[string]any{"protocol": "bogus"}), "protocol is invalid"},
-		{"model", base(map[string]any{"model": "bad model!"}), "model contains unsupported characters"},
 		{"enabled", base(map[string]any{"enabled": "maybe"}), "enabled must be a boolean"},
 		{"vision flag", base(map[string]any{"visionCapable": nil}), "visionCapable must be a boolean"},
 		{"no capability", base(map[string]any{"capabilities": []string{"audio"}}), "capabilities must include at least one of text or image"},
@@ -169,18 +171,15 @@ func TestDevelopmentModeAllowsPlainHTTPButNotPrivateHosts(t *testing.T) {
 		"baseUrl must not target a private or loopback address")
 }
 
-func TestNewProvidersWithADefaultModelJoinTheQueue(t *testing.T) {
+func TestNewProvidersAndModelsAreNotQueuedImplicitly(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	h.createProvider("alpha", map[string]any{"model": "alpha-chat"})
-	h.createProvider("beta", map[string]any{"model": "beta-chat"})
-	h.createProvider("gamma", nil) // no default model: not queued automatically
+	h.createProvider("beta", nil)
+	h.addModels("beta", "beta-chat")
 
 	catalog := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
-	equal(t, "provider count", len(list(t, catalog.JSON["providers"])), 3)
-	equal(t, "queue", catalog.JSON["queue"], []any{
-		map[string]any{"providerId": "alpha", "modelId": ""},
-		map[string]any{"providerId": "beta", "modelId": ""},
-	})
+	equal(t, "provider count", len(list(t, catalog.JSON["providers"])), 2)
+	equal(t, "queue", len(list(t, catalog.JSON["queue"])), 0)
 	h.assertNoSecret(catalog)
 }
 
@@ -213,9 +212,8 @@ func TestModelCatalog(t *testing.T) {
 	plain := byID(t, added.JSON["models"], "plain-chat")
 	equal(t, "explicit tags", stringsOf(t, plain["tags"]), []string{"image", "reasoning"})
 	equal(t, "explicit enabled", plain["enabled"], false)
-	// The first catalog model becomes the provider default.
+	// Adding models does not change the provider row.
 	provider := object(t, added.JSON["provider"])
-	equal(t, "default model", provider["model"], "gpt-4o-mini")
 	equal(t, "provider capabilities", stringsOf(t, provider["capabilities"]), []string{"text", "image"})
 
 	// Re-adding keeps operator tags and the original origin.
@@ -231,8 +229,7 @@ func TestModelCatalog(t *testing.T) {
 	equal(t, "updated enabled", model["enabled"], false)
 	equal(t, "updated origin", model["origin"], "remote")
 	provider = object(t, updated.JSON["provider"])
-	equal(t, "provider follows default model", stringsOf(t, provider["capabilities"]), []string{"text"})
-	equal(t, "provider vision", provider["visionCapable"], false)
+	equal(t, "provider capabilities kept", stringsOf(t, provider["capabilities"]), []string{"text", "image"})
 	equal(t, "models listed", len(list(t, updated.JSON["models"])), 3)
 
 	notFound := h.call(http.MethodPut, "/llm/providers/gamma/models", map[string]any{"id": "absent"})
@@ -254,15 +251,14 @@ func TestModelCatalog(t *testing.T) {
 	// Removing models also drops their queue targets and compacts priorities.
 	h.ok(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{
 		map[string]any{"providerId": "gamma", "modelId": "text-embedding-3-small"},
-		map[string]any{"providerId": "gamma", "modelId": ""},
+		map[string]any{"providerId": "gamma", "modelId": "gpt-4o-mini"},
 		map[string]any{"providerId": "gamma", "modelId": "plain-chat"},
 	}}, http.StatusOK)
 	removed := h.ok(http.MethodPost, "/llm/providers/gamma/models/remove", map[string]any{"ids": []string{"text-embedding-3-small", "gpt-4o-mini", "gpt-4o-mini", "absent"}}, http.StatusOK)
 	equal(t, "removed", removed.JSON["removed"], float64(2))
-	equal(t, "default cleared", object(t, removed.JSON["provider"])["model"], "")
 	equal(t, "remaining", len(list(t, removed.JSON["models"])), 1)
 	equal(t, "compacted priorities", h.scalar(`SELECT group_concat(model_id || ':' || priority, ',') FROM
-		(SELECT model_id, priority FROM llm_route_targets WHERE route = 'schedule' ORDER BY priority)`), ":0,plain-chat:1")
+		(SELECT model_id, priority FROM llm_route_targets WHERE route = 'schedule' ORDER BY priority)`), "plain-chat:0")
 	h.invalid(http.MethodPost, "/llm/providers/gamma/models/remove", map[string]any{"ids": []string{}}, "ids must be a non-empty array")
 	h.invalid(http.MethodPost, "/llm/providers/gamma/models/remove", map[string]any{"ids": []any{nil}}, "model id is required")
 	h.assertNoSecret(added, updated, removed, all)
@@ -278,18 +274,19 @@ func TestQueue(t *testing.T) {
 	}
 	equal(t, "modelTags", stringsOf(t, empty.JSON["modelTags"]), llmModelTags)
 
-	h.createProvider("alpha", map[string]any{"model": "alpha-chat"})
+	h.createProvider("alpha", nil)
+	h.addModels("alpha", "alpha-chat")
 	h.createProvider("beta", nil)
-	h.ok(http.MethodPost, "/llm/providers/beta/models", map[string]any{"models": []any{map[string]any{"id": "beta-vision"}, map[string]any{"id": "beta-fast"}}}, http.StatusCreated)
+	h.addModels("beta", "beta-vision", "beta-fast")
 
 	saved := h.ok(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{
 		map[string]any{"providerId": "beta", "modelId": "beta-fast"},
-		map[string]any{"providerId": "alpha"},
+		map[string]any{"providerId": "alpha", "modelId": "alpha-chat"},
 		map[string]any{"providerId": "beta", "modelId": "beta-fast"},
 	}}, http.StatusOK)
 	want := []any{
 		map[string]any{"providerId": "beta", "modelId": "beta-fast"},
-		map[string]any{"providerId": "alpha", "modelId": ""},
+		map[string]any{"providerId": "alpha", "modelId": "alpha-chat"},
 	}
 	equal(t, "saved queue", saved.JSON["queue"], want)
 	h.assertNoSecret(saved)
@@ -297,7 +294,9 @@ func TestQueue(t *testing.T) {
 
 	h.invalid(http.MethodPut, "/llm/queue", map[string]any{}, "targets must be an array")
 	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"modelId": "x"}}}, "providerId is required")
-	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"providerId": "ghost"}}}, "LLM provider does not exist: ghost")
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"providerId": "alpha"}}}, "modelId is required")
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"providerId": "alpha", "modelId": ""}}}, "modelId is required")
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"providerId": "ghost", "modelId": "x"}}}, "LLM provider does not exist: ghost")
 	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"providerId": "beta", "modelId": "absent"}}}, "LLM model does not exist: beta/absent")
 	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"providerId": "beta", "modelId": "bad id"}}}, "modelId contains unsupported characters")
 	equal(t, "queue kept after rejection", h.ok(http.MethodGet, "/llm", nil, http.StatusOK).JSON["queue"], want)

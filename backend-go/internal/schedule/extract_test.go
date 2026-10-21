@@ -294,7 +294,7 @@ func TestProvidersAreTriedInQueueOrder(t *testing.T) {
 		t.Errorf("events = %d", got)
 	}
 
-	// The catalog model of a target replaces the provider default.
+	// A target calls the catalog model it names.
 	f.exec(`DELETE FROM llm_route_targets`)
 	f.exec(`INSERT INTO llm_models (provider_id, model_id, tags_json, enabled, created_at, updated_at) VALUES ('p-second', 'model-catalog', '["text","reasoning"]', 1, ?, ?)`, testTimestamp, testTimestamp)
 	f.exec(`INSERT INTO llm_route_targets (route, provider_id, model_id, priority, created_at, updated_at) VALUES (?, 'p-second', 'model-catalog', 0, ?, ?)`, routeQueue, testTimestamp, testTimestamp)

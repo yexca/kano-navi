@@ -225,8 +225,11 @@ messageEnabled, messageAllPosts, keywords}`; `enabled` is derived: the message
 stage alone, or keyword candidates plus boards. `messageAllPosts` makes the
 message stage select every post instead of only heuristic matches. `queue` is
 the single ordered `[{providerId, modelId}]` list every extraction stage draws
-from; an empty `modelId` follows the provider default, and a save replaces the
-whole list. Model IDs may
+from; every target names a catalog model (`modelId` is required), and a save
+replaces the whole list. Providers have no default model: a provider response
+carries no `model` field, a `model` field in a provider write is ignored, and a
+provider test without `{model}` only lists the provider's models. Creating a
+provider or adding catalog models never queues anything. Model IDs may
 contain `/`, so model writes name the model in the body. Provider responses
 report `apiKeyConfigured` only; keys are write-only.
 

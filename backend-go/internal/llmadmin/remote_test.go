@@ -121,12 +121,13 @@ func TestProviderRequestFailuresAreSanitized(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			h := newHarness(t, harnessOptions{})
 			h.createProvider("alpha", nil)
-			h.createProvider("beta", map[string]any{"model": "beta-chat"})
+			h.createProvider("beta", nil)
+			h.addModels("beta", "beta-chat")
 			h.transport.respond = respond
 
 			listing := h.invalid(http.MethodPost, "/llm/providers/alpha/discover", nil, messageListFailed)
 			viaTest := h.invalid(http.MethodPost, "/llm/providers/alpha/test", nil, messageListFailed)
-			inference := h.invalid(http.MethodPost, "/llm/providers/beta/test", map[string]any{}, messageRequestFailed)
+			inference := h.invalid(http.MethodPost, "/llm/providers/beta/test", map[string]any{"model": "beta-chat"}, messageRequestFailed)
 			providers := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
 			alpha := byID(t, providers.JSON["providers"], "alpha")
 			equal(t, "alpha status", alpha["lastStatus"], "failed")
@@ -186,11 +187,12 @@ func TestProviderTestInference(t *testing.T) {
 	for _, test := range cases {
 		t.Run(test.protocol, func(t *testing.T) {
 			h := newHarness(t, harnessOptions{})
-			h.createProvider("beta", map[string]any{"model": "beta-chat", "protocol": test.protocol})
+			h.createProvider("beta", map[string]any{"protocol": test.protocol})
+			h.addModels("beta", "beta-chat")
 			h.transport.respond = func(*http.Request) (*http.Response, error) {
 				return jsonResponse(http.StatusOK, `{"id":"synthetic","output":"`+upstreamDetail+`"}`), nil
 			}
-			result := h.ok(http.MethodPost, "/llm/providers/beta/test", map[string]any{}, http.StatusOK)
+			result := h.ok(http.MethodPost, "/llm/providers/beta/test", map[string]any{"model": "beta-chat"}, http.StatusOK)
 			equal(t, "ok", result.JSON["ok"], true)
 			equal(t, "method", result.JSON["method"], "inference")
 			equal(t, "model", result.JSON["model"], "beta-chat")
@@ -224,8 +226,8 @@ func TestProviderTestInference(t *testing.T) {
 
 func TestProviderTestModelSelectionAndPreconditions(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
-	h.createProvider("beta", map[string]any{"model": "beta-chat"})
-	h.ok(http.MethodPost, "/llm/providers/beta/models", map[string]any{"models": []any{map[string]any{"id": "beta-fast"}}}, http.StatusCreated)
+	h.createProvider("beta", nil)
+	h.addModels("beta", "beta-chat", "beta-fast")
 
 	chosen := h.ok(http.MethodPost, "/llm/providers/beta/test", map[string]any{"model": "beta-fast"}, http.StatusOK)
 	equal(t, "chosen model", chosen.JSON["model"], "beta-fast")
@@ -254,12 +256,13 @@ func TestProviderTestModelSelectionAndPreconditions(t *testing.T) {
 func TestProviderTestTimeout(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	h.createProvider("alpha", map[string]any{"timeoutMs": 1000})
-	h.createProvider("beta", map[string]any{"model": "beta-chat", "timeoutMs": 1000})
+	h.createProvider("beta", map[string]any{"timeoutMs": 1000})
+	h.addModels("beta", "beta-chat")
 	h.transport.respond = func(request *http.Request) (*http.Response, error) {
 		<-request.Context().Done()
 		return nil, request.Context().Err()
 	}
-	h.invalid(http.MethodPost, "/llm/providers/beta/test", nil, messageRequestTimeout)
+	h.invalid(http.MethodPost, "/llm/providers/beta/test", map[string]any{"model": "beta-chat"}, messageRequestTimeout)
 	h.invalid(http.MethodPost, "/llm/providers/alpha/discover", nil, messageListTimeout)
 	providers := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
 	equal(t, "beta error", byID(t, providers.JSON["providers"], "beta")["lastError"], messageRequestTimeout)

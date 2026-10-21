@@ -130,6 +130,8 @@ func (f *fixture) number(query string, args ...any) int {
 	return int(value.Int64)
 }
 
+// addProvider stores a keyed provider and one catalog model tagged with
+// capabilities.
 func (f *fixture) addProvider(id, protocol, baseURL, model, capabilities string) {
 	f.t.Helper()
 	ciphertext, err := secretstore.Encrypt(testProviderKey, testKey)
@@ -142,16 +144,19 @@ func (f *fixture) addProvider(id, protocol, baseURL, model, capabilities string)
 	}
 	f.exec(`INSERT INTO llm_providers (id, name, protocol, base_url, model, enabled, vision_capable,
 		capabilities_json, timeout_ms, max_retries, api_key_ciphertext, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, 1, ?, ?, 30000, 2, ?, ?, ?)`,
-		id, id, protocol, baseURL, model, vision, capabilities, ciphertext, testTimestamp, testTimestamp)
+		VALUES (?, ?, ?, ?, '', 1, ?, ?, 30000, 2, ?, ?, ?)`,
+		id, id, protocol, baseURL, vision, capabilities, ciphertext, testTimestamp, testTimestamp)
+	f.exec(`INSERT INTO llm_models (provider_id, model_id, tags_json, enabled, created_at, updated_at)
+		VALUES (?, ?, ?, 1, ?, ?)`, id, model, capabilities, testTimestamp, testTimestamp)
 }
 
-// queue appends provider-default targets to the model priority queue.
+// queue appends each provider's first catalog model to the priority queue.
 func (f *fixture) queue(providerIDs ...string) {
 	f.t.Helper()
 	for _, id := range providerIDs {
 		f.exec(`INSERT INTO llm_route_targets (route, provider_id, model_id, priority, created_at, updated_at)
-			VALUES (?, ?, '', (SELECT COUNT(*) FROM llm_route_targets WHERE route = ?), ?, ?)`, routeQueue, id, routeQueue, testTimestamp, testTimestamp)
+			VALUES (?, ?, (SELECT model_id FROM llm_models WHERE provider_id = ? ORDER BY rowid LIMIT 1),
+			(SELECT COUNT(*) FROM llm_route_targets WHERE route = ?), ?, ?)`, routeQueue, id, id, routeQueue, testTimestamp, testTimestamp)
 	}
 }
 

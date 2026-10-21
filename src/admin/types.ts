@@ -263,9 +263,7 @@ export interface Provider {
   name: string
   protocol: string
   baseUrl: string
-  model: string
   enabled: boolean
-  capabilities: string[]
   timeoutMs: number
   maxRetries: number
   apiKeyConfigured: boolean

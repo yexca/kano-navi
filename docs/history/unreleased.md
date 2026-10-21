@@ -19,6 +19,16 @@
   in place of `routes`, and `PUT /api/admin/llm/queue` replaces
   `PUT /api/admin/llm/routes/{route}`. The first start merges the saved routes
   into the queue (message, board, then fallback order, without duplicates).
+- Providers no longer have a default model. Every queue target and connection
+  test names a catalog model: `PUT /api/admin/llm/queue` requires `modelId`,
+  provider responses drop `model`, and a provider write ignores it. Creating a
+  provider or adding models queues nothing. The first start rewrites targets
+  that followed the default to name that model, keeps the earlier position of a
+  duplicate, and drops targets of providers that never had one.
+- The provider dialog has presets on the left and the connection, models and
+  request settings on the right. Discovering models saves the connection
+  first; on save, ticked models join the catalog and models marked Queue join
+  the end of the queue. The models dialog queues and tests one model at a time.
 
 </details>
 

@@ -127,11 +127,14 @@ func TestStandaloneMergesStageRoutesIntoOneQueue(t *testing.T) {
 	for _, statement := range []string{
 		`INSERT INTO llm_providers(id,name,base_url,model,created_at,updated_at) VALUES('alpha','Alpha','https://alpha.example.test/v1','a-1','` + stamp + `','` + stamp + `')`,
 		`INSERT INTO llm_providers(id,name,base_url,model,created_at,updated_at) VALUES('beta','Beta','https://beta.example.test/v1','b-1','` + stamp + `','` + stamp + `')`,
+		`INSERT INTO llm_providers(id,name,base_url,model,created_at,updated_at) VALUES('gamma','Gamma','https://gamma.example.test/v1','','` + stamp + `','` + stamp + `')`,
 		`INSERT INTO llm_route_targets(route,provider_id,model_id,priority,created_at,updated_at) VALUES
 			('schedule_vision','alpha','',0,'` + stamp + `','` + stamp + `'),
 			('schedule_board','beta','b-vision',0,'` + stamp + `','` + stamp + `'),
 			('schedule_board','alpha','',1,'` + stamp + `','` + stamp + `'),
-			('schedule_message','beta','',0,'` + stamp + `','` + stamp + `')`,
+			('schedule_board','beta','b-1',2,'` + stamp + `','` + stamp + `'),
+			('schedule_message','beta','',0,'` + stamp + `','` + stamp + `'),
+			('schedule_message','gamma','',1,'` + stamp + `','` + stamp + `')`,
 	} {
 		if _, err = s.db.Exec(statement); err != nil {
 			t.Fatalf("%s: %v", statement, err)
@@ -153,8 +156,10 @@ func TestStandaloneMergesStageRoutesIntoOneQueue(t *testing.T) {
 		return got.String
 	}
 	// Message, then board, then vision; a repeated provider/model pair keeps
-	// its first position.
-	want := "schedule:beta/:0,schedule:beta/b-vision:1,schedule:alpha/:2"
+	// its first position. Targets that followed the retired provider default
+	// name that model, so beta/b-1 keeps the earlier slot, and gamma, which
+	// never had a default, is dropped.
+	want := "schedule:beta/b-1:0,schedule:beta/b-vision:2,schedule:alpha/a-1:3"
 	if got := queue(); got != want {
 		t.Fatalf("merged queue = %q, want %q", got, want)
 	}

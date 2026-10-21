@@ -190,6 +190,16 @@ func (h *harness) createProvider(id string, extra map[string]any) map[string]any
 	return object(h.t, h.ok(http.MethodPost, "/llm/providers", body, http.StatusCreated).JSON["provider"])
 }
 
+// addModels adds catalog models by ID with inferred tags.
+func (h *harness) addModels(providerID string, ids ...string) {
+	h.t.Helper()
+	models := []any{}
+	for _, id := range ids {
+		models = append(models, map[string]any{"id": id})
+	}
+	h.ok(http.MethodPost, "/llm/providers/"+providerID+"/models", map[string]any{"models": models}, http.StatusCreated)
+}
+
 func (h *harness) scalar(query string, args ...any) string {
 	h.t.Helper()
 	var value *string

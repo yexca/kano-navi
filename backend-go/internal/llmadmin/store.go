@@ -30,7 +30,6 @@ type Provider struct {
 	Name             string   `json:"name"`
 	Protocol         string   `json:"protocol"`
 	BaseURL          string   `json:"baseUrl"`
-	Model            string   `json:"model"`
 	Enabled          bool     `json:"enabled"`
 	VisionCapable    bool     `json:"visionCapable"`
 	TimeoutMs        int64    `json:"timeoutMs"`
@@ -58,8 +57,8 @@ type Model struct {
 	UpdatedAt    string   `json:"updatedAt"`
 }
 
-// RouteTarget is one ordered model choice of the queue. An empty ModelID
-// follows the provider's default model.
+// RouteTarget is one ordered model choice of the queue: a provider and one
+// of its catalog models.
 type RouteTarget struct {
 	ProviderID string `json:"providerId"`
 	ModelID    string `json:"modelId"`
@@ -137,8 +136,9 @@ func SetAppSetting(ctx context.Context, db Querier, key, value string) (updatedA
 }
 
 // The credential column is reduced to a flag inside SQLite, so the ciphertext
-// never reaches the projection code.
-const providerColumns = `id, name, protocol, base_url, model, enabled, vision_capable,
+// never reaches the projection code. The retired llm_providers.model column
+// is kept for older snapshots but no longer read.
+const providerColumns = `id, name, protocol, base_url, enabled, vision_capable,
 	capabilities_json, timeout_ms, max_retries,
 	(api_key_ciphertext IS NOT NULL AND api_key_ciphertext <> '') AS api_key_configured,
 	last_status, last_error, last_checked_at, created_at, updated_at`
@@ -147,7 +147,7 @@ func scanProvider(scan scanner) (Provider, error) {
 	var p Provider
 	var enabled, vision, configured sql.NullInt64
 	var capabilities, lastStatus, lastError, lastChecked sql.NullString
-	err := scan(&p.ID, &p.Name, &p.Protocol, &p.BaseURL, &p.Model, &enabled, &vision,
+	err := scan(&p.ID, &p.Name, &p.Protocol, &p.BaseURL, &enabled, &vision,
 		&capabilities, &p.TimeoutMs, &p.MaxRetries, &configured,
 		&lastStatus, &lastError, &lastChecked, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
@@ -422,10 +422,10 @@ func (m *Module) upsertProvider(ctx context.Context, db Querier, input providerW
 			id, name, protocol, base_url, model, enabled, vision_capable,
 			capabilities_json, timeout_ms, max_retries, api_key_ciphertext,
 			last_status, last_error, last_checked_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)
+		) VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name=excluded.name, protocol=excluded.protocol, base_url=excluded.base_url,
-			model=excluded.model, enabled=excluded.enabled,
+			enabled=excluded.enabled,
 			vision_capable=excluded.vision_capable,
 			capabilities_json=excluded.capabilities_json,
 			timeout_ms=excluded.timeout_ms,
@@ -433,49 +433,13 @@ func (m *Module) upsertProvider(ctx context.Context, db Querier, input providerW
 			api_key_ciphertext=CASE WHEN ? = 1 THEN excluded.api_key_ciphertext
 				ELSE llm_providers.api_key_ciphertext END,
 			updated_at=excluded.updated_at`,
-		input.ID, name, input.Protocol, input.BaseURL, input.Model, input.Enabled,
+		input.ID, name, input.Protocol, input.BaseURL, input.Enabled,
 		slices.Contains(capabilities, "image"), compactJSON(capabilities), timeout, MaxRetries,
 		credential, timestamp, timestamp, input.ReplaceAPIKey)
 	if err != nil {
 		return nil, errors.New("llm provider write failed")
 	}
-	if input.Model != "" {
-		if err = m.syncDefaultModelCapabilities(ctx, db, input.ID, input.Model, capabilities); err != nil {
-			return nil, err
-		}
-	}
 	return GetProvider(ctx, db, input.ID)
-}
-
-// syncDefaultModelCapabilities keeps the default model's routing tags and
-// the provider capability columns identical, whichever side is edited.
-func (m *Module) syncDefaultModelCapabilities(ctx context.Context, db Querier, providerID, model string, capabilities []string) error {
-	timestamp := m.stamp()
-	existing, err := GetModel(ctx, db, providerID, model)
-	if err != nil {
-		return err
-	}
-	merged := []any{}
-	for _, capability := range capabilities {
-		merged = append(merged, capability)
-	}
-	if existing != nil {
-		for _, tag := range existing.Tags {
-			if !slices.Contains(llmCapabilities, tag) {
-				merged = append(merged, tag)
-			}
-		}
-	}
-	tags := compactJSON(normalizeModelTags(merged))
-	if existing != nil {
-		_, err = db.ExecContext(ctx, `UPDATE llm_models SET tags_json = ?, updated_at = ? WHERE provider_id = ? AND model_id = ?`,
-			tags, timestamp, providerID, model)
-		return err
-	}
-	_, err = db.ExecContext(ctx, `INSERT INTO llm_models
-		(provider_id, model_id, name, tags_json, enabled, origin, owned_by, created_at, updated_at)
-		VALUES (?, ?, NULL, ?, 1, 'legacy', NULL, ?, ?)`, providerID, model, tags, timestamp, timestamp)
-	return err
 }
 
 func (m *Module) updateProviderStatus(ctx context.Context, db Querier, id, status, message string) error {
@@ -557,14 +521,6 @@ func (m *Module) upsertModels(ctx context.Context, db Querier, provider *Provide
 		if err != nil {
 			return err
 		}
-		capabilities := routingCapabilities(tags)
-		if model.ID == provider.Model && len(capabilities) > 0 {
-			_, err = db.ExecContext(ctx, `UPDATE llm_providers SET capabilities_json = ?, vision_capable = ?, updated_at = ?
-				WHERE id = ?`, compactJSON(capabilities), slices.Contains(capabilities, "image"), timestamp, provider.ID)
-			if err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
@@ -586,11 +542,6 @@ func (m *Module) deleteModels(ctx context.Context, db Querier, provider *Provide
 		removed += changed
 		if _, err = db.ExecContext(ctx, `DELETE FROM llm_route_targets WHERE provider_id = ? AND model_id = ?`, provider.ID, id); err != nil {
 			return 0, err
-		}
-		if id == provider.Model {
-			if _, err = db.ExecContext(ctx, `UPDATE llm_providers SET model = '', updated_at = ? WHERE id = ?`, m.stamp(), provider.ID); err != nil {
-				return 0, err
-			}
 		}
 	}
 	targets, err := QueueTargets(ctx, db)
@@ -618,9 +569,8 @@ func (m *Module) writeQueue(ctx context.Context, db Querier, targets []RouteTarg
 	return nil
 }
 
-// setQueue replaces the ordered queue. A target with an empty model follows
-// the provider default; any other model must be in the provider's catalog.
-// It must run inside a transaction.
+// setQueue replaces the ordered queue. Every target names a model in its
+// provider's catalog. It must run inside a transaction.
 func (m *Module) setQueue(ctx context.Context, db Querier, targets []RouteTarget) error {
 	seen := map[RouteTarget]bool{}
 	normalized := make([]RouteTarget, 0, len(targets))
@@ -636,14 +586,15 @@ func (m *Module) setQueue(ctx context.Context, db Querier, targets []RouteTarget
 		if provider == nil {
 			return httpx.Invalid("LLM provider does not exist: %s", target.ProviderID)
 		}
-		if target.ModelID != "" {
-			model, modelErr := GetModel(ctx, db, target.ProviderID, target.ModelID)
-			if modelErr != nil {
-				return modelErr
-			}
-			if model == nil {
-				return httpx.Invalid("LLM model does not exist: %s/%s", target.ProviderID, target.ModelID)
-			}
+		if target.ModelID == "" {
+			return httpx.Invalid("modelId is required: %s", target.ProviderID)
+		}
+		model, modelErr := GetModel(ctx, db, target.ProviderID, target.ModelID)
+		if modelErr != nil {
+			return modelErr
+		}
+		if model == nil {
+			return httpx.Invalid("LLM model does not exist: %s/%s", target.ProviderID, target.ModelID)
 		}
 		if seen[target] {
 			continue
@@ -652,19 +603,4 @@ func (m *Module) setQueue(ctx context.Context, db Querier, targets []RouteTarget
 		normalized = append(normalized, target)
 	}
 	return m.writeQueue(ctx, db, normalized)
-}
-
-// appendQueueProvider adds a provider-default target unless the provider is
-// already queued.
-func (m *Module) appendQueueProvider(ctx context.Context, db Querier, providerID string) error {
-	current, err := QueueTargets(ctx, db)
-	if err != nil {
-		return err
-	}
-	for _, target := range current {
-		if target.ProviderID == providerID {
-			return nil
-		}
-	}
-	return m.setQueue(ctx, db, append(current, RouteTarget{ProviderID: providerID}))
 }

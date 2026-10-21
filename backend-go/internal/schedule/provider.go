@@ -147,20 +147,18 @@ func (e *Extractor) configuredProviders(ctx context.Context, inputMode string) (
 		if row == nil || !row.enabled {
 			continue
 		}
-		model, capabilities := row.model, row.capabilities
-		if target.modelID != "" {
-			catalog, err := llmModel(ctx, e.db, row.id, target.modelID)
-			if err != nil {
-				return nil, "", err
-			}
-			if catalog == nil || !catalog.enabled {
-				continue
-			}
-			model, capabilities = catalog.id, catalog.capabilities
-		}
-		if model == "" {
+		// Every target names a catalog model; providers have no default.
+		if target.modelID == "" {
 			continue
 		}
+		catalog, err := llmModel(ctx, e.db, row.id, target.modelID)
+		if err != nil {
+			return nil, "", err
+		}
+		if catalog == nil || !catalog.enabled {
+			continue
+		}
+		model, capabilities := catalog.id, catalog.capabilities
 		apiKey, known := apiKeys[row.id]
 		if !known {
 			if row.ciphertext != "" {

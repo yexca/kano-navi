@@ -334,15 +334,9 @@ func (m *Module) postProvider(w http.ResponseWriter, r *http.Request) {
 		if inputErr != nil {
 			return inputErr
 		}
-		if provider, err = m.upsertProvider(ctx, tx, input); err != nil {
-			return err
-		}
-		// A provider created with a default model joins the end of the
-		// queue. Providers without one are queued explicitly by the operator.
-		if provider == nil || provider.Model == "" {
-			return nil
-		}
-		return m.appendQueueProvider(ctx, tx, provider.ID)
+		// Queue targets name catalog models, so the operator queues them.
+		provider, err = m.upsertProvider(ctx, tx, input)
+		return err
 	})
 	if err != nil {
 		m.fail(w, err)
@@ -478,9 +472,6 @@ func (m *Module) runProviderTest(ctx context.Context, id string, body map[string
 	}
 	if apiKey == "" {
 		return response, httpx.Invalid("provider API key is not configured")
-	}
-	if model == "" {
-		model = provider.Model
 	}
 	response.OK = true
 	if model == "" {
@@ -626,24 +617,6 @@ func (m *Module) postModels(id string) handler {
 			}
 			if err := m.upsertModels(ctx, tx, provider, inputs); err != nil {
 				return err
-			}
-			if provider.Model == "" {
-				// The first catalog model becomes the default test model.
-				first, modelErr := GetModel(ctx, tx, provider.ID, inputs[0].ID)
-				if modelErr != nil {
-					return modelErr
-				}
-				capabilities := provider.Capabilities
-				if first != nil && len(first.Capabilities) > 0 {
-					capabilities = first.Capabilities
-				}
-				if _, err := m.upsertProvider(ctx, tx, providerWrite{
-					ID: provider.ID, Name: provider.Name, Protocol: provider.Protocol,
-					BaseURL: provider.BaseURL, Model: inputs[0].ID, Enabled: provider.Enabled,
-					Capabilities: capabilities, TimeoutMs: provider.TimeoutMs,
-				}); err != nil {
-					return err
-				}
 			}
 			var payloadErr error
 			response, payloadErr = m.modelsPayload(ctx, tx, provider.ID)
