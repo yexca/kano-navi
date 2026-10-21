@@ -34,7 +34,10 @@ snapshot health dot.
 
 1. Now: a ticket for what airs next (artwork, Japan date and time, the
    visitor's local time, and an hours/minutes countdown, or an on-air state
-   while a stream is live), falling back to the latest video. Beside it, the
+   while a stream is live), falling back to the latest video. A schedule entry
+   without artwork gets a compact date ticket instead, with its automatic or
+   confirmed provenance and a link named for what it opens (the stream or its
+   announcement), and the latest video follows it as a small card. Beside it, the
    profile card: banner, avatar, name, catchphrase, main links, counts, and
    the snapshot state with a reload button.
 2. Weekly schedule: a Monday-first program guide with seven day columns on

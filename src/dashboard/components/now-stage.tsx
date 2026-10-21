@@ -1,9 +1,17 @@
 import type { Dashboard, Locale, Profile, Translator } from "@/types"
-import { ArrowUpRight, Play, Radio, RefreshCw } from "lucide-react"
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  Play,
+  Radio,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react"
 
 import { ExternalLink, XLogo, YouTubeLogo } from "@/site/links"
 import {
   countdownParts,
+  eventIsManual,
   eventTypeKey,
   formatJapanDay,
   formatJapanTime,
@@ -12,7 +20,7 @@ import {
   videoKindLabel,
   visitorIsInJapan,
 } from "../format"
-import { pickSpotlight } from "../spotlight"
+import { pickCompanion, pickSpotlight } from "../spotlight"
 
 export interface SyncState {
   tone: "leaf" | "honey" | "danger" | "muted"
@@ -74,6 +82,268 @@ function Countdown({
   )
 }
 
+type SpotlightItem = NonNullable<ReturnType<typeof pickSpotlight>>
+type Companion = NonNullable<ReturnType<typeof pickCompanion>>
+
+function TicketHead({
+  item,
+  isLive,
+  t,
+}: {
+  item: SpotlightItem
+  isLive: boolean
+  t: Translator
+}) {
+  const typeKey = item.event ? eventTypeKey(item.event) : null
+  const tag = item.video
+    ? videoKindLabel(item.video, t)
+    : typeKey
+      ? t(typeKey)
+      : item.detail || t("schedule.publicEvent")
+  const manual = item.event ? eventIsManual(item.event) : false
+  return (
+    <span className="ticket-head">
+      {isLive ? (
+        <span className="ticket-onair">
+          <Radio aria-hidden="true" />
+          {t("spotlight.onAir")}
+        </span>
+      ) : (
+        <span className="kicker">
+          {t(item.mode === "next" ? "spotlight.next" : "spotlight.latest")}
+        </span>
+      )}
+      <span className="tag tone-berry">{tag}</span>
+      {item.event ? (
+        <span className={`ticket-provenance${manual ? " is-manual" : ""}`}>
+          {manual ? (
+            <BadgeCheck aria-hidden="true" />
+          ) : (
+            <Sparkles aria-hidden="true" />
+          )}
+          {t(manual ? "schedule.sourceManual" : "schedule.sourceAutomatic")}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+function TicketWhen({
+  item,
+  locale,
+  now,
+  t,
+}: {
+  item: SpotlightItem
+  locale: Locale
+  now: number
+  t: Translator
+}) {
+  if (item.mode !== "next") {
+    return (
+      <span className="ticket-when">
+        <small>{formatRelative(item.time, locale, now)}</small>
+      </span>
+    )
+  }
+  if (!item.time) {
+    return (
+      <span className="ticket-when">
+        <strong>
+          {item.dateOnly} · {t("common.pendingConfirmation")}
+        </strong>
+      </span>
+    )
+  }
+  return (
+    <span className="ticket-when">
+      <strong>
+        <span className="sr-only">{formatJapanDay(item.time, locale)} </span>
+        {formatJapanTime(item.time)} {t("common.timezoneShort")}
+      </strong>
+      {!visitorIsInJapan() ? (
+        <small>
+          {t("spotlight.localTime", {
+            time: formatVisitorTime(item.time, locale),
+          })}
+        </small>
+      ) : null}
+    </span>
+  )
+}
+
+function DateBlock({ item, locale }: { item: SpotlightItem; locale: Locale }) {
+  const parts = item.time
+    ? japanDateParts(item.time, locale)
+    : item.dateOnly
+      ? dateOnlyParts(item.dateOnly, locale)
+      : null
+  if (!parts) return null
+  return (
+    <span className="ticket-date" aria-hidden="true">
+      <small>{parts.month}</small>
+      <strong>{parts.day}</strong>
+      <small>{parts.weekday}</small>
+    </span>
+  )
+}
+
+/** A stream or video with artwork: the picture leads, the stub follows. */
+function FullTicket({
+  item,
+  isLive,
+  locale,
+  now,
+  t,
+}: {
+  item: SpotlightItem
+  isLive: boolean
+  locale: Locale
+  now: number
+  t: Translator
+}) {
+  const Wrapper = item.url ? ExternalLink : "div"
+  return (
+    <Wrapper
+      className={`ticket is-${isLive ? "live" : item.mode}${item.thumbnailUrl ? " has-art" : ""}`}
+      href={item.url || undefined}
+    >
+      <span className="ticket-art" aria-hidden="true">
+        {item.thumbnailUrl ? (
+          <img src={item.thumbnailUrl} alt="" />
+        ) : (
+          <span className="ticket-art-fallback" />
+        )}
+        {item.link === "watch" ? (
+          <span className="ticket-play">
+            <Play fill="currentColor" />
+          </span>
+        ) : null}
+      </span>
+      <span className="ticket-stub">
+        <TicketHead item={item} isLive={isLive} t={t} />
+        <span className="ticket-body">
+          {item.mode === "next" ? (
+            <DateBlock item={item} locale={locale} />
+          ) : null}
+          <span className="ticket-copy">
+            <span className="ticket-title">{item.title}</span>
+            <TicketWhen item={item} locale={locale} now={now} t={t} />
+          </span>
+        </span>
+        {item.mode === "next" && item.time && !isLive ? (
+          <Countdown time={item.time} now={now} t={t} />
+        ) : null}
+        {isLive ? (
+          <span className="ticket-note">{t("spotlight.started")}</span>
+        ) : null}
+        {item.url ? (
+          <span className="ticket-open">
+            {t("spotlight.open")}
+            <ArrowUpRight aria-hidden="true" />
+          </span>
+        ) : null}
+      </span>
+    </Wrapper>
+  )
+}
+
+/** A schedule entry without artwork: the date is the picture. */
+function CompactTicket({
+  item,
+  isLive,
+  locale,
+  now,
+  t,
+}: {
+  item: SpotlightItem
+  isLive: boolean
+  locale: Locale
+  now: number
+  t: Translator
+}) {
+  const Wrapper = item.url ? ExternalLink : "div"
+  return (
+    <Wrapper
+      className={`ticket is-compact is-${isLive ? "live" : item.mode}`}
+      href={item.url || undefined}
+    >
+      <span className="ticket-side">
+        <DateBlock item={item} locale={locale} />
+      </span>
+      <span className="ticket-stub">
+        <TicketHead item={item} isLive={isLive} t={t} />
+        <span className="ticket-copy">
+          <span className="ticket-title">{item.title}</span>
+          <TicketWhen item={item} locale={locale} now={now} t={t} />
+        </span>
+        {item.time && !isLive ? (
+          <Countdown time={item.time} now={now} t={t} />
+        ) : null}
+        {isLive ? (
+          <span className="ticket-note">{t("spotlight.started")}</span>
+        ) : null}
+        {item.url ? (
+          <span className="ticket-link">
+            {item.link === "announcement" ? (
+              <XLogo aria-hidden="true" />
+            ) : item.link === "watch" ? (
+              <Play fill="currentColor" aria-hidden="true" />
+            ) : null}
+            {t(
+              item.link === "announcement"
+                ? "spotlight.announcement"
+                : item.link === "watch"
+                  ? "spotlight.watch"
+                  : "spotlight.open",
+            )}
+            <ArrowUpRight aria-hidden="true" />
+          </span>
+        ) : null}
+      </span>
+    </Wrapper>
+  )
+}
+
+/** The latest video under a compact ticket. */
+function LatestCard({
+  companion,
+  locale,
+  now,
+  t,
+}: {
+  companion: Companion
+  locale: Locale
+  now: number
+  t: Translator
+}) {
+  return (
+    <ExternalLink className="latest-card" href={companion.url}>
+      <span className="latest-card-art" aria-hidden="true">
+        {companion.thumbnailUrl ? (
+          <img src={companion.thumbnailUrl} alt="" loading="lazy" />
+        ) : (
+          <span className="ticket-art-fallback" />
+        )}
+        <span className="latest-card-play">
+          <Play fill="currentColor" />
+        </span>
+      </span>
+      <span className="latest-card-copy">
+        <span className="ticket-head">
+          <span className="kicker">{t("spotlight.latest")}</span>
+          <span className="tag">{videoKindLabel(companion.video, t)}</span>
+        </span>
+        <span className="latest-card-title">{companion.title}</span>
+        {companion.time ? (
+          <small>{formatRelative(companion.time, locale, now)}</small>
+        ) : null}
+      </span>
+      <ArrowUpRight className="latest-card-open" aria-hidden="true" />
+    </ExternalLink>
+  )
+}
+
 /** The single most useful thing to know right now: what airs next. */
 function NextTicket({
   summary,
@@ -110,105 +380,25 @@ function NextTicket({
 
   const isLive =
     item.mode === "next" && Boolean(item.time) && Date.parse(item.time) <= now
-  const typeKey = item.event ? eventTypeKey(item.event) : null
-  const tag = item.video
-    ? videoKindLabel(item.video, t)
-    : typeKey
-      ? t(typeKey)
-      : item.detail || t("schedule.publicEvent")
-  const parts = item.time
-    ? japanDateParts(item.time, locale)
-    : item.dateOnly
-      ? dateOnlyParts(item.dateOnly, locale)
-      : null
-  const Wrapper = item.url ? ExternalLink : "div"
-
+  if (item.layout === "full") {
+    return (
+      <FullTicket item={item} isLive={isLive} locale={locale} now={now} t={t} />
+    )
+  }
+  const companion = pickCompanion(summary, item)
   return (
-    <Wrapper
-      className={`ticket is-${isLive ? "live" : item.mode}${item.thumbnailUrl ? " has-art" : ""}`}
-      href={item.url || undefined}
-    >
-      <span className="ticket-art" aria-hidden="true">
-        {item.thumbnailUrl ? (
-          <img src={item.thumbnailUrl} alt="" />
-        ) : (
-          <span className="ticket-art-fallback" />
-        )}
-        {item.url ? (
-          <span className="ticket-play">
-            <Play fill="currentColor" />
-          </span>
-        ) : null}
-      </span>
-      <span className="ticket-stub">
-        <span className="ticket-head">
-          {isLive ? (
-            <span className="ticket-onair">
-              <Radio aria-hidden="true" />
-              {t("spotlight.onAir")}
-            </span>
-          ) : (
-            <span className="kicker">
-              {t(item.mode === "next" ? "spotlight.next" : "spotlight.latest")}
-            </span>
-          )}
-          <span className="tag tone-berry">{tag}</span>
-        </span>
-        <span className="ticket-body">
-          {parts && item.mode === "next" ? (
-            <span className="ticket-date" aria-hidden="true">
-              <small>{parts.month}</small>
-              <strong>{parts.day}</strong>
-              <small>{parts.weekday}</small>
-            </span>
-          ) : null}
-          <span className="ticket-copy">
-            <span className="ticket-title">{item.title}</span>
-            {item.mode === "next" ? (
-              <span className="ticket-when">
-                {item.time ? (
-                  <>
-                    <strong>
-                      <span className="sr-only">
-                        {formatJapanDay(item.time, locale)}{" "}
-                      </span>
-                      {formatJapanTime(item.time)} {t("common.timezoneShort")}
-                    </strong>
-                    {!visitorIsInJapan() ? (
-                      <small>
-                        {t("spotlight.localTime", {
-                          time: formatVisitorTime(item.time, locale),
-                        })}
-                      </small>
-                    ) : null}
-                  </>
-                ) : (
-                  <strong>
-                    {item.dateOnly} · {t("common.pendingConfirmation")}
-                  </strong>
-                )}
-              </span>
-            ) : (
-              <span className="ticket-when">
-                <small>{formatRelative(item.time, locale, now)}</small>
-              </span>
-            )}
-          </span>
-        </span>
-        {item.mode === "next" && item.time && !isLive ? (
-          <Countdown time={item.time} now={now} t={t} />
-        ) : null}
-        {isLive ? (
-          <span className="ticket-note">{t("spotlight.started")}</span>
-        ) : null}
-        {item.url ? (
-          <span className="ticket-open">
-            {t("spotlight.open")}
-            <ArrowUpRight aria-hidden="true" />
-          </span>
-        ) : null}
-      </span>
-    </Wrapper>
+    <div className="stage-main">
+      <CompactTicket
+        item={item}
+        isLive={isLive}
+        locale={locale}
+        now={now}
+        t={t}
+      />
+      {companion ? (
+        <LatestCard companion={companion} locale={locale} now={now} t={t} />
+      ) : null}
+    </div>
   )
 }
 

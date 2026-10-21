@@ -361,6 +361,197 @@ a.ticket:hover .ticket-open {
   color: var(--berry);
 }
 
+.ticket-provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--soft);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.ticket-provenance svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ticket-provenance.is-manual {
+  color: var(--leaf);
+}
+
+/* A schedule entry without artwork: the date stub replaces the art band. */
+.stage-main {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+.ticket.is-compact {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.ticket-side {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 24px 26px;
+  background: var(--berry-wash);
+}
+
+.ticket-side::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: var(--gingham);
+  opacity: 0.18;
+}
+
+.ticket.is-compact .ticket-date {
+  position: relative;
+  min-width: 84px;
+  padding: 0;
+  background: transparent;
+}
+
+.ticket.is-compact .ticket-date strong {
+  font-size: 52px;
+}
+
+.ticket.is-compact .ticket-date small {
+  font-size: 12.5px;
+}
+
+.ticket.is-compact .ticket-stub {
+  align-content: center;
+  border-top: 0;
+  border-left: 2px dashed var(--rule);
+}
+
+.ticket.is-compact .ticket-stub::before {
+  top: -11px;
+  left: -11px;
+}
+
+.ticket.is-compact .ticket-stub::after {
+  top: auto;
+  right: auto;
+  bottom: -11px;
+  left: -11px;
+}
+
+.ticket-link {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  justify-self: start;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.ticket-link svg {
+  width: 13px;
+  height: 13px;
+}
+
+a.ticket:hover .ticket-link {
+  border-color: var(--berry);
+  color: var(--berry);
+}
+
+.latest-card {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px 12px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease;
+}
+
+a.latest-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.latest-card-art {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--sunken);
+}
+
+.latest-card-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.latest-card-play {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--berry);
+  color: #fff;
+}
+
+.latest-card-play svg {
+  width: 13px;
+  height: 13px;
+  margin-left: 2px;
+}
+
+.latest-card-copy {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.latest-card-copy small {
+  color: var(--soft);
+  font-size: 12.5px;
+}
+
+.latest-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.latest-card-open {
+  width: 16px;
+  height: 16px;
+  color: var(--soft);
+}
+
+a.latest-card:hover .latest-card-open {
+  color: var(--berry);
+}
+
 /* Profile card */
 
 .profile-card {
@@ -565,6 +756,32 @@ a.ticket:hover .ticket-open {
   .ticket-open {
     top: 16px;
     right: 18px;
+  }
+
+  .ticket-side {
+    padding: 18px 14px;
+  }
+
+  .ticket.is-compact .ticket-date {
+    min-width: 56px;
+  }
+
+  .ticket.is-compact .ticket-date strong {
+    font-size: 38px;
+  }
+
+  .latest-card {
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 14px;
+    padding: 10px;
+  }
+
+  .latest-card-open {
+    display: none;
+  }
+
+  .latest-card-title {
+    font-size: 14.5px;
   }
 }
 

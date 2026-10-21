@@ -73,6 +73,10 @@ both `nextStream` and `pickSpotlight`. YouTube watch, youtu.be, live, and shorts
 links match by the video identity parsed locally from their public URL, ignoring
 share/query parameters and supported YouTube subdomain differences. Other links
 retain exact URL matching; different videos and lookalike hosts do not match.
+`pickSpotlight` gives a candidate with artwork the full ticket and one without
+it the compact layout; `pickCompanion` then adds the latest video beneath a
+compact ticket unless it is the same link. The play mark appears only on
+YouTube or Twitch links; X links read as an announcement.
 Matching needs no protected source item IDs or additional public API fields.
 At the end instant the video yields to later focus candidates. This derived video
 `endsAt` belongs to local snapshot state. Without an explicit end, the three-hour

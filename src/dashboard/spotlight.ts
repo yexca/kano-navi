@@ -1,6 +1,35 @@
 import { cleanVideoTitle, scheduleSortTime, eventIsUpcoming } from "./format.ts"
 import { eventIsLive, videoIsInFocus } from "./derive-dashboard.ts"
 
+const watchHosts = ["youtube.com", "youtu.be", "twitch.tv"]
+const announcementHosts = ["x.com", "twitter.com"]
+
+function hostMatches(host, domains) {
+  return domains.some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  )
+}
+
+/** What following the ticket opens: the stream, its announcement, or a page. */
+export function spotlightLink(url) {
+  if (!url) return null
+  let host = ""
+  try {
+    host = new URL(url).hostname.toLowerCase()
+  } catch {
+    return "open"
+  }
+  if (hostMatches(host, watchHosts)) return "watch"
+  if (hostMatches(host, announcementHosts)) return "announcement"
+  return "open"
+}
+
+// Only artwork earns the full ticket; a schedule entry without it would leave
+// an empty art band, so it gets the compact date ticket instead.
+function withLayout(item) {
+  return { ...item, layout: item.thumbnailUrl ? "full" : "compact" }
+}
+
 export function pickSpotlight(summary, now) {
   const candidates = []
   if (summary?.nextStream?.scheduledAt) {
@@ -10,6 +39,7 @@ export function pickSpotlight(summary, now) {
       time: video.scheduledAt,
       title: cleanVideoTitle(video.title),
       url: video.url,
+      link: "watch",
       thumbnailUrl: video.thumbnailUrl,
       video,
     })
@@ -27,6 +57,7 @@ export function pickSpotlight(summary, now) {
         title: cleanVideoTitle(event.title),
         detail: event.detail,
         url: event.url,
+        link: spotlightLink(event.url),
         event,
       })
     }
@@ -45,18 +76,34 @@ export function pickSpotlight(summary, now) {
         scheduleSortTime(a.time, a.dateOnly) -
         scheduleSortTime(b.time, b.dateOnly),
     )
-  if (upcoming[0]) return upcoming[0]
+  if (upcoming[0]) return withLayout(upcoming[0])
 
   const video = summary?.latestVideo
   if (video) {
     return {
       mode: "latest",
+      layout: "full",
       time: video.publishedAt || video.scheduledAt,
       title: cleanVideoTitle(video.title),
       url: video.url,
+      link: "watch",
       thumbnailUrl: video.thumbnailUrl,
       video,
     }
   }
   return null
+}
+
+/** The latest video shown under a compact ticket, so the stage keeps a picture. */
+export function pickCompanion(summary, item) {
+  if (item?.layout !== "compact") return null
+  const video = summary?.latestVideo
+  if (!video || video.url === item.url) return null
+  return {
+    time: video.publishedAt || video.scheduledAt,
+    title: cleanVideoTitle(video.title),
+    url: video.url,
+    thumbnailUrl: video.thumbnailUrl,
+    video,
+  }
 }
