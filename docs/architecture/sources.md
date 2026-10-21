@@ -302,6 +302,12 @@ A schedule image (`assets.kind = schedule`) is public only after two gates:
    candidate whose source post no longer passes gate 1 (written by an older
    sync) is recorded as `skipped` / `source_not_board` without a model call. A
    pending cache, or no keyed Image provider, is also `skipped` and retried.
+   An asset without an image URL (the legacy `weekly-schedule` alias written
+   by the old seed/importer) has nothing to download: it is recorded once as
+   `skipped` / `no_image` and left out of later scans, forced ones included,
+   until a writer gives it a URL. It is never public and never counts as
+   needing review; the console shows it as having no image, and an operator
+   may still label it `not_schedule`.
 
 `/api/dashboard` returns a schedule asset only when an operator labelled it
 `schedule`, or when it has no manual label, still passes gate 1, and the model

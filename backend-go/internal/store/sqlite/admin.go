@@ -466,7 +466,7 @@ func (s *Store) AdminCounts(ctx context.Context, today string) (AdminCounts, err
 	  (SELECT COUNT(*) FROM posts),
 	  (SELECT COUNT(*) FROM videos),
 	  (SELECT COUNT(*) FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id=a.id
-	     WHERE a.kind='schedule' AND COALESCE(r.manual_status,'unreviewed')='unreviewed'
+	     WHERE a.kind='schedule' AND TRIM(a.url)<>'' AND COALESCE(r.manual_status,'unreviewed')='unreviewed'
 	       AND COALESCE(r.llm_status,'pending') IN ('pending','uncertain','failed')),
 	  (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL AND cancellation_status='llm_suspected'),
 	  (SELECT COUNT(*) FROM post_llm_states WHERE status='failed'),

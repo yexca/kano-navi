@@ -411,6 +411,13 @@ func TestOverviewCountsWhatNeedsReview(t *testing.T) {
 	 ('p1','x','post','label','one','2026-03-01T00:00:00.000Z','https://post.example.test/1'),
 	 ('p2','x','post','label','two','2026-03-01T00:00:00.000Z','https://post.example.test/2')`)
 	c.exec(t, `INSERT INTO post_llm_states(post_id,status,reprocess_requested,updated_at) VALUES ('p1','failed',1,'2026-03-01T00:00:00.000Z'),('p2','processed',0,'2026-03-01T00:00:00.000Z')`)
+	// A legacy schedule row without an image URL has nothing to review, with or
+	// without a recorded scan; an unchecked image with a URL does.
+	c.exec(t, `INSERT INTO assets(id,kind,url,period_basis) VALUES
+	 ('schedule-unchecked','schedule','https://media.example.test/board.png','inferred'),
+	 ('weekly-schedule','schedule','','legacy'),
+	 ('schedule-blank','schedule','  ','legacy')`)
+	c.exec(t, `INSERT INTO schedule_asset_reviews(asset_id,llm_status,manual_status,updated_at) VALUES ('schedule-blank','pending','unreviewed','2026-03-01T00:00:00.000Z')`)
 	code, payload := c.call(t, "GET", "/api/admin/overview", "")
 	if code != 200 {
 		t.Fatalf("overview=%d %v", code, payload)
@@ -420,7 +427,7 @@ func TestOverviewCountsWhatNeedsReview(t *testing.T) {
 	if counts["events"] != float64(3) || counts["upcomingEvents"] != float64(1) || counts["posts"] != float64(2) || counts["videos"] != float64(0) {
 		t.Fatalf("counts=%v", counts)
 	}
-	if review["suspectedCancellations"] != float64(1) || review["failedPosts"] != float64(1) || review["reprocessRequested"] != float64(1) || review["pendingImages"] != float64(0) {
+	if review["suspectedCancellations"] != float64(1) || review["failedPosts"] != float64(1) || review["reprocessRequested"] != float64(1) || review["pendingImages"] != float64(1) {
 		t.Fatalf("review=%v", review)
 	}
 	if scheduler := payload["scheduler"].(map[string]any); scheduler["running"] != true {

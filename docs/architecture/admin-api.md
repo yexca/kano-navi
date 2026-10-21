@@ -58,7 +58,7 @@ external work:
     "youtube": {"skipped", "lastSuccessAt", "lastStep", "push": {"enabled", "verified"}}
   },
   "review": {
-    "pendingImages",          // unlabelled images the model has not settled (pending, uncertain, failed)
+    "pendingImages",          // unlabelled images with a URL the model has not settled (pending, uncertain, failed)
     "suspectedCancellations", // events with an LLM cancellation overlay
     "failedPosts",            // posts whose last extraction failed
     "reprocessRequested"      // posts queued for re-extraction
@@ -167,7 +167,10 @@ the stored values unless the body overrides them.
 
 `status` is `schedule`, `not_schedule` or `unreviewed` (which clears the
 label; the others require `reason`). A `schedule` label is the manual gate
-that lets an image reach the image model.
+that lets an image reach the image model. Each item's `mediaStatus` is
+`ready`, `pending`, `failed`, `missing` (no usable cache file yet) or
+`none` (the asset has no image URL, such as the legacy `weekly-schedule`
+alias); `none` never needs review and keeps `previewUrl` null.
 
 ## Posts
 

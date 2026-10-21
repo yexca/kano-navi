@@ -35,11 +35,22 @@ import { eventToInput, EventWhen } from "@/admin/views/event-parts"
 const tabs = ["images", "cancellations", "posts"] as const
 type Tab = (typeof tabs)[number]
 
+/** A record without an image URL (mediaStatus "none") has nothing to check,
+ * so it never waits for review; the operator can still label it. */
 export function needsReview(image: ScheduleImage) {
   return (
     image.manualStatus === "unreviewed" &&
+    image.mediaStatus !== "none" &&
     ["pending", "uncertain", "failed"].includes(image.llmStatus)
   )
+}
+
+function mediaLabel(image: ScheduleImage) {
+  if (image.mediaStatus === "none")
+    return image.periodBasis === "legacy" ? "noneLegacy" : "none"
+  return ["pending", "failed"].includes(image.mediaStatus)
+    ? image.mediaStatus
+    : "missing"
 }
 
 function PeriodDialog({
@@ -119,6 +130,7 @@ function ImageCard({
   const [reason, setReason] = useState("")
   const [busy, setBusy] = useState("")
   const [editing, setEditing] = useState(false)
+  const noImage = image.mediaStatus === "none"
   const review = async (status: string) => {
     setBusy(status)
     const result = await act(
@@ -149,9 +161,7 @@ function ImageCard({
         ) : (
           <span>
             <ImageOff aria-hidden />
-            {t(
-              `admin.review.media.${["pending", "failed"].includes(image.mediaStatus) ? image.mediaStatus : "missing"}`,
-            )}
+            {t(`admin.review.media.${mediaLabel(image)}`)}
           </span>
         )}
       </a>
@@ -186,13 +196,15 @@ function ImageCard({
             ],
             [
               t("admin.review.model"),
-              image.llmCheckedAt
-                ? `${t(`admin.status.${image.llmStatus}`)}${
-                    image.llmConfidence != null
-                      ? ` · ${Math.round(image.llmConfidence * 100)}%`
-                      : ""
-                  }`
-                : t("admin.review.notChecked"),
+              noImage
+                ? t("admin.review.media.none")
+                : image.llmCheckedAt
+                  ? `${t(`admin.status.${image.llmStatus}`)}${
+                      image.llmConfidence != null
+                        ? ` · ${Math.round(image.llmConfidence * 100)}%`
+                        : ""
+                    }`
+                  : t("admin.review.notChecked"),
             ],
             [t("admin.review.account"), image.sourceAccount],
             [
@@ -201,7 +213,11 @@ function ImageCard({
             ],
           ]}
         />
-        {image.llmReason ? (
+        {noImage ? (
+          image.manualStatus === "unreviewed" ? (
+            <p className="adm-note">{t("admin.review.noImageHint")}</p>
+          ) : null
+        ) : image.llmReason ? (
           <p className="adm-quote">{image.llmReason}</p>
         ) : null}
         {image.manualReason ? (

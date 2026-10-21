@@ -30,7 +30,7 @@ belong to the TypeScript initializer. See
 | `app_settings`           | Model, schedule-extractor, X-account, Featured, and YouTube push settings (push secret sealed)            |
 | `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                            |
 | `post_llm_states`        | Per-post LLM status, last attempt, error, and reprocess queue state                                       |
-| `schedule_asset_reviews` | Per-schedule-image LLM verdict, skip reason, and optional manual label with its reason                    |
+| `schedule_asset_reviews` | Per-schedule-image LLM verdict, skip reason (`no_image` for a URL-less row), and optional manual label    |
 | `llm_providers`          | OpenAI-compatible or Anthropic endpoints, Text/Image capabilities, health, and encrypted keys             |
 | `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)     |
 | `llm_route_targets`      | Ordered provider + model failover targets for `schedule_board`, `schedule_message`, and `schedule_vision` |

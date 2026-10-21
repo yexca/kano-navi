@@ -165,6 +165,10 @@ export const adminMessages = {
     "admin.review.media.missing": "Not cached",
     "admin.review.media.pending": "Caching",
     "admin.review.media.failed": "Cache failed",
+    "admin.review.media.none": "No image",
+    "admin.review.media.noneLegacy": "No image (legacy record)",
+    "admin.review.noImageHint":
+      "This record has no image URL, so there is nothing to download or check. Label it Not a schedule to close it; a newer synced image replaces it.",
     "admin.review.periodTitle": "Correct the covered dates",
     "admin.review.periodHint":
       "Both days are included, in Asia/Tokyo. The correction survives later image checks.",
@@ -700,6 +704,10 @@ export const adminMessages = {
     "admin.review.media.missing": "未缓存",
     "admin.review.media.pending": "缓存中",
     "admin.review.media.failed": "缓存失败",
+    "admin.review.media.none": "无图片",
+    "admin.review.media.noneLegacy": "无图片（旧记录）",
+    "admin.review.noImageHint":
+      "这条记录没有图片地址，无需下载或检查。标记为「不是日程」即可关闭；之后同步到的新图片会替换它。",
     "admin.review.periodTitle": "修正覆盖日期",
     "admin.review.periodHint":
       "两端日期都包含在内（日本时间）。修正会在之后的图片检查中保留。",

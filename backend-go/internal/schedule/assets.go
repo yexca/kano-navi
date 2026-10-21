@@ -20,6 +20,19 @@ func (e *Extractor) skipAsset(ctx context.Context, update reviewUpdate, reason s
 	return assetResult{status: "skipped"}, err
 }
 
+// hasImage reports whether a schedule asset names an image at all. A legacy
+// row without a URL has nothing to download, so it is recorded once as
+// `skipped` / `no_image` instead of waiting for a cache that never arrives.
+func hasImage(review *assetReview) bool {
+	return jsTrim(review.url) != ""
+}
+
+// settledWithoutImage is a URL-less asset already recorded as `no_image`. It
+// stays out of later scans until a writer gives the asset an image URL.
+func settledWithoutImage(review *assetReview) bool {
+	return !hasImage(review) && review.llmStatus == "skipped" && review.llmReason == "no_image"
+}
+
 // assetImage resolves the cached file behind a schedule asset. A missing or
 // unfinished download keeps the review pending.
 func (e *Extractor) assetImage(ctx context.Context, review *assetReview) (*cachedImage, error) {
@@ -50,6 +63,9 @@ func (e *Extractor) verifyAsset(ctx context.Context, assetID string, force bool)
 		return assetResult{status: "missing"}, nil
 	}
 	update := reviewUpdate{assetID: review.id, expectURL: review.url, expectVersion: review.assetVersion}
+	if !hasImage(review) {
+		return e.skipAsset(ctx, update, "no_image")
+	}
 	if !review.sourceMatchesBoard {
 		return e.skipAsset(ctx, update, "source_not_board")
 	}
@@ -196,7 +212,7 @@ func (e *Extractor) verifyPendingAssets(ctx context.Context, limit int, force bo
 	}
 	candidates := []*assetReview{}
 	for _, review := range all {
-		if review.manualStatus == "unreviewed" {
+		if review.manualStatus == "unreviewed" && !settledWithoutImage(review) {
 			candidates = append(candidates, review)
 		}
 	}

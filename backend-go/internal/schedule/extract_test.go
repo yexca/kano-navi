@@ -415,6 +415,52 @@ func TestScheduleImageVerificationApprovesAsset(t *testing.T) {
 	f.assertNoSecretStored()
 }
 
+func TestScheduleAssetWithoutImageIsSettledOnce(t *testing.T) {
+	f, _ := boardFixture(t)
+	// The legacy compatibility alias names no image and has no media row; a
+	// URL-less row an operator already labelled keeps its label.
+	f.exec(`INSERT INTO assets (id, kind, url, week_start, period_basis) VALUES ('weekly-schedule', 'schedule', '', '2026-04-20', 'legacy')`)
+	f.exec(`INSERT INTO assets (id, kind, url, week_start, period_basis) VALUES ('schedule-2026-04-13', 'schedule', '', '2026-04-13', 'legacy')`)
+	f.exec(`INSERT INTO schedule_asset_reviews (asset_id, llm_status, manual_status, manual_reason, updated_at) VALUES ('schedule-2026-04-13', 'pending', 'not_schedule', 'no image', ?)`, testTimestamp)
+
+	first := f.scan()
+	assets, _ := first.Counts["assetVerification"].(map[string]any)
+	if f.provider.count() != 1 || countOf(assets, "success") != 1 || countOf(assets, "skipped") != 1 || countOf(assets, "attempted") != 2 {
+		t.Fatalf("first scan = %v after %d requests", assets, f.provider.count())
+	}
+	review := `SELECT llm_status || '|' || COALESCE(llm_reason,'') || '|' || manual_status || '|' || COALESCE(manual_reason,'') || '|' || (llm_checked_at IS NOT NULL) FROM schedule_asset_reviews WHERE asset_id=?`
+	if got := f.text(review, "weekly-schedule"); got != "skipped|no_image|unreviewed||0" {
+		t.Errorf("alias review = %q", got)
+	}
+	if got := f.text(review, "schedule-2026-04-13"); got != "pending||not_schedule|no image|0" {
+		t.Errorf("labelled review was touched: %q", got)
+	}
+	if got := f.number(`SELECT COUNT(*) FROM assets WHERE id='weekly-schedule' AND url='' AND period_basis='legacy'`); got != 1 {
+		t.Error("the legacy row was rewritten")
+	}
+
+	// A settled URL-less asset is not retried, even by a forced scan.
+	second := f.scan()
+	assets, _ = second.Counts["assetVerification"].(map[string]any)
+	if countOf(assets, "skipped") != 0 || countOf(assets, "attempted") != 0 || countOf(assets, "cached") != 1 {
+		t.Errorf("second scan = %v", assets)
+	}
+	forced, err := f.run.verifyPendingAssets(context.Background(), 200, true)
+	if err != nil || countOf(forced, "skipped") != 0 {
+		t.Errorf("forced scan = %v, %v", forced, err)
+	}
+
+	// A newer synced image replaces the alias and is verified as usual.
+	const nextURL = "https://pbs.twimg.com/media/synthetic-next-week.png"
+	f.addCachedImage(nextURL, []byte(pngHeader+"n"))
+	sourceURL := f.text(`SELECT source_url FROM assets WHERE id='schedule-2026-04-27'`)
+	f.exec(`UPDATE assets SET url=?, source_url=?, asset_version=asset_version+1 WHERE id='weekly-schedule'`, nextURL, sourceURL)
+	f.scan()
+	if got := f.text(review, "weekly-schedule"); got != "schedule|table of days|unreviewed||1" {
+		t.Errorf("replaced alias review = %q", got)
+	}
+}
+
 func TestScheduleImageVerdictIsDroppedWhenAssetChanges(t *testing.T) {
 	f, _ := boardFixture(t)
 	f.provider.respond = func(recordedRequest) (int, string) {

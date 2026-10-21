@@ -809,6 +809,36 @@ func TestScheduleAssetListAndManualReview(t *testing.T) {
 	}
 }
 
+func TestScheduleAssetWithoutImageReportsNoImage(t *testing.T) {
+	f := newFixture(t, true)
+	stamp := "2026-10-01T00:00:00.000Z"
+	f.exec(`INSERT INTO assets(id,kind,url,week_start,updated_at) VALUES('weekly-schedule','schedule','','2026-09-28',?)`, stamp)
+	f.exec(`INSERT INTO schedule_asset_reviews(asset_id,llm_status,llm_reason,updated_at) VALUES('weekly-schedule','skipped','no_image',?)`, stamp)
+
+	listing := f.request(http.MethodGet, "/schedule-images", "", nil)
+	listing.expect(t, http.StatusOK, "")
+	assets := list(t, listing.json["items"])
+	if len(assets) != 1 {
+		t.Fatalf("the legacy alias is listed: %s", listing.raw)
+	}
+	alias := object(t, assets[0])
+	if alias["mediaStatus"] != "none" || alias["previewUrl"] != nil || alias["mediaId"] != nil || alias["mediaSourceUrl"] != nil ||
+		alias["approved"] != false || alias["periodBasis"] != "legacy" || alias["effectiveStatus"] != "skipped" || alias["llmReason"] != "no_image" {
+		t.Fatalf("a URL-less asset reports no image: %#v", alias)
+	}
+
+	// The operator closes it with the ordinary label; the scan verdict stays.
+	rejected := f.post("/schedule-images/weekly-schedule/review", map[string]any{"status": "not_schedule", "reason": "legacy record"})
+	rejected.expect(t, http.StatusOK, "")
+	if asset := object(t, rejected.json["image"]); asset["manualStatus"] != "not_schedule" || asset["effectiveStatus"] != "not_schedule" ||
+		asset["llmStatus"] != "skipped" || asset["llmReason"] != "no_image" || asset["mediaStatus"] != "none" {
+		t.Fatalf("unexpected label on a URL-less asset: %#v", asset)
+	}
+	if f.text(`SELECT url||'|'||period_basis FROM assets WHERE id='weekly-schedule'`) != "|legacy" {
+		t.Fatal("labelling must not rewrite the legacy row")
+	}
+}
+
 func TestScheduleAssetPeriod(t *testing.T) {
 	f := newFixture(t, true)
 	seedScheduleAssets(f)
