@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -94,5 +95,27 @@ func TestGoSourceWorkflowProducesPostsReservationsAndReadableMedia(t *testing.T)
 	}
 	if _, err = s.GetDashboardRevision(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+func TestYoutubeRecentFeedOutageIsRetryableDependencyFailure(t *testing.T) {
+	s, err := sqlite.OpenInitialized(filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite"), true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	requests := 0
+	c := ytsource.NewClient(&http.Client{Transport: xTestRT(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "www.youtube.com" || r.URL.Path != "/feeds/videos.xml" {
+			t.Fatalf("unexpected request %s", r.URL)
+		}
+		requests++
+		return &http.Response{StatusCode: 500, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
+	})})
+	c.FeedRetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
+	steps := &SourceSteps{Store: s, Youtube: ytsource.NewAdapter(c, ytsource.Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 1})}
+	_, err = steps.youtubeRecent(context.Background(), StepInput{})
+	var se *StepError
+	if !errors.As(err, &se) || se.Category != ErrDependency || !se.Retryable || requests != 3 {
+		t.Fatalf("err=%#v requests=%d", err, requests)
 	}
 }

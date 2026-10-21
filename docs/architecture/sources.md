@@ -67,6 +67,18 @@ metadata distinguishes successful `inspected` checks from `detailRequested`
 attempts. Historical windows
 do not write this incremental metadata.
 
+The public RSS feed returns intermittent HTTP 5xx responses that clear within
+seconds, so the feed request alone is repeated up to two more times after an
+upstream 5xx (`youtube_upstream_5xx`) or a connection failure
+(`youtube_unavailable`), waiting 0.5 and then 1.5 seconds. Each try keeps the
+10-second request timeout, and cancellation stops the wait. Rate limiting
+(`youtube_rate_limited`), other 4xx responses (`youtube_http_error`), timeouts,
+redirects, and oversized bodies are never repeated. Streams and watch pages are
+requested once; their 5xx responses record `youtube_upstream_5xx`. When the feed
+still fails, the step ends as retryable `dependency_unavailable` (or
+`timeout`/`rate_limited`) without writing, so existing video and event snapshots
+remain.
+
 Video thumbnails are registered and linked to their rows, then the bounded media
 stage downloads pending files from YouTube's `*.ytimg.com` thumbnail CDN
 subdomains (including `i.ytimg.com` and its numbered hosts).

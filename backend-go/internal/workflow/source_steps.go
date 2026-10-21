@@ -124,7 +124,7 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 				category = ErrTimeout
 			case "youtube_rate_limited":
 				category = ErrRateLimited
-			case "youtube_unavailable", "youtube_http_error":
+			case "youtube_unavailable", "youtube_upstream_5xx", "youtube_http_error":
 				category = ErrDependency
 			}
 		}
