@@ -30,6 +30,13 @@ const groups = {
     "ci-frontend": "Type-check and build the frontend, then run its tests",
     check: "Run installed-dependency checks and local API smoke",
   },
+  "Dependency audit": {
+    audit: "Run every dependency advisory check (queries live databases)",
+    "npm-audit-production": "Audit locked production npm dependencies",
+    "npm-audit": "Audit the full locked npm dependency tree",
+    "go-audit":
+      "Check reachable Go module and standard library vulnerabilities",
+  },
   "Docker and full CI": {
     "docker-build": "Build the Go image DOCKER_IMAGE (default kano-navi:ci)",
     "production-smoke": "Check the built image in a disposable container",

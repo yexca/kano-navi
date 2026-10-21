@@ -31,6 +31,7 @@ CI/tooling work, and pre-commit validation.
 | Full locally portable Actions validation              | make ci-local         | Locked dependencies and Docker |
 | Install then full validation                          | make ci               | Node/npm, Go and Docker        |
 | Manual privacy review before handoff or commit        | make sensitive-check  | Node and Git                   |
+| Dependency advisories (live npm and Go databases)     | make audit            | Node/npm, Go and network       |
 
 make install uses npm ci. Narrow targets and ci-local do not reinstall.
 make ci installs first, then runs ci-local. Both full targets enforce image
@@ -158,6 +159,15 @@ and Docker image check names are preserved. Release calls this workflow rather
 than maintaining another list of check commands, then grants write permissions
 only to publication jobs. Only normal CI runs cancel superseded runs; release
 publication is serialized per tag.
+
+The Dependency audit workflow runs daily at 03:17 UTC and on manual dispatch.
+Its npm job runs make npm-audit-production and then make npm-audit, which read
+only package-lock.json and install nothing. Its Go job runs make go-audit:
+govulncheck, pinned by GOVULNCHECK_VERSION, reports vulnerabilities that the
+backend actually reaches in its modules and in the standard library of the
+go.mod toolchain that the release image also uses. A new advisory fails the
+run without changing the repository. These targets query live advisory
+databases, so they stay outside check and ci and never gate a pull request.
 
 ## Related Docs
 

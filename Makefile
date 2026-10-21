@@ -7,6 +7,7 @@ DOCKER ?= docker
 DOCKER_BUILD ?= $(DOCKER) build
 DOCKER_BUILD_ARGS ?=
 DOCKER_IMAGE ?= kano-navi:ci
+GOVULNCHECK_VERSION ?= v1.8.0
 GO_BINARY ?= backend-go/bin/kano-go$(if $(filter Windows_NT,$(OS)),.exe,)
 # package.json owns the version; Go builds receive it at link time.
 APP_VERSION = $(shell $(NODE) -p "require('./package.json').version")
@@ -15,6 +16,7 @@ GO_LDFLAGS = -X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version
 .PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-test
 .PHONY: go-build go-start go-docker-build
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-frontend
+.PHONY: audit npm-audit npm-audit-production go-audit
 .PHONY: smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
 help:
@@ -90,6 +92,18 @@ test-frontend:
 
 smoke:
 	$(NODE) scripts/smoke.ts
+
+# Advisory checks query live databases, so they stay outside check and ci.
+audit: npm-audit-production npm-audit go-audit
+
+npm-audit-production:
+	$(NPM) audit --omit=dev
+
+npm-audit:
+	$(NPM) audit
+
+go-audit:
+	$(GO) -C backend-go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 docker-build:
 	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -t $(DOCKER_IMAGE) .

@@ -1,0 +1,54 @@
+name: Dependency audit
+
+on:
+  schedule:
+    # Daily at 03:17 UTC (12:17 Japan time), off the top of the hour.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kano-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  npm:
+    name: npm advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.19.0"
+      # npm audit reads package-lock.json; no installation or scripts run.
+      - name: Audit the production dependencies
+        run: make npm-audit-production
+      - name: Audit the full locked dependency tree
+        if: ${{ !cancelled() }}
+        run: make npm-audit
+
+  go:
+    name: Go vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # The go.mod version matches the release image, so standard library
+      # findings describe the shipped toolchain.
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+      - name: Check reachable vulnerabilities in modules and the standard library
+        run: make go-audit
