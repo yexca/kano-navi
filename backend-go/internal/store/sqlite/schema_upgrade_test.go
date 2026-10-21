@@ -87,7 +87,7 @@ func TestStandaloneUpgradesOlderSnapshotAdditively(t *testing.T) {
 		`SELECT account_handle FROM posts WHERE id='synthetic-post'`:                                                             "synthetic_handle",
 		`SELECT text FROM posts WHERE id='synthetic-post'`:                                                                       "retained",
 		`SELECT max_retries FROM llm_providers WHERE id='synthetic'`:                                                             "2",
-		`SELECT group_concat(route,',') FROM (SELECT route FROM llm_route_targets WHERE provider_id='synthetic' ORDER BY route)`: "schedule_board,schedule_message,schedule_vision",
+		`SELECT group_concat(route,',') FROM (SELECT route FROM llm_route_targets WHERE provider_id='synthetic' ORDER BY route)`: "schedule",
 		`SELECT model_id||'/'||origin FROM llm_models WHERE provider_id='synthetic'`:                                             "synthetic-model/legacy",
 		`SELECT value FROM app_settings WHERE key='llm_route_targets_migrated'`:                                                  "1",
 		`SELECT title FROM resources WHERE id=9`:                                                                                 "official site",
@@ -112,8 +112,54 @@ func TestStandaloneUpgradesOlderSnapshotAdditively(t *testing.T) {
 	if again := query(`SELECT value FROM app_settings WHERE key='dashboard_revision'`); again != revision {
 		t.Fatalf("idempotent start changed the revision: %s -> %s", revision, again)
 	}
-	if count := query(`SELECT COUNT(*) FROM llm_route_targets`); count != "3" {
+	if count := query(`SELECT COUNT(*) FROM llm_route_targets`); count != "1" {
 		t.Fatalf("idempotent start duplicated routes: %s", count)
+	}
+}
+
+func TestStandaloneMergesStageRoutesIntoOneQueue(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "snapshot.sqlite")
+	s, err := OpenStandalone(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const stamp = "2026-03-01T00:00:00.000Z"
+	for _, statement := range []string{
+		`INSERT INTO llm_providers(id,name,base_url,model,created_at,updated_at) VALUES('alpha','Alpha','https://alpha.example.test/v1','a-1','` + stamp + `','` + stamp + `')`,
+		`INSERT INTO llm_providers(id,name,base_url,model,created_at,updated_at) VALUES('beta','Beta','https://beta.example.test/v1','b-1','` + stamp + `','` + stamp + `')`,
+		`INSERT INTO llm_route_targets(route,provider_id,model_id,priority,created_at,updated_at) VALUES
+			('schedule_vision','alpha','',0,'` + stamp + `','` + stamp + `'),
+			('schedule_board','beta','b-vision',0,'` + stamp + `','` + stamp + `'),
+			('schedule_board','alpha','',1,'` + stamp + `','` + stamp + `'),
+			('schedule_message','beta','',0,'` + stamp + `','` + stamp + `')`,
+	} {
+		if _, err = s.db.Exec(statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+	s.Close()
+	queue := func() string {
+		t.Helper()
+		s, err := OpenStandalone(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		var got sql.NullString
+		if err = s.db.QueryRow(`SELECT group_concat(route||':'||provider_id||'/'||model_id||':'||priority,',') FROM
+			(SELECT * FROM llm_route_targets ORDER BY route,priority)`).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		return got.String
+	}
+	// Message, then board, then vision; a repeated provider/model pair keeps
+	// its first position.
+	want := "schedule:beta/:0,schedule:beta/b-vision:1,schedule:alpha/:2"
+	if got := queue(); got != want {
+		t.Fatalf("merged queue = %q, want %q", got, want)
+	}
+	if got := queue(); got != want {
+		t.Fatalf("second start changed the queue: %q", got)
 	}
 }
 

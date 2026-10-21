@@ -120,11 +120,6 @@
       "予定"
     ],
     "providers": ["p-text", "p-vision", "p-anth", "p-chat"],
-    "providerOrders": {
-      "schedule_message": ["p-text", "p-vision", "p-anth", "p-chat"],
-      "schedule_board": ["p-text", "p-vision", "p-anth", "p-chat"],
-      "schedule_vision": ["p-text", "p-vision", "p-anth", "p-chat"]
-    },
     "assetVerification": {
       "attempted": 3,
       "success": 2,
@@ -376,11 +371,6 @@
       "予定"
     ],
     "providers": ["p-text", "p-vision", "p-anth", "p-chat"],
-    "providerOrders": {
-      "schedule_message": ["p-text", "p-vision", "p-anth", "p-chat"],
-      "schedule_board": ["p-text", "p-vision", "p-anth", "p-chat"],
-      "schedule_vision": ["p-text", "p-vision", "p-anth", "p-chat"]
-    },
     "assetVerification": {
       "attempted": 1,
       "success": 0,

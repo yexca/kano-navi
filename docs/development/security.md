@@ -19,7 +19,7 @@
 
 The model boundary is opt-in. Matching public schedule-post text and ready
 cached post images are sent only to the ordered, administrator-configured
-provider route. OpenAI Responses, Chat Completions, and Anthropic Messages are
+model queue. OpenAI Responses, Chat Completions, and Anthropic Messages are
 supported. Every provider request has a timeout, bounded responses/retries, and redirect
 blocking; a failed provider is skipped in favor of the next configured one.
 Provider keys are encrypted with the `LLM_SECRETS_KEY` master key before they

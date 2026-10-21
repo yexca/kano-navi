@@ -143,9 +143,7 @@ func (m *Module) AdminRoutes() []httpx.Route {
 		{Method: http.MethodPost, Path: "/llm/providers/{id}/models", Handler: m.guard(id(m.postModels))},
 		{Method: http.MethodPut, Path: "/llm/providers/{id}/models", Handler: m.guard(id(m.putModel))},
 		{Method: http.MethodPost, Path: "/llm/providers/{id}/models/remove", Handler: m.guard(id(m.removeModels))},
-		{Method: http.MethodPut, Path: "/llm/routes/{route}", Handler: m.guard(func(w http.ResponseWriter, r *http.Request) {
-			m.putRoute(r.PathValue("route"))(w, r)
-		})},
+		{Method: http.MethodPut, Path: "/llm/queue", Handler: m.guard(m.putQueue)},
 		{Method: http.MethodPut, Path: "/videos/featured", Handler: m.guard(m.putFeatured)},
 	}
 }
@@ -298,34 +296,11 @@ func (m *Module) putFeatured(w http.ResponseWriter, r *http.Request) {
 
 // --- catalog ----------------------------------------------------------------
 
-type routeState struct {
-	// Targets is the effective order extraction uses; Configured is the
-	// operator's saved list, which is empty while a fallback applies.
-	Targets    []RouteTarget `json:"targets"`
-	Configured []RouteTarget `json:"configured"`
-}
-
 type llmResponse struct {
-	Providers []Provider           `json:"providers"`
-	Models    []Model              `json:"models"`
-	Routes    RouteMap[routeState] `json:"routes"`
-	ModelTags []string             `json:"modelTags"`
-}
-
-func routesPayload(ctx context.Context, db Querier) (RouteMap[routeState], error) {
-	var routes RouteMap[routeState]
-	effective, err := ScheduleRouteTargets(ctx, db)
-	if err != nil {
-		return routes, err
-	}
-	configured, err := configuredRouteTargets(ctx, db)
-	if err != nil {
-		return routes, err
-	}
-	routes.Vision = routeState{Targets: effective.Vision, Configured: configured.Vision}
-	routes.Message = routeState{Targets: effective.Message, Configured: configured.Message}
-	routes.Board = routeState{Targets: effective.Board, Configured: configured.Board}
-	return routes, nil
+	Providers []Provider    `json:"providers"`
+	Models    []Model       `json:"models"`
+	Queue     []RouteTarget `json:"queue"`
+	ModelTags []string      `json:"modelTags"`
 }
 
 func (m *Module) getLLM(w http.ResponseWriter, r *http.Request) {
@@ -334,7 +309,7 @@ func (m *Module) getLLM(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if response.Providers, err = ListProviders(ctx, m.db); err == nil {
 		if response.Models, err = ListModels(ctx, m.db, ""); err == nil {
-			response.Routes, err = routesPayload(ctx, m.db)
+			response.Queue, err = QueueTargets(ctx, m.db)
 		}
 	}
 	if err != nil {
@@ -362,18 +337,12 @@ func (m *Module) postProvider(w http.ResponseWriter, r *http.Request) {
 		if provider, err = m.upsertProvider(ctx, tx, input); err != nil {
 			return err
 		}
-		// Legacy clients create a provider with one model and expect it to
-		// join every route. Providers without a default model are routed
-		// explicitly from the detection settings.
+		// A provider created with a default model joins the end of the
+		// queue. Providers without one are queued explicitly by the operator.
 		if provider == nil || provider.Model == "" {
 			return nil
 		}
-		for _, route := range []string{RouteVision, RouteMessage, RouteBoard} {
-			if err := m.appendRouteProvider(ctx, tx, route, provider.ID); err != nil {
-				return err
-			}
-		}
-		return nil
+		return m.appendQueueProvider(ctx, tx, provider.ID)
 	})
 	if err != nil {
 		m.fail(w, err)
@@ -774,37 +743,31 @@ func (m *Module) removeModels(id string) handler {
 	}
 }
 
-// --- routes -----------------------------------------------------------------
+// --- queue ------------------------------------------------------------------
 
-func (m *Module) putRoute(name string) handler {
-	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := m.body(w, r)
-		if err != nil {
-			m.fail(w, err)
-			return
-		}
-		ctx := r.Context()
-		var routes RouteMap[routeState]
-		err = m.write(ctx, func(tx *sql.Tx) error {
-			route, routeErr := validProviderRoute(name)
-			if routeErr != nil {
-				return routeErr
-			}
-			targets, targetErr := routeTargetsInput(body["targets"])
-			if targetErr != nil {
-				return targetErr
-			}
-			if err := m.setRouteTargets(ctx, tx, route, targets); err != nil {
-				return err
-			}
-			var payloadErr error
-			routes, payloadErr = routesPayload(ctx, tx)
-			return payloadErr
-		})
-		if err != nil {
-			m.fail(w, err)
-			return
-		}
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{"routes": routes})
+func (m *Module) putQueue(w http.ResponseWriter, r *http.Request) {
+	body, err := m.body(w, r)
+	if err != nil {
+		m.fail(w, err)
+		return
 	}
+	ctx := r.Context()
+	var queue []RouteTarget
+	err = m.write(ctx, func(tx *sql.Tx) error {
+		targets, targetErr := routeTargetsInput(body["targets"])
+		if targetErr != nil {
+			return targetErr
+		}
+		if err := m.setQueue(ctx, tx, targets); err != nil {
+			return err
+		}
+		var payloadErr error
+		queue, payloadErr = QueueTargets(ctx, tx)
+		return payloadErr
+	})
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"queue": queue})
 }

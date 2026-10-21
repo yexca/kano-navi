@@ -65,8 +65,8 @@ does the same with the built bundle. Restart after changing Go source.
    transaction: missing tables, columns and indexes are added from the embedded
    schema, followed by the documented backfills (schedule periods, post account
    handles, focus video IDs, provider capabilities and retries, the one-time
-   route-target copy, default catalog models, and the message/board route
-   defaults). A snapshot whose `events` table predates event sources is rebuilt
+   route-target copy, default catalog models, and the merge of per-stage
+   routes into the single model queue). A snapshot whose `events` table predates event sources is rebuilt
    in place: every row keeps its ID, gains its Japan calendar date and becomes
    its own source evidence, and events curated from X are locked. Nothing else
    is dropped or cleared. A database without the core tables is refused

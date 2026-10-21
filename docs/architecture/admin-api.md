@@ -209,7 +209,7 @@ Changing the featured video advances the dashboard revision.
 | ---------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------- |
 | `GET /extraction`                        |                                                                                            | extraction settings                               |
 | `PUT /extraction`                        | any subset of `{keywordEnabled, visionEnabled, messageEnabled, messageAllPosts, keywords}` | extraction settings                               |
-| `GET /llm`                               |                                                                                            | `{providers, models, routes, modelTags}`          |
+| `GET /llm`                               |                                                                                            | `{providers, models, queue, modelTags}`           |
 | `POST /llm/providers`                    | provider fields                                                                            | `201 {provider}`                                  |
 | `PUT /llm/providers/{id}`                | provider fields                                                                            | `{provider}`                                      |
 | `DELETE /llm/providers/{id}`             |                                                                                            | `204`                                             |
@@ -218,15 +218,15 @@ Changing the featured video advances the dashboard revision.
 | `POST /llm/providers/{id}/models`        | `{models, origin?}`                                                                        | `201 {provider, models}`                          |
 | `PUT /llm/providers/{id}/models`         | one model `{id, ...}`                                                                      | `{provider, model, models}`                       |
 | `POST /llm/providers/{id}/models/remove` | `{ids}`                                                                                    | `{provider, models, removed}`                     |
-| `PUT /llm/routes/{route}`                | `{targets: [{providerId, modelId}]}`                                                       | `{routes}`                                        |
+| `PUT /llm/queue`                         | `{targets: [{providerId, modelId}]}`                                                       | `{queue}`                                         |
 
 Extraction settings are `{enabled, keywordEnabled, visionEnabled,
 messageEnabled, messageAllPosts, keywords}`; `enabled` is derived: the message
 stage alone, or keyword candidates plus boards. `messageAllPosts` makes the
-message stage select every post instead of only heuristic matches. `routes`
-maps each route (`schedule_vision`, `schedule_message`,
-`schedule_board`) to `{targets, configured}`:
-the effective ordered targets and the operator's saved list. Model IDs may
+message stage select every post instead of only heuristic matches. `queue` is
+the single ordered `[{providerId, modelId}]` list every extraction stage draws
+from; an empty `modelId` follows the provider default, and a save replaces the
+whole list. Model IDs may
 contain `/`, so model writes name the model in the body. Provider responses
 report `apiKeyConfigured` only; keys are write-only.
 

@@ -164,11 +164,12 @@ func TestParityWithTypeScriptExtractor(t *testing.T) {
 	}
 
 	f := newFixture(t)
-	f.addProvider("p-resp", protocolResponses, "https://provider.example.test/v1", "model-a", `["text","image"]`)
+	// The recorded fixture used separate message and board routes; post-b's
+	// request and extraction row were rewritten for the shared queue, where it
+	// goes to p-chat like the board posts.
 	f.addProvider("p-chat", protocolChat, "https://chat.example.test", "model-b", `["text","image"]`)
 	f.addProvider("p-anth", protocolAnthropic, "https://anthropic.example.test/v1/", "model-c", `["text","image"]`)
-	f.route(routeMessage, "p-resp")
-	f.route(routeBoard, "p-chat", "p-anth")
+	f.queue("p-chat", "p-anth")
 	for _, item := range []struct{ id, label, text, publishedAt string }{
 		{"post-a", "SCHEDULE / 日程", "今週のスケジュール 😀 です\n5/3 21:00 歌枠 <b>&\u2028", "2026-04-28T03:00:00.000Z"},
 		{"post-c", "", "予定していた5/3の配信は中止です", "2026-04-27T03:00:00.000Z"},
@@ -183,14 +184,14 @@ func TestParityWithTypeScriptExtractor(t *testing.T) {
 			if strings.Contains(request.body, "中止") {
 				return http.StatusInternalServerError, `{"error":"synthetic"}`
 			}
+			if strings.Contains(request.body, "明日") {
+				return http.StatusOK, chatReply(replies["post-b"])
+			}
 			return http.StatusOK, chatReply(replies["post-a"])
 		case strings.Contains(request.url, "anthropic.example.test"):
 			return http.StatusOK, `{"content":[{"type":"text","text":"x"},{"type":"tool_use","name":"kano_schedule_extraction","input":` + replies["post-c"] + `}]}`
 		}
-		return http.StatusOK, stringify(obj("output", []any{
-			obj("type", "reasoning"),
-			obj("type", "message", "content", []any{obj("type", "output_text", "text", replies["post-b"])}),
-		}))
+		return http.StatusNotFound, `{}`
 	}
 
 	first := f.scan()
@@ -297,7 +298,7 @@ func TestParityWithTypeScriptImagePaths(t *testing.T) {
 	f.addProvider("p-vision", protocolResponses, "https://provider.example.test/v1", "model-v", `["text","image"]`)
 	f.addProvider("p-anth", protocolAnthropic, "https://anthropic.example.test", "model-c", `["text","image"]`)
 	f.addProvider("p-chat", protocolChat, "https://vision-chat.example.test/v1", "model-w", `["image"]`)
-	f.route(routeVision, "p-text", "p-vision", "p-anth", "p-chat")
+	f.queue("p-text", "p-vision", "p-anth", "p-chat")
 	f.exec(`INSERT INTO app_settings (key, value, updated_at) VALUES ('schedule_message_enabled', '0', ?)`, testTimestamp)
 	for _, item := range []struct {
 		id, postType, label, text, publishedAt string

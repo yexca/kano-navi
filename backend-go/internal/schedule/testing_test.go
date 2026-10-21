@@ -146,11 +146,12 @@ func (f *fixture) addProvider(id, protocol, baseURL, model, capabilities string)
 		id, id, protocol, baseURL, model, vision, capabilities, ciphertext, testTimestamp, testTimestamp)
 }
 
-func (f *fixture) route(route string, providerIDs ...string) {
+// queue appends provider-default targets to the model priority queue.
+func (f *fixture) queue(providerIDs ...string) {
 	f.t.Helper()
-	for priority, id := range providerIDs {
+	for _, id := range providerIDs {
 		f.exec(`INSERT INTO llm_route_targets (route, provider_id, model_id, priority, created_at, updated_at)
-			VALUES (?, ?, '', ?, ?, ?)`, route, id, priority, testTimestamp, testTimestamp)
+			VALUES (?, ?, '', (SELECT COUNT(*) FROM llm_route_targets WHERE route = ?), ?, ?)`, routeQueue, id, routeQueue, testTimestamp, testTimestamp)
 	}
 }
 

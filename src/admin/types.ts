@@ -290,17 +290,11 @@ export interface RouteTarget {
   modelId: string
 }
 
-export type RouteId = "schedule_board" | "schedule_message" | "schedule_vision"
-
-export interface RouteState {
-  targets: RouteTarget[]
-  configured: RouteTarget[]
-}
-
 export interface LlmCatalog {
   providers: Provider[]
   models: Model[]
-  routes: Record<RouteId, RouteState>
+  /** The single model priority queue every extraction stage draws from. */
+  queue: RouteTarget[]
   modelTags: string[]
 }
 

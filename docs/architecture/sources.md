@@ -146,13 +146,13 @@ poll.
 Schedule extraction has two independent candidate paths:
 
 1. The schedule-board path uses the admin-configurable keyword list to select
-   posts that look like a schedule image or board. It uses the
-   `schedule_board` provider route.
+   posts that look like a schedule image or board; its posts are recorded with
+   the `schedule_board` detection route.
 2. The single-message path applies a cheap local date/time and scheduling-verb
    heuristic to ordinary X messages, including messages without a configured
-   keyword. Suspected messages are sent to the `schedule_message` provider
-   route, which first classifies the post as `schedule`, `not_schedule`, or
-   `uncertain` before extracting events. With `schedule_message_all_posts`
+   keyword. Suspected messages are recorded with the `schedule_message`
+   detection route, and the model first classifies the post as `schedule`,
+   `not_schedule`, or `uncertain` before extracting events. With `schedule_message_all_posts`
    enabled, the path skips the heuristic and selects every X post with text or
    images; each new post then costs one model call, still within the shared
    scan limit.
@@ -168,13 +168,12 @@ breaker. The shared limit counts candidates requiring work; unchanged fingerprin
 cache hits do not consume it. Failures and blocked candidates move behind older
 unattempted work on later scans. Manual reprocess requests still run first. A post selected by the
 board path is not sent a second time through the message path in the same scan.
-The legacy `schedule_vision` route remains available for older API clients and
-is used as the compatibility fallback when a new route has no explicit order.
 
-Each route is an ordered list of targets: a provider plus one of its catalog
+Both paths, and the schedule-image check below, draw from one model priority
+queue: an ordered list of targets, each a provider plus one of its catalog
 models. An empty model ID means "the provider's default model" (`llm_providers.model`)
 and uses the provider-level capabilities; this is how legacy provider-only
-routes were migrated and how a route target without a model is saved. The default model's catalog tags and the provider capability
+routes were migrated and how a queue target without a model is saved. The default model's catalog tags and the provider capability
 columns are kept identical whichever side is edited. Target selection follows
 the original post modality. Text-only input requires `text`; image-only input
 requires `image`; mixed input requires a model with both tags. Only ready cached images are sent to the model. A post that
@@ -182,7 +181,8 @@ declares an image but whose cache is not ready is recorded as `media_pending`
 and is not silently reduced to text-only input. Each provider uses OpenAI
 Responses, Chat Completions, or Anthropic Messages, receives at most three total calls (one
 initial request plus two retries), and then yields to the next enabled, keyed,
-capability-compatible provider in that route's priority order. The persisted
+capability-compatible target in queue order; targets whose capabilities do
+not fit the input are skipped without a call. The persisted
 `max_retries` field is retained for old clients and migrated to this fixed
 policy; it is not a cost-control override.
 
@@ -194,7 +194,7 @@ action the server requests `GET <baseUrl>/models` with the stored key, a
 timeout, `redirect: "error"`, and a 4 MB response limit; it accepts OpenAI-style
 `{ data: [{ id }] }`, `{ models: [...] }`, or bare arrays. Upstream bodies and
 errors are reduced to fixed messages. Tags for newly added models are suggested
-from the model ID and stay editable. Removing a model removes its route
+from the model ID and stay editable. Removing a model removes its queue
 targets; removing the default model clears `llm_providers.model`. The private
 and loopback address guard for provider URLs applies to model discovery too.
 
@@ -235,14 +235,15 @@ Every stored post has an LLM processing state. Failed, skipped, and uncertain
 attempts remain visible to operators, and `POST /api/admin/posts/:id/reprocess`
 queues a forced pass that bypasses the successful-result cache. The automatic
 scan consumes queued posts even when they no longer match the current keyword
-heuristic; a missing provider or route target or a pending image keeps the queue request
+heuristic; a missing provider or queue target or a pending image keeps the reprocess request
 pending,
 while a provider failure consumes it. Queued posts run before keyword
-candidates within the shared scan limit. They use the route the operator
-requested; without one, a post that a keyword path also selected keeps that
-route, image posts use `schedule_board`, and text posts use `schedule_message`.
+candidates within the shared scan limit. They use the detection route the
+operator requested; without one, a post that a keyword path also selected
+keeps that route, image posts use `schedule_board`, and text posts use
+`schedule_message`. The route chooses the prompt path, not the models.
 
-Providers and model routes are configured explicitly in `/admin`; initialization
+Providers and the model queue are configured explicitly in `/admin`; initialization
 does not create or enable an OpenAI provider. The legacy model preference comes
 from `app_settings.llm_model`. Provider API keys are encrypted with
 `LLM_SECRETS_KEY`; ciphertext is never returned by an API response or written
@@ -297,7 +298,8 @@ A schedule image (`assets.kind = schedule`) is public only after two gates:
    input, because the looser post classifier labels any `配信予定` post as
    `SCHEDULE / 日程`. The configurable extraction keywords do not promote images.
 2. The automatic scan sends each unreviewed candidate's ready cached image,
-   without the post text, to the `schedule_board` route and records
+   without the post text, to the first image-capable targets of the model
+   queue and records
    `schedule`, `not_schedule`, or `uncertain` in `schedule_asset_reviews`. A
    candidate whose source post no longer passes gate 1 (written by an older
    sync) is recorded as `skipped` / `source_not_board` without a model call. A

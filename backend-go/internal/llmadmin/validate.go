@@ -331,17 +331,6 @@ func providerCapabilities(value any, existing *Provider) ([]string, error) {
 	return capabilities, nil
 }
 
-func validProviderRoute(value any) (string, error) {
-	route := RouteVision
-	if jsTruthy(value) {
-		route = jsString(value)
-	}
-	if !slices.Contains(scheduleRoutes, route) {
-		return "", httpx.Invalid("route is invalid")
-	}
-	return route, nil
-}
-
 func integerField(value any, name string, minimum, maximum, fallback int64) (int64, error) {
 	if value == nil || value == "" {
 		return fallback, nil

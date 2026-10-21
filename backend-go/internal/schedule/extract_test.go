@@ -21,7 +21,7 @@ func messageFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := newFixture(t)
 	f.addProvider("p-main", protocolChat, "https://provider.example.test/v1", "model-a", `["text"]`)
-	f.route(routeMessage, "p-main")
+	f.queue("p-main")
 	f.addPost("post-1", "", "明日 21時から歌枠配信します", "2026-04-28T03:00:00.000Z", "")
 	f.provider.respond = func(recordedRequest) (int, string) {
 		return http.StatusOK, chatReply(scheduleReply(songTitle, songDate, songClock, "scheduled"))
@@ -260,7 +260,7 @@ func TestProviderFailureKeepsEventsAndRecordsFailure(t *testing.T) {
 	}
 }
 
-func TestProvidersAreTriedInRouteOrder(t *testing.T) {
+func TestProvidersAreTriedInQueueOrder(t *testing.T) {
 	f := newFixture(t)
 	f.addProvider("p-third", protocolResponses, "https://third.example.test/v1", "model-3", `["text"]`)
 	f.addProvider("p-first", protocolChat, "https://first.example.test/v1", "model-1", `["text"]`)
@@ -268,7 +268,7 @@ func TestProvidersAreTriedInRouteOrder(t *testing.T) {
 	f.addProvider("p-image", protocolChat, "https://image.example.test/v1", "model-i", `["image"]`)
 	f.addProvider("p-off", protocolChat, "https://off.example.test/v1", "model-o", `["text"]`)
 	f.exec(`UPDATE llm_providers SET enabled=0 WHERE id='p-off'`)
-	f.route(routeMessage, "p-off", "p-image", "p-first", "p-second", "p-third")
+	f.queue("p-off", "p-image", "p-first", "p-second", "p-third")
 	f.addPost("post-1", "", "明日 21時から歌枠配信します", "2026-04-28T03:00:00.000Z", "")
 	f.provider.respond = func(request recordedRequest) (int, string) {
 		if strings.Contains(request.url, "second.example.test") {
@@ -297,7 +297,7 @@ func TestProvidersAreTriedInRouteOrder(t *testing.T) {
 	// The catalog model of a target replaces the provider default.
 	f.exec(`DELETE FROM llm_route_targets`)
 	f.exec(`INSERT INTO llm_models (provider_id, model_id, tags_json, enabled, created_at, updated_at) VALUES ('p-second', 'model-catalog', '["text","reasoning"]', 1, ?, ?)`, testTimestamp, testTimestamp)
-	f.exec(`INSERT INTO llm_route_targets (route, provider_id, model_id, priority, created_at, updated_at) VALUES (?, 'p-second', 'model-catalog', 0, ?, ?)`, routeMessage, testTimestamp, testTimestamp)
+	f.exec(`INSERT INTO llm_route_targets (route, provider_id, model_id, priority, created_at, updated_at) VALUES (?, 'p-second', 'model-catalog', 0, ?, ?)`, routeQueue, testTimestamp, testTimestamp)
 	f.scan()
 	last := f.provider.requests[len(f.provider.requests)-1]
 	if !strings.Contains(last.body, `"model":"model-catalog"`) {
@@ -356,7 +356,7 @@ func boardFixture(t *testing.T) (*fixture, string) {
 	t.Helper()
 	f := newFixture(t)
 	f.addProvider("p-vision", protocolResponses, "https://provider.example.test/v1", "model-v", `["text","image"]`)
-	f.route(routeBoard, "p-vision")
+	f.queue("p-vision")
 	// Only schedule images are under test: no post matches a keyword.
 	f.exec(`INSERT INTO app_settings (key, value, updated_at) VALUES ('schedule_keywords', '["unmatched-keyword"]', ?)`, testTimestamp)
 	f.exec(`INSERT INTO app_settings (key, value, updated_at) VALUES ('schedule_message_enabled', '0', ?)`, testTimestamp)
@@ -572,13 +572,13 @@ func TestReprocessRequestedPostIsRerun(t *testing.T) {
 		t.Errorf("post state = %q", got)
 	}
 
-	// A request forces a new provider call although the fingerprint is cached,
-	// and the operator's route choice is honoured.
+	// The operator's route choice is honoured; the board path draws from the
+	// same queue, so the first capable target takes it.
 	f.addProvider("p-board", protocolChat, "https://board.example.test/v1", "model-b", `["text"]`)
-	f.route(routeBoard, "p-board")
+	f.queue("p-board")
 	f.exec(`UPDATE post_llm_states SET reprocess_requested=1, route=? WHERE post_id='post-1'`, routeBoard)
 	f.scan()
-	if got := f.provider.hosts(); len(got) != 2 || got[1] != "board.example.test" {
+	if got := f.provider.hosts(); len(got) != 2 || got[1] != got[0] {
 		t.Errorf("forced rerun requests = %v", got)
 	}
 	if got := f.text(`SELECT status || '|' || route || '|' || reprocess_requested FROM post_llm_states`); got != "success|schedule_board|0" {
@@ -599,7 +599,7 @@ func TestPostsWithoutUsableInputAreSkipped(t *testing.T) {
 	t.Run("pending image is not downgraded to text", func(t *testing.T) {
 		f := newFixture(t)
 		f.addProvider("p-vision", protocolChat, "https://provider.example.test/v1", "model-v", `["text","image"]`)
-		f.route(routeVision, "p-vision")
+		f.queue("p-vision")
 		post(f)
 		result := f.scan()
 		if f.provider.count() != 0 || countOf(result.Counts, "skipped") != 1 || f.text(state) != "skipped|media_pending" {
@@ -609,7 +609,7 @@ func TestPostsWithoutUsableInputAreSkipped(t *testing.T) {
 	t.Run("text-only provider cannot take an image post", func(t *testing.T) {
 		f := newFixture(t)
 		f.addProvider("p-text", protocolChat, "https://provider.example.test/v1", "model-t", `["text"]`)
-		f.route(routeVision, "p-text")
+		f.queue("p-text")
 		post(f)
 		f.exec(`DELETE FROM media_links`)
 		f.exec(`DELETE FROM media_assets`)

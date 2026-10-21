@@ -89,7 +89,7 @@ the schedule page curates entries with durable locks; runs and workflows start
 syncs or save step lists on a server-side timer; sources run recent or
 historical fetch windows and YouTube push; content covers posts, the featured
 video and profile media; and models & detection holds the extraction stages,
-an ordered model list per route and a provider catalog in the style of desktop
+one ordered model priority queue and a provider catalog in the style of desktop
 LLM clients (API host and key, fetched model list, capability tags). The public calendar labels
 automatic extraction and manual confirmation so visitors can distinguish their
 provenance. A `/mcp` integration endpoint

@@ -58,7 +58,7 @@ type Model struct {
 	UpdatedAt    string   `json:"updatedAt"`
 }
 
-// RouteTarget is one ordered model choice of a route. An empty ModelID
+// RouteTarget is one ordered model choice of the queue. An empty ModelID
 // follows the provider's default model.
 type RouteTarget struct {
 	ProviderID string `json:"providerId"`
@@ -237,8 +237,8 @@ func ListModels(ctx context.Context, db Querier, providerID string) ([]Model, er
 		ORDER BY provider_id ASC, model_id COLLATE NOCASE ASC`)
 }
 
-// RouteTargets returns the targets configured for exactly this route.
-func RouteTargets(ctx context.Context, db Querier, route string) ([]RouteTarget, error) {
+// QueueTargets returns the model priority queue in order.
+func QueueTargets(ctx context.Context, db Querier) ([]RouteTarget, error) {
 	return collect(ctx, db, func(scan scanner) (RouteTarget, error) {
 		var target RouteTarget
 		var model sql.NullString
@@ -247,78 +247,7 @@ func RouteTargets(ctx context.Context, db Querier, route string) ([]RouteTarget,
 		return target, err
 	}, `SELECT r.provider_id, r.model_id FROM llm_route_targets r
 		JOIN llm_providers p ON p.id = r.provider_id
-		WHERE r.route = ? ORDER BY r.priority ASC, r.provider_id ASC, r.model_id ASC`, route)
-}
-
-// ScheduleRouteTargets returns the effective targets per route: message and
-// board fall back to the vision route while they have none of their own.
-func ScheduleRouteTargets(ctx context.Context, db Querier) (RouteMap[[]RouteTarget], error) {
-	var out RouteMap[[]RouteTarget]
-	var err error
-	if out.Vision, err = RouteTargets(ctx, db, RouteVision); err != nil {
-		return out, err
-	}
-	if out.Message, err = RouteTargets(ctx, db, RouteMessage); err != nil {
-		return out, err
-	}
-	if out.Board, err = RouteTargets(ctx, db, RouteBoard); err != nil {
-		return out, err
-	}
-	if len(out.Message) == 0 {
-		out.Message = slices.Clone(out.Vision)
-	}
-	if len(out.Board) == 0 {
-		out.Board = slices.Clone(out.Vision)
-	}
-	return out, nil
-}
-
-func configuredRouteTargets(ctx context.Context, db Querier) (RouteMap[[]RouteTarget], error) {
-	var out RouteMap[[]RouteTarget]
-	var err error
-	if out.Message, err = RouteTargets(ctx, db, RouteMessage); err != nil {
-		return out, err
-	}
-	if out.Board, err = RouteTargets(ctx, db, RouteBoard); err != nil {
-		return out, err
-	}
-	out.Vision, err = RouteTargets(ctx, db, RouteVision)
-	return out, err
-}
-
-func routeProviders(ctx context.Context, db Querier, route string) ([]string, error) {
-	targets, err := RouteTargets(ctx, db, route)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(targets))
-	for _, target := range targets {
-		ids = append(ids, target.ProviderID)
-	}
-	return uniqueStrings(ids), nil
-}
-
-// ScheduleProviderOrders is the distinct provider order per route, kept for
-// the legacy provider-only admin API.
-func ScheduleProviderOrders(ctx context.Context, db Querier) (RouteMap[[]string], error) {
-	var out RouteMap[[]string]
-	var err error
-	if out.Vision, err = routeProviders(ctx, db, RouteVision); err != nil {
-		return out, err
-	}
-	if out.Message, err = routeProviders(ctx, db, RouteMessage); err != nil {
-		return out, err
-	}
-	if out.Board, err = routeProviders(ctx, db, RouteBoard); err != nil {
-		return out, err
-	}
-	if len(out.Message) == 0 {
-		out.Message = slices.Clone(out.Vision)
-	}
-	if len(out.Board) == 0 {
-		out.Board = slices.Clone(out.Vision)
-	}
-	return out, nil
+		WHERE r.route = ? ORDER BY r.priority ASC, r.provider_id ASC, r.model_id ASC`, QueueRoute)
 }
 
 func settingBoolean(value string, fallback bool) bool {
@@ -664,26 +593,24 @@ func (m *Module) deleteModels(ctx context.Context, db Querier, provider *Provide
 			}
 		}
 	}
-	for _, route := range scheduleRoutes {
-		targets, err := RouteTargets(ctx, db, route)
-		if err != nil {
-			return 0, err
-		}
-		if err = m.writeRouteTargets(ctx, db, route, targets); err != nil {
-			return 0, err
-		}
+	targets, err := QueueTargets(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+	if err = m.writeQueue(ctx, db, targets); err != nil {
+		return 0, err
 	}
 	return removed, nil
 }
 
-func (m *Module) writeRouteTargets(ctx context.Context, db Querier, route string, targets []RouteTarget) error {
+func (m *Module) writeQueue(ctx context.Context, db Querier, targets []RouteTarget) error {
 	timestamp := m.stamp()
-	if _, err := db.ExecContext(ctx, `DELETE FROM llm_route_targets WHERE route = ?`, route); err != nil {
+	if _, err := db.ExecContext(ctx, `DELETE FROM llm_route_targets WHERE route = ?`, QueueRoute); err != nil {
 		return err
 	}
 	for priority, target := range targets {
 		_, err := db.ExecContext(ctx, `INSERT INTO llm_route_targets (route, provider_id, model_id, priority, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?)`, route, target.ProviderID, target.ModelID, priority, timestamp, timestamp)
+			VALUES (?, ?, ?, ?, ?, ?)`, QueueRoute, target.ProviderID, target.ModelID, priority, timestamp, timestamp)
 		if err != nil {
 			return err
 		}
@@ -691,10 +618,10 @@ func (m *Module) writeRouteTargets(ctx context.Context, db Querier, route string
 	return nil
 }
 
-// setRouteTargets replaces a route's ordered targets. A target with an empty
-// model follows the provider default; any other model must be in the
-// provider's catalog. It must run inside a transaction.
-func (m *Module) setRouteTargets(ctx context.Context, db Querier, route string, targets []RouteTarget) error {
+// setQueue replaces the ordered queue. A target with an empty model follows
+// the provider default; any other model must be in the provider's catalog.
+// It must run inside a transaction.
+func (m *Module) setQueue(ctx context.Context, db Querier, targets []RouteTarget) error {
 	seen := map[RouteTarget]bool{}
 	normalized := make([]RouteTarget, 0, len(targets))
 	for _, target := range targets {
@@ -724,13 +651,13 @@ func (m *Module) setRouteTargets(ctx context.Context, db Querier, route string, 
 		seen[target] = true
 		normalized = append(normalized, target)
 	}
-	return m.writeRouteTargets(ctx, db, route, normalized)
+	return m.writeQueue(ctx, db, normalized)
 }
 
-// appendRouteProvider adds a provider-default target unless the provider is
-// already routed.
-func (m *Module) appendRouteProvider(ctx context.Context, db Querier, route, providerID string) error {
-	current, err := RouteTargets(ctx, db, route)
+// appendQueueProvider adds a provider-default target unless the provider is
+// already queued.
+func (m *Module) appendQueueProvider(ctx context.Context, db Querier, providerID string) error {
+	current, err := QueueTargets(ctx, db)
 	if err != nil {
 		return err
 	}
@@ -739,5 +666,5 @@ func (m *Module) appendRouteProvider(ctx context.Context, db Querier, route, pro
 			return nil
 		}
 	}
-	return m.setRouteTargets(ctx, db, route, append(current, RouteTarget{ProviderID: providerID}))
+	return m.setQueue(ctx, db, append(current, RouteTarget{ProviderID: providerID}))
 }

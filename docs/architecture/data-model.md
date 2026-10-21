@@ -12,30 +12,30 @@ and keeps external snapshots and LLM catalogs empty. Full legacy upgrades still
 belong to the TypeScript initializer. See
 [Go source workflows and media downloads](go-source-workflows.md).
 
-| Table                    | Purpose                                                                                                   |
-| ------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `profiles`               | Name, bio, avatar, banner, and official entry points                                                      |
-| `posts`                  | X posts, account source, publication time, engagement counts, and media                                   |
-| `events`                 | Unified schedules, provenance, confidence, manual locks, and tombstones                                   |
-| `event_sources`          | Source post/reservation identities attached to each event                                                 |
-| `videos`                 | Published YouTube videos and scheduled streams                                                            |
-| `focus`                  | The page's latest focus item and stable YouTube video ID                                                  |
-| `timeline`               | Person and activity timeline                                                                              |
-| `resources`              | X, YouTube, Wikipedia, and other resource links                                                           |
-| `assets`                 | Schedule images and their sources                                                                         |
-| `media_assets`           | Remote media identities, cache metadata, and fetch status                                                 |
-| `media_links`            | Links from cached media to posts, videos, profiles, and focus items                                       |
-| `sync_runs`              | Status, counts, error summaries, trigger, and asynchronous job identity                                   |
-| `sync_state`             | Durable per-account X and YouTube cursors                                                                 |
-| `app_settings`           | Model, schedule-extractor, X-account, Featured, and YouTube push settings (push secret sealed)            |
-| `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                            |
-| `post_llm_states`        | Per-post LLM status, last attempt, error, and reprocess queue state                                       |
-| `schedule_asset_reviews` | Per-schedule-image LLM verdict, skip reason (`no_image` for a URL-less row), and optional manual label    |
-| `llm_providers`          | OpenAI-compatible or Anthropic endpoints, Text/Image capabilities, health, and encrypted keys             |
-| `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)     |
-| `llm_route_targets`      | Ordered provider + model failover targets for `schedule_board`, `schedule_message`, and `schedule_vision` |
-| `llm_route_providers`    | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                   |
-| `workflows`              | Saved step selections, rolling source windows, timer settings, and last/next run metadata                 |
+| Table                    | Purpose                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `profiles`               | Name, bio, avatar, banner, and official entry points                                                   |
+| `posts`                  | X posts, account source, publication time, engagement counts, and media                                |
+| `events`                 | Unified schedules, provenance, confidence, manual locks, and tombstones                                |
+| `event_sources`          | Source post/reservation identities attached to each event                                              |
+| `videos`                 | Published YouTube videos and scheduled streams                                                         |
+| `focus`                  | The page's latest focus item and stable YouTube video ID                                               |
+| `timeline`               | Person and activity timeline                                                                           |
+| `resources`              | X, YouTube, Wikipedia, and other resource links                                                        |
+| `assets`                 | Schedule images and their sources                                                                      |
+| `media_assets`           | Remote media identities, cache metadata, and fetch status                                              |
+| `media_links`            | Links from cached media to posts, videos, profiles, and focus items                                    |
+| `sync_runs`              | Status, counts, error summaries, trigger, and asynchronous job identity                                |
+| `sync_state`             | Durable per-account X and YouTube cursors                                                              |
+| `app_settings`           | Model, schedule-extractor, X-account, Featured, and YouTube push settings (push secret sealed)         |
+| `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                         |
+| `post_llm_states`        | Per-post LLM status, last attempt, error, and reprocess queue state                                    |
+| `schedule_asset_reviews` | Per-schedule-image LLM verdict, skip reason (`no_image` for a URL-less row), and optional manual label |
+| `llm_providers`          | OpenAI-compatible or Anthropic endpoints, Text/Image capabilities, health, and encrypted keys          |
+| `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)  |
+| `llm_route_targets`      | The ordered provider + model failover queue (`route = 'schedule'`) shared by every extraction stage    |
+| `llm_route_providers`    | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                |
+| `workflows`              | Saved step selections, rolling source windows, timer settings, and last/next run metadata              |
 
 The API maps snake_case columns to camelCase and removes `raw_json`. The
 frontend must not depend on database fields that are not declared in the API
@@ -197,8 +197,11 @@ LLM providers store an explicit `text`/`image` capability array in
 to store Anthropic providers. The same capability and route rules apply to all
 protocols. The
 `vision_capable` field remains a derived migration field for old
-clients. The provider routes `schedule_board`, `schedule_message`, and legacy
-`schedule_vision` each have their own priority order.
+clients. Every stage shares one priority queue; the startup upgrade folds the
+older per-stage `schedule_message`, `schedule_board`, and `schedule_vision`
+targets into it in that order, keeping the first position of a repeated
+provider + model pair. `post_llm_states.route` still records which detection
+path (`schedule_message` or `schedule_board`) handled a post.
 
 `internal/httpapi/media.go` and `internal/store/sqlite/media.go` own cache-root
 path validation and serving; `internal/store/sqlite/source_write.go` owns

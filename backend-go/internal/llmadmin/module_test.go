@@ -169,24 +169,18 @@ func TestDevelopmentModeAllowsPlainHTTPButNotPrivateHosts(t *testing.T) {
 		"baseUrl must not target a private or loopback address")
 }
 
-func TestNewProvidersWithADefaultModelJoinEveryRoute(t *testing.T) {
+func TestNewProvidersWithADefaultModelJoinTheQueue(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	h.createProvider("alpha", map[string]any{"model": "alpha-chat"})
 	h.createProvider("beta", map[string]any{"model": "beta-chat"})
-	h.createProvider("gamma", nil) // no default model: not routed automatically
+	h.createProvider("gamma", nil) // no default model: not queued automatically
 
 	catalog := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
 	equal(t, "provider count", len(list(t, catalog.JSON["providers"])), 3)
-	routes := object(t, catalog.JSON["routes"])
-	want := []any{
+	equal(t, "queue", catalog.JSON["queue"], []any{
 		map[string]any{"providerId": "alpha", "modelId": ""},
 		map[string]any{"providerId": "beta", "modelId": ""},
-	}
-	for _, route := range scheduleRoutes {
-		state := object(t, routes[route])
-		equal(t, route+" targets", state["targets"], want)
-		equal(t, route+" configured", state["configured"], want)
-	}
+	})
 	h.assertNoSecret(catalog)
 }
 
@@ -257,8 +251,8 @@ func TestModelCatalog(t *testing.T) {
 	all := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
 	equal(t, "all models", len(list(t, all.JSON["models"])), 3)
 
-	// Removing models also drops their route targets and compacts priorities.
-	h.ok(http.MethodPut, "/llm/routes/schedule_message", map[string]any{"targets": []any{
+	// Removing models also drops their queue targets and compacts priorities.
+	h.ok(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{
 		map[string]any{"providerId": "gamma", "modelId": "text-embedding-3-small"},
 		map[string]any{"providerId": "gamma", "modelId": ""},
 		map[string]any{"providerId": "gamma", "modelId": "plain-chat"},
@@ -268,26 +262,16 @@ func TestModelCatalog(t *testing.T) {
 	equal(t, "default cleared", object(t, removed.JSON["provider"])["model"], "")
 	equal(t, "remaining", len(list(t, removed.JSON["models"])), 1)
 	equal(t, "compacted priorities", h.scalar(`SELECT group_concat(model_id || ':' || priority, ',') FROM
-		(SELECT model_id, priority FROM llm_route_targets WHERE route = 'schedule_message' ORDER BY priority)`), ":0,plain-chat:1")
+		(SELECT model_id, priority FROM llm_route_targets WHERE route = 'schedule' ORDER BY priority)`), ":0,plain-chat:1")
 	h.invalid(http.MethodPost, "/llm/providers/gamma/models/remove", map[string]any{"ids": []string{}}, "ids must be a non-empty array")
 	h.invalid(http.MethodPost, "/llm/providers/gamma/models/remove", map[string]any{"ids": []any{nil}}, "model id is required")
 	h.assertNoSecret(added, updated, removed, all)
 }
 
-func routeOf(t *testing.T, result reply, route string) map[string]any {
-	t.Helper()
-	return object(t, object(t, result.JSON["routes"])[route])
-}
-
-func TestRoutes(t *testing.T) {
+func TestQueue(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
 	empty := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
-	for _, route := range scheduleRoutes {
-		for _, group := range []string{"targets", "configured"} {
-			equal(t, route+"."+group, len(list(t, routeOf(t, empty, route)[group])), 0)
-		}
-	}
-	for _, fragment := range []string{`"providers":[]`, `"models":[]`} {
+	for _, fragment := range []string{`"providers":[]`, `"models":[]`, `"queue":[]`} {
 		if !strings.Contains(empty.Raw, fragment) {
 			t.Fatalf("expected %s in %s", fragment, empty.Raw)
 		}
@@ -298,7 +282,7 @@ func TestRoutes(t *testing.T) {
 	h.createProvider("beta", nil)
 	h.ok(http.MethodPost, "/llm/providers/beta/models", map[string]any{"models": []any{map[string]any{"id": "beta-vision"}, map[string]any{"id": "beta-fast"}}}, http.StatusCreated)
 
-	saved := h.ok(http.MethodPut, "/llm/routes/schedule_board", map[string]any{"targets": []any{
+	saved := h.ok(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{
 		map[string]any{"providerId": "beta", "modelId": "beta-fast"},
 		map[string]any{"providerId": "alpha"},
 		map[string]any{"providerId": "beta", "modelId": "beta-fast"},
@@ -307,28 +291,19 @@ func TestRoutes(t *testing.T) {
 		map[string]any{"providerId": "beta", "modelId": "beta-fast"},
 		map[string]any{"providerId": "alpha", "modelId": ""},
 	}
-	equal(t, "saved targets", routeOf(t, saved, RouteBoard)["targets"], want)
-	equal(t, "saved configured", routeOf(t, saved, RouteBoard)["configured"], want)
+	equal(t, "saved queue", saved.JSON["queue"], want)
 	h.assertNoSecret(saved)
+	equal(t, "catalog queue", h.ok(http.MethodGet, "/llm", nil, http.StatusOK).JSON["queue"], want)
 
-	catalog := h.ok(http.MethodGet, "/llm", nil, http.StatusOK)
-	vision := []any{map[string]any{"providerId": "alpha", "modelId": ""}}
-	equal(t, "board", routeOf(t, catalog, RouteBoard)["targets"], want)
-	equal(t, "vision", routeOf(t, catalog, RouteVision)["targets"], vision)
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{}, "targets must be an array")
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"modelId": "x"}}}, "providerId is required")
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"providerId": "ghost"}}}, "LLM provider does not exist: ghost")
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"providerId": "beta", "modelId": "absent"}}}, "LLM model does not exist: beta/absent")
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{map[string]any{"providerId": "beta", "modelId": "bad id"}}}, "modelId contains unsupported characters")
+	equal(t, "queue kept after rejection", h.ok(http.MethodGet, "/llm", nil, http.StatusOK).JSON["queue"], want)
 
-	// Clearing a route makes the effective view fall back to vision while the
-	// configured view stays empty.
-	cleared := h.ok(http.MethodPut, "/llm/routes/schedule_message", map[string]any{"targets": []any{}}, http.StatusOK)
-	equal(t, "message fallback", routeOf(t, cleared, RouteMessage)["targets"], vision)
-	equal(t, "message configured", len(list(t, routeOf(t, cleared, RouteMessage)["configured"])), 0)
-
-	h.invalid(http.MethodPut, "/llm/routes/bogus", map[string]any{"targets": []any{}}, "route is invalid")
-	h.invalid(http.MethodPut, "/llm/routes/schedule_board", map[string]any{}, "targets must be an array")
-	h.invalid(http.MethodPut, "/llm/routes/schedule_board", map[string]any{"targets": []any{map[string]any{"modelId": "x"}}}, "providerId is required")
-	h.invalid(http.MethodPut, "/llm/routes/schedule_board", map[string]any{"targets": []any{map[string]any{"providerId": "ghost"}}}, "LLM provider does not exist: ghost")
-	h.invalid(http.MethodPut, "/llm/routes/schedule_board", map[string]any{"targets": []any{map[string]any{"providerId": "beta", "modelId": "absent"}}}, "LLM model does not exist: beta/absent")
-	h.invalid(http.MethodPut, "/llm/routes/schedule_board", map[string]any{"targets": []any{map[string]any{"providerId": "beta", "modelId": "bad id"}}}, "modelId contains unsupported characters")
-	equal(t, "board kept after rejection", routeOf(t, h.ok(http.MethodGet, "/llm", nil, http.StatusOK), RouteBoard)["configured"], want)
+	cleared := h.ok(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{}}, http.StatusOK)
+	equal(t, "cleared queue", len(list(t, cleared.JSON["queue"])), 0)
 }
 
 func TestExtraction(t *testing.T) {
@@ -427,7 +402,7 @@ func TestReadOnlyStoreRejectsMutations(t *testing.T) {
 		{http.MethodPut, "/llm/providers/alpha"}, {http.MethodDelete, "/llm/providers/alpha"},
 		{http.MethodPost, "/llm/providers/alpha/test"}, {http.MethodPost, "/llm/providers/alpha/discover"},
 		{http.MethodPost, "/llm/providers/alpha/models"}, {http.MethodPut, "/llm/providers/alpha/models"},
-		{http.MethodPost, "/llm/providers/alpha/models/remove"}, {http.MethodPut, "/llm/routes/schedule_vision"},
+		{http.MethodPost, "/llm/providers/alpha/models/remove"}, {http.MethodPut, "/llm/queue"},
 	}
 	for _, mutation := range mutations {
 		result := h.call(mutation.method, mutation.path, map[string]any{})
@@ -442,7 +417,7 @@ func TestReadOnlyStoreRejectsMutations(t *testing.T) {
 
 func TestRouting(t *testing.T) {
 	h := newHarness(t, harnessOptions{})
-	for _, path := range []string{"/", "/config", "/providers", "/llm/providers/a/b", "/llm/providers/a/models/other", "/llm/routes/a/b", "/extraction/x"} {
+	for _, path := range []string{"/", "/config", "/providers", "/llm/providers/a/b", "/llm/providers/a/models/other", "/llm/routes/schedule_board", "/llm/queue/x", "/extraction/x"} {
 		missing := h.call(http.MethodGet, path, nil)
 		equal(t, path+" status", missing.Status, http.StatusNotFound)
 		equal(t, path+" code", missing.JSON["error"], "not_found")

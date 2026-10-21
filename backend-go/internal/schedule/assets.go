@@ -77,7 +77,7 @@ func (e *Extractor) verifyAsset(ctx context.Context, assetID string, force bool)
 		return e.skipAsset(ctx, update, "media_pending")
 	}
 	update.expectSHA = image.sha256
-	providers, reason, err := e.configuredProviders(ctx, "image", "board")
+	providers, reason, err := e.configuredProviders(ctx, "image")
 	if err != nil {
 		return assetResult{}, err
 	}

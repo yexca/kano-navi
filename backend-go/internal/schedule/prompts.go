@@ -11,9 +11,11 @@ const (
 	protocolChat      = "openai-chat-completions"
 	protocolAnthropic = "anthropic-messages"
 
-	routeVision  = "schedule_vision"
+	// routeMessage and routeBoard record a post's detection path; every path
+	// draws its models from the one priority queue stored as routeQueue.
 	routeMessage = "schedule_message"
 	routeBoard   = "schedule_board"
+	routeQueue   = "schedule"
 
 	llmMaxRetries = 2
 

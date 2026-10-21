@@ -33,7 +33,6 @@ import type {
   Extraction,
   LlmCatalog,
   Provider,
-  RouteId,
   RouteTarget,
 } from "@/admin/types"
 import {
@@ -52,12 +51,6 @@ import {
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { cn } from "@/lib/utils"
-
-const routes: { id: RouteId; needs: "image" | "text" }[] = [
-  { id: "schedule_board", needs: "image" },
-  { id: "schedule_message", needs: "text" },
-  { id: "schedule_vision", needs: "image" },
-]
 
 function ProviderMark({ provider }: { provider: Partial<Provider> }) {
   const icon = providerIcon(provider)
@@ -219,36 +212,32 @@ function ExtractionPanel() {
   )
 }
 
-// --- routes -----------------------------------------------------------------
+// --- queue ------------------------------------------------------------------
 
-function RouteEditor({
-  route,
-  needs,
+function QueueEditor({
   catalog,
   onSaved,
 }: {
-  route: RouteId
-  needs: "image" | "text"
   catalog: LlmCatalog
   onSaved: (catalog: LlmCatalog) => void
 }) {
   const { t } = useAppSettings()
   const { api, act } = useAdmin()
-  const state = catalog.routes[route]
-  const [targets, setTargets] = useState<RouteTarget[]>(state.configured)
+  const [targets, setTargets] = useState<RouteTarget[]>(catalog.queue)
   const [choice, setChoice] = useState("")
   const [busy, setBusy] = useState(false)
-  useEffect(() => setTargets(state.configured), [state.configured])
-  const dirty = JSON.stringify(targets) !== JSON.stringify(state.configured)
-  const shown = targets.length || dirty ? targets : state.targets
-  const fallback = !targets.length && !dirty && state.targets.length > 0
-  const described = shown.map((target) =>
+  useEffect(() => setTargets(catalog.queue), [catalog.queue])
+  const dirty = JSON.stringify(targets) !== JSON.stringify(catalog.queue)
+  const described = targets.map((target) =>
     describeTarget(target, catalog.providers, catalog.models),
   )
   const usable = described.filter((item) => !item.issue)
-  const missingCapability =
-    usable.length > 0 &&
-    !usable.some((item) => item.capabilities.includes(needs))
+  // Each stage picks the first usable model with the capability it needs.
+  const missing = (["text", "image"] as const).filter(
+    (needs) =>
+      usable.length > 0 &&
+      !usable.some((item) => item.capabilities.includes(needs)),
+  )
   const candidates = catalog.models.filter(
     (model) =>
       model.enabled &&
@@ -267,42 +256,27 @@ function RouteEditor({
   const save = async () => {
     setBusy(true)
     const result = await act(
-      () => api.updateRoute(route, targets),
-      "admin.notice.routeSaved",
+      () => api.updateQueue(targets),
+      "admin.notice.queueSaved",
     )
     setBusy(false)
-    if (result) onSaved({ ...catalog, routes: result.routes })
+    if (result) onSaved({ ...catalog, queue: result.queue })
   }
   return (
-    <article className="adm-route">
-      <header>
-        <div>
-          <h3>{t(`admin.route.${route}`)}</h3>
-          <p className="adm-muted">{t(`admin.route.${route}.hint`)}</p>
-        </div>
-        <Badge tone={needs === "image" ? "berry" : "sky"}>
-          {t(`admin.tag.${needs}`)}
-        </Badge>
-      </header>
-      {fallback ? (
-        <p className="adm-note">{t("admin.route.usesFallback")}</p>
-      ) : null}
-      {shown.length ? (
+    <div className="adm-route">
+      {targets.length ? (
         <ol className="adm-route-targets">
           {described.map((item, index) => (
             <li
-              key={`${shown[index].providerId}:${shown[index].modelId}`}
-              className={cn(
-                item.issue && "has-issue",
-                fallback && "is-fallback",
-              )}
+              key={`${targets[index].providerId}:${targets[index].modelId}`}
+              className={cn(item.issue && "has-issue")}
             >
               <span className="adm-route-rank">{index + 1}</span>
               {item.provider ? <ProviderMark provider={item.provider} /> : null}
               <span className="adm-route-model">
                 <strong>{item.modelId || t("admin.route.noDefault")}</strong>
                 <small>
-                  {item.provider?.name || shown[index].providerId}
+                  {item.provider?.name || targets[index].providerId}
                   {item.followsDefault
                     ? ` · ${t("admin.route.followsDefault")}`
                     : ""}
@@ -314,29 +288,27 @@ function RouteEditor({
                   {t(`admin.route.issue.${item.issue}`)}
                 </Badge>
               ) : null}
-              {!fallback ? (
-                <span className="adm-row-actions">
-                  <IconButton
-                    icon={ArrowUp}
-                    label={t("admin.route.up")}
-                    disabled={index === 0}
-                    onClick={() => move(index, -1)}
-                  />
-                  <IconButton
-                    icon={ArrowDown}
-                    label={t("admin.route.down")}
-                    disabled={index === shown.length - 1}
-                    onClick={() => move(index, 1)}
-                  />
-                  <IconButton
-                    icon={X}
-                    label={t("admin.route.remove")}
-                    onClick={() =>
-                      setTargets(targets.filter((_, at) => at !== index))
-                    }
-                  />
-                </span>
-              ) : null}
+              <span className="adm-row-actions">
+                <IconButton
+                  icon={ArrowUp}
+                  label={t("admin.route.up")}
+                  disabled={index === 0}
+                  onClick={() => move(index, -1)}
+                />
+                <IconButton
+                  icon={ArrowDown}
+                  label={t("admin.route.down")}
+                  disabled={index === targets.length - 1}
+                  onClick={() => move(index, 1)}
+                />
+                <IconButton
+                  icon={X}
+                  label={t("admin.route.remove")}
+                  onClick={() =>
+                    setTargets(targets.filter((_, at) => at !== index))
+                  }
+                />
+              </span>
             </li>
           ))}
         </ol>
@@ -345,12 +317,12 @@ function RouteEditor({
           {t("admin.route.emptyHint")}
         </Empty>
       )}
-      {missingCapability ? (
-        <p className="adm-inline-error">
+      {missing.map((needs) => (
+        <p key={needs} className="adm-inline-error">
           <TriangleAlert aria-hidden />
           {t(`admin.route.needs.${needs}`)}
         </p>
-      ) : null}
+      ))}
       <div className="adm-route-add">
         <select
           value={choice}
@@ -406,7 +378,7 @@ function RouteEditor({
           {t("admin.action.save")}
         </Button>
       </div>
-    </article>
+    </div>
   )
 }
 
@@ -1120,17 +1092,7 @@ export function ModelsView(_: ViewProps) {
         {!data ? (
           <Loading />
         ) : (
-          <div className="adm-route-grid">
-            {routes.map((route) => (
-              <RouteEditor
-                key={route.id}
-                route={route.id}
-                needs={route.needs}
-                catalog={data}
-                onSaved={catalog.setData}
-              />
-            ))}
-          </div>
+          <QueueEditor catalog={data} onSaved={catalog.setData} />
         )}
       </Panel>
       <Panel

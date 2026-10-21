@@ -61,8 +61,8 @@ it. TypeScript is the frontend and the maintenance scripts only.
 - LLM_SECRETS_KEY, source API credentials, and MCP_CONTROL_TOKEN stay in the
   environment. OPENAI_API_KEY is accepted only by the explicit
   `kano-go migrate-llm` command.
-  Model discovery is an operator action; preserve per-route provider/model order
-  and original text/image capability requirements.
+  Model discovery is an operator action; preserve the single queue's
+  provider/model order and original text/image capability requirements.
 - New outbound paths need explicit destinations, timeout and response limits,
   redirect policy, error handling, and snapshot retention. Follow the existing
   source/downloader/provider protections; privacy allowlisting alone does not

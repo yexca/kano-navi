@@ -125,21 +125,16 @@ func routeForDetectionType(detectionType string) string {
 	return routeBoard
 }
 
-// configuredProviders returns the usable targets of a detector route in
-// priority order. A route without targets follows the legacy vision route.
-// An empty list comes with the reason recorded on the skipped post or image.
-func (e *Extractor) configuredProviders(ctx context.Context, inputMode, detectionType string) ([]provider, string, error) {
-	targets, err := routeTargets(ctx, e.db, routeForDetectionType(detectionType))
+// configuredProviders returns the usable queue targets for an input mode in
+// priority order; targets whose capabilities do not fit are skipped. An
+// empty list comes with the reason recorded on the skipped post or image.
+func (e *Extractor) configuredProviders(ctx context.Context, inputMode string) ([]provider, string, error) {
+	targets, err := queueTargets(ctx, e.db)
 	if err != nil {
 		return nil, "", err
 	}
 	if len(targets) == 0 {
-		if targets, err = routeTargets(ctx, e.db, routeVision); err != nil {
-			return nil, "", err
-		}
-		if len(targets) == 0 {
-			return []provider{}, "no_route_target", nil
-		}
+		return []provider{}, "no_route_target", nil
 	}
 	providers := []provider{}
 	apiKeys := map[string]string{}

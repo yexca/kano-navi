@@ -210,9 +210,8 @@ func (e *Extractor) extractPending(ctx context.Context) (map[string]any, error) 
 	counts := map[string]any{
 		"attempted": 0, "success": 0, "cached": 0, "skipped": 0, "failed": 0,
 		"uncertain": 0, "boardAttempted": 0, "messageAttempted": 0,
-		"keywords":       config.keywords,
-		"providers":      config.providerOrder,
-		"providerOrders": config.providerOrders,
+		"keywords":  config.keywords,
+		"providers": config.providerOrder,
 	}
 	for _, item := range queue {
 		if countOf(counts, "attempted") >= scanLimit {
@@ -356,7 +355,7 @@ func (e *Extractor) extractPost(ctx context.Context, item post, detectionType st
 	if media.hasImages && !media.complete {
 		return e.skipPost(ctx, item.id, route, "media_pending", force)
 	}
-	providers, reason, err := e.configuredProviders(ctx, inputMode, detectionType)
+	providers, reason, err := e.configuredProviders(ctx, inputMode)
 	if err != nil {
 		return postResult{}, err
 	}

@@ -16,12 +16,7 @@
       "今週の予定",
       "予定"
     ],
-    "providers": [],
-    "providerOrders": {
-      "schedule_message": ["p-resp"],
-      "schedule_board": ["p-chat", "p-anth"],
-      "schedule_vision": []
-    },
+    "providers": ["p-chat", "p-anth"],
     "assetVerification": {
       "attempted": 0,
       "success": 0,
@@ -81,13 +76,13 @@
       "body": "{\"model\":\"model-c\",\"max_tokens\":4000,\"system\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Source post published at 2026-04-27T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-c\\n\\n予定していた5/3の配信は中止です\"}]}],\"tools\":[{\"name\":\"kano_schedule_extraction\",\"description\":\"Return the structured classification result.\",\"input_schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}],\"tool_choice\":{\"type\":\"tool\",\"name\":\"kano_schedule_extraction\"}}"
     },
     {
-      "url": "https://provider.example.test/v1/responses",
+      "url": "https://chat.example.test/v1/chat/completions",
       "method": "POST",
       "headers": {
         "content-type": "application/json",
         "authorization": "<redacted>"
       },
-      "body": "{\"model\":\"model-a\",\"store\":false,\"instructions\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\",\"input\":[{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Source post published at 2026-04-26T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-b\\n\\n明日 20時から歌います\"}]}],\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_output_tokens\":4000}"
+      "body": "{\"model\":\"model-b\",\"messages\":[{\"role\":\"system\",\"content\":\"First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. Return an empty events array for not_schedule.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Source post published at 2026-04-26T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-b\\n\\n明日 20時から歌います\"}]}],\"response_format\":{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"kano_schedule_extraction\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"classification\":{\"type\":\"string\",\"enum\":[\"schedule\",\"not_schedule\",\"uncertain\"]},\"events\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"title\":{\"type\":\"string\"},\"detail\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"date\":{\"type\":\"string\"},\"time\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"endTime\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"timePrecision\":{\"type\":\"string\",\"enum\":[\"exact\",\"approximate\",\"unknown\"]},\"status\":{\"type\":\"string\"},\"eventType\":{\"type\":\"string\",\"enum\":[\"event\",\"stream\",\"member\",\"release\",\"appearance\"]},\"url\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"}},\"required\":[\"title\",\"detail\",\"date\",\"time\",\"endTime\",\"timePrecision\",\"status\",\"eventType\",\"url\",\"confidence\",\"evidence\"]}},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"evidence\":{\"type\":\"string\"},\"reason\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"action\":{\"type\":\"string\",\"enum\":[\"add\",\"update\",\"cancel\",\"none\"]}},\"required\":[\"classification\",\"events\",\"confidence\",\"evidence\",\"reason\",\"action\"]}}},\"max_completion_tokens\":4000}"
     }
   ],
   "afterFirst": {
@@ -248,8 +243,8 @@
         "source": "x",
         "source_item_id": "post-b",
         "content_fingerprint": "f48d4872c5a8bbe9d2521bcd215fb5969d9425f9c54ebfd85095613fd06451d5",
-        "extractor_version": "openai-schedule-v4:message:text:p-resp:openai-responses:178858412ac004a2b0e5dc0a47e6e5b44149c44cfea3a85fd2975cf83e512e98",
-        "model": "model-a",
+        "extractor_version": "openai-schedule-v4:message:text:p-chat:openai-chat-completions:b3646dcbd00f86734f463a9b72118a547301f11b8b55063fa4f7675194339316",
+        "model": "model-b",
         "status": "uncertain",
         "result_json": "{\"classification\":\"uncertain\",\"events\":[],\"confidence\":0.4,\"evidence\":\"\",\"reason\":\"曖昧\",\"action\":\"none\"}",
         "error": null
@@ -295,11 +290,6 @@
       },
       {
         "id": "p-chat",
-        "last_status": "failed",
-        "last_error": "LLM request failed (HTTP 500)"
-      },
-      {
-        "id": "p-resp",
         "last_status": "success",
         "last_error": null
       }
@@ -322,12 +312,7 @@
       "今週の予定",
       "予定"
     ],
-    "providers": [],
-    "providerOrders": {
-      "schedule_message": ["p-resp"],
-      "schedule_board": ["p-chat", "p-anth"],
-      "schedule_vision": []
-    },
+    "providers": ["p-chat", "p-anth"],
     "assetVerification": {
       "attempted": 0,
       "success": 0,
@@ -498,8 +483,8 @@
         "source": "x",
         "source_item_id": "post-b",
         "content_fingerprint": "f48d4872c5a8bbe9d2521bcd215fb5969d9425f9c54ebfd85095613fd06451d5",
-        "extractor_version": "openai-schedule-v4:message:text:p-resp:openai-responses:178858412ac004a2b0e5dc0a47e6e5b44149c44cfea3a85fd2975cf83e512e98",
-        "model": "model-a",
+        "extractor_version": "openai-schedule-v4:message:text:p-chat:openai-chat-completions:b3646dcbd00f86734f463a9b72118a547301f11b8b55063fa4f7675194339316",
+        "model": "model-b",
         "status": "uncertain",
         "result_json": "{\"classification\":\"uncertain\",\"events\":[],\"confidence\":0.4,\"evidence\":\"\",\"reason\":\"曖昧\",\"action\":\"none\"}",
         "error": null
@@ -547,11 +532,6 @@
         "id": "p-chat",
         "last_status": "failed",
         "last_error": "LLM request failed (HTTP 500)"
-      },
-      {
-        "id": "p-resp",
-        "last_status": "success",
-        "last_error": null
       }
     ]
   }

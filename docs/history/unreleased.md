@@ -11,6 +11,18 @@
 </details>
 
 <details>
+<summary><strong>Operator console</strong></summary>
+
+- Model routing is one priority queue instead of separate board, message and
+  fallback routes. Every stage tries the queued models in order and skips those
+  without the Text or Image tag it needs. `GET /api/admin/llm` returns `queue`
+  in place of `routes`, and `PUT /api/admin/llm/queue` replaces
+  `PUT /api/admin/llm/routes/{route}`. The first start merges the saved routes
+  into the queue (message, board, then fallback order, without duplicates).
+
+</details>
+
+<details>
 <summary><strong>Runtime and development</strong></summary>
 
 - `make sensitive-check` scans only the files Git can see, so ignored local

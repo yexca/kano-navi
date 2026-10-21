@@ -54,7 +54,6 @@ type scheduleConfig struct {
 	messageAllPosts bool
 	keywords        []string
 	providerOrder   []string
-	providerOrders  map[string][]string
 }
 
 func settingBoolean(value string, fallback bool) bool {
@@ -187,38 +186,22 @@ func (e *Extractor) loadConfig(ctx context.Context) (scheduleConfig, error) {
 	} else {
 		config.keywords = boundedKeywords(parseListValues(defaultScheduleKeywords))
 	}
-	config.providerOrders = map[string][]string{}
-	legacy, err := routeProviders(ctx, e.db, routeVision)
-	if err != nil {
-		return config, err
-	}
-	for _, route := range []string{routeMessage, routeBoard} {
-		configured, err := routeProviders(ctx, e.db, route)
-		if err != nil {
-			return config, err
-		}
-		if len(configured) == 0 {
-			configured = append([]string{}, legacy...)
-		}
-		config.providerOrders[route] = configured
-	}
-	config.providerOrders[routeVision] = legacy
-	config.providerOrder = legacy
-	return config, nil
+	config.providerOrder, err = queueProviders(ctx, e.db)
+	return config, err
 }
 
-// ---- providers, models and routes (read-only apart from the status) ----
+// ---- providers, models and the queue (read-only apart from the status) ----
 
 type routeTarget struct {
 	providerID string
 	modelID    string
 }
 
-func routeTargets(ctx context.Context, q queryer, route string) ([]routeTarget, error) {
+func queueTargets(ctx context.Context, q queryer) ([]routeTarget, error) {
 	rows, err := q.QueryContext(ctx, `SELECT r.provider_id, r.model_id
 		FROM llm_route_targets r
 		JOIN llm_providers p ON p.id = r.provider_id
-		WHERE r.route = ? ORDER BY r.priority ASC, r.provider_id ASC, r.model_id ASC`, route)
+		WHERE r.route = ? ORDER BY r.priority ASC, r.provider_id ASC, r.model_id ASC`, routeQueue)
 	if err != nil {
 		return nil, err
 	}
@@ -235,8 +218,8 @@ func routeTargets(ctx context.Context, q queryer, route string) ([]routeTarget, 
 	return out, rows.Err()
 }
 
-func routeProviders(ctx context.Context, q queryer, route string) ([]string, error) {
-	targets, err := routeTargets(ctx, q, route)
+func queueProviders(ctx context.Context, q queryer) ([]string, error) {
+	targets, err := queueTargets(ctx, q)
 	if err != nil {
 		return nil, err
 	}

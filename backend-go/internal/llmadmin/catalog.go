@@ -1,6 +1,6 @@
 // Package llmadmin serves the operator's LLM configuration API: providers,
-// their model catalogs, per-route model targets and the schedule detection
-// settings. It mirrors the wire contract of server/admin-api.ts.
+// their model catalogs, the shared model priority queue and the schedule
+// detection settings.
 //
 // Provider credentials are write-only. Neither the plaintext nor the stored
 // ciphertext is ever placed in a response, an error or a log line.
@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	RouteVision  = "schedule_vision"
-	RouteMessage = "schedule_message"
-	RouteBoard   = "schedule_board"
+	// QueueRoute names the single model priority queue in llm_route_targets.
+	// Every extraction stage walks it in order and skips targets whose
+	// capabilities do not fit the request.
+	QueueRoute = "schedule"
 
 	// MaxRetries is the fixed three-request provider contract.
 	MaxRetries = 2
@@ -35,7 +36,6 @@ const (
 )
 
 var (
-	scheduleRoutes          = []string{RouteMessage, RouteBoard, RouteVision}
 	llmCapabilities         = []string{"text", "image"}
 	llmModelTags            = []string{"text", "image", "reasoning", "tools", "embedding"}
 	llmProtocols            = []string{protocolResponses, protocolChat, protocolAnthropic}
@@ -45,25 +45,6 @@ var (
 	providerIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 	llmModelPattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
 )
-
-// RouteMap keeps the three schedule routes in the order the TypeScript
-// server emitted them, which a Go map would not.
-type RouteMap[T any] struct {
-	Message T `json:"schedule_message"`
-	Board   T `json:"schedule_board"`
-	Vision  T `json:"schedule_vision"`
-}
-
-func (m RouteMap[T]) Get(route string) T {
-	switch route {
-	case RouteMessage:
-		return m.Message
-	case RouteBoard:
-		return m.Board
-	default:
-		return m.Vision
-	}
-}
 
 // RemoteModel is one entry of a provider's own model list.
 type RemoteModel struct {

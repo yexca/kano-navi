@@ -335,16 +335,57 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 	if err := exec(`INSERT OR IGNORE INTO llm_models(provider_id,model_id,name,tags_json,enabled,origin,owned_by,created_at,updated_at) SELECT id,model,NULL,capabilities_json,1,'legacy',NULL,created_at,created_at FROM llm_providers WHERE model<>''`); err != nil {
 		return err
 	}
-	// The original implementation had one vision route. Both detectors keep
-	// that order until an operator separates them.
-	for _, route := range []string{"schedule_message", "schedule_board"} {
-		if err := exec(`INSERT INTO llm_route_targets(route,provider_id,model_id,priority,created_at,updated_at)
- SELECT ?,provider_id,model_id,priority,?,? FROM llm_route_targets WHERE route='schedule_vision'
- AND NOT EXISTS(SELECT 1 FROM llm_route_targets WHERE route=?)`, route, now, now, route); err != nil {
-			return err
+	return mergeRouteQueue(ctx, tx, now)
+}
+
+// mergeRouteQueue folds the older per-stage routes into the single priority
+// queue: message, then board, then vision targets in their saved order, each
+// provider/model pair once. Stages pick capable targets from the queue, so
+// no configured target is lost. An existing queue is kept as it is.
+func mergeRouteQueue(ctx context.Context, tx *sql.Tx, now string) error {
+	const queue = "schedule"
+	stages := []string{"schedule_message", "schedule_board", "schedule_vision"}
+	rows, err := tx.QueryContext(ctx, `SELECT route,provider_id,model_id FROM llm_route_targets
+ WHERE route IN (?,?,?) ORDER BY CASE route WHEN ? THEN 0 WHEN ? THEN 1 ELSE 2 END,priority,provider_id,model_id`,
+		stages[0], stages[1], stages[2], stages[0], stages[1])
+	if err != nil {
+		return ErrSchema
+	}
+	type target struct{ provider, model string }
+	var targets []target
+	seen := map[target]bool{}
+	for rows.Next() {
+		var route string
+		var item target
+		if err = rows.Scan(&route, &item.provider, &item.model); err != nil {
+			rows.Close()
+			return ErrSchema
+		}
+		if !seen[item] {
+			seen[item] = true
+			targets = append(targets, item)
 		}
 	}
-	return nil
+	if err = rows.Close(); err != nil {
+		return ErrSchema
+	}
+	if err = rows.Err(); err != nil || len(targets) == 0 {
+		return err
+	}
+	var queued int
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM llm_route_targets WHERE route=?`, queue).Scan(&queued); err != nil {
+		return ErrSchema
+	}
+	if queued == 0 {
+		for priority, item := range targets {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO llm_route_targets(route,provider_id,model_id,priority,created_at,updated_at) VALUES(?,?,?,?,?,?)`,
+				queue, item.provider, item.model, priority, now, now); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = tx.ExecContext(ctx, `DELETE FROM llm_route_targets WHERE route IN (?,?,?)`, stages[0], stages[1], stages[2])
+	return err
 }
 
 // backfillRows derives one value per row from its URL. Rows are read fully

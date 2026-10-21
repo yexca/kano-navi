@@ -32,8 +32,6 @@ import type {
   ProfileMedia,
   ProfileMediaState,
   Provider,
-  RouteId,
-  RouteState,
   RouteTarget,
   Run,
   ScheduleImage,
@@ -222,12 +220,8 @@ function createClient(run: Runner, slow: Runner) {
         `/llm/providers/${enc(id)}/models/remove`,
         { ids },
       ),
-    updateRoute: (route: RouteId, targets: RouteTarget[]) =>
-      send<{ routes: Record<RouteId, RouteState> }>(
-        "PUT",
-        `/llm/routes/${route}`,
-        { targets },
-      ),
+    updateQueue: (targets: RouteTarget[]) =>
+      send<{ queue: RouteTarget[] }>("PUT", "/llm/queue", { targets }),
   }
 }
 

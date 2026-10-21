@@ -1711,36 +1711,10 @@ button.adm-run-line:hover,
   gap: 16px;
 }
 
-.adm-route-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 14px;
-}
-
 .adm-route {
   display: grid;
   align-content: start;
   gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--adm-line);
-  border-radius: var(--adm-radius-sm);
-  background: color-mix(in oklab, var(--adm-sunken) 35%, transparent);
-}
-
-.adm-route header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.adm-route h3 {
-  margin: 0;
-  font-size: 15px;
-}
-
-.adm-route header p {
-  font-size: 12px;
 }
 
 .adm-route-targets {
@@ -1764,11 +1738,6 @@ button.adm-run-line:hover,
 
 .adm-route-targets li.has-issue {
   border-color: color-mix(in oklab, var(--danger) 40%, transparent);
-}
-
-.adm-route-targets li.is-fallback {
-  border-style: dashed;
-  opacity: 0.75;
 }
 
 .adm-route-targets .adm-row-actions {
@@ -2278,8 +2247,7 @@ button.adm-run-line:hover,
   }
 
   .adm-image-grid,
-  .adm-provider-grid,
-  .adm-route-grid {
+  .adm-provider-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

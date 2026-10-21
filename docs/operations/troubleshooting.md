@@ -3,11 +3,11 @@
 | Symptom                                   | Checks and recovery                                                                                                                         |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Server refuses startup                    | Check APP_MODE and production ADMIN_PASSWORD length. Authentication is validated before SQLite opens.                                       |
-| Fresh board has no posts or providers     | Expected initialization. Configure providers/routes in /admin and run a workflow.                                                           |
+| Fresh board has no posts or providers     | Expected initialization. Configure providers and the model queue in /admin and run a workflow.                                              |
 | Stale data after a failed run             | Inspect guarded sync history; the previous snapshot is retained. Check source coverage and request budgets.                                 |
 | Date range returns partial coverage       | Check source credential-availability flags and pagination budgets. Public profile/RSS coverage cannot expand to a full archive.             |
 | Timed workflow does not run               | Check WORKFLOW_SCHEDULER_ENABLED, next run, and the single-flight queue. The API process must remain running.                               |
-| Schedule extraction skipped               | Check route ordering, keyed provider capabilities, stage flags, and ready cached images. Pending images are not reduced to text-only input. |
+| Schedule extraction skipped               | Check queue ordering, keyed provider capabilities, stage flags, and ready cached images. Pending images are not reduced to text-only input. |
 | Model provider cannot connect             | Inspect sanitized admin status. Private/loopback provider origins are rejected; redirects are blocked.                                      |
 | Media returns 404                         | Verify a ready database row and a contained cache path. Missing bytes do not trigger an external browser fetch.                             |
 | Admin session disappears                  | Sessions are in memory and expire on restart. Log in again.                                                                                 |
