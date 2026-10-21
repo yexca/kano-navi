@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type ComponentType } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react"
 import {
   Bot,
   CalendarDays,
@@ -171,6 +177,7 @@ export function AdminApp() {
   const { t } = useAppSettings()
   const data = useAdminData()
   const [location, setLocation] = useState(readHash)
+  const navRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     document.title = t("admin.meta.title")
@@ -195,6 +202,19 @@ export function AdminApp() {
     window.addEventListener("hashchange", onHashChange)
     return () => window.removeEventListener("hashchange", onHashChange)
   }, [])
+
+  // On narrow screens the nav is a scrolling strip; keep the current view in it.
+  const signedIn = Boolean(data.session?.authenticated)
+  useEffect(() => {
+    const nav = navRef.current
+    const item = nav?.querySelector(".adm-nav-item.is-active")
+    if (!nav || !item || nav.scrollWidth <= nav.clientWidth) return
+    const box = nav.getBoundingClientRect()
+    const rect = item.getBoundingClientRect()
+    if (rect.left < box.left) nav.scrollLeft -= box.left - rect.left + 16
+    else if (rect.right > box.right)
+      nav.scrollLeft += rect.right - box.right + 16
+  }, [location.view, signedIn])
 
   const navigate = useCallback((view: string, tab = "") => {
     if (!views.some((entry) => entry.id === view)) return
@@ -247,7 +267,11 @@ export function AdminApp() {
               <small>{t("admin.brand.console")}</small>
             </span>
           </a>
-          <nav className="adm-nav" aria-label={t("admin.nav.label")}>
+          <nav
+            ref={navRef}
+            className="adm-nav"
+            aria-label={t("admin.nav.label")}
+          >
             {groups.map((group) => (
               <div className="adm-nav-group" key={group}>
                 <p>{t(`admin.nav.group.${group}`)}</p>
