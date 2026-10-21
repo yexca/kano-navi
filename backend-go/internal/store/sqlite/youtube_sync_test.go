@@ -76,3 +76,45 @@ func TestYoutubeWritesPreserveLocksTombstonesAndCursorOnRollback(t *testing.T) {
 		t.Fatal("rolled back revision changed")
 	}
 }
+
+func TestPendingMediaPrefersNewestOwnerOverSameSyncTie(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	// One sync registers every thumbnail with the same created_at, oldest first.
+	ids := []string{"AAAAAAAAAAA", "BBBBBBBBBBB", "CCCCCCCCCCC", "DDDDDDDDDDD", "EEEEEEEEEEE"}
+	result := ytsource.Result{NextCursor: ids[len(ids)-1], NextCursorTime: "2026-01-05T00:00:00Z"}
+	thumbs := map[string]string{}
+	for i, id := range ids {
+		thumb := "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg"
+		media, _, err := mediaIdentity(thumb)
+		if err != nil {
+			t.Fatal(err)
+		}
+		thumbs[id] = media
+		result.Videos = append(result.Videos, ytsource.Video{ID: id, Title: "video " + id, PublishedAt: "2026-01-0" + string(rune('1'+i)) + "T00:00:00Z", URL: "https://www.youtube.com/watch?v=" + id, ThumbnailURL: thumb, Kind: "VIDEO"})
+	}
+	if err = s.WriteYoutubeRecent(ctx, "UCAAAAAAAAAAAAAAAAAAAAAA", result); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := s.PendingMedia(ctx, 2)
+	if err != nil || len(pending) != 2 || pending[0].ID != thumbs["EEEEEEEEEEE"] || pending[1].ID != thumbs["DDDDDDDDDDD"] {
+		t.Fatalf("newest thumbnails not first pending=%#v err=%v", pending, err)
+	}
+	// A previously checked asset stays behind never-checked ones even when its
+	// owner is the newest video.
+	testutil.Exec(t, p, `UPDATE media_assets SET last_checked_at='2026-01-06T00:00:00Z' WHERE id=?`, thumbs["EEEEEEEEEEE"])
+	pending, err = s.PendingMedia(ctx, len(ids))
+	if err != nil || len(pending) != len(ids) {
+		t.Fatalf("pending=%#v err=%v", pending, err)
+	}
+	for i, id := range []string{"DDDDDDDDDDD", "CCCCCCCCCCC", "BBBBBBBBBBB", "AAAAAAAAAAA", "EEEEEEEEEEE"} {
+		if pending[i].ID != thumbs[id] {
+			t.Fatalf("position %d is %s, want thumbnail of %s", i, pending[i].ID, id)
+		}
+	}
+}

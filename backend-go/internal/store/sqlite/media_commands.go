@@ -23,7 +23,19 @@ func (s *Store) PendingMedia(ctx context.Context, limit int) ([]PendingMedia, er
 	if limit < 1 || limit > 100 {
 		return nil, ErrSourceWrite
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,source,source_url FROM media_assets WHERE status='pending' AND source IN('x','youtube') AND length(id)=64 AND id NOT GLOB '*[^a-f0-9]*' ORDER BY COALESCE(last_checked_at,created_at),id LIMIT ?`, limit)
+	// Never-checked assets come first, newest owner first, so the latest video
+	// or post the board shows is not left behind by a same-sync tie on
+	// created_at. Each owner lookup is a primary-key probe via media_links_media_idx.
+	rows, err := s.db.QueryContext(ctx, `SELECT id,source,source_url FROM (
+		SELECT a.id,a.source,a.source_url,a.last_checked_at,a.created_at,(
+			SELECT MAX(COALESCE(
+				(SELECT julianday(COALESCE(v.scheduled_at,v.published_at)) FROM videos v WHERE ml.owner_type='video' AND v.id=ml.owner_id),
+				(SELECT julianday(p.published_at) FROM posts p WHERE ml.owner_type='post' AND p.id=ml.owner_id),
+				(SELECT julianday(p.published_at) FROM posts p WHERE ml.owner_type='asset' AND ml.owner_id GLOB 'schedule-x-*' AND p.id=substr(ml.owner_id,12))
+			)) FROM media_links ml WHERE ml.media_id=a.id
+		) AS owner_instant
+		FROM media_assets a WHERE a.status='pending' AND a.source IN('x','youtube') AND length(a.id)=64 AND a.id NOT GLOB '*[^a-f0-9]*'
+	) ORDER BY last_checked_at IS NOT NULL,COALESCE(owner_instant,0) DESC,COALESCE(last_checked_at,created_at),id LIMIT ?`, limit)
 	if err != nil {
 		return nil, ErrSourceWrite
 	}

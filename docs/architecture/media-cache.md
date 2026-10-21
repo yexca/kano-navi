@@ -72,7 +72,12 @@ served as active same-origin content.
    `registerMediaCandidates`.
 2. The candidate is deduplicated by normalized source URL, recorded as
    `pending`, and linked to its owner. Registration does not download bytes.
-3. The media step claims a bounded batch during a synchronization. It
+3. The media step claims a bounded batch during a synchronization.
+   Never-checked assets come first, ordered by their newest owner (a video's
+   scheduled or published time, or the publication time of the post or
+   schedule post that links it), so thumbnails the board shows first are not
+   left pending by a same-synchronization tie. Previously checked assets and
+   assets without a dated owner follow by creation or last-check time. It
    downloads with a timeout and byte limit, verifies the image magic bytes and
    declared MIME type, writes a temporary file, atomically renames it into the
    source namespace's `sha256/` directory, and calls `upsertMediaAsset` with
