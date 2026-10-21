@@ -167,7 +167,7 @@ func (e *Extractor) extractPending(ctx context.Context) (map[string]any, error) 
 		if !stage.enabled {
 			continue
 		}
-		posts, err := e.listCandidatePosts(ctx, config.keywords, stage.detectionType)
+		posts, err := e.listCandidatePosts(ctx, config.keywords, stage.detectionType, config.messageAllPosts)
 		if err != nil {
 			return nil, err
 		}
@@ -488,17 +488,28 @@ func (e *Extractor) extractWithProvider(ctx context.Context, item post, images [
 	return "failed", err
 }
 
-func (e *Extractor) attemptExtraction(ctx context.Context, item post, images []cachedImage, fingerprint, version string, target provider, inputMode, route string, extractionID int64) (string, error) {
-	publishedAt := item.publishedAt
-	if publishedAt == "" {
-		publishedAt = "undefined"
+// publishedAtText is the publication time given to the model: the stored
+// timestamp plus its Asia/Tokyo date, weekday and time, so 今日, 明日 and bare
+// weekdays resolve without the model converting from UTC. The extraction
+// identity keeps the stored timestamp alone.
+func publishedAtText(value string) string {
+	if value == "" {
+		return "undefined"
 	}
+	instant, ok := parseInstant(value)
+	if !ok {
+		return value
+	}
+	return value + " (" + instant.In(jst).Format("2006-01-02 Mon 15:04") + " Asia/Tokyo)"
+}
+
+func (e *Extractor) attemptExtraction(ctx context.Context, item post, images []cachedImage, fingerprint, version string, target provider, inputMode, route string, extractionID int64) (string, error) {
 	call := modelCall{
 		instructions: scheduleInstructions,
 		name:         extractionToolName,
 		schema:       scheduleSchema,
 		maxTokens:    4000,
-		text:         "Source post published at " + publishedAt + ". Source URL: " + item.url + "\n\n" + item.text,
+		text:         "Source post published at " + publishedAtText(item.publishedAt) + ". Source URL: " + item.url + "\n\n" + item.text,
 		includeText:  inputMode != "image",
 	}
 	if inputMode != "text" {

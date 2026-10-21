@@ -49,9 +49,12 @@ type scheduleConfig struct {
 	keywordEnabled bool
 	visionEnabled  bool
 	messageEnabled bool
-	keywords       []string
-	providerOrder  []string
-	providerOrders map[string][]string
+	// messageAllPosts sends every X post with text or images through the
+	// message route instead of only the posts the local heuristic selects.
+	messageAllPosts bool
+	keywords        []string
+	providerOrder   []string
+	providerOrders  map[string][]string
 }
 
 func settingBoolean(value string, fallback bool) bool {
@@ -165,6 +168,13 @@ func (e *Extractor) loadConfig(ctx context.Context) (scheduleConfig, error) {
 		}
 		*stage.target = settingBoolean(value, legacyEnabled)
 	}
+	// Unlike the stages, the all-posts switch does not follow the legacy
+	// switch: it is off unless explicitly enabled.
+	allPosts, err := setting("schedule_message_all_posts", "SCHEDULE_MESSAGE_ALL_POSTS", "0")
+	if err != nil {
+		return config, err
+	}
+	config.messageAllPosts = settingBoolean(allPosts, false)
 	stored, ok, err := appSetting(ctx, e.db, "schedule_keywords")
 	if err != nil {
 		return config, err
@@ -397,7 +407,9 @@ func isLikelyScheduleBoardText(value string) bool {
 	return scheduleBoardPattern.MatchString(value)
 }
 
-func (e *Extractor) listCandidatePosts(ctx context.Context, keywords []string, detectionType string) ([]post, error) {
+// listCandidatePosts selects the posts a detector stage scans. With allPosts,
+// the message stage takes every post that has text or images.
+func (e *Extractor) listCandidatePosts(ctx context.Context, keywords []string, detectionType string, allPosts bool) ([]post, error) {
 	lowered := []string{}
 	for _, keyword := range boundedKeywords(parseListValues(keywords)) {
 		lowered = append(lowered, jsToLower(keyword))
@@ -441,6 +453,8 @@ func (e *Extractor) listCandidatePosts(ctx context.Context, keywords []string, d
 		switch {
 		case detectionType != "message":
 			selected = matchesKeyword()
+		case allPosts:
+			selected = jsTrim(item.text) != "" || len(item.mediaURLs) > 0
 		case jsTrim(item.text) == "":
 			selected = len(item.mediaURLs) > 0 && noticeLabelPattern.MatchString(item.postType+" "+item.label)
 		default:

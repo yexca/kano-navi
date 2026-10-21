@@ -140,7 +140,15 @@ Schedule extraction has two independent candidate paths:
    heuristic to ordinary X messages, including messages without a configured
    keyword. Suspected messages are sent to the `schedule_message` provider
    route, which first classifies the post as `schedule`, `not_schedule`, or
-   `uncertain` before extracting events.
+   `uncertain` before extracting events. With `schedule_message_all_posts`
+   enabled, the path skips the heuristic and selects every X post with text or
+   images; each new post then costs one model call, still within the shared
+   scan limit.
+
+The model text starts with the stored publication timestamp followed by its
+Asia/Tokyo date, weekday, and time, so relative dates such as 今日, 明日, or a
+bare weekday resolve without a UTC conversion. Fingerprints use the stored
+timestamp alone.
 
 The two candidate lists are merged, de-duplicated by X post ID, sorted by
 least recent attempt (unattempted posts first), with publication time as a tie
@@ -184,8 +192,10 @@ preserved, and a pasted inference endpoint is reduced to its API root.
 `src/lib/llm-endpoints.ts` owns this rule for both UI previews and server calls.
 Anthropic requests use `x-api-key` and `anthropic-version: 2023-06-01`.
 Model discovery follows `has_more`/`last_id` with 100 models per page and a
-20-page cap under one timeout. Extraction uses a forced tool with the existing
-JSON schema and validates its `tool_use.input` locally; cached images are sent
+20-page cap under one timeout. Extraction offers one tool with the existing
+JSON schema under `tool_choice: auto` (newer Claude models reject a forced
+tool choice) and a system instruction to call it, then validates its
+`tool_use.input` locally; a reply without that tool call fails the attempt; cached images are sent
 as base64 image blocks. Model and inference responses are bounded to 4 MiB of
 streamed bytes, and redirects are rejected. Connection tests and inference share
 the protocol-specific output limit: `max_output_tokens` for Responses,
@@ -213,7 +223,8 @@ Every stored post has an LLM processing state. Failed, skipped, and uncertain
 attempts remain visible to operators, and `POST /api/admin/posts/:id/reprocess`
 queues a forced pass that bypasses the successful-result cache. The automatic
 scan consumes queued posts even when they no longer match the current keyword
-heuristic; a missing provider or pending image keeps the queue request pending,
+heuristic; a missing provider or route target or a pending image keeps the queue request
+pending,
 while a provider failure consumes it. Queued posts run before keyword
 candidates within the shared scan limit. They use the route the operator
 requested; without one, a post that a keyword path also selected keeps that
@@ -229,7 +240,8 @@ synchronization never reads that environment variable.
 Candidates from either X account use the same idempotent fingerprint and
 manual-lock rules. The stage flags are stored as `schedule_keyword_enabled`,
 `schedule_vision_enabled`, and `schedule_message_enabled` and can be changed
-independently in `/admin`. The legacy `schedule_extraction_enabled` setting is
+independently in `/admin`. `schedule_message_all_posts` is off unless set
+explicitly and does not follow the legacy switch. The legacy `schedule_extraction_enabled` setting is
 retained for old clients and for seeding the stage defaults; it is no longer a
 runtime master switch, so a newly enabled stage can run even when an older
 database still contains `0` there. The old admin API field updates all three

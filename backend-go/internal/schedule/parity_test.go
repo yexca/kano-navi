@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -29,6 +30,35 @@ type parityData struct {
 	Second         map[string]any              `json:"second"`
 	SecondRequests int                         `json:"secondRequests"`
 	AfterSecond    map[string][]map[string]any `json:"afterSecond"`
+}
+
+// The recording predates two deliberate request changes, applied to the
+// recorded bodies here: the Asia/Tokyo publication time in the model text, and
+// Anthropic's "auto" tool choice with a system instruction naming the tool.
+// Identities, fingerprints and stored JSON are still compared unchanged.
+var (
+	recordedPublishedAt = regexp.MustCompile(`Source post published at ([^ ]+)\. Source URL`)
+	recordedForcedTool  = regexp.MustCompile(`"tool_choice":\{"type":"tool","name":"([^"]+)"\}`)
+)
+
+func withLocalPublishedAt(body string) string {
+	body = recordedPublishedAt.ReplaceAllStringFunc(body, func(match string) string {
+		value := recordedPublishedAt.FindStringSubmatch(match)[1]
+		return "Source post published at " + publishedAtText(value) + ". Source URL"
+	})
+	forced := recordedForcedTool.FindStringSubmatch(body)
+	if forced == nil {
+		return body
+	}
+	var request map[string]any
+	if err := json.Unmarshal([]byte(body), &request); err != nil {
+		return body
+	}
+	system, _ := request["system"].(string)
+	recordedSystem, _ := json.Marshal(system)
+	updatedSystem, _ := json.Marshal(anthropicToolInstruction(system, forced[1]))
+	body = strings.Replace(body, `"system":`+string(recordedSystem), `"system":`+string(updatedSystem), 1)
+	return recordedForcedTool.ReplaceAllString(body, `"tool_choice":{"type":"auto","disable_parallel_tool_use":true}`)
 }
 
 var parityQueries = map[string]string{
@@ -178,8 +208,8 @@ func TestParityWithTypeScriptExtractor(t *testing.T) {
 		if got.url != want.URL {
 			t.Errorf("request %d url = %q, want %q", i, got.url, want.URL)
 		}
-		if got.body != want.Body {
-			t.Errorf("request %d body differs:\n got  %s\n want %s", i, got.body, want.Body)
+		if wantBody := withLocalPublishedAt(want.Body); got.body != wantBody {
+			t.Errorf("request %d body differs:\n got  %s\n want %s", i, got.body, wantBody)
 		}
 		if got.headers.Get("Content-Type") != want.Headers["content-type"] {
 			t.Errorf("request %d content type = %q", i, got.headers.Get("Content-Type"))
@@ -364,8 +394,8 @@ func TestParityWithTypeScriptImagePaths(t *testing.T) {
 		t.Fatalf("%d provider requests, want %d", len(f.provider.requests), len(data.Requests))
 	}
 	for i, want := range data.Requests {
-		if got := f.provider.requests[i]; got.url != want.URL || got.body != want.Body {
-			t.Errorf("request %d differs:\n got  %s %s\n want %s %s", i, got.url, got.body, want.URL, want.Body)
+		if got, wantBody := f.provider.requests[i], withLocalPublishedAt(want.Body); got.url != want.URL || got.body != wantBody {
+			t.Errorf("request %d differs:\n got  %s %s\n want %s %s", i, got.url, got.body, want.URL, wantBody)
 		}
 	}
 	f.compareTables("first", mediaParityQueries, data.AfterFirst)

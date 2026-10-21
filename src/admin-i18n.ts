@@ -401,6 +401,9 @@ export const adminMessages = {
     "admin.models.stage.message": "Single messages",
     "admin.models.stage.messageHint":
       "Check ordinary posts that mention a date or stream.",
+    "admin.models.stage.allPosts": "Send every post to the model",
+    "admin.models.stage.allPostsHint":
+      "Skip the local date and stream check: every post with text or images goes to the message route. Each new post costs one model call.",
     "admin.models.keywords": "Keywords",
     "admin.models.keywordsHint":
       "{count} of 30 · one per line or comma separated, 80 characters each",
@@ -924,6 +927,9 @@ export const adminMessages = {
       "日程表需要开启关键词候选才能找到贴文。",
     "admin.models.stage.message": "单条消息",
     "admin.models.stage.messageHint": "检查提到日期或直播的普通贴文。",
+    "admin.models.stage.allPosts": "所有贴文都交给模型",
+    "admin.models.stage.allPostsHint":
+      "跳过本地的日期和直播检查：每条带文字或图片的贴文都发送给单条消息路由。每条新贴文消耗一次模型调用。",
     "admin.models.keywords": "关键词",
     "admin.models.keywordsHint":
       "{count} / 30 · 每行一个或用逗号分隔，每个不超过 80 个字符",

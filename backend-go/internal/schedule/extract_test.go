@@ -75,7 +75,7 @@ func TestTextPostProducesEvents(t *testing.T) {
 	if request.url != "https://provider.example.test/v1/chat/completions" || request.headers.Get("Authorization") != "Bearer "+testProviderKey {
 		t.Errorf("unexpected request %s", request.url)
 	}
-	if !strings.Contains(request.body, "Source post published at 2026-04-28T03:00:00.000Z. Source URL: https://x.com/synthetic_handle/status/post-1") {
+	if !strings.Contains(request.body, "Source post published at 2026-04-28T03:00:00.000Z (2026-04-28 Tue 12:00 Asia/Tokyo). Source URL: https://x.com/synthetic_handle/status/post-1") {
 		t.Errorf("request body lacks the source text: %s", request.body)
 	}
 	if got := f.number(`SELECT COUNT(*) FROM events`); got != 1 {
@@ -480,6 +480,34 @@ func TestDisabledExtractionShortCircuits(t *testing.T) {
 	})
 }
 
+func TestMessageAllPostsSelectsEveryPost(t *testing.T) {
+	f := messageFixture(t)
+	// Neither the keywords nor the local heuristic select this post.
+	f.addPost("post-plain", "", "おはよう", "2026-04-27T03:00:00.000Z", "")
+	f.scan()
+	if got := f.number(`SELECT COUNT(*) FROM post_llm_states WHERE post_id = 'post-plain'`); got != 0 {
+		t.Fatalf("heuristic scan selected the plain post")
+	}
+	f.exec(`INSERT INTO app_settings (key, value, updated_at) VALUES ('schedule_message_all_posts', '1', ?)`, testTimestamp)
+	f.scan()
+	if got := f.text(`SELECT status || '|' || route FROM post_llm_states WHERE post_id = 'post-plain'`); got != "success|schedule_message" {
+		t.Errorf("plain post state = %q", got)
+	}
+	if f.provider.count() != 2 {
+		t.Errorf("provider requests = %d, want 2", f.provider.count())
+	}
+}
+
+func TestMessageAllPostsFollowsEnvironmentDefault(t *testing.T) {
+	f := messageFixture(t)
+	f.addPost("post-plain", "", "おはよう", "2026-04-27T03:00:00.000Z", "")
+	f.env["SCHEDULE_MESSAGE_ALL_POSTS"] = "1"
+	f.scan()
+	if got := f.number(`SELECT COUNT(*) FROM post_llm_states WHERE post_id = 'post-plain'`); got != 1 {
+		t.Errorf("environment default did not select the plain post")
+	}
+}
+
 func TestReprocessRequestedPostIsRerun(t *testing.T) {
 	f := messageFixture(t)
 	// The post matches no detector and extraction is disabled: only the
@@ -559,7 +587,7 @@ func TestPostsWithoutUsableInputAreSkipped(t *testing.T) {
 		f := messageFixture(t)
 		f.exec(`DELETE FROM llm_route_targets`)
 		result := f.scan()
-		if got := f.text(`SELECT status || '|' || last_error FROM post_llm_states`); result.Status != "success" || got != "skipped|missing_api_key" {
+		if got := f.text(`SELECT status || '|' || last_error FROM post_llm_states`); result.Status != "success" || got != "skipped|no_route_target" {
 			t.Errorf("state = %q, status = %q", got, result.Status)
 		}
 	})

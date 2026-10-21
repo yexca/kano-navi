@@ -14,6 +14,7 @@
 | `SCHEDULE_KEYWORD_ENABLED`    | `1`                  | Enable keyword candidate selection                                 |
 | `SCHEDULE_VISION_ENABLED`     | `1`                  | Enable schedule-board LLM extraction                               |
 | `SCHEDULE_MESSAGE_ENABLED`    | `1`                  | Enable single-message schedule detection                           |
+| `SCHEDULE_MESSAGE_ALL_POSTS`  | `0`                  | Send every post through the message route, skipping the heuristic  |
 | `SCHEDULE_KEYWORDS`           | `schedule,...`       | Comma-separated schedule candidate keywords                        |
 | `WORKFLOW_SCHEDULER_ENABLED`  | `1`                  | Start timed saved workflows inside the server process              |
 | `MCP_ENABLED`                 | `1`                  | Expose the stateless `/mcp` endpoint                               |

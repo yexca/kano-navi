@@ -71,7 +71,10 @@ type ScheduleExtraction struct {
 	KeywordEnabled bool
 	VisionEnabled  bool
 	MessageEnabled bool
-	Keywords       []string
+	// MessageAllPosts sends every post through the message route instead of
+	// only the posts its local heuristic selects.
+	MessageAllPosts bool
+	Keywords        []string
 }
 
 type scanner func(dest ...any) error
@@ -389,6 +392,12 @@ func ScheduleExtractionConfig(ctx context.Context, db Querier, lookupEnv func(st
 	// The legacy switch only seeds the stage defaults: the message detector
 	// can be enabled on its own.
 	config.Enabled = config.MessageEnabled || (config.KeywordEnabled && config.VisionEnabled)
+	// The all-posts switch is off unless explicitly enabled.
+	allPosts, err := setting("schedule_message_all_posts", "SCHEDULE_MESSAGE_ALL_POSTS", "0")
+	if err != nil {
+		return config, err
+	}
+	config.MessageAllPosts = settingBoolean(allPosts, false)
 
 	const unset = "\x00unset"
 	keywords, err := setting("schedule_keywords", "SCHEDULE_KEYWORDS", unset)

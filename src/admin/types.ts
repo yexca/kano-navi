@@ -254,6 +254,7 @@ export interface Extraction {
   keywordEnabled: boolean
   visionEnabled: boolean
   messageEnabled: boolean
+  messageAllPosts: boolean
   keywords: string[]
 }
 

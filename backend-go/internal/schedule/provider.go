@@ -137,6 +137,9 @@ func (e *Extractor) configuredProviders(ctx context.Context, inputMode, detectio
 		if targets, err = routeTargets(ctx, e.db, routeVision); err != nil {
 			return nil, "", err
 		}
+		if len(targets) == 0 {
+			return []provider{}, "no_route_target", nil
+		}
 	}
 	providers := []provider{}
 	apiKeys := map[string]string{}
@@ -338,6 +341,13 @@ func property(value any, key string) any {
 
 const noStructuredOutput = "LLM response did not contain structured output"
 
+// anthropicToolInstruction asks for the result tool by name. Newer Claude
+// models reject a forced tool_choice ("tool" or "any") with HTTP 400, so the
+// request uses "auto" and steers from the system prompt instead.
+func anthropicToolInstruction(instructions, name string) string {
+	return instructions + "\n\nReturn the result only by calling the " + name + " tool exactly once."
+}
+
 // callModel sends the request in the provider's protocol and returns the
 // structured result the model produced.
 func (e *Extractor) callModel(ctx context.Context, p provider, call modelCall) (any, error) {
@@ -362,13 +372,13 @@ func (e *Extractor) callModel(ctx context.Context, p provider, call modelCall) (
 		payload, err := e.requestLLM(ctx, p, stringify(obj(
 			"model", p.model,
 			"max_tokens", min(4000, max(1, call.maxTokens)),
-			"system", call.instructions,
+			"system", anthropicToolInstruction(call.instructions, call.name),
 			"messages", []any{obj("role", "user", "content", content)},
 			"tools", []any{obj(
 				"name", call.name,
 				"description", "Return the structured classification result.",
 				"input_schema", call.schema)},
-			"tool_choice", obj("type", "tool", "name", call.name),
+			"tool_choice", obj("type", "auto", "disable_parallel_tool_use", true),
 		)))
 		if err != nil {
 			return nil, err

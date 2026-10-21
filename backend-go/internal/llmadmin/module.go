@@ -169,21 +169,23 @@ func (m *Module) guard(next handler) handler {
 
 type extractionResponse struct {
 	// Enabled is derived: the message detector alone, or keyword plus vision.
-	Enabled        bool     `json:"enabled"`
-	KeywordEnabled bool     `json:"keywordEnabled"`
-	VisionEnabled  bool     `json:"visionEnabled"`
-	MessageEnabled bool     `json:"messageEnabled"`
-	Keywords       []string `json:"keywords"`
+	Enabled         bool     `json:"enabled"`
+	KeywordEnabled  bool     `json:"keywordEnabled"`
+	VisionEnabled   bool     `json:"visionEnabled"`
+	MessageEnabled  bool     `json:"messageEnabled"`
+	MessageAllPosts bool     `json:"messageAllPosts"`
+	Keywords        []string `json:"keywords"`
 }
 
 func (m *Module) extractionPayload(ctx context.Context, db Querier) (extractionResponse, error) {
 	schedule, err := ScheduleExtractionConfig(ctx, db, m.env)
 	return extractionResponse{
-		Enabled:        schedule.Enabled,
-		KeywordEnabled: schedule.KeywordEnabled,
-		VisionEnabled:  schedule.VisionEnabled,
-		MessageEnabled: schedule.MessageEnabled,
-		Keywords:       schedule.Keywords,
+		Enabled:         schedule.Enabled,
+		KeywordEnabled:  schedule.KeywordEnabled,
+		VisionEnabled:   schedule.VisionEnabled,
+		MessageEnabled:  schedule.MessageEnabled,
+		MessageAllPosts: schedule.MessageAllPosts,
+		Keywords:        schedule.Keywords,
 	}, err
 }
 
@@ -200,6 +202,7 @@ var extractionStages = []struct{ field, key string }{
 	{"keywordEnabled", "schedule_keyword_enabled"},
 	{"visionEnabled", "schedule_vision_enabled"},
 	{"messageEnabled", "schedule_message_enabled"},
+	{"messageAllPosts", "schedule_message_all_posts"},
 }
 
 func (m *Module) putExtraction(w http.ResponseWriter, r *http.Request) {

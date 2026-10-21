@@ -338,11 +338,14 @@ func TestExtraction(t *testing.T) {
 		equal(t, key, initial.JSON[key], true)
 	}
 	equal(t, "keywords", stringsOf(t, initial.JSON["keywords"]), defaultScheduleKeywords)
+	equal(t, "all posts off by default", initial.JSON["messageAllPosts"], false)
 
 	saved := h.ok(http.MethodPut, "/extraction", map[string]any{
 		"keywordEnabled": false, "visionEnabled": "off",
-		"messageEnabled": "on", "keywords": " 予定, live，予定\nboard ",
+		"messageEnabled": "on", "messageAllPosts": true, "keywords": " 予定, live，予定\nboard ",
 	}, http.StatusOK)
+	equal(t, "all posts", saved.JSON["messageAllPosts"], true)
+	equal(t, "stored all posts", h.scalar(`SELECT value FROM app_settings WHERE key = 'schedule_message_all_posts'`), "1")
 	equal(t, "keyword stage", saved.JSON["keywordEnabled"], false)
 	equal(t, "vision stage", saved.JSON["visionEnabled"], false)
 	equal(t, "message stage", saved.JSON["messageEnabled"], true)
@@ -400,8 +403,11 @@ func TestExtractionEnvironmentDefaults(t *testing.T) {
 		"SCHEDULE_EXTRACTION_ENABLED": "0",
 		"SCHEDULE_MESSAGE_ENABLED":    "yes",
 		"SCHEDULE_KEYWORDS":           `["alpha", "beta", "alpha"]`,
+		"SCHEDULE_MESSAGE_ALL_POSTS":  "1",
 	}})
 	config := h.ok(http.MethodGet, "/extraction", nil, http.StatusOK)
+	// The legacy switch does not turn the all-posts option off.
+	equal(t, "all posts", config.JSON["messageAllPosts"], true)
 	equal(t, "keyword stage", config.JSON["keywordEnabled"], false)
 	equal(t, "vision stage", config.JSON["visionEnabled"], false)
 	equal(t, "message stage", config.JSON["messageEnabled"], true)

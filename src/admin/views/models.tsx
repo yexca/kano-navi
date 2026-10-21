@@ -115,6 +115,7 @@ function ExtractionPanel() {
     draft.keywordEnabled !== extraction.data.keywordEnabled ||
     draft.visionEnabled !== extraction.data.visionEnabled ||
     draft.messageEnabled !== extraction.data.messageEnabled ||
+    draft.messageAllPosts !== extraction.data.messageAllPosts ||
     parsed.join("\n") !== extraction.data.keywords.join("\n")
   const save = async () => {
     setBusy(true)
@@ -124,6 +125,7 @@ function ExtractionPanel() {
           keywordEnabled: draft.keywordEnabled,
           visionEnabled: draft.visionEnabled,
           messageEnabled: draft.messageEnabled,
+          messageAllPosts: draft.messageAllPosts,
           keywords: parsed,
         }),
       "admin.notice.extractionSaved",
@@ -180,6 +182,13 @@ function ExtractionPanel() {
           description={t("admin.models.stage.messageHint")}
         />
       </div>
+      <Switch
+        checked={draft.messageAllPosts}
+        disabled={!draft.messageEnabled}
+        onChange={(messageAllPosts) => setDraft({ ...draft, messageAllPosts })}
+        label={t("admin.models.stage.allPosts")}
+        description={t("admin.models.stage.allPostsHint")}
+      />
       <Field
         label={t("admin.models.keywords")}
         hint={t("admin.models.keywordsHint", { count: parsed.length })}

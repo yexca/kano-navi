@@ -202,24 +202,25 @@ Changing the featured video advances the dashboard revision.
 
 ## Extraction and models
 
-| Method and path                          | Body                                                                      | Result                                            |
-| ---------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------- |
-| `GET /extraction`                        |                                                                           | extraction settings                               |
-| `PUT /extraction`                        | any subset of `{keywordEnabled, visionEnabled, messageEnabled, keywords}` | extraction settings                               |
-| `GET /llm`                               |                                                                           | `{providers, models, routes, modelTags}`          |
-| `POST /llm/providers`                    | provider fields                                                           | `201 {provider}`                                  |
-| `PUT /llm/providers/{id}`                | provider fields                                                           | `{provider}`                                      |
-| `DELETE /llm/providers/{id}`             |                                                                           | `204`                                             |
-| `POST /llm/providers/{id}/test`          | `{model?}`                                                                | `{ok, method, model, remoteModelCount, provider}` |
-| `POST /llm/providers/{id}/discover`      |                                                                           | `{provider, models}` remote catalog               |
-| `POST /llm/providers/{id}/models`        | `{models, origin?}`                                                       | `201 {provider, models}`                          |
-| `PUT /llm/providers/{id}/models`         | one model `{id, ...}`                                                     | `{provider, model, models}`                       |
-| `POST /llm/providers/{id}/models/remove` | `{ids}`                                                                   | `{provider, models, removed}`                     |
-| `PUT /llm/routes/{route}`                | `{targets: [{providerId, modelId}]}`                                      | `{routes}`                                        |
+| Method and path                          | Body                                                                                       | Result                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| `GET /extraction`                        |                                                                                            | extraction settings                               |
+| `PUT /extraction`                        | any subset of `{keywordEnabled, visionEnabled, messageEnabled, messageAllPosts, keywords}` | extraction settings                               |
+| `GET /llm`                               |                                                                                            | `{providers, models, routes, modelTags}`          |
+| `POST /llm/providers`                    | provider fields                                                                            | `201 {provider}`                                  |
+| `PUT /llm/providers/{id}`                | provider fields                                                                            | `{provider}`                                      |
+| `DELETE /llm/providers/{id}`             |                                                                                            | `204`                                             |
+| `POST /llm/providers/{id}/test`          | `{model?}`                                                                                 | `{ok, method, model, remoteModelCount, provider}` |
+| `POST /llm/providers/{id}/discover`      |                                                                                            | `{provider, models}` remote catalog               |
+| `POST /llm/providers/{id}/models`        | `{models, origin?}`                                                                        | `201 {provider, models}`                          |
+| `PUT /llm/providers/{id}/models`         | one model `{id, ...}`                                                                      | `{provider, model, models}`                       |
+| `POST /llm/providers/{id}/models/remove` | `{ids}`                                                                                    | `{provider, models, removed}`                     |
+| `PUT /llm/routes/{route}`                | `{targets: [{providerId, modelId}]}`                                                       | `{routes}`                                        |
 
 Extraction settings are `{enabled, keywordEnabled, visionEnabled,
-messageEnabled, keywords}`; `enabled` is derived: the message stage alone, or
-keyword candidates plus boards. `routes`
+messageEnabled, messageAllPosts, keywords}`; `enabled` is derived: the message
+stage alone, or keyword candidates plus boards. `messageAllPosts` makes the
+message stage select every post instead of only heuristic matches. `routes`
 maps each route (`schedule_vision`, `schedule_message`,
 `schedule_board`) to `{targets, configured}`:
 the effective ordered targets and the operator's saved list. Model IDs may
