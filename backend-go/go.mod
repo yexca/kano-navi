@@ -1,6 +1,6 @@
 module github.com/yexca/kano-navi/backend-go
 
-go 1.26.4
+go 1.26.10
 
 require modernc.org/sqlite v1.60.1
 

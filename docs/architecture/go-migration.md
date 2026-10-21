@@ -173,7 +173,7 @@ driver text.
 
 ## Toolchain and build matrix
 
-The module remains pinned to Go `1.26.4`, matching the repository's current
+The module remains pinned to Go `1.26.10`, matching the repository's current
 Windows toolchain and the CI `go-version-file` setting. `make go-check` runs:
 
 ```text

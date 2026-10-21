@@ -29,7 +29,7 @@ internal/mcpapi    /mcp tools
 ```
 
 The module uses the pure-Go `modernc.org/sqlite` driver and builds with
-`CGO_ENABLED=0`. It declares Go `1.26.4`; CI reads that version from
+`CGO_ENABLED=0`. It declares Go `1.26.10`; CI reads that version from
 `go.mod`.
 
 ## Checks

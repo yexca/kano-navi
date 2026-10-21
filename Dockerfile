@@ -12,7 +12,7 @@ RUN npm ci --ignore-scripts
 COPY . .
 RUN npx vite build
 
-FROM golang:1.26.4-bookworm AS backend
+FROM golang:1.26.10-bookworm AS backend
 
 WORKDIR /src
 
@@ -31,7 +31,7 @@ RUN VERSION="$(grep -m1 '^  "version"' /tmp/package.json | sed 's/.*"version": "
 
 # Development: the Go toolchain builds and runs the backend, Vite serves the
 # frontend with hot reload and proxies /api, /media and /mcp to it.
-FROM golang:1.26.4-bookworm AS development
+FROM golang:1.26.10-bookworm AS development
 
 COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
 COPY --from=frontend /usr/local/lib/node_modules /usr/local/lib/node_modules

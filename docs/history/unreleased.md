@@ -16,5 +16,8 @@
 - `make sensitive-check` scans only the files Git can see, so ignored local
   state such as `.env`, `data/` and tool indexes no longer fails it. Tracked
   files are still scanned even when an ignore rule matches them.
+- The backend and the release image build with Go 1.26.10, which fixes the
+  standard library vulnerabilities reported for 1.26.4. Vite 8.3.5 resolves the
+  development-only launch-editor advisories.
 
 </details>
