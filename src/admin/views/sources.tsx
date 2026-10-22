@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type SubmitEvent } from "react"
 import { Download, KeyRound, Radio, RotateCw, Save } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
@@ -39,7 +39,7 @@ function FetchForm({
   const [endDate, setEndDate] = useState(japanToday())
   const [busy, setBusy] = useState(false)
   const past = mode !== "recent"
-  const submit = async (event) => {
+  const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
     await start({

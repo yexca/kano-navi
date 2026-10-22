@@ -1,8 +1,10 @@
+type MessageCatalog = Record<
+  string,
+  string | string[] | ((values: any) => string)
+>
+
 export type PageMessages = Partial<
-  Record<
-    import("./types").Locale,
-    Record<string, string | ((values: any) => string)>
-  >
+  Record<import("./types").Locale, MessageCatalog>
 >
 
 export const localeOptions = [
@@ -583,11 +585,11 @@ export function createTranslator(
   locale: import("./types").Locale,
   pageMessages: PageMessages = {},
 ): import("./types").Translator {
-  const selectedMessages = {
+  const selectedMessages: MessageCatalog = {
     ...messages[locale],
     ...(pageMessages[locale] || {}),
   }
-  const fallbackMessages = {
+  const fallbackMessages: MessageCatalog = {
     ...messages.en,
     ...pageMessages.en,
   }
@@ -595,7 +597,8 @@ export function createTranslator(
   return (key, values: Record<string, any> = {}) => {
     const message = selectedMessages[key] ?? fallbackMessages[key] ?? key
     if (typeof message === "function") return message(values)
-    if (typeof message !== "string") return message
+    // List messages such as "schedule.weekdays" are returned for callers to index.
+    if (typeof message !== "string") return message as unknown as string
 
     return message.replace(
       /\{(\w+)\}/g,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type SubmitEvent } from "react"
 import {
   ArrowDown,
   ArrowUp,
@@ -505,7 +505,7 @@ function ProviderDialog({
     setPicked([])
     setQueued([])
   }
-  const save = async (event) => {
+  const save = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy("save")
     const saved = await persist("admin.notice.providerSaved")

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import path from "node:path"
-import test from "node:test"
+import test, { type TestContext } from "node:test"
 import { createElement } from "react"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { createServer } from "vite"
@@ -20,7 +20,7 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
       await vite.ssrLoadModule("/src/admin/use-admin-data.ts")
     // Keep Vite's real watcher/optimizer timers outside the mocked clock.
     await vite.close()
-    const setup = async (context, { resource = false } = {}) => {
+    const setup = async (context: TestContext, { resource = false } = {}) => {
       context.mock.timers.enable({
         apis: ["Date", "setTimeout"],
         now: new Date("2025-01-01T00:00:00Z"),
@@ -40,19 +40,26 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
         resolve: (response: Response) => void
       }
       const requests: Pending[] = []
-      context.mock.method(globalThis, "fetch", (url, options) => {
-        return new Promise<Response>((resolve) =>
-          requests.push({
-            path: String(url).replace(/^\/api\/admin/, ""),
-            method: options.method,
-            body:
-              options.body === undefined ? undefined : JSON.parse(options.body),
-            signal: options.signal,
-            settled: false,
-            resolve,
-          }),
-        )
-      })
+      type FetchOptions = { method: string; body?: string; signal: AbortSignal }
+      context.mock.method(
+        globalThis,
+        "fetch",
+        (url: RequestInfo | URL, options: FetchOptions) => {
+          return new Promise<Response>((resolve) =>
+            requests.push({
+              path: String(url).replace(/^\/api\/admin/, ""),
+              method: options.method,
+              body:
+                options.body === undefined
+                  ? undefined
+                  : JSON.parse(options.body),
+              signal: options.signal,
+              settled: false,
+              resolve,
+            }),
+          )
+        },
+      )
       let value: ReturnType<typeof useAdminData>
       let loaded: ReturnType<typeof useResource>
       let root: ReactTestRenderer
@@ -122,7 +129,10 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
       steps: [],
       progress: {},
     })
-    const overview = (activeRun = null) => ({ activeRun, recentRuns: [] })
+    const overview = (activeRun: ReturnType<typeof run> | null = null) => ({
+      activeRun,
+      recentRuns: [],
+    })
     const failure = (code: string) => ({ error: code, message: code })
 
     await t.test(
@@ -139,7 +149,7 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
           await fixture.tick(60000)
           assert.equal(fixture.all("/overview").length, 0)
 
-          let login: Promise<void>
+          let login: Promise<void> | undefined
           await act(async () => {
             login = fixture.current().login("synthetic-password")
           })
@@ -181,12 +191,12 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
           const sources = fixture.current().api.sources()
           const sourcesOutcome = sources.then(
             () => "resolved",
-            (error) => error.name,
+            (error: { name: string }) => error.name,
           )
           const login = fixture.current().api.login("wrong-synthetic")
           const loginOutcome = login.then(
             () => "resolved",
-            (error) => error.status,
+            (error: { status: number }) => error.status,
           )
           await fixture.respond(
             fixture.open("/session", "POST"),
@@ -268,7 +278,7 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
           await fixture.respond(fixture.open("/session"), signedIn)
           await fixture.respond(fixture.open("/overview"), overview())
 
-          let started: Promise<any>
+          let started: Promise<{ id: string } | undefined> | undefined
           await act(async () => {
             started = fixture.current().start({ kind: "sync" })
           })
@@ -283,7 +293,10 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
           assert.deepEqual(
             fixture
               .current()
-              .toasts.map((toast) => [toast.tone, toast.message]),
+              .toasts.map((toast: { tone: string; message: unknown }) => [
+                toast.tone,
+                toast.message,
+              ]),
             [["success", { key: "admin.notice.busy", values: {} }]],
           )
           assert.equal(fixture.current().session.authenticated, true)
@@ -295,7 +308,7 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
           await fixture.respond(fixture.open("/runs", "POST"), {
             run: run("run-synthetic-4"),
           })
-          assert.equal((await started).id, "run-synthetic-4")
+          assert.equal((await started)?.id, "run-synthetic-4")
           assert.equal(
             fixture.current().toasts.at(-1).message.key,
             "admin.notice.runQueued",

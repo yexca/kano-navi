@@ -39,7 +39,7 @@ export function createRequestScope(timeoutMs = 12000) {
           ),
         timeoutMs,
       )
-      let rejectAbort: () => void
+      let rejectAbort = () => {}
       const aborted = new Promise<never>((_, reject) => {
         rejectAbort = () =>
           reject(

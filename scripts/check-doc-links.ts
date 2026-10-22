@@ -6,12 +6,12 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = path.resolve(scriptDirectory, "..")
 const externalTargetPattern = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/iu
 
-function normalizePath(file) {
+function normalizePath(file: string): string {
   return file.replaceAll("\\", "/")
 }
 
-function markdownFiles(directory, relativeDirectory = "") {
-  const files = []
+function markdownFiles(directory: string, relativeDirectory = ""): string[] {
+  const files: string[] = []
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const relativePath = normalizePath(path.join(relativeDirectory, entry.name))
     if (entry.isDirectory()) {
@@ -25,7 +25,7 @@ function markdownFiles(directory, relativeDirectory = "") {
   return files
 }
 
-function targetPath(rawTarget) {
+function targetPath(rawTarget: string): string | null {
   const withoutTitle = rawTarget.trim()
   const target = withoutTitle.startsWith("<")
     ? withoutTitle.slice(1, withoutTitle.indexOf(">"))

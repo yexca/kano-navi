@@ -1,4 +1,5 @@
 import { Brain, Eye, Layers, Type, Wrench } from "lucide-react"
+import type { Model, Provider, RouteTarget } from "./types.ts"
 
 export { inferenceEndpoint, modelsEndpoint } from "../lib/llm-endpoints.ts"
 
@@ -56,7 +57,7 @@ export const providerPresets = [
   },
 ]
 
-export function providerSlug(name, existingIds = []) {
+export function providerSlug(name: string, existingIds: string[] = []) {
   const base =
     String(name || "")
       .toLowerCase()
@@ -77,14 +78,25 @@ export function providerSlug(name, existingIds = []) {
  * Resolve a route target against the catalog for display: which model it
  * will call and whether it can actually be used right now.
  */
-export function describeTarget(target, providers, models) {
+export type TargetIssue =
+  | "providerMissing"
+  | "providerDisabled"
+  | "keyMissing"
+  | "modelMissing"
+  | "modelDisabled"
+
+export function describeTarget(
+  target: RouteTarget,
+  providers: Provider[],
+  models: Model[],
+) {
   const provider = providers.find((item) => item.id === target.providerId)
   const modelId = target.modelId || ""
   const model = models.find(
     (item) => item.providerId === target.providerId && item.id === modelId,
   )
   const capabilities = model?.capabilities || []
-  let issue = null
+  let issue: TargetIssue | null = null
   if (!provider) issue = "providerMissing"
   else if (!provider.enabled) issue = "providerDisabled"
   else if (!provider.apiKeyConfigured) issue = "keyMissing"

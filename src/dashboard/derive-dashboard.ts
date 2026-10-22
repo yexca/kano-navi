@@ -1,4 +1,4 @@
-import type { Dashboard } from "../types.ts"
+import type { Dashboard, ScheduleEvent, Video } from "../types.ts"
 import { streamIdentity } from "../lib/stream-identity.ts"
 import {
   eventIsUpcoming,
@@ -9,7 +9,7 @@ import {
 
 export const LIVE_GRACE_MS = 3 * 3600 * 1000
 
-export function eventIsLive(event, now: number) {
+export function eventIsLive(event: ScheduleEvent, now: number) {
   if (
     !["stream", "member"].includes(event.eventType) &&
     event.source !== "youtube"
@@ -23,7 +23,7 @@ export function eventIsLive(event, now: number) {
   )
 }
 
-export function videoIsInFocus(video, now: number) {
+export function videoIsInFocus(video: Video, now: number) {
   if (video.isCancelled) return false
   const start = Date.parse(video.scheduledAt || "")
   const end = Date.parse(video.endsAt || "")
@@ -41,7 +41,7 @@ export function deriveDashboardAt(snapshot: Dashboard, now: number): Dashboard {
   }))
   const streamEnds = new Map<string, string>()
   for (const event of events) {
-    if (event.url && Number.isFinite(Date.parse(event.endsAt || "")))
+    if (event.url && event.endsAt && Number.isFinite(Date.parse(event.endsAt)))
       streamEnds.set(streamIdentity(event.url), event.endsAt)
   }
   const videos = snapshot.videos.map((video) => ({

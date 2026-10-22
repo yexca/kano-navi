@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { execFileSync, spawn } from "node:child_process"
+import { execFileSync, spawn, type ChildProcess } from "node:child_process"
 import fs from "node:fs"
 import { createServer } from "node:net"
 import os from "node:os"
@@ -8,10 +8,10 @@ import { setTimeout as delay } from "node:timers/promises"
 import { fileURLToPath } from "node:url"
 
 export async function verifySnapshot(
-  origin,
+  origin: string,
   { staticPages = false }: { staticPages?: boolean } = {},
 ) {
-  async function request(route, status = 200) {
+  async function request(route: string, status = 200) {
     const response = await fetch(`${origin}${route}`, {
       signal: AbortSignal.timeout(5000),
       redirect: "error",
@@ -46,7 +46,7 @@ export async function verifySnapshot(
   if (staticPages) {
     for (const route of ["/", "/history", "/admin"]) {
       const response = await request(route)
-      assert.match(response.headers.get("content-type"), /text\/html/u)
+      assert.match(response.headers.get("content-type") ?? "", /text\/html/u)
       assert.match(await response.text(), /<div id="root"><\/div>/u)
     }
   }
@@ -83,7 +83,7 @@ async function runLocalSmoke() {
     WORKFLOW_SCHEDULER_ENABLED: "0",
     MCP_CONTROL_TOKEN: "",
   }
-  let server
+  let server: ChildProcess | undefined
   try {
     execFileSync(go, ["build", "-o", binary, "./cmd/kano-go"], {
       cwd: path.join(root, "backend-go"),
@@ -122,9 +122,10 @@ async function runLocalSmoke() {
     await verifySnapshot(origin)
     console.log("API smoke passed (isolated SQLite, seed, reads, admin guard).")
   } finally {
-    if (server && server.exitCode == null) {
-      const exited = new Promise((resolve) => server.once("exit", resolve))
-      server.kill()
+    const running = server
+    if (running && running.exitCode == null) {
+      const exited = new Promise((resolve) => running.once("exit", resolve))
+      running.kill()
       await exited
     }
     fs.rmSync(temporaryRoot, { recursive: true, force: true, maxRetries: 5 })

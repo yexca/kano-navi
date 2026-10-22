@@ -1,48 +1,54 @@
+import type { ScheduleEvent, Translator, Video } from "../types.ts"
+
 export const JAPAN_TIME_ZONE = "Asia/Tokyo"
 
-const intlLocales = {
+/** Anything `new Date()` accepts; empty and invalid values format as blank. */
+type DateInput = Date | string | number | null | undefined
+
+const intlLocales: Record<string, string> = {
   "zh-CN": "zh-CN",
   ja: "ja-JP",
   en: "en-US",
 }
 
-export function intlLocale(locale) {
+export function intlLocale(locale: string) {
   return intlLocales[locale] || intlLocales.en
 }
 
-const formatterCache = new Map()
+const formatterCache = new Map<string, Intl.DateTimeFormat>()
 
-function formatter(locale, options) {
+function formatter(locale: string, options: Intl.DateTimeFormatOptions) {
   const key = `${locale}|${JSON.stringify(options)}`
-  if (!formatterCache.has(key)) {
-    formatterCache.set(
-      key,
-      new Intl.DateTimeFormat(intlLocale(locale), options),
-    )
+  let cached = formatterCache.get(key)
+  if (!cached) {
+    cached = new Intl.DateTimeFormat(intlLocale(locale), options)
+    formatterCache.set(key, cached)
   }
-  return formatterCache.get(key)
+  return cached
 }
 
-function parts(date, locale, options) {
-  return formatter(locale, options)
-    .formatToParts(date)
-    .reduce((result, part) => {
-      result[part.type] = part.value
-      return result
-    }, {})
+function parts(
+  date: Date,
+  locale: string,
+  options: Intl.DateTimeFormatOptions,
+) {
+  const result: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {}
+  for (const part of formatter(locale, options).formatToParts(date))
+    result[part.type] = part.value
+  return result
 }
 
-function toDate(value) {
+function toDate(value: DateInput) {
   if (!value) return null
   const date = value instanceof Date ? value : new Date(value)
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-const pad = (value) => String(value).padStart(2, "0")
+const pad = (value: number) => String(value).padStart(2, "0")
 
 // Calendar math uses local Date objects whose Y/M/D mirror the Japan date, so
 // week navigation is independent of the visitor's own time zone.
-export function dateKey(value) {
+export function dateKey(value: DateInput) {
   const date = toDate(value)
   if (!date) return ""
   const { year, month, day } = parts(date, "en", {
@@ -54,7 +60,7 @@ export function dateKey(value) {
   return `${year}-${month}-${day}`
 }
 
-export function localDateKey(date) {
+export function localDateKey(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
@@ -63,22 +69,22 @@ export function japanToday() {
   return new Date(year, month - 1, day)
 }
 
-export function addDays(date, amount) {
+export function addDays(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + amount)
 }
 
-export function startOfWeek(date) {
+export function startOfWeek(date: Date) {
   return addDays(date, -((date.getDay() + 6) % 7))
 }
 
-export function weekStartKey(value) {
+export function weekStartKey(value: DateInput) {
   const key = dateKey(value)
   if (!key) return ""
   const [year, month, day] = key.split("-").map(Number)
   return localDateKey(startOfWeek(new Date(year, month - 1, day)))
 }
 
-export function formatWeekRange(weekStart, locale) {
+export function formatWeekRange(weekStart: Date, locale: string) {
   const weekEnd = addDays(weekStart, 6)
   const format = formatter(locale, { month: "short", day: "numeric" })
   return typeof format.formatRange === "function"
@@ -86,7 +92,7 @@ export function formatWeekRange(weekStart, locale) {
     : `${format.format(weekStart)} – ${format.format(weekEnd)}`
 }
 
-export function formatLongDate(date, locale) {
+export function formatLongDate(date: Date, locale: string) {
   return formatter(locale, {
     month: "long",
     day: "numeric",
@@ -95,7 +101,7 @@ export function formatLongDate(date, locale) {
 }
 
 /** "08.29 21:00" in Japan time. */
-export function formatStamp(value) {
+export function formatStamp(value: DateInput) {
   const date = toDate(value)
   if (!date) return "—"
   const p = parts(date, "en", {
@@ -109,7 +115,7 @@ export function formatStamp(value) {
   return `${p.month}.${p.day} ${p.hour}:${p.minute}`
 }
 
-export function formatJapanTime(value) {
+export function formatJapanTime(value: DateInput) {
   const date = toDate(value)
   if (!date) return ""
   const p = parts(date, "en", {
@@ -121,7 +127,7 @@ export function formatJapanTime(value) {
   return `${p.hour}:${p.minute}`
 }
 
-export function formatJapanDay(value, locale) {
+export function formatJapanDay(value: DateInput, locale: string) {
   const date = toDate(value)
   if (!date) return ""
   return formatter(locale, {
@@ -132,7 +138,7 @@ export function formatJapanDay(value, locale) {
   }).format(date)
 }
 
-export function formatVisitorTime(value, locale) {
+export function formatVisitorTime(value: DateInput, locale: string) {
   const date = toDate(value)
   if (!date) return ""
   return formatter(locale, {
@@ -155,18 +161,22 @@ export function visitorIsInJapan() {
   }
 }
 
-const relativeCache = new Map()
+const relativeCache = new Map<string, Intl.RelativeTimeFormat>()
 
-export function formatRelative(value, locale, now = Date.now()) {
+export function formatRelative(
+  value: DateInput,
+  locale: string,
+  now = Date.now(),
+) {
   const date = toDate(value)
   if (!date) return ""
-  if (!relativeCache.has(locale)) {
-    relativeCache.set(
-      locale,
-      new Intl.RelativeTimeFormat(intlLocale(locale), { numeric: "auto" }),
-    )
+  let format = relativeCache.get(locale)
+  if (!format) {
+    format = new Intl.RelativeTimeFormat(intlLocale(locale), {
+      numeric: "auto",
+    })
+    relativeCache.set(locale, format)
   }
-  const format = relativeCache.get(locale)
   const seconds = Math.round((date.getTime() - now) / 1000)
   const abs = Math.abs(seconds)
   if (abs < 60) return format.format(0, "second")
@@ -176,7 +186,7 @@ export function formatRelative(value, locale, now = Date.now()) {
   return format.format(Math.round(seconds / (86400 * 30)), "month")
 }
 
-export function countdownParts(value, now = Date.now()) {
+export function countdownParts(value: DateInput, now = Date.now()) {
   const date = toDate(value)
   if (!date) return null
   const remaining = date.getTime() - now
@@ -190,7 +200,7 @@ export function countdownParts(value, now = Date.now()) {
   }
 }
 
-export function formatCompact(value, locale) {
+export function formatCompact(value: unknown, locale: string) {
   const number = Number(value)
   if (!Number.isFinite(number) || number <= 0) return ""
   return new Intl.NumberFormat(intlLocale(locale), {
@@ -202,11 +212,11 @@ export function formatCompact(value, locale) {
 // ---------------------------------------------------------------------------
 // Events
 
-export function eventDateKey(event) {
+export function eventDateKey(event: ScheduleEvent) {
   return event.startsOn || dateKey(event.startsAt)
 }
 
-export function eventIsUpcoming(event, now = Date.now()) {
+export function eventIsUpcoming(event: ScheduleEvent, now = Date.now()) {
   const timestamp = Date.parse(event.startsAt || "")
   if (!Number.isNaN(timestamp)) return timestamp >= now
   const day = eventDateKey(event)
@@ -234,18 +244,13 @@ const pendingStatuses = [
 ]
 
 /** upcoming | done | pending | cancelled | cancellation_review */
-export function eventStatus(event, now = Date.now()) {
+export function eventStatus(event: ScheduleEvent, now = Date.now()) {
   if (event.cancellationStatus === "manual_confirmed") return "cancelled"
   if (event.cancellationStatus === "llm_suspected") return "cancellation_review"
-  const explicit = String(event.statusCode || "").toLowerCase()
   const status = String(event.status || "")
     .trim()
     .toLowerCase()
-  if (
-    cancelledStatuses.includes(explicit) ||
-    cancelledStatuses.includes(status) ||
-    status.startsWith("cancel")
-  )
+  if (cancelledStatuses.includes(status) || status.startsWith("cancel"))
     return "cancelled"
   if (eventIsUpcoming(event, now)) return "upcoming"
   if (event.timePrecision === "unknown" || pendingStatuses.includes(status))
@@ -253,18 +258,18 @@ export function eventStatus(event, now = Date.now()) {
   return "done"
 }
 
-export function eventIsManual(event) {
+export function eventIsManual(event: ScheduleEvent) {
   return event.provenance === "manual" || Boolean(event.manualLocked)
 }
 
-export function eventTypeKey(event) {
+export function eventTypeKey(event: ScheduleEvent) {
   const type = String(event.eventType || "").toLowerCase()
   return ["stream", "member", "event", "release", "video"].includes(type)
     ? `event.type.${type}`
     : null
 }
 
-export function sortEvents(events) {
+export function sortEvents(events: ScheduleEvent[]) {
   return [...events].sort(
     (a, b) =>
       scheduleSortTime(a.startsAt, a.startsOn) -
@@ -275,7 +280,10 @@ export function sortEvents(events) {
 
 // Date-only entries follow timed entries on the same Japan date. This is a
 // sorting boundary only; it does not supply an event start or countdown.
-export function scheduleSortTime(time, dateOnly = null) {
+export function scheduleSortTime(
+  time: string | null | undefined,
+  dateOnly: string | null = null,
+) {
   const instant = Date.parse(time || "")
   if (Number.isFinite(instant)) return instant
   const dayEnd = Date.parse(`${dateOnly}T23:59:59.999+09:00`)
@@ -285,7 +293,7 @@ export function scheduleSortTime(time, dateOnly = null) {
 // ---------------------------------------------------------------------------
 // Videos
 
-const videoKindKeys = {
+const videoKindKeys: Record<string, string> = {
   GAMEPLAY: "media.kind.gameplay",
   TALK: "media.kind.talk",
   "LIVE ARCHIVE": "media.kind.liveArchive",
@@ -293,7 +301,7 @@ const videoKindKeys = {
   MUSIC: "media.kind.music",
 }
 
-export function videoKindLabel(video, t) {
+export function videoKindLabel(video: Video, t: Translator) {
   const kind = String(video?.kind || "")
     .trim()
     .toUpperCase()
@@ -306,12 +314,12 @@ export function videoKindLabel(video, t) {
 }
 
 /** Strip the trailing 【鹿乃まほろ/ミリプロ】 credit that every title repeats. */
-export function cleanVideoTitle(title) {
+export function cleanVideoTitle(title: string | null | undefined) {
   return String(title || "")
     .replace(/\s*【\s*鹿乃まほろ\s*[/／]\s*ミリプロ\s*】\s*/gu, " ")
     .trim()
 }
 
-export function videoTime(video) {
+export function videoTime(video: Video) {
   return video.scheduledAt || video.publishedAt || null
 }

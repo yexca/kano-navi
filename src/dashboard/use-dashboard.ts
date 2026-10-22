@@ -164,7 +164,8 @@ export function useDashboard(now = Date.now()) {
       setCalendarError(null)
       setCalendarLoading(false)
       return { ok: true }
-    } catch (error) {
+    } catch (caught) {
+      const error = caught instanceof Error ? caught : new Error(String(caught))
       if (
         scope.active &&
         key === rangeKey(rangeRef.current) &&
@@ -198,7 +199,8 @@ export function useDashboard(now = Date.now()) {
       calendarRef.current = combined
       setCalendar(combined)
       setCalendarError(null)
-    } catch (error) {
+    } catch (caught) {
+      const error = caught instanceof Error ? caught : new Error(String(caught))
       if (
         scope.active &&
         key === rangeKey(rangeRef.current) &&

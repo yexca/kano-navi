@@ -16,6 +16,7 @@ import {
   Ticket,
   TrainFront,
   Users,
+  type LucideIcon,
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
@@ -30,6 +31,7 @@ import {
   localized,
   mediaByMilestone,
   sourceName,
+  type LocalizedText,
 } from "./media"
 import {
   GalleryTile,
@@ -46,7 +48,7 @@ const MEDIA_KINDS = ["cover", "artwork", "model", "frame", "goods"]
 // its heading passes this line.
 const ACTIVE_YEAR_OFFSET = 140
 
-const kindIcons = {
+const kindIcons: Record<string, LucideIcon> = {
   start: Mic,
   debut: Star,
   release: Disc3,
@@ -70,19 +72,15 @@ interface Milestone {
   branch: string
   kind: string
   highlight?: boolean
-  title: Record<string, string>
-  detail?: Record<string, string>
+  title: LocalizedText
+  detail?: LocalizedText
   source: string | null
   links?: { href: string; label: string }[]
 }
 
-interface RailSegment {
-  gap: boolean
-  year?: string
-  items?: Milestone[]
-  from?: number
-  to?: number
-}
+type RailSegment =
+  | { gap: false; year: string; items: Milestone[] }
+  | { gap: true; from: number; to: number }
 
 const allMilestones = milestones as Milestone[]
 
@@ -715,7 +713,7 @@ export function HistoryApp() {
         items={viewer?.items}
         index={viewer?.index || 0}
         label={
-          viewer ? localized(viewer.items[viewer.index]?.title, locale) : ""
+          (viewer && localized(viewer.items[viewer.index]?.title, locale)) || ""
         }
         onClose={closeMedia}
         onStep={stepMedia}

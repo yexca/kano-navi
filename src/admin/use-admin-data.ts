@@ -11,6 +11,7 @@ import {
 import { createRequestScope, startPolling } from "../lib/polling"
 
 import {
+  ApiError,
   errorMessage,
   message,
   request,
@@ -274,7 +275,12 @@ export function useAdminData() {
             request(path, { ...options, signal }),
           )
         } catch (error) {
-          if (error?.status === 401 && !path.startsWith("/session")) signedOut()
+          if (
+            error instanceof ApiError &&
+            error.status === 401 &&
+            !path.startsWith("/session")
+          )
+            signedOut()
           throw error
         }
       }
@@ -402,7 +408,8 @@ export function useAdminData() {
         void refreshOverview().catch(() => {})
         return run
       } catch (error) {
-        if (error?.status === 409) notify("admin.notice.busy")
+        if (error instanceof ApiError && error.status === 409)
+          notify("admin.notice.busy")
         else fail(error)
         return undefined
       }
@@ -459,7 +466,8 @@ export function useResource<T>(load: () => Promise<T>, deps: unknown[]) {
       return next
     } catch (failure) {
       // A superseded read leaves the newer one in charge of the state.
-      if (failure?.name === "AbortError") return undefined
+      if (failure instanceof Error && failure.name === "AbortError")
+        return undefined
       setError(failure)
       setLoading(false)
       fail(failure)

@@ -3,6 +3,20 @@ import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
+export type ApprovedHosts = Map<string, string>
+
+export type ScanEntry = {
+  file: string
+  line: number
+  text?: string
+}
+
+export type SensitiveFinding = {
+  file: string
+  line: number | null
+  kind: string
+}
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 export const repositoryRoot = path.resolve(scriptDirectory, "..")
 export const privacyAllowlistFile = "scripts/privacy-allowlist.json"
@@ -72,16 +86,16 @@ const binaryExtensions = new Set([
   ".zip",
 ])
 
-function normalizePath(file) {
+function normalizePath(file: string): string {
   return file.replaceAll("\\", "/")
 }
 
-function runGit(argumentsList, cwd = repositoryRoot) {
+function runGit(argumentsList: string[], cwd = repositoryRoot) {
   return spawnSync("git", argumentsList, { cwd, encoding: "buffer" })
 }
 
-function walkFiles(directory, relativeDirectory = "") {
-  const files = []
+function walkFiles(directory: string, relativeDirectory = ""): string[] {
+  const files: string[] = []
   let entries
   try {
     entries = fs.readdirSync(directory, { withFileTypes: true })
@@ -105,7 +119,7 @@ function walkFiles(directory, relativeDirectory = "") {
 // Tracked files plus untracked files that Git does not ignore. A tracked file
 // stays listed even when an ignore rule matches it, so a force-added secret is
 // still scanned; ignored local state (.env, data/, tool indexes) is not.
-export function repositoryFiles(root = repositoryRoot) {
+export function repositoryFiles(root = repositoryRoot): string[] {
   const result = runGit(
     ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
     root,
@@ -120,18 +134,18 @@ export function repositoryFiles(root = repositoryRoot) {
   return walkFiles(root)
 }
 
-function isIgnoredPath(file) {
+function isIgnoredPath(file: string): boolean {
   const normalized = normalizePath(file)
   return normalized.split("/").some((part) => ignoredDirectoryNames.has(part))
 }
 
-function isBinaryPath(file) {
+function isBinaryPath(file: string): boolean {
   return binaryExtensions.has(
     path.posix.extname(normalizePath(file)).toLowerCase(),
   )
 }
 
-export function isSensitivePath(file) {
+export function isSensitivePath(file: string): boolean {
   const normalized = normalizePath(file)
   if (isIgnoredPath(normalized)) return false
   const baseName = path.posix.basename(normalized).toLowerCase()
@@ -153,7 +167,7 @@ export function isSensitivePath(file) {
   )
 }
 
-function findSensitiveFiles(files) {
+function findSensitiveFiles(files: string[]): SensitiveFinding[] {
   return files.filter(isSensitivePath).map((file) => ({
     file,
     line: null,
@@ -161,11 +175,11 @@ function findSensitiveFiles(files) {
   }))
 }
 
-function canonicalHost(value) {
+function canonicalHost(value: unknown): string {
   return String(value).toLowerCase().replace(/\.$/u, "")
 }
 
-export function parsePrivacyAllowlist(contents) {
+export function parsePrivacyAllowlist(contents: string): ApprovedHosts {
   let parsed
   try {
     parsed = JSON.parse(contents)
@@ -186,7 +200,7 @@ export function parsePrivacyAllowlist(contents) {
     throw new Error("root must contain only version 1 and a hosts array")
   }
 
-  const hosts = new Map()
+  const hosts: ApprovedHosts = new Map()
   for (const [index, entry] of parsed.hosts.entries()) {
     const entryNumber = index + 1
     if (entry === null || Array.isArray(entry) || typeof entry !== "object") {
@@ -231,7 +245,10 @@ function loadPrivacyAllowlist() {
   }
 }
 
-export function isAllowedHost(host, approvedHosts = new Map()) {
+export function isAllowedHost(
+  host: string,
+  approvedHosts: ApprovedHosts = new Map(),
+): boolean {
   const normalized = canonicalHost(host).replace(/^\[|\]$/gu, "")
   if (reservedHosts.has(normalized)) return true
   if (normalized.startsWith("127.")) return true
@@ -248,7 +265,7 @@ export function isAllowedHost(host, approvedHosts = new Map()) {
   return false
 }
 
-function isDocumentationIPv4(value) {
+function isDocumentationIPv4(value: string): boolean {
   const octets = value.split(".").map(Number)
   if (
     octets.length !== 4 ||
@@ -263,7 +280,7 @@ function isDocumentationIPv4(value) {
   )
 }
 
-function isAllowedIPv4(value) {
+function isAllowedIPv4(value: string): boolean {
   return (
     value === "0.0.0.0" ||
     value.startsWith("127.") ||
@@ -271,11 +288,11 @@ function isAllowedIPv4(value) {
   )
 }
 
-function normalizedValue(value) {
+function normalizedValue(value: string): string {
   return value.trim().replace(/^['"`]|['"`,;]+$/gu, "")
 }
 
-export function isSafePlaceholder(value) {
+export function isSafePlaceholder(value: string): boolean {
   const normalized = normalizedValue(value).toLowerCase()
   return (
     normalized === "" ||
@@ -294,7 +311,7 @@ export function isSafePlaceholder(value) {
   )
 }
 
-function isLiteralSensitiveValue(value) {
+function isLiteralSensitiveValue(value: string): boolean {
   const normalized = normalizedValue(value)
   if (isSafePlaceholder(normalized)) return false
   return (
@@ -302,7 +319,7 @@ function isLiteralSensitiveValue(value) {
   )
 }
 
-function parseURL(candidate) {
+function parseURL(candidate: string): URL {
   const normalized = candidate
     .replace(/\$\([^)]*\)/gu, "0")
     .replace(/\$\{[^}]+\}/gu, "0")
@@ -310,11 +327,15 @@ function parseURL(candidate) {
   return new URL(normalized)
 }
 
-function containsPrivatePath(text) {
+function containsPrivatePath(text: string): boolean {
   return /(?:[A-Za-z]:[\\/](?:Users|home)[\\/]|\/(?:home|Users)\/)/u.test(text)
 }
 
-export function scanLine(entry, findings, approvedHosts = new Map()) {
+export function scanLine(
+  entry: ScanEntry,
+  findings: SensitiveFinding[],
+  approvedHosts: ApprovedHosts = new Map(),
+): void {
   const text = entry.text || ""
   if (containsPrivatePath(text))
     findings.push({ ...entry, kind: "private local path" })
@@ -374,7 +395,7 @@ export function scanLine(entry, findings, approvedHosts = new Map()) {
   }
 }
 
-function readText(file) {
+function readText(file: string): string | null {
   const fullPath = path.resolve(repositoryRoot, file)
   let stat
   try {
@@ -391,7 +412,7 @@ function readText(file) {
 export function runSensitiveCheck() {
   const approvedHosts = loadPrivacyAllowlist()
   const files = repositoryFiles().filter((file) => !isIgnoredPath(file))
-  const findings = []
+  const findings: SensitiveFinding[] = []
   findings.push(...findSensitiveFiles(files))
   let scannedTextFiles = 0
   let skippedBinaryFiles = 0
