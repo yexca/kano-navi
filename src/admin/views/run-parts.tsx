@@ -1,4 +1,5 @@
-import { AtSign, ImageDown, Sparkles, Youtube } from "lucide-react"
+import type { SVGProps } from "react"
+import { AtSign, ImageDown, Sparkles } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import {
@@ -10,10 +11,17 @@ import {
 import type { Run } from "@/admin/types"
 import { StatusBadge, Spinner } from "@/admin/ui"
 import { cn } from "@/lib/utils"
+import { YouTubeLogo } from "@/site/links"
+
+// lucide-react 1.x has no brand icons. The board's logo takes lucide's
+// default 24px size so unstyled icon slots render it the same way.
+function YouTubeIcon(props: SVGProps<SVGSVGElement>) {
+  return <YouTubeLogo width={24} height={24} {...props} />
+}
 
 export const stepIcons = {
   x: AtSign,
-  youtube: Youtube,
+  youtube: YouTubeIcon,
   media: ImageDown,
   schedule: Sparkles,
 }
