@@ -51,6 +51,12 @@ reload when a chunk fails (including after a deployment). Direct visits and
 trailing-slash routes work through the existing SPA fallback. History/about
 remain static and never mount the dashboard hook or request its API.
 
+SQLite stores one text per seeded timeline and link row. The board translates
+that text through src/dashboard/seed-copy.ts, keyed by the exact seed wording
+in static-seed.json, so a row whose text was changed shows as stored. Update
+both files together; the frontend tests require English and Japanese copy for
+every seed row.
+
 The dashboard hook coordinates one current request. Snapshot refreshes share an
 in-flight promise; a manual refresh cancels an older revision read, and stale
 completions cannot install state. A 15-second deadline covers headers and JSON

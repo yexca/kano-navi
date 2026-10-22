@@ -1,4 +1,4 @@
-import type { Dashboard, Translator } from "@/types"
+import type { Dashboard, Locale, Translator } from "@/types"
 import {
   ArrowRight,
   ArrowUpRight,
@@ -14,6 +14,7 @@ import {
 import { SectionTitle } from "@/site/site-shell"
 import { ExternalLink, XLogo, YouTubeLogo } from "@/site/links"
 import { archiveLinks, hashtags } from "../content"
+import { localizeSeedText } from "../seed-copy"
 
 function resourceIcon(url = "") {
   if (/\/\/(?:www\.)?(?:x|twitter)\.com\//u.test(url)) return XLogo
@@ -37,10 +38,12 @@ function hostOf(url: string) {
 export function LinkDirectory({
   timeline,
   resources,
+  locale,
   t,
 }: {
   timeline: Dashboard["timeline"]
   resources: Dashboard["resources"]
+  locale: Locale
   t: Translator
 }) {
   return (
@@ -61,8 +64,11 @@ export function LinkDirectory({
                     <Icon />
                   </span>
                   <span className="link-row-copy">
-                    <strong>{resource.title}</strong>
-                    <small>{resource.detail || hostOf(resource.url)}</small>
+                    <strong>{localizeSeedText(resource.title, locale)}</strong>
+                    <small>
+                      {localizeSeedText(resource.detail, locale) ||
+                        hostOf(resource.url)}
+                    </small>
                   </span>
                   <ArrowUpRight className="link-row-arrow" aria-hidden="true" />
                 </ExternalLink>
@@ -79,8 +85,10 @@ export function LinkDirectory({
               <li key={item.id}>
                 <span className="journey-mini-year">{item.year}</span>
                 <span className="journey-mini-copy">
-                  <strong>{item.title}</strong>
-                  {item.detail ? <small>{item.detail}</small> : null}
+                  <strong>{localizeSeedText(item.title, locale)}</strong>
+                  {item.detail ? (
+                    <small>{localizeSeedText(item.detail, locale)}</small>
+                  ) : null}
                 </span>
               </li>
             ))}

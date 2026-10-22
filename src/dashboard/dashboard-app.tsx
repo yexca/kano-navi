@@ -222,6 +222,7 @@ export function DashboardApp() {
         <LinkDirectory
           timeline={dashboard.timeline}
           resources={dashboard.resources}
+          locale={locale}
           t={t}
         />
       </main>

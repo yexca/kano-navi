@@ -485,7 +485,10 @@ export function HistoryApp() {
                 <HistoryImage item={portrait} locale={locale} t={t} eager />
               </button>
               <figcaption>
-                <span>2026 · ミリプロSONA</span>
+                <span>
+                  {branchById.sona.since} ·{" "}
+                  {localized(branchById.sona.label, locale)}
+                </span>
                 <ExternalLink className="text-link" href={portrait.sourcePage}>
                   {t("history.heroImageSource")}
                   <ArrowUpRight aria-hidden="true" />

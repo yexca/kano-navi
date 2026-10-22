@@ -7,6 +7,9 @@
   a thumbnail. A schedule entry without one gets a compact date ticket with its
   provenance and a link named for what it opens (the stream or its X notice),
   and the latest video follows it as a small card.
+- The board's link list and milestones follow the selected language instead
+  of always showing the Chinese seed text, and the journey portrait caption
+  names the agency in the selected language.
 
 </details>
 
