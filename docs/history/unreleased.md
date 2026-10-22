@@ -45,8 +45,15 @@
 - `make sensitive-check` scans only the files Git can see, so ignored local
   state such as `.env`, `data/` and tool indexes no longer fails it. Tracked
   files are still scanned even when an ignore rule matches them.
-- A daily Dependency audit workflow runs npm audit and govulncheck. Run the
-  same checks locally with `make audit`.
+- A daily Dependency audit workflow runs npm audit, npm registry signature
+  verification and govulncheck. Run the same checks locally with `make audit`.
+- `make ci-backend` runs golangci-lint, go vet and the Go tests with the race
+  detector; the race detector needs a C compiler such as gcc. `make ci-style`
+  also checks the workflow files with actionlint, so it needs Go as well.
+- Dependabot proposes weekly grouped updates for GitHub Actions, Go modules and
+  npm packages. `.nvmrc` pins the Node version for CI.
+- Bug reports and feature requests have issue forms, and suspected
+  vulnerabilities go to private security reporting.
 - The backend and the release image build with Go 1.26.10, which fixes the
   standard library vulnerabilities reported for 1.26.4. Vite 8.3.5 resolves the
   development-only launch-editor advisories.

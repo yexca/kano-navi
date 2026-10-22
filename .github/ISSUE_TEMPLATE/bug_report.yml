@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible problem with Kano Navi.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe one reproducible problem using synthetic data and redacted diagnostics.
+        Do not attach databases, runtime media, credentials, API keys, admin passwords, or personal paths.
+        Report suspected vulnerabilities through [private security reporting](https://github.com/yexca/kano-navi/security/advisories/new).
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed private data from the report and attachments.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kano Navi version
+      description: The version on the About page, the image tag, or the commit you run.
+      placeholder: "Version, image tag, or commit"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      multiple: true
+      options:
+        - Public board, history, or About page
+        - Operator console (/admin)
+        - Synchronization or schedule extraction
+        - MCP endpoint
+        - Docker deployment
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the browser, host OS, Docker/Compose versions, and APP_MODE as relevant. Omit private addresses and paths.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the starting state and exact actions. Use synthetic posts, events, and URLs such as example.com when one is needed.
+      placeholder: |
+        1. Start with ...
+        2. Open ...
+        3. Run ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include sanitized error codes or screenshots when helpful.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Optional relevant log excerpts or workflow run statuses. Review them for credentials, provider keys, private endpoints, and paths before posting.
+      render: text

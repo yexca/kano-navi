@@ -102,8 +102,9 @@ The Makefile is the canonical validation entry point for local work and Actions.
 - Begin with git status --short and preserve existing user changes. Do not use
   destructive reset or checkout commands.
 - Choose the smallest sufficient target: make docs-check for docs, make ci-style
-  for style/tooling, make ci-backend for data/API/sync (the Go tests and vet),
-  and make ci-frontend for UI (type check, build and frontend tests).
+  for style/tooling (including actionlint), make ci-backend for data/API/sync
+  (golangci-lint, vet and race-enabled Go tests), and make ci-frontend for UI
+  (type check, build and frontend tests).
   Check affected UI in a browser at desktop and mobile widths.
 - Use make smoke for seeded snapshot/API integration and make docker-build plus
   make production-smoke for runtime/container work. Smoke uses disposable state;

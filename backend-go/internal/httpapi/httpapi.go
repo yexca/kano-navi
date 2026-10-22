@@ -219,7 +219,7 @@ func queryCalendarNumber(r *http.Request, key string, fallback float64) float64 
 func (h *Handler) calendar(w http.ResponseWriter, r *http.Request) {
 	pageValue := queryCalendarNumber(r, "page", 1)
 	pageSizeValue := queryCalendarNumber(r, "pageSize", 100)
-	page, pageSize := 1, 100
+	var page, pageSize int
 	maxInt := float64(^uint(0) >> 1)
 	if pageValue < maxInt {
 		page = int(pageValue)

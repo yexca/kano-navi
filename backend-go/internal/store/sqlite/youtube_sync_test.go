@@ -43,7 +43,6 @@ func TestYoutubeWritesPreserveLocksTombstonesAndCursorOnRollback(t *testing.T) {
 	if links != 1 || evidence != 1 {
 		t.Fatalf("duplicate identities links=%d evidence=%d", links, evidence)
 	}
-	revision, _ := s.GetDashboardRevision(ctx)
 	feed := result
 	feed.Videos = append([]ytsource.Video{}, result.Videos...)
 	feed.Videos[0].FeedOnly = true
@@ -57,7 +56,7 @@ func TestYoutubeWritesPreserveLocksTombstonesAndCursorOnRollback(t *testing.T) {
 	if retainedTitle != "changed automatically" {
 		t.Fatal("RSS replaced existing checked snapshot")
 	}
-	revision, _ = s.GetDashboardRevision(ctx)
+	revision, _ := s.GetDashboardRevision(ctx)
 	testutil.Exec(t, p, `CREATE TRIGGER reject_sync BEFORE UPDATE ON sync_state BEGIN SELECT RAISE(ABORT,'fixture'); END`)
 	result.Videos[0].Title = "must roll back"
 	result.NextCursor = "BBBBBBBBBBB"

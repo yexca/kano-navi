@@ -8,15 +8,17 @@ DOCKER_BUILD ?= $(DOCKER) build
 DOCKER_BUILD_ARGS ?=
 DOCKER_IMAGE ?= kano-navi:ci
 GOVULNCHECK_VERSION ?= v1.8.0
+GOLANGCI_LINT_VERSION ?= v2.13.1
+ACTIONLINT_VERSION ?= v1.7.12
 GO_BINARY ?= backend-go/bin/kano-go$(if $(filter Windows_NT,$(OS)),.exe,)
 # package.json owns the version; Go builds receive it at link time.
 APP_VERSION = $(shell $(NODE) -p "require('./package.json').version")
 GO_LDFLAGS = -X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version=$(APP_VERSION)
 
 .PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-test
-.PHONY: go-build go-start go-docker-build
+.PHONY: go-build go-start go-docker-build go-lint go-vet go-race actionlint
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-frontend
-.PHONY: audit npm-audit npm-audit-production go-audit
+.PHONY: audit npm-audit npm-audit-production npm-audit-signatures go-audit
 .PHONY: smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
 
 help:
@@ -58,6 +60,17 @@ go-test:
 	$(GO) -C backend-go test ./...
 	$(GO) -C backend-go vet ./...
 
+# Static analysis uses the linters listed in scripts/golangci-lint.yml.
+go-lint:
+	$(GO) -C backend-go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config=../scripts/golangci-lint.yml --color=never ./...
+
+go-vet:
+	$(GO) -C backend-go vet ./...
+
+# The race detector needs cgo and a C compiler.
+go-race:
+	$(GO) -C backend-go test -race -timeout=20m ./...
+
 go-build:
 	$(GO) -C backend-go build -trimpath -ldflags "$(GO_LDFLAGS)" -o $(patsubst backend-go/%,%,$(GO_BINARY)) ./cmd/kano-go
 
@@ -73,6 +86,10 @@ format-check:
 
 typecheck:
 	$(NPM) run typecheck
+
+# Shell snippets are also checked wherever shellcheck is installed.
+actionlint:
+	$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 docs-check:
 	$(NPM) run docs:check-links
@@ -94,13 +111,17 @@ smoke:
 	$(NODE) scripts/smoke.ts
 
 # Advisory checks query live databases, so they stay outside check and ci.
-audit: npm-audit-production npm-audit go-audit
+audit: npm-audit-production npm-audit npm-audit-signatures go-audit
 
 npm-audit-production:
 	$(NPM) audit --omit=dev
 
 npm-audit:
 	$(NPM) audit
+
+# Verifies registry signatures and provenance of the installed packages.
+npm-audit-signatures:
+	$(NPM) audit signatures
 
 go-audit:
 	$(GO) -C backend-go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
@@ -112,9 +133,9 @@ production-smoke:
 	$(NODE) scripts/production-smoke.ts $(DOCKER_IMAGE)
 
 # Narrow checks use the existing locked installation and never fetch source data.
-ci-style: format-check docs-check test-sensitive sensitive-check
+ci-style: format-check docs-check actionlint test-sensitive sensitive-check
 
-ci-backend: go-test
+ci-backend: go-lint go-vet go-race
 
 # The build type-checks the frontend, the maintenance scripts and the tests.
 ci-frontend: build test-frontend
@@ -127,5 +148,7 @@ ci-local: check
 	$(MAKE) production-smoke
 
 # Installation completes before any checks start, including parallel invocations.
+# The fresh installation is verified against the registry signatures first.
 ci: install
+	$(MAKE) npm-audit-signatures
 	$(MAKE) ci-local

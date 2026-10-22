@@ -36,7 +36,9 @@ func (s *Scheduler) Start() {
 		for {
 			select {
 			case <-t.C:
-				s.Tick(ctx)
+				// A workflow stays due until it runs, so a failed lookup or
+				// submission is retried on the next tick.
+				_, _ = s.Tick(ctx)
 			case <-ctx.Done():
 				return
 			}

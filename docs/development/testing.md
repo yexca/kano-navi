@@ -1,7 +1,9 @@
 # Testing and CI
 
 The shipped backend is Go. `make go-test` runs its contracts and vet without
-Docker. `make go-check` also validates formatting, CGO-free operation,
+Docker. `make ci-backend` runs golangci-lint with `scripts/golangci-lint.yml`,
+vet, and the contracts again under the race detector (`make go-race`, which
+needs cgo and a C compiler). `make go-check` also validates formatting, CGO-free operation,
 Linux/Windows builds and disposable read-only/development containers. Source
 tests, including the historical-window API adapter, use fake transports and
 synthetic credentials; no check synchronizes live sources. See
@@ -17,26 +19,29 @@ CI/tooling work, and pre-commit validation.
 
 ## Validation Targets
 
-| Change or task                                        | Target                | Requirements                   |
-| ----------------------------------------------------- | --------------------- | ------------------------------ |
-| Documentation links                                   | make docs-check       | Node.js                        |
-| Formatting, docs, scanner behavior and source privacy | make ci-style         | Locked dependencies            |
-| SQLite, API, sync, media or extraction                | make ci-backend       | Go                             |
-| TypeScript frontend, scripts, tests, and config       | make typecheck        | Locked dependencies            |
-| Public or admin UI                                    | make ci-frontend      | Locked dependencies            |
-| Seed and HTTP snapshot integration                    | make smoke            | Node.js and Go                 |
-| Production image                                      | make docker-build     | Docker with Linux containers   |
-| Production entry point, pages and guards              | make production-smoke | The locally built DOCKER_IMAGE |
-| All checks without Docker or installation             | make check            | Locked dependencies and Go     |
-| Full locally portable Actions validation              | make ci-local         | Locked dependencies and Docker |
-| Install then full validation                          | make ci               | Node/npm, Go and Docker        |
-| Manual privacy review before handoff or commit        | make sensitive-check  | Node and Git                   |
-| Dependency advisories (live npm and Go databases)     | make audit            | Node/npm, Go and network       |
+| Change or task                                          | Target                | Requirements                             |
+| ------------------------------------------------------- | --------------------- | ---------------------------------------- |
+| Documentation links                                     | make docs-check       | Node.js                                  |
+| Formatting, docs, workflows, scanner and source privacy | make ci-style         | Locked dependencies and Go               |
+| SQLite, API, sync, media or extraction                  | make ci-backend       | Go and a C compiler                      |
+| TypeScript frontend, scripts, tests, and config         | make typecheck        | Locked dependencies                      |
+| Public or admin UI                                      | make ci-frontend      | Locked dependencies                      |
+| Seed and HTTP snapshot integration                      | make smoke            | Node.js and Go                           |
+| Production image                                        | make docker-build     | Docker with Linux containers             |
+| Production entry point, pages and guards                | make production-smoke | The locally built DOCKER_IMAGE           |
+| All checks without Docker or installation               | make check            | Locked dependencies, Go and a C compiler |
+| Full locally portable Actions validation                | make ci-local         | Locked dependencies and Docker           |
+| Install then full validation                            | make ci               | Node/npm, Go and Docker                  |
+| Manual privacy review before handoff or commit          | make sensitive-check  | Node and Git                             |
+| Dependency advisories and npm registry signatures       | make audit            | Locked installation, Go and network      |
 
 make install uses npm ci. Narrow targets and ci-local do not reinstall.
-make ci installs first, then runs ci-local. Both full targets enforce image
+make ci installs first, verifies the registry signatures of the fresh
+installation with make npm-audit-signatures, then runs ci-local. Both full targets enforce image
 build before production smoke even under make -j. Override NPM, NODE, DOCKER,
 DOCKER_BUILD, DOCKER_BUILD_ARGS, or DOCKER_IMAGE for the corresponding toolchain.
+GOLANGCI_LINT_VERSION, ACTIONLINT_VERSION and GOVULNCHECK_VERSION pin the Go
+tools that `go run` builds; Dependabot does not update them.
 DOCKER is an executable path/name for the smoke helper, not a shell command.
 Existing check-docs, check-sensitive, and privacy-check aliases remain supported.
 npm run check is the Node-only formatting/test/privacy/docs/build sequence; use
@@ -133,9 +138,12 @@ calls from Release:
 Style -> Backend, Go gate, Frontend, API smoke, Docker image -> Validate
 ```
 
-Style runs make ci-style. Backend runs make ci-backend, the Go contract tests
-and vet. Go gate runs make go-check: formatting, CGO-free and cross-platform
-builds and the read-only container smoke. Frontend runs make ci-frontend: the
+Style runs make ci-style, which also checks the workflow files and their shell
+snippets with actionlint (shellcheck is preinstalled on the runner). Backend
+runs make ci-backend: golangci-lint, vet and the Go contract tests under the
+race detector. Go gate runs make go-check: formatting, CGO-free and cross-platform
+builds and the read-only container smoke. Frontend runs make
+npm-audit-signatures on its fresh installation, then make ci-frontend: the
 type check, the build and the frontend tests. API smoke runs make smoke
 against the Go backend. Docker
 image runs make docker-build, which compiles the Go backend and the frontend
@@ -144,8 +152,10 @@ production-smoke against that image.
 Every runner has a timeout, locked installation, and read-only repository
 permissions. Checkout does not persist credentials. Caches speed installation
 and image layers but never skip validation targets. Actions are pinned to
-reviewed commit SHAs; Node 24.22.1 and the Go version in backend-go/go.mod
-match the Docker build toolchain.
+reviewed commit SHAs. Every Node job uses the local
+`.github/actions/setup-node` action, which installs the version in `.nvmrc`;
+that version and the Go version in backend-go/go.mod match the Docker build
+toolchain.
 
 `make ci-frontend` type-checks the frontend, scripts and tests before Vite
 builds the browser bundle, then runs the frontend tests. Node executes script
@@ -162,12 +172,24 @@ publication is serialized per tag.
 
 The Dependency audit workflow runs daily at 03:17 UTC and on manual dispatch.
 Its npm job runs make npm-audit-production and then make npm-audit, which read
-only package-lock.json and install nothing. Its Go job runs make go-audit:
+only package-lock.json, then installs the locked tree and runs make
+npm-audit-signatures. Its Go job runs make go-audit:
 govulncheck, pinned by GOVULNCHECK_VERSION, reports vulnerabilities that the
 backend actually reaches in its modules and in the standard library of the
 go.mod toolchain that the release image also uses. A new advisory fails the
 run without changing the repository. These targets query live advisory
 databases, so they stay outside check and ci and never gate a pull request.
+Both jobs run only in the upstream repository, so forks do not inherit the
+schedule.
+
+Dependabot (`.github/dependabot.yml`) proposes weekly grouped updates for
+GitHub Actions, Go modules and npm packages after a seven-day cooldown. The
+Node and Go toolchains and the Docker base images are upgraded by hand; see
+[Dependency updates](security.md#dependency-updates).
+
+Issue forms in `.github/ISSUE_TEMPLATE/` collect bug reports and feature
+requests with synthetic data, and route suspected vulnerabilities to private
+security reporting as the [security policy](../../SECURITY.md) describes.
 
 ## Related Docs
 

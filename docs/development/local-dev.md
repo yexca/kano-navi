@@ -3,12 +3,15 @@
 ## Prerequisites
 
 - Go 1.26.10 or newer (the version in `backend-go/go.mod`, matching CI and Docker)
-- Node.js 24.22.1 or newer in the 24 LTS line (matching CI and Docker)
+- Node.js 24.22.1 or newer in the 24 LTS line (`.nvmrc` pins the version CI
+  and Docker use)
 - npm 10+
 - Git
+- A C compiler such as gcc, only for `make go-race` and `make ci-backend`
 
 The backend is the Go module in `backend-go/`; it uses the pure-Go
-`modernc.org/sqlite` driver and needs no C toolchain. Its package layout,
+`modernc.org/sqlite` driver, so building and running it needs no C toolchain.
+Only the race detector needs cgo and a C compiler. Its package layout,
 commands and startup order are in
 [Go backend](../architecture/go-standalone.md).
 

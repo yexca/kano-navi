@@ -1,0 +1,52 @@
+# Dependency update policy: docs/development/security.md#dependency-updates
+#
+# The Node and Go toolchains are repeated across .nvmrc, package.json engines,
+# backend-go/go.mod and both Dockerfiles. Upgrade them by hand in one change.
+# Docker is not listed: every base image is a toolchain image or scratch.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    # The root covers .github/workflows; composite actions are listed apart.
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci(actions)
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /backend-go
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build(deps)
+    groups:
+      go-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build(deps)
+    ignore:
+      # Type definitions follow the pinned Node major.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]

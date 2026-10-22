@@ -25,13 +25,16 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: ./.github/actions/setup-node
+      # actionlint is built from its pinned Go module.
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
-          node-version: "24.22.1"
-          cache: npm
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
       - name: Install locked dependencies
         run: make install
-      - name: Check formatting, docs, and source privacy
+      - name: Check formatting, docs, workflows, and source privacy
         run: make ci-style
 
   backend:
@@ -49,7 +52,7 @@ jobs:
         with:
           go-version-file: backend-go/go.mod
           cache-dependency-path: backend-go/go.sum
-      - name: Run Go backend contracts
+      - name: Run Go lint, vet and race-enabled contracts
         run: make ci-backend
 
   go:
@@ -81,12 +84,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: "24.22.1"
-          cache: npm
+        uses: ./.github/actions/setup-node
       - name: Install locked dependencies
         run: make install
+      - name: Verify registry signatures of the installed packages
+        run: make npm-audit-signatures
       - name: Type-check, build and test the frontend
         run: make ci-frontend
 
@@ -101,10 +103,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: "24.22.1"
-          cache: npm
+        uses: ./.github/actions/setup-node
       - name: Set up Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
@@ -124,9 +123,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: ./.github/actions/setup-node
         with:
-          node-version: "24.22.1"
+          cache: "false"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - name: Cache production image layers

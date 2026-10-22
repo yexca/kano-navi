@@ -22,10 +22,16 @@ func TestWriteXRecentAtomicSnapshotAndCursor(t *testing.T) {
 	db, _ := sql.Open("sqlite", "file:"+p+"?mode=ro")
 	defer db.Close()
 	var posts, cursor, media, assets int
-	db.QueryRow("SELECT COUNT(*) FROM posts").Scan(&posts)
-	db.QueryRow("SELECT COUNT(*) FROM sync_state WHERE cursor_id='1'").Scan(&cursor)
-	db.QueryRow("SELECT COUNT(*) FROM media_assets WHERE status='pending'").Scan(&media)
-	db.QueryRow("SELECT COUNT(*) FROM assets WHERE kind='schedule'").Scan(&assets)
+	for query, count := range map[string]*int{
+		"SELECT COUNT(*) FROM posts":                               &posts,
+		"SELECT COUNT(*) FROM sync_state WHERE cursor_id='1'":      &cursor,
+		"SELECT COUNT(*) FROM media_assets WHERE status='pending'": &media,
+		"SELECT COUNT(*) FROM assets WHERE kind='schedule'":        &assets,
+	} {
+		if err = db.QueryRow(query).Scan(count); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if posts != 1 || cursor != 1 || media != 1 || assets != 1 {
 		t.Fatalf("counts %d %d %d %d", posts, cursor, media, assets)
 	}

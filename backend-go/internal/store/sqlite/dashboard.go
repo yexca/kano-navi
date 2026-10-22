@@ -1076,9 +1076,10 @@ func (s *Store) queryProfileMedia(ctx context.Context) (ProfileMediaSlots, error
 			return out, dbErr(err)
 		}
 		pm := s.profileMedia(id, slot, source, su, cp, sha, mime, status.String, active != 0)
-		if slot == "avatar" {
+		switch slot {
+		case "avatar":
 			out.Avatar = pm
-		} else if slot == "banner" {
+		case "banner":
 			out.Banner = pm
 		}
 	}

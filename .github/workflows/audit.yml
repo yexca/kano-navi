@@ -16,6 +16,8 @@ concurrency:
 jobs:
   npm:
     name: npm advisories
+    # Forks inherit the schedule; only the upstream repository runs it.
+    if: github.repository == 'yexca/kano-navi'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,18 +26,24 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: "24.22.1"
-      # npm audit reads package-lock.json; no installation or scripts run.
+        uses: ./.github/actions/setup-node
+      # The advisory audits read only package-lock.json.
       - name: Audit the production dependencies
         run: make npm-audit-production
       - name: Audit the full locked dependency tree
         if: ${{ !cancelled() }}
         run: make npm-audit
+      # Signature verification reads the installed packages.
+      - name: Install locked dependencies
+        if: ${{ !cancelled() }}
+        run: make install
+      - name: Verify registry signatures of the installed packages
+        if: ${{ !cancelled() }}
+        run: make npm-audit-signatures
 
   go:
     name: Go vulnerabilities
+    if: github.repository == 'yexca/kano-navi'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

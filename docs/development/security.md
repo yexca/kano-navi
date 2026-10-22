@@ -79,14 +79,29 @@ Credentials are used only for registry login and must not enter build arguments,
 images, source artifacts, or logs. See [Testing](testing.md) and
 [Commit and release](commit-and-release.md).
 
+## Dependency Updates
+
 make npm-audit audits the full npm dependency tree, make npm-audit-production
-the production subset, and make go-audit runs govulncheck against the backend
-and its Go toolchain; make audit runs all three. The Dependency audit workflow
-runs them daily. These network advisory checks are separate from source
-privacy and deterministic CI. Review the lockfile and outbound boundaries on
-upgrades. No npm dependency needs an install script: the image build installs
-with `--ignore-scripts`, and SQLite is the pure-Go `modernc.org/sqlite` driver
-pinned in `backend-go/go.mod`. Review `go.sum` changes like the lockfile.
+the production subset, make npm-audit-signatures verifies the registry
+signatures and provenance attestations of the installed packages, and make
+go-audit runs govulncheck against the backend and its Go toolchain; make audit
+runs all four. The Dependency audit workflow runs them daily. The advisory
+checks are separate from source privacy and deterministic CI; CI and make ci
+verify the signatures of every fresh installation. Review the lockfile and
+outbound boundaries on upgrades. No npm dependency needs an install script: the
+image build installs with `--ignore-scripts`, and SQLite is the pure-Go
+`modernc.org/sqlite` driver pinned in `backend-go/go.mod`. Review `go.sum`
+changes like the lockfile.
+
+Dependabot opens weekly grouped pull requests for GitHub Actions (including the
+composite actions in `.github/actions/`), Go modules and npm packages, each
+after a seven-day cooldown so a freshly published release has time to be
+withdrawn. Its commit messages follow the
+[commit convention](commit-and-release.md#commit-convention). Review such a
+pull request like any other dependency change. The Node version in `.nvmrc`,
+`package.json` engines and the Dockerfiles, the Go version in
+`backend-go/go.mod` and the Dockerfiles, and the Go tool versions pinned in the
+Makefile are upgraded by hand in one change.
 
 ## Related Docs
 

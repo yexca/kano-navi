@@ -233,9 +233,10 @@ func parseRevision(value string) int64 {
 	if value == "" {
 		return 0
 	}
-	if value[0] == '+' {
+	switch value[0] {
+	case '+':
 		value = value[1:]
-	} else if value[0] == '-' {
+	case '-':
 		return 0
 	}
 	end := 0

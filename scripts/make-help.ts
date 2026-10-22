@@ -22,11 +22,16 @@ const groups = {
     "test-frontend":
       "Test frontend request hooks, polling, and the history catalog",
     "go-test": "Run Go backend contracts and vet without Docker",
+    "go-lint": "Run golangci-lint over the Go backend",
+    "go-vet": "Run go vet over the Go backend",
+    "go-race": "Run Go backend contracts with the race detector (needs cgo)",
+    actionlint: "Check GitHub Actions workflows",
     "go-check":
       "Check Go formatting, contracts, cross-builds, and disposable containers",
     smoke: "Check a seeded temporary SQLite snapshot through the Go backend",
-    "ci-style": "Check formatting, documentation, and source privacy",
-    "ci-backend": "Run the Go backend contract tests and vet",
+    "ci-style":
+      "Check formatting, documentation, workflows, and source privacy",
+    "ci-backend": "Run Go lint, vet, and race-enabled contract tests",
     "ci-frontend": "Type-check and build the frontend, then run its tests",
     check: "Run installed-dependency checks and local API smoke",
   },
@@ -34,6 +39,8 @@ const groups = {
     audit: "Run every dependency advisory check (queries live databases)",
     "npm-audit-production": "Audit locked production npm dependencies",
     "npm-audit": "Audit the full locked npm dependency tree",
+    "npm-audit-signatures":
+      "Verify registry signatures of the installed npm packages",
     "go-audit":
       "Check reachable Go module and standard library vulnerabilities",
   },
@@ -41,7 +48,7 @@ const groups = {
     "docker-build": "Build the Go image DOCKER_IMAGE (default kano-navi:ci)",
     "production-smoke": "Check the built image in a disposable container",
     "ci-local": "Run checks, build the image, and check production runtime",
-    ci: "Install dependencies, then run ci-local (requires Docker)",
+    ci: "Install and verify dependencies, then run ci-local (requires Docker)",
   },
 }
 

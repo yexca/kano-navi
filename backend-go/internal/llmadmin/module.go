@@ -177,14 +177,7 @@ type extractionResponse struct {
 
 func (m *Module) extractionPayload(ctx context.Context, db Querier) (extractionResponse, error) {
 	schedule, err := ScheduleExtractionConfig(ctx, db, m.env)
-	return extractionResponse{
-		Enabled:         schedule.Enabled,
-		KeywordEnabled:  schedule.KeywordEnabled,
-		VisionEnabled:   schedule.VisionEnabled,
-		MessageEnabled:  schedule.MessageEnabled,
-		MessageAllPosts: schedule.MessageAllPosts,
-		Keywords:        schedule.Keywords,
-	}, err
+	return extractionResponse(schedule), err
 }
 
 func (m *Module) getExtraction(w http.ResponseWriter, r *http.Request) {

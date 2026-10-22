@@ -25,10 +25,6 @@ func syntheticPNG(variant byte) []byte {
 	return append([]byte("\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR\x00\x00\x00\x02\x00\x00\x00\x03\x08\x06\x00\x00\x00\x00\x00\x00\x00"), variant)
 }
 
-type roundTrip func(*http.Request) (*http.Response, error)
-
-func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
-
 func reply(status int, header map[string]string, body []byte) *http.Response {
 	h := http.Header{}
 	for key, value := range header {
