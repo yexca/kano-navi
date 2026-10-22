@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Go 1.26.10 or newer (the version in `backend-go/go.mod`, matching CI and Docker)
-- Node.js 24.19.0 or newer in the 24 LTS line (matching CI and Docker)
+- Node.js 24.22.1 or newer in the 24 LTS line (matching CI and Docker)
 - npm 10+
 - Git
 

@@ -101,7 +101,7 @@ and [workflows](docs/architecture/workflows.md) for coverage and fetch limits.
 
 ## Develop locally
 
-Requires **Go 1.26+** for the backend, **Node.js 24.19+ in the 24 LTS line**
+Requires **Go 1.26+** for the backend, **Node.js 24.22.1+ in the 24 LTS line**
 and **npm 10+** for the frontend, and Git.
 
 ```bash

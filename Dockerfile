@@ -1,7 +1,7 @@
 # One static Go binary serves the public API, the operator console, workflows
 # and timers, MCP and the built frontend. Node only builds the frontend; no
 # Node runtime is shipped.
-FROM node:24.19.0-bookworm-slim AS frontend
+FROM node:24.22.1-bookworm-slim AS frontend
 
 WORKDIR /app
 

@@ -144,7 +144,7 @@ production-smoke against that image.
 Every runner has a timeout, locked installation, and read-only repository
 permissions. Checkout does not persist credentials. Caches speed installation
 and image layers but never skip validation targets. Actions are pinned to
-reviewed commit SHAs; Node 24.19.0 and the Go version in backend-go/go.mod
+reviewed commit SHAs; Node 24.22.1 and the Go version in backend-go/go.mod
 match the Docker build toolchain.
 
 `make ci-frontend` type-checks the frontend, scripts and tests before Vite

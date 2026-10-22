@@ -47,5 +47,8 @@
 - The backend and the release image build with Go 1.26.10, which fixes the
   standard library vulnerabilities reported for 1.26.4. Vite 8.3.5 resolves the
   development-only launch-editor advisories.
+- CI, the Docker frontend build and the development image use Node 24.22.1,
+  the October 2026 security release, and `package.json` requires at least that
+  version.
 
 </details>
