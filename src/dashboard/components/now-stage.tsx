@@ -378,8 +378,7 @@ function NextTicket({
     )
   }
 
-  const isLive =
-    item.mode === "next" && Boolean(item.time) && Date.parse(item.time) <= now
+  const isLive = item.mode === "next" && Date.parse(item.time || "") <= now
   if (item.layout === "full") {
     return (
       <FullTicket item={item} isLive={isLive} locale={locale} now={now} t={t} />
@@ -437,7 +436,11 @@ function ProfileCard({
         ) : null}
       </div>
       <div className="profile-body">
-        <img className="profile-avatar" src={profile.avatarUrl} alt="" />
+        <img
+          className="profile-avatar"
+          src={profile.avatarUrl ?? undefined}
+          alt=""
+        />
         <p className="kicker">{t("hero.kicker")}</p>
         <h1 id="profile-name" className="profile-name">
           {profile.displayName}

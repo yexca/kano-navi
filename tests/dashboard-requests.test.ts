@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import path from "node:path"
-import test from "node:test"
+import test, { type TestContext } from "node:test"
 import { createElement } from "react"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { createServer } from "vite"
@@ -21,7 +21,7 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
     )
     // Keep Vite's real watcher/optimizer timers outside the mocked clock.
     await vite.close()
-    const setup = async (context) => {
+    const setup = async (context: TestContext) => {
       context.mock.timers.enable({
         apis: ["Date", "setTimeout"],
         now: new Date("2025-01-01T00:00:00Z"),
@@ -47,31 +47,35 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
         reject: (error: Error) => void
       }[] = []
       let calendarRevision = 0
-      context.mock.method(globalThis, "fetch", (url, options) => {
-        if (String(url).startsWith("/api/calendar"))
-          return Promise.resolve({
-            ok: true,
-            status: 200,
-            json: async () => ({
-              events: [],
-              scheduleImages: [],
-              adjacent: { previous: null, next: null },
-              total: 0,
-              page: 1,
-              hasNext: false,
-              revision: calendarRevision,
-              dayCounts: {},
+      context.mock.method(
+        globalThis,
+        "fetch",
+        (url: RequestInfo | URL, options: { signal: AbortSignal }) => {
+          if (String(url).startsWith("/api/calendar"))
+            return Promise.resolve({
+              ok: true,
+              status: 200,
+              json: async () => ({
+                events: [],
+                scheduleImages: [],
+                adjacent: { previous: null, next: null },
+                total: 0,
+                page: 1,
+                hasNext: false,
+                revision: calendarRevision,
+                dayCounts: {},
+              }),
+            } as Response)
+          return new Promise<Response>((resolve, reject) =>
+            requests.push({
+              url: String(url),
+              signal: options.signal,
+              resolve,
+              reject,
             }),
-          } as Response)
-        return new Promise<Response>((resolve, reject) =>
-          requests.push({
-            url: String(url),
-            signal: options.signal,
-            resolve,
-            reject,
-          }),
-        )
-      })
+          )
+        },
+      )
       let value: ReturnType<typeof useDashboard>
       let root: ReactTestRenderer
       function Probe() {
@@ -142,7 +146,7 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
             "Snapshot 1",
           )
           assert.equal(fixture.current().error, null)
-          let reload: Promise<any>
+          let reload: Promise<unknown> | undefined
           await act(async () => {
             reload = fixture.current().reload()
           })
@@ -174,7 +178,8 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
           await fixture.respond(0, snapshot(1))
           await fixture.tick(8000)
           assert.match(fixture.requests[1].url, /revision\?since=1$/)
-          let first: Promise<any>, second: Promise<any>
+          let first: Promise<unknown> | undefined
+          let second: Promise<unknown> | undefined
           await act(async () => {
             first = fixture.current().reload()
             second = fixture.current().reload()

@@ -4,8 +4,14 @@ import deepseek from "../assets/providers/deepseek.svg"
 import openrouter from "../assets/providers/openrouter.svg"
 import gemini from "../assets/providers/gemini.svg"
 
-const icons = { openai, anthropic, deepseek, openrouter, gemini }
-const hosts = {
+const icons: Record<string, string> = {
+  openai,
+  anthropic,
+  deepseek,
+  openrouter,
+  gemini,
+}
+const hosts: Record<string, string> = {
   "api.openai.com": "openai",
   "api.anthropic.com": "anthropic",
   "api.deepseek.com": "deepseek",
@@ -19,7 +25,7 @@ export function providerIcon(provider: {
   baseUrl?: string
 }) {
   try {
-    const brand = hosts[new URL(provider.baseUrl).hostname]
+    const brand = hosts[new URL(provider.baseUrl ?? "").hostname]
     if (brand) return icons[brand]
   } catch {
     // Unsaved preset forms and custom providers may have no URL yet.

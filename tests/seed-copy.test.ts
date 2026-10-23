@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs"
 import test from "node:test"
 import { localizeSeedText } from "../src/dashboard/seed-copy.ts"
 
-const seed = JSON.parse(
+type SeedRow = { title: string | null; detail: string | null }
+
+const seed: { timeline: SeedRow[]; resources: SeedRow[] } = JSON.parse(
   readFileSync(
     new URL(
       "../backend-go/internal/store/sqlite/static-seed.json",
@@ -21,8 +23,11 @@ const seedTexts = [
 const cjk = /[぀-ヿ一-鿿]/u
 
 test("every timeline and link seed reads without CJK text in English", () => {
-  for (const text of seedTexts)
-    assert.doesNotMatch(localizeSeedText(text, "en"), cjk, text)
+  for (const text of seedTexts) {
+    const localized = localizeSeedText(text, "en")
+    assert.ok(localized !== null, text)
+    assert.doesNotMatch(localized, cjk, text)
+  }
 })
 
 test("every seed detail has a Japanese translation", () => {

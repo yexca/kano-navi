@@ -48,7 +48,7 @@ test("polling continues after one 503, backs off to a cap, then recovers its cad
 test("polling never overlaps a stalled request and cleanup prevents later scheduling", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] })
   let calls = 0,
-    release
+    release: (() => void) | undefined
   const stop = startPolling(
     async () => {
       calls++
@@ -64,6 +64,7 @@ test("polling never overlaps a stalled request and cleanup prevents later schedu
   await flush()
   assert.equal(calls, 1)
   stop()
+  assert.ok(release)
   release()
   await flush()
   t.mock.timers.tick(10000)
@@ -74,7 +75,7 @@ test("polling never overlaps a stalled request and cleanup prevents later schedu
 test("request deadlines abort even an uncooperative response and preserve a subsequent success", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] })
   const scope = createRequestScope(20)
-  let signal
+  let signal: AbortSignal | undefined
   const pending = scope.run("snapshot", async (value) => {
     signal = value
     return new Promise(() => {})
@@ -82,6 +83,7 @@ test("request deadlines abort even an uncooperative response and preserve a subs
   const rejected = assert.rejects(pending, { name: "TimeoutError" })
   t.mock.timers.tick(20)
   await rejected
+  assert.ok(signal)
   assert.equal(signal.aborted, true)
   assert.equal(
     await scope.run("snapshot", async () => "recovered"),
@@ -91,7 +93,7 @@ test("request deadlines abort even an uncooperative response and preserve a subs
 
 test("superseded and unmounted reads cannot commit late responses", async () => {
   const scope = createRequestScope(1000)
-  let release
+  let release: ((value: string) => void) | undefined
   const pending = scope.run(
     "snapshot",
     async () =>
@@ -101,6 +103,7 @@ test("superseded and unmounted reads cannot commit late responses", async () => 
   )
   const rejected = assert.rejects(pending, { name: "AbortError" })
   assert.equal(await scope.run("snapshot", async () => "new"), "new")
+  assert.ok(release)
   release("old")
   await rejected
   const second = scope.run("activity", async () => new Promise(() => {}))

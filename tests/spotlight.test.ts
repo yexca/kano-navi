@@ -5,10 +5,11 @@ import {
   pickSpotlight,
   spotlightLink,
 } from "../src/dashboard/spotlight.ts"
+import type { ScheduleEvent, Video } from "../src/types.ts"
 
 const now = Date.parse("2026-10-21T12:00:00Z")
 
-const latestVideo = {
+const latestVideo: Video = {
   id: "latest",
   source: "youtube",
   title: "Synthetic archive",
@@ -21,7 +22,7 @@ const latestVideo = {
   isUpcoming: false,
 }
 
-const dateOnlyEvent = {
+const dateOnlyEvent: ScheduleEvent = {
   id: "event-date-only",
   source: "x",
   title: "Synthetic collab",
@@ -29,7 +30,9 @@ const dateOnlyEvent = {
   startsOn: "2026-10-24",
   startsAt: null,
   endsAt: null,
+  timezone: "Asia/Tokyo",
   timePrecision: "unknown",
+  status: null,
   eventType: "stream",
   url: "https://x.com/example/status/1",
   provenance: "automatic",
@@ -41,17 +44,19 @@ const dateOnlyEvent = {
 test("a schedule entry without artwork gets the compact ticket and the latest video", () => {
   const summary = { nextEvent: dateOnlyEvent, nextStream: null, latestVideo }
   const item = pickSpotlight(summary, now)
+  assert.ok(item)
   assert.equal(item.layout, "compact")
   assert.equal(item.link, "announcement")
   assert.equal(item.dateOnly, "2026-10-24")
   assert.equal(item.time, null)
   const companion = pickCompanion(summary, item)
+  assert.ok(companion)
   assert.equal(companion.url, latestVideo.url)
   assert.equal(companion.thumbnailUrl, latestVideo.thumbnailUrl)
 })
 
 test("a reserved stream with artwork keeps the full ticket without a companion", () => {
-  const nextStream = {
+  const nextStream: Video = {
     ...latestVideo,
     id: "reserved",
     url: "https://www.youtube.com/watch?v=synthetic02",
@@ -62,6 +67,7 @@ test("a reserved stream with artwork keeps the full ticket without a companion",
   }
   const summary = { nextEvent: dateOnlyEvent, nextStream, latestVideo }
   const item = pickSpotlight(summary, now)
+  assert.ok(item)
   assert.equal(item.layout, "full")
   assert.equal(item.link, "watch")
   assert.equal(item.url, nextStream.url)
@@ -71,6 +77,7 @@ test("a reserved stream with artwork keeps the full ticket without a companion",
 test("the latest-video fallback stays a full ticket", () => {
   const summary = { nextEvent: null, nextStream: null, latestVideo }
   const item = pickSpotlight(summary, now)
+  assert.ok(item)
   assert.equal(item.mode, "latest")
   assert.equal(item.layout, "full")
   assert.equal(pickCompanion(summary, item), null)

@@ -7,7 +7,7 @@ import { verifySnapshot } from "./smoke.ts"
 const image = process.argv[2] || "kano-navi:ci"
 const dockerExecutable = process.env.DOCKER || "docker"
 
-function docker(args) {
+function docker(args: string[]): string {
   return execFileSync(dockerExecutable, args, {
     encoding: "utf8",
     timeout: 30000,
@@ -74,7 +74,7 @@ async function runProductionSmoke() {
 }
 
 // The image build injects the package.json version into the binary.
-async function verifyReportedVersion(origin) {
+async function verifyReportedVersion(origin: string) {
   const { version } = JSON.parse(
     readFileSync(new URL("../package.json", import.meta.url), "utf8"),
   )
@@ -106,7 +106,7 @@ async function verifyReportedVersion(origin) {
     )
 }
 
-function assertLoopbackAddress(address) {
+function assertLoopbackAddress(address: string) {
   if (!/^127\.0\.0\.1:\d+$/u.test(address))
     throw new Error("Docker did not publish the expected loopback port")
 }
