@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,6 +24,8 @@ func (e *Error) Error() string { return e.Code }
 type Download struct {
 	Content                  []byte
 	MIME, ETag, LastModified string
+	// NotModified reports a 304 answer to a revalidation; Content is empty.
+	NotModified bool
 }
 type Client struct{ http *http.Client }
 
@@ -55,6 +58,11 @@ func AllowedURL(raw string) bool {
 	return true
 }
 func (c *Client) Fetch(ctx context.Context, raw string) (Download, error) {
+	return c.fetch(ctx, raw, "", "")
+}
+
+// fetch sends the stored validators so an unchanged file costs a 304.
+func (c *Client) fetch(ctx context.Context, raw, etag, lastModified string) (Download, error) {
 	out := Download{}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -68,12 +76,22 @@ func (c *Client) Fetch(ctx context.Context, raw string) (Download, error) {
 		}
 		req.Header.Set("Accept", "image/avif,image/webp,image/png,image/jpeg,image/gif")
 		req.Header.Set("User-Agent", "kano-navi-go/media-cache")
+		if etag != "" {
+			req.Header.Set("If-None-Match", etag)
+		}
+		if lastModified != "" {
+			req.Header.Set("If-Modified-Since", lastModified)
+		}
 		resp, err := c.http.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return out, &Error{"media_timeout"}
 			}
 			return out, &Error{"media_unavailable"}
+		}
+		if resp.StatusCode == http.StatusNotModified && (etag != "" || lastModified != "") {
+			resp.Body.Close()
+			return Download{NotModified: true}, nil
 		}
 		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 			resp.Body.Close()
@@ -107,12 +125,62 @@ func (c *Client) Fetch(ctx context.Context, raw string) (Download, error) {
 		if actual == "" || (e == nil && mediaformat.Extension(declared) != "" && actual != declared) {
 			return out, &Error{"media_invalid_image"}
 		}
-		return Download{content, actual, resp.Header.Get("ETag"), resp.Header.Get("Last-Modified")}, nil
+		return Download{Content: content, MIME: actual, ETag: resp.Header.Get("ETag"), LastModified: resp.Header.Get("Last-Modified")}, nil
 	}
 	return out, &Error{"media_redirect_rejected"}
 }
 
-type Summary struct{ Attempted, Ready, Missing, Failed int }
+// thumbnailPath matches YouTube's fixed-size thumbnail files.
+var thumbnailPath = regexp.MustCompile(`^/(vi|vi_webp)/([A-Za-z0-9_-]{11})/(maxresdefault|sddefault|hqdefault)(_live)?\.(jpg|webp)$`)
+
+// thumbnailSizes is YouTube's size order; hqdefault exists for every video,
+// while the larger files are generated only for some.
+var thumbnailSizes = []string{"maxresdefault", "sddefault", "hqdefault"}
+
+// ThumbnailFallbacks lists the smaller variants of a YouTube thumbnail URL to
+// try, in order, when that size was never generated. A live variant ends with
+// the plain hqdefault.jpg, which outlives the stream. Other URLs have none.
+func ThumbnailFallbacks(raw string) []string {
+	u, err := url.Parse(raw)
+	if err != nil || !strings.HasSuffix(strings.ToLower(u.Hostname()), ".ytimg.com") {
+		return nil
+	}
+	m := thumbnailPath.FindStringSubmatch(u.Path)
+	if m == nil {
+		return nil
+	}
+	dir, id, size, live, ext := m[1], m[2], m[3], m[4], m[5]
+	base := "https://" + u.Host + "/"
+	out := []string{}
+	smaller := false
+	for _, candidate := range thumbnailSizes {
+		if smaller {
+			out = append(out, base+dir+"/"+id+"/"+candidate+live+"."+ext)
+		}
+		smaller = smaller || candidate == size
+	}
+	if live != "" {
+		out = append(out, base+"vi/"+id+"/hqdefault.jpg")
+	}
+	return out
+}
+
+// fetchAsset requests the asset and, while YouTube reports a size as missing,
+// the next smaller one. The bytes stay under the original URL, so a later
+// revalidation picks up the larger size once YouTube generates it.
+func (c *Client) fetchAsset(ctx context.Context, asset sqlite.PendingMedia) (Download, error) {
+	d, err := c.fetch(ctx, asset.SourceURL, asset.ETag, asset.LastModified)
+	for _, next := range ThumbnailFallbacks(asset.SourceURL) {
+		var e *Error
+		if !errors.As(err, &e) || e.Code != "media_missing" {
+			break
+		}
+		d, err = c.fetch(ctx, next, asset.ETag, asset.LastModified)
+	}
+	return d, err
+}
+
+type Summary struct{ Attempted, Ready, Unchanged, Missing, Failed int }
 
 func (c *Client) DownloadPending(ctx context.Context, store *sqlite.Store, limit int) (Summary, error) {
 	out := Summary{}
@@ -124,7 +192,15 @@ func (c *Client) DownloadPending(ctx context.Context, store *sqlite.Store, limit
 		if ctx.Err() != nil {
 			return out, ctx.Err()
 		}
-		d, err := c.Fetch(ctx, asset.SourceURL)
+		d, err := c.fetchAsset(ctx, asset)
+		if err == nil && d.NotModified {
+			if err = store.MarkMediaUnchanged(ctx, asset); err != nil {
+				return out, err
+			}
+			out.Attempted++
+			out.Unchanged++
+			continue
+		}
 		status, code := "ready", ""
 		if err != nil {
 			status = "failed"

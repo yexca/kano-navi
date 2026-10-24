@@ -75,7 +75,7 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 		if result.Failed > 0 || result.Missing > 0 {
 			status = "partial"
 		}
-		return AttemptResult{Status: status, Result: map[string]any{"attempted": result.Attempted, "ready": result.Ready, "failed": result.Failed}}, nil
+		return AttemptResult{Status: status, Result: map[string]any{"attempted": result.Attempted, "ready": result.Ready, "unchanged": result.Unchanged, "failed": result.Failed}}, nil
 	case "schedule":
 		if s.Schedule == nil {
 			break

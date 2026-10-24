@@ -81,7 +81,10 @@ remain.
 
 Video thumbnails are registered and linked to their rows, then the bounded media
 stage downloads pending files from YouTube's `*.ytimg.com` thumbnail CDN
-subdomains (including `i.ytimg.com` and its numbered hosts).
+subdomains (including `i.ytimg.com` and its numbered hosts). A size YouTube
+never generated falls back to the next smaller one, and the thumbnail of an
+upcoming or recent video is revalidated because its URL stays the same when the
+creator replaces the image; see [Media cache](media-cache.md).
 
 #### WebSub Push
 

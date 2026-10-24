@@ -84,8 +84,20 @@ served as active same-origin content.
    `status = ready`.
 4. A failed or unavailable request updates the row to `failed` or `missing`.
    Existing ready files are retained; a failed synchronization never clears a
-   known snapshot.
-5. Retention and garbage collection can later use `last_seen_at` and
+   known snapshot. A transient failure (`media_timeout`, `media_unavailable`,
+   `media_http_error` or `media_body_unavailable`) is claimed again once
+   30 minutes have passed since its last check; rejected destinations, invalid
+   images, oversized bodies and `missing` files are not retried.
+5. A YouTube thumbnail that answers 404 for `maxresdefault` or `sddefault`
+   (including their `_live` forms) is requested at the next smaller size,
+   ending with `hqdefault.jpg`. The bytes are stored under the original URL, so
+   the asset identity and links do not change.
+6. A ready YouTube thumbnail linked to an upcoming video, or to one that
+   started or was published within the last 24 hours, is revalidated at most
+   every 30 minutes with its stored `ETag` and `Last-Modified`. A 304 only
+   records the check; new bytes become the next content-addressed version,
+   and only a changed hash advances the dashboard revision.
+7. Retention and garbage collection can later use `last_seen_at` and
    `media_links` to remove unreferenced files deliberately.
 
 The downloader accepts only HTTPS URLs on X's `*.twimg.com` media CDN
@@ -95,8 +107,9 @@ subdomain boundary; lookalike hosts and the bare parent domains are rejected.
 The host policy is kept in code because this is also an SSRF boundary; the
 broader privacy allowlist is not a download permission list. The cache still
 accepts image MIME types only, so X video URLs may be recognized as official
-media while remaining unavailable to the image cache. Retry scheduling, image
-dimension probing, and garbage collection remain follow-up work.
+media while remaining unavailable to the image cache. Image dimension probing
+and garbage collection, including of versions a revalidation replaced, remain
+follow-up work.
 
 Content-addressed paths are deliberately preferred over layouts such as
 `pics/x/<timestamp>` or `pics/youtube/<video-id>`. Ownership already lives in
