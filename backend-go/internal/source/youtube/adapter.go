@@ -49,8 +49,14 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 	if state.Videos == nil {
 		state.Videos = map[string]Video{}
 	}
+	// RSS lists waiting rooms and premieres like ordinary uploads, so recent
+	// entries also become detail candidates for their schedule.
+	feedIDs := []string{}
 	for _, v := range feed {
 		t, _ := time.Parse(time.RFC3339Nano, v.PublishedAt)
+		if !t.Before(cutoff) {
+			feedIDs = append(feedIDs, v.ID)
+		}
 		if _, exists := state.Videos[v.ID]; !exists && !t.Before(cutoff) && t.Before(now) {
 			v.FeedOnly = true
 			result.Videos = append(result.Videos, v)
@@ -75,7 +81,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 		checked[id] = true
 	}
 	eligible := append([]string{}, state.Queue...)
-	for _, id := range streamIDs {
+	for _, id := range append(append([]string{}, streamIDs...), feedIDs...) {
 		v, exists := state.Videos[id]
 		t, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
 		if !exists || !checked[id] || v.IsUpcoming || (!t.IsZero() && !t.Before(now.Add(-24*time.Hour))) {
@@ -122,7 +128,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 		if v.IsUpcoming {
 			v.Kind = "UPCOMING LIVE"
 		}
-		if t.IsZero() {
+		if t.IsZero() || v.Premiere {
 			v.Kind = Classify(v.Title)
 		}
 		result.Videos = append(result.Videos, v)
@@ -132,7 +138,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 			result.Queue = withoutID(result.Queue, id)
 		}
 	}
-	for _, id := range uniqueIDs(append(streamIDs, state.ActiveIDs...), 1000) {
+	for _, id := range uniqueIDs(append(append(streamIDs, feedIDs...), state.ActiveIDs...), 1000) {
 		if checked[id] {
 			result.CheckedIDs = append(result.CheckedIDs, id)
 		}

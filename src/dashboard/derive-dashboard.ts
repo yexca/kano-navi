@@ -8,19 +8,41 @@ import {
 } from "./format.ts"
 
 export const LIVE_GRACE_MS = 3 * 3600 * 1000
+/** How close a later reservation must be to replace a presumed-live item. */
+export const LIVE_YIELD_MS = 30 * 60 * 1000
 
+// Only streams and memberships are presumed live without an end; other YouTube
+// activities, such as a premiere, stay live only until their explicit end.
 export function eventIsLive(event, now: number) {
-  if (
-    !["stream", "member"].includes(event.eventType) &&
-    event.source !== "youtube"
-  )
-    return false
+  const isStream = ["stream", "member"].includes(event.eventType)
+  if (!isStream && event.source !== "youtube") return false
   const start = Date.parse(event.startsAt || "")
   const end = Date.parse(event.endsAt || "")
-  return (
-    start <= now &&
-    (Number.isFinite(end) ? end > now : start > now - LIVE_GRACE_MS)
-  )
+  if (!(start <= now)) return false
+  if (Number.isFinite(end)) return end > now
+  return isStream && start > now - LIVE_GRACE_MS
+}
+
+/**
+ * The first of start-ordered focus candidates. A started candidate without an
+ * explicit end is only presumed live, so it yields to a later timed candidate
+ * that has started or starts within LIVE_YIELD_MS.
+ */
+export function leadingCandidate<T>(
+  candidates: T[],
+  now: number,
+  startOf: (candidate: T) => number,
+  endOf: (candidate: T) => number,
+): T | null {
+  const lead = candidates.find((candidate, index) => {
+    const start = startOf(candidate)
+    if (!(start <= now) || Number.isFinite(endOf(candidate))) return true
+    return !candidates.slice(index + 1).some((later) => {
+      const next = startOf(later)
+      return next > start && next - now <= LIVE_YIELD_MS
+    })
+  })
+  return lead ?? null
 }
 
 export function videoIsInFocus(video, now: number) {
@@ -80,8 +102,18 @@ export function deriveDashboardAt(snapshot: Dashboard, now: number): Dashboard {
     videos,
     summary: {
       ...snapshot.summary,
-      nextEvent: focusEvents[0] || null,
-      nextStream: focusVideos[0] || null,
+      nextEvent: leadingCandidate(
+        focusEvents,
+        now,
+        (event) => Date.parse(event.startsAt || ""),
+        (event) => Date.parse(event.endsAt || ""),
+      ),
+      nextStream: leadingCandidate(
+        focusVideos,
+        now,
+        (video) => Date.parse(video.scheduledAt || ""),
+        (video) => Date.parse(video.endsAt || ""),
+      ),
       latestVideo: latestVideos[0] || null,
       counts: snapshot.summary.counts
         ? {

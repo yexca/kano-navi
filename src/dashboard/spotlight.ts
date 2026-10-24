@@ -1,5 +1,10 @@
+import { streamIdentity } from "../lib/stream-identity.ts"
 import { cleanVideoTitle, scheduleSortTime, eventIsUpcoming } from "./format.ts"
-import { eventIsLive, videoIsInFocus } from "./derive-dashboard.ts"
+import {
+  eventIsLive,
+  leadingCandidate,
+  videoIsInFocus,
+} from "./derive-dashboard.ts"
 
 const watchHosts = ["youtube.com", "youtu.be", "twitch.tv"]
 const announcementHosts = ["x.com", "twitter.com"]
@@ -47,7 +52,9 @@ export function pickSpotlight(summary, now) {
   if (summary?.nextEvent) {
     const event = summary.nextEvent
     const duplicate = candidates.some(
-      (candidate) => event.url && candidate.url === event.url,
+      (candidate) =>
+        event.url &&
+        streamIdentity(candidate.url) === streamIdentity(event.url),
     )
     if (!duplicate) {
       candidates.push({
@@ -76,7 +83,14 @@ export function pickSpotlight(summary, now) {
         scheduleSortTime(a.time, a.dateOnly) -
         scheduleSortTime(b.time, b.dateOnly),
     )
-  if (upcoming[0]) return withLayout(upcoming[0])
+  const lead = leadingCandidate(
+    upcoming,
+    now,
+    (candidate) => Date.parse(candidate.time || ""),
+    (candidate) =>
+      Date.parse((candidate.event || candidate.video).endsAt || ""),
+  )
+  if (lead) return withLayout(lead)
 
   const video = summary?.latestVideo
   if (video) {

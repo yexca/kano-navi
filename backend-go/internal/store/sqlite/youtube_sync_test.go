@@ -76,6 +76,40 @@ func TestYoutubeWritesPreserveLocksTombstonesAndCursorOnRollback(t *testing.T) {
 	}
 }
 
+func TestYoutubePremiereIsAReleaseThatKeepsItsReportedEnd(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	premiere := ytsource.Video{ID: "EEEEEEEEEEE", Title: "premiere", PublishedAt: "2026-01-02T03:00:00Z", ScheduledAt: "2026-01-02T09:00:09Z", EndedAt: "2026-01-02T09:06:55Z", URL: "https://www.youtube.com/watch?v=EEEEEEEEEEE", Kind: "MUSIC", Premiere: true}
+	live := ytsource.Video{ID: "DDDDDDDDDDD", Title: "waiting room", PublishedAt: "2026-01-02T17:00:00Z", ScheduledAt: "2026-01-03T12:00:00Z", URL: "https://www.youtube.com/watch?v=DDDDDDDDDDD", Kind: "UPCOMING LIVE", IsUpcoming: true}
+	write := func(videos ...ytsource.Video) {
+		t.Helper()
+		if err := s.WriteYoutubeRecent(ctx, "UCAAAAAAAAAAAAAAAAAAAAAA", ytsource.Result{Videos: videos, NextCursor: "DDDDDDDDDDD", NextCursorTime: "2026-01-02T17:00:00Z"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(premiere, live)
+	// A later check that cannot read the end keeps the one already reported.
+	premiere.EndedAt = ""
+	write(premiere)
+	db, _ := sql.Open("sqlite", p)
+	defer db.Close()
+	for id, want := range map[string][2]string{"youtube-EEEEEEEEEEE": {"release", "2026-01-02T09:06:55Z"}, "youtube-DDDDDDDDDDD": {"stream", ""}} {
+		var eventType string
+		var endsAt sql.NullString
+		if err = db.QueryRow(`SELECT event_type,ends_at FROM events WHERE id=?`, id).Scan(&eventType, &endsAt); err != nil {
+			t.Fatal(err)
+		}
+		if eventType != want[0] || endsAt.String != want[1] {
+			t.Fatalf("%s type=%s ends=%v", id, eventType, endsAt)
+		}
+	}
+}
+
 func TestPendingMediaPrefersNewestOwnerOverSameSyncTie(t *testing.T) {
 	p := testutil.NewSnapshot(t)
 	s, err := OpenWorkflowCore(p, true)

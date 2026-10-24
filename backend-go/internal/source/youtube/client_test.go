@@ -84,13 +84,72 @@ func TestRecentQueueRotatesFailureAndCompletesOrdinaryVideo(t *testing.T) {
 	})})
 	a := NewAdapter(c, Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 1})
 	a.Now = func() time.Time { return time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC) }
+	// The recent RSS entry joins the tail after the stream-page discoveries.
 	first, err := a.FetchRecent(context.Background(), State{Queue: []string{"AAAAAAAAAAA", "BBBBBBBBBBB"}}, 7)
-	if err != nil || len(first.Queue) != 2 || first.Queue[0] != "BBBBBBBBBBB" || first.Requested != 1 || len(first.Errors) != 1 {
+	if err != nil || strings.Join(first.Queue, ",") != "BBBBBBBBBBB,CCCCCCCCCCC,AAAAAAAAAAA" || first.Requested != 1 || len(first.Errors) != 1 {
 		t.Fatalf("first=%#v err=%v", first, err)
 	}
 	second, err := a.FetchRecent(context.Background(), State{Queue: first.Queue}, 7)
-	if err != nil || second.Inspected != 1 || len(second.Queue) != 1 || second.Queue[0] != "AAAAAAAAAAA" || len(requested) != 2 || requested[1] != "BBBBBBBBBBB" {
+	if err != nil || second.Inspected != 1 || strings.Join(second.Queue, ",") != "CCCCCCCCCCC,AAAAAAAAAAA" || len(requested) != 2 || requested[1] != "BBBBBBBBBBB" {
 		t.Fatalf("second=%#v requests=%v err=%v", second, requested, err)
+	}
+}
+func TestRecentFeedEntriesGetDetailsOutsideTheStreamsPage(t *testing.T) {
+	var requested []string
+	watch := map[string]string{
+		// A waiting room the streams page has not listed yet.
+		"DDDDDDDDDDD": `var ytInitialPlayerResponse={"videoDetails":{"videoId":"DDDDDDDDDDD","title":"waiting room","isUpcoming":true,"isLiveContent":true},"playabilityStatus":{"status":"LIVE_STREAM_OFFLINE"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":false,"startTimestamp":"2026-01-03T12:00:00+00:00"}}}};{"scheduledStartTime":"1767441600"}`,
+		// A finished premiere, which RSS describes as an ordinary upload.
+		"EEEEEEEEEEE": `var ytInitialPlayerResponse={"videoDetails":{"videoId":"EEEEEEEEEEE","title":"Song cover premiere","isLiveContent":false},"playabilityStatus":{"status":"OK"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":false,"startTimestamp":"2026-01-02T09:00:09+00:00","endTimestamp":"2026-01-02T09:06:55+00:00"}}}};`,
+	}
+	c := NewClient(&http.Client{Transport: fakeTransport(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/feeds/videos.xml":
+			return response(200, `<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"><entry><yt:videoId>DDDDDDDDDDD</yt:videoId><title>waiting room</title><published>2026-01-02T17:00:00Z</published></entry><entry><yt:videoId>EEEEEEEEEEE</yt:videoId><title>Song cover premiere</title><published>2026-01-02T03:00:00Z</published></entry><entry><yt:videoId>FFFFFFFFFFF</yt:videoId><title>old upload</title><published>2025-12-01T00:00:00Z</published></entry></feed>`), nil
+		case "/channel/UCAAAAAAAAAAAAAAAAAAAAAA/streams":
+			return response(200, ``), nil
+		case "/watch":
+			id := r.URL.Query().Get("v")
+			requested = append(requested, id)
+			return response(200, watch[id]), nil
+		}
+		t.Fatalf("unexpected path %s", r.URL.Path)
+		return nil, nil
+	})})
+	a := NewAdapter(c, Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 5})
+	a.Now = func() time.Time { return time.Date(2026, 1, 3, 10, 0, 0, 0, time.UTC) }
+	result, err := a.FetchRecent(context.Background(), State{}, 7)
+	if err != nil || len(result.Errors) != 0 || strings.Join(requested, ",") != "DDDDDDDDDDD,EEEEEEEEEEE" {
+		t.Fatalf("result=%#v requests=%v err=%v", result, requested, err)
+	}
+	details := map[string]Video{}
+	for _, v := range result.Videos {
+		if !v.FeedOnly {
+			details[v.ID] = v
+		}
+	}
+	room, premiere := details["DDDDDDDDDDD"], details["EEEEEEEEEEE"]
+	if room.ScheduledAt != "2026-01-03T12:00:00Z" || !room.IsUpcoming || room.Premiere || room.EndedAt != "" || room.Kind != "UPCOMING LIVE" {
+		t.Fatalf("waiting room=%#v", room)
+	}
+	if premiere.ScheduledAt != "2026-01-02T09:00:09Z" || premiere.IsUpcoming || !premiere.Premiere || premiere.EndedAt != "2026-01-02T09:06:55Z" || premiere.Kind != "MUSIC" {
+		t.Fatalf("premiere=%#v", premiere)
+	}
+	if strings.Join(result.CheckedIDs, ",") != "DDDDDDDDDDD,EEEEEEEEEEE" {
+		t.Fatalf("checked=%v", result.CheckedIDs)
+	}
+	// A checked, finished premiere is not requested again.
+	requested = nil
+	state := State{CheckedIDs: result.CheckedIDs, Queue: result.Queue, Videos: map[string]Video{"DDDDDDDDDDD": room, "EEEEEEEEEEE": premiere}, ActiveIDs: []string{"DDDDDDDDDDD"}}
+	if _, err = a.FetchRecent(context.Background(), state, 7); err != nil || strings.Join(requested, ",") != "DDDDDDDDDDD" {
+		t.Fatalf("requests=%v err=%v", requested, err)
+	}
+}
+func TestWatchEndIsReadOnlyFromTheBroadcastDetails(t *testing.T) {
+	body := `var ytInitialPlayerResponse={"videoDetails":{"videoId":"AAAAAAAAAAA","title":"live","isLiveContent":true},"playabilityStatus":{"status":"OK"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":true,"startTimestamp":"2026-01-03T12:00:00+00:00"}}}};{"endTimestamp":"2026-01-03T13:00:00+00:00"}`
+	v, err := ParseWatch([]byte(body), "AAAAAAAAAAA")
+	if err != nil || v.ScheduledAt != "2026-01-03T12:00:00Z" || v.EndedAt != "" || v.Premiere {
+		t.Fatalf("video=%#v err=%v", v, err)
 	}
 }
 func feedClient(rt fakeTransport) *Client {

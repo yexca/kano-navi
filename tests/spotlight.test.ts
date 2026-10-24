@@ -1,10 +1,15 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import type { Dashboard } from "../src/types.ts"
 import {
   pickCompanion,
   pickSpotlight,
   spotlightLink,
 } from "../src/dashboard/spotlight.ts"
+import {
+  deriveDashboardAt,
+  eventIsLive,
+} from "../src/dashboard/derive-dashboard.ts"
 
 const now = Date.parse("2026-10-21T12:00:00Z")
 
@@ -99,4 +104,154 @@ test("links name what they open", () => {
   assert.equal(spotlightLink("https://media.example.test/page"), "open")
   assert.equal(spotlightLink("not a url"), "open")
   assert.equal(spotlightLink(null), null)
+})
+
+const evening = Date.parse("2026-10-24T11:24:00Z")
+
+function scheduled(overrides) {
+  return {
+    ...dateOnlyEvent,
+    source: "youtube",
+    timePrecision: "exact",
+    startsOn: "2026-10-24",
+    endsAt: null,
+    ...overrides,
+  }
+}
+
+test("only streams are presumed live without an explicit end", () => {
+  const started = { startsAt: "2026-10-24T10:24:00Z" }
+  const release = scheduled({ ...started, eventType: "release" })
+  assert.equal(eventIsLive(release, evening), false)
+  assert.equal(
+    eventIsLive({ ...release, endsAt: "2026-10-24T11:30:00Z" }, evening),
+    true,
+  )
+  assert.equal(
+    eventIsLive({ ...release, endsAt: "2026-10-24T11:00:00Z" }, evening),
+    false,
+  )
+  assert.equal(
+    eventIsLive(scheduled({ ...started, eventType: "stream" }), evening),
+    true,
+  )
+})
+
+function snapshot(events, videos = []): Dashboard {
+  return {
+    profile: {
+      displayName: "Synthetic",
+      romanizedName: "Synthetic",
+      bio: "",
+      avatarUrl: null,
+      bannerUrl: null,
+      xUrl: "https://x.com/example",
+      youtubeUrl: "https://www.youtube.com/@example",
+    },
+    summary: {
+      nextEvent: null,
+      nextStream: null,
+      latestVideo: null,
+      latestPost: null,
+      counts: null,
+    },
+    posts: [],
+    events,
+    videos,
+    focus: null,
+    timeline: [],
+    resources: [],
+    assets: [],
+    scheduleImages: [],
+    meta: {
+      fetchedAt: null,
+      lastSync: null,
+      postWindowDays: 3,
+      xAccounts: [],
+      featuredVideoId: null,
+    },
+  }
+}
+
+test("a started premiere does not hold the stage before a later stream", () => {
+  const premiere = scheduled({
+    id: "premiere",
+    eventType: "release",
+    startsAt: "2026-10-24T09:00:00Z",
+  })
+  const collab = scheduled({
+    id: "collab",
+    eventType: "stream",
+    startsAt: "2026-10-24T12:00:00Z",
+  })
+  const derived = deriveDashboardAt(snapshot([premiere, collab]), evening)
+  assert.equal(derived.summary.nextEvent.id, "collab")
+  assert.equal(pickSpotlight(derived.summary, evening).event.id, "collab")
+})
+
+test("a presumed-live stream yields once a later reservation is near", () => {
+  const earlier = scheduled({
+    id: "earlier",
+    eventType: "stream",
+    startsAt: "2026-10-24T11:00:00Z",
+  })
+  const later = scheduled({
+    id: "later",
+    eventType: "stream",
+    startsAt: "2026-10-24T12:00:00Z",
+  })
+  const at = (time) =>
+    deriveDashboardAt(snapshot([earlier, later]), Date.parse(time)).summary
+      .nextEvent.id
+  assert.equal(at("2026-10-24T11:20:00Z"), "earlier")
+  assert.equal(at("2026-10-24T11:31:00Z"), "later")
+  assert.equal(at("2026-10-24T12:05:00Z"), "later")
+  // An explicit end is not presumed, so it keeps the stage until it passes.
+  const ending = { ...earlier, endsAt: "2026-10-24T11:50:00Z" }
+  const summary = deriveDashboardAt(
+    snapshot([ending, later]),
+    Date.parse("2026-10-24T11:40:00Z"),
+  ).summary
+  assert.equal(summary.nextEvent.id, "earlier")
+})
+
+test("the spotlight lets a presumed-live video yield to a near event", () => {
+  const nextStream = {
+    ...latestVideo,
+    id: "presumed",
+    url: "https://www.youtube.com/watch?v=synthetic03",
+    scheduledAt: "2026-10-24T10:00:00Z",
+    publishedAt: null,
+    isUpcoming: false,
+    endsAt: null,
+  }
+  const nextEvent = scheduled({
+    id: "near",
+    eventType: "stream",
+    startsAt: "2026-10-24T11:40:00Z",
+    url: "https://x.com/example/status/2",
+  })
+  const item = pickSpotlight({ nextStream, nextEvent, latestVideo }, evening)
+  assert.equal(item.event.id, "near")
+})
+
+test("an event for the same YouTube video is not a second candidate", () => {
+  const nextStream = {
+    ...latestVideo,
+    id: "synthetic04",
+    url: "https://www.youtube.com/watch?v=synthetic04",
+    scheduledAt: "2026-10-24T12:00:00Z",
+    publishedAt: null,
+    kind: "UPCOMING LIVE",
+    isUpcoming: true,
+  }
+  const nextEvent = scheduled({
+    id: "youtube-synthetic04",
+    eventType: "stream",
+    startsAt: "2026-10-24T12:00:00Z",
+    url: "https://www.youtube.com/live/synthetic04?si=share",
+  })
+  const item = pickSpotlight({ nextStream, nextEvent, latestVideo }, evening)
+  assert.equal(item.video.id, "synthetic04")
+  assert.equal(item.layout, "full")
 })

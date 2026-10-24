@@ -52,9 +52,16 @@ or entries newer than its timestamp when that cursor has fallen out of the RSS
 window. It separately inspects the streams page and keeps rechecking active or
 recent reservations for `scheduledStartTime`, writing them to both `videos` and
 `events`. When no schedule time is available, the script does not invent one. RSS insertion
-does not count as a reservation detail check. Successful stream-page detail
-checks are recorded in incremental `sync_state.metadata.streamDetailsCheckedIds`
-for currently discovered/active videos. Eligible discoveries and reservation
+does not count as a reservation detail check, but RSS lists waiting rooms and
+premieres like ordinary uploads, so RSS entries published within the lookback
+window are detail candidates as well, after stream-page discoveries. A watch
+page whose player reports `isLiveContent: false` with a start time is a
+premiere: its event is a `release` and its video keeps the title-derived kind.
+A finished stream or premiere writes the `endTimestamp` from its
+`liveBroadcastDetails` as the event's `ends_at`; a later check without one keeps
+the stored end. Successful detail checks are recorded in incremental
+`sync_state.metadata.streamDetailsCheckedIds` for currently discovered, recent
+RSS and active videos. Eligible discoveries and reservation
 refreshes share the durable rotating detail queue; failed checks remain eligible,
 and failed refreshes retain existing video/event snapshots. HTTP 200 alone is
 not success: a reservation needs a parsed timestamp and page title; an ordinary

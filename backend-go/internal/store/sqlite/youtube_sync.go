@@ -103,6 +103,10 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 					status = "会员限定"
 				}
 			}
+			// A premiere is a release, so it is never presumed live past its end.
+			if v.Premiere {
+				typeName, detail = "release", "YouTube Premiere / 预约"
+			}
 			eventID := "youtube-" + v.ID
 			// Reuse legacy evidence identities, including locked rows and deleted
 			// rows. A new canonical ID must not resurrect a different old ID.
@@ -115,7 +119,7 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 				eventID = existingID
 			}
 			// Manual locks and deletion tombstones survive every source refresh.
-			_, err = tx.ExecContext(ctx, `INSERT INTO events(id,source,source_item_id,source_key,title,detail,starts_on,starts_at,timezone,time_precision,status,event_type,url,is_upcoming,provenance,manual_locked,created_at,updated_at,raw_json) VALUES(?,'youtube',?,'reservation',?,?,?,?,'Asia/Tokyo','exact',?,?,?,?,'automatic',0,?,?,'{}') ON CONFLICT(id) DO UPDATE SET title=excluded.title,detail=excluded.detail,starts_on=excluded.starts_on,starts_at=excluded.starts_at,status=excluded.status,event_type=excluded.event_type,url=excluded.url,is_upcoming=excluded.is_upcoming,updated_at=excluded.updated_at WHERE events.manual_locked=0 AND events.deleted_at IS NULL`, eventID, v.ID, v.Title, detail, start.In(time.FixedZone("JST", 9*3600)).Format("2006-01-02"), v.ScheduledAt, status, typeName, v.URL, v.IsUpcoming, now, now)
+			_, err = tx.ExecContext(ctx, `INSERT INTO events(id,source,source_item_id,source_key,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,is_upcoming,provenance,manual_locked,created_at,updated_at,raw_json) VALUES(?,'youtube',?,'reservation',?,?,?,?,?,'Asia/Tokyo','exact',?,?,?,?,'automatic',0,?,?,'{}') ON CONFLICT(id) DO UPDATE SET title=excluded.title,detail=excluded.detail,starts_on=excluded.starts_on,starts_at=excluded.starts_at,ends_at=COALESCE(excluded.ends_at,events.ends_at),status=excluded.status,event_type=excluded.event_type,url=excluded.url,is_upcoming=excluded.is_upcoming,updated_at=excluded.updated_at WHERE events.manual_locked=0 AND events.deleted_at IS NULL`, eventID, v.ID, v.Title, detail, start.In(time.FixedZone("JST", 9*3600)).Format("2006-01-02"), v.ScheduledAt, nullable(v.EndedAt), status, typeName, v.URL, v.IsUpcoming, now, now)
 			if err != nil {
 				return ErrSourceWrite
 			}

@@ -12,8 +12,13 @@ import (
 
 type Video struct {
 	ID, Title, PublishedAt, ScheduledAt, URL, ThumbnailURL, Kind string
-	IsUpcoming                                                   bool
-	FeedOnly                                                     bool
+	// EndedAt is the broadcast end a watch page reports once a stream or
+	// premiere finishes; it stays empty while unknown.
+	EndedAt    string
+	IsUpcoming bool
+	// Premiere marks a scheduled upload that is not live content.
+	Premiere bool
+	FeedOnly bool
 }
 
 func Classify(title string) string {
@@ -93,9 +98,10 @@ var encodedPlayerPattern = regexp.MustCompile(`"player_response"\s*:\s*("(?:\\.|
 
 type playerResponse struct {
 	VideoDetails struct {
-		VideoID  string `json:"videoId"`
-		Title    string `json:"title"`
-		Upcoming bool   `json:"isUpcoming"`
+		VideoID     string `json:"videoId"`
+		Title       string `json:"title"`
+		Upcoming    bool   `json:"isUpcoming"`
+		LiveContent *bool  `json:"isLiveContent"`
 	} `json:"videoDetails"`
 	Playability struct {
 		Status string `json:"status"`
@@ -155,6 +161,19 @@ func ParseWatch(body []byte, id string) (Video, error) {
 	if v.Title == "" || (v.IsUpcoming && v.ScheduledAt == "") || (v.ScheduledAt == "" && (!found || player.VideoDetails.VideoID != id || player.Playability.Status != "OK")) {
 		return v, &Error{"youtube_watch_details_incomplete"}
 	}
+	// The end is optional detail read only from the flat broadcast object; an
+	// unreadable one leaves it unknown.
+	if i := strings.Index(text, `"liveBroadcastDetails"`); i >= 0 && v.ScheduledAt != "" {
+		details := text[i:]
+		if j := strings.IndexByte(details, '}'); j >= 0 {
+			details = details[:j]
+		}
+		if t, err := time.Parse(time.RFC3339Nano, jsonField(details, "endTimestamp")); err == nil {
+			v.EndedAt = t.UTC().Format(time.RFC3339Nano)
+		}
+	}
+	live := player.VideoDetails.LiveContent
+	v.Premiere = found && v.ScheduledAt != "" && live != nil && !*live
 	v.ThumbnailURL = meta(text, "og:image")
 	return v, nil
 }
