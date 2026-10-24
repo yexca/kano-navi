@@ -1,5 +1,5 @@
 import type { SVGProps } from "react"
-import { AtSign, Combine, ImageDown, Sparkles } from "lucide-react"
+import { AtSign, Combine, ImageDown, RadioTower, Sparkles } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import {
@@ -25,6 +25,7 @@ export const stepIcons = {
   media: ImageDown,
   schedule: Sparkles,
   reconcile: Combine,
+  live: RadioTower,
 }
 
 /** One chip per step, in execution order, coloured by its outcome. */
@@ -69,7 +70,7 @@ export function runOutcome(run: Run) {
   return run.result?.status === "partial" ? "partial" : "completed"
 }
 
-const triggers = ["admin", "scheduler", "websub", "mcp"]
+const triggers = ["admin", "scheduler", "websub", "live-probe", "mcp"]
 
 export function RunLine({
   run,

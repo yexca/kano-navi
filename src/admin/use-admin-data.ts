@@ -108,6 +108,12 @@ function createClient(run: Runner, slow: Runner) {
     sources: () => get<Sources>("/sources"),
     updatePush: (body: { enabled?: boolean; callbackUrl?: string | null }) =>
       send<Sources["youtube"]["push"]>("PUT", "/sources/youtube/push", body),
+    updateLiveProbe: (body: { enabled?: boolean; intervalMinutes?: number }) =>
+      send<Sources["youtube"]["liveProbe"]>(
+        "PUT",
+        "/sources/youtube/live-probe",
+        body,
+      ),
     rotatePushSecret: () =>
       send<Sources["youtube"]["push"]>(
         "POST",

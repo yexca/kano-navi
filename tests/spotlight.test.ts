@@ -4,11 +4,13 @@ import type { Dashboard } from "../src/types.ts"
 import {
   pickCompanion,
   pickSpotlight,
+  spotlightIsLive,
   spotlightLink,
 } from "../src/dashboard/spotlight.ts"
 import {
   deriveDashboardAt,
   eventIsLive,
+  videoIsInFocus,
 } from "../src/dashboard/derive-dashboard.ts"
 
 const now = Date.parse("2026-10-21T12:00:00Z")
@@ -254,4 +256,104 @@ test("an event for the same YouTube video is not a second candidate", () => {
   const item = pickSpotlight({ nextStream, nextEvent, latestVideo }, evening)
   assert.equal(item.video.id, "synthetic04")
   assert.equal(item.layout, "full")
+})
+
+const longAgo = "2026-10-24T06:00:00Z"
+
+test("a confirmed live stream stays on air past the start-time grace", () => {
+  const event = scheduled({ eventType: "stream", startsAt: longAgo })
+  assert.equal(eventIsLive(event, evening), false)
+  assert.equal(eventIsLive({ ...event, liveStatus: "live" }, evening), true)
+  // A reported end still closes it.
+  assert.equal(
+    eventIsLive(
+      { ...event, liveStatus: "live", endsAt: "2026-10-24T11:00:00Z" },
+      evening,
+    ),
+    false,
+  )
+  const video = {
+    ...latestVideo,
+    id: "long-live",
+    scheduledAt: longAgo,
+    isUpcoming: false,
+    endsAt: null,
+  }
+  assert.equal(videoIsInFocus(video, evening), false)
+  assert.equal(videoIsInFocus({ ...video, liveStatus: "live" }, evening), true)
+  const item = pickSpotlight(
+    {
+      nextStream: { ...video, liveStatus: "live" },
+      nextEvent: null,
+      latestVideo,
+    },
+    evening,
+  )
+  assert.equal(item.video.id, "long-live")
+  assert.equal(spotlightIsLive(item, evening), true)
+})
+
+test("a confirmed end or waiting room is never on air", () => {
+  const started = scheduled({
+    eventType: "stream",
+    startsAt: "2026-10-24T11:00:00Z",
+  })
+  // Within the grace a stream is presumed live until the probe says otherwise.
+  assert.equal(eventIsLive(started, evening), true)
+  assert.equal(eventIsLive({ ...started, liveStatus: "ended" }, evening), false)
+  assert.equal(
+    eventIsLive({ ...started, liveStatus: "upcoming" }, evening),
+    false,
+  )
+  const video = {
+    ...latestVideo,
+    id: "late",
+    scheduledAt: "2026-10-24T11:00:00Z",
+    isUpcoming: false,
+    endsAt: null,
+  }
+  assert.equal(
+    videoIsInFocus({ ...video, liveStatus: "ended" }, evening),
+    false,
+  )
+  // A late waiting room keeps its ticket but does not claim to be live.
+  const waiting = { ...video, liveStatus: "upcoming" as const }
+  assert.equal(videoIsInFocus(waiting, evening), true)
+  const item = pickSpotlight(
+    { nextStream: waiting, nextEvent: null, latestVideo },
+    evening,
+  )
+  assert.equal(item.video.id, "late")
+  assert.equal(spotlightIsLive(item, evening), false)
+  // Without a probe result the start time is the fallback.
+  assert.equal(
+    spotlightIsLive(
+      pickSpotlight(
+        { nextStream: video, nextEvent: null, latestVideo },
+        evening,
+      ),
+      evening,
+    ),
+    true,
+  )
+  const derived = deriveDashboardAt(snapshot([], [waiting]), evening)
+  assert.equal(derived.videos[0].isUpcoming, true)
+  assert.equal(derived.summary.latestVideo, null)
+})
+
+test("a confirmed live stream keeps the stage before a near reservation", () => {
+  const live = scheduled({
+    id: "live",
+    eventType: "stream",
+    startsAt: "2026-10-24T10:00:00Z",
+  })
+  const later = scheduled({
+    id: "later",
+    eventType: "stream",
+    startsAt: "2026-10-24T11:40:00Z",
+  })
+  const lead = (events) =>
+    deriveDashboardAt(snapshot(events), evening).summary.nextEvent.id
+  assert.equal(lead([live, later]), "later")
+  assert.equal(lead([{ ...live, liveStatus: "live" }, later]), "live")
 })

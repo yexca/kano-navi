@@ -88,6 +88,31 @@ that finds the queue busy is retried on the next tick. Two workflows are seeded
 once (`full-refresh` and `sources-only`) without timers; deleting them does not
 recreate them. Set `WORKFLOW_SCHEDULER_ENABLED=0` to disable timers.
 
+### Live-status probe
+
+The YouTube [live-status probe](sources.md#live-status-probe) has its own
+timer and its own operator interval, stored in `app_settings`
+(`youtube_live_probe_enabled`, default on; `youtube_live_probe_interval_minutes`,
+default 30, 5–360). It is edited in `/admin` (Sources → Live-status probe).
+The same server process checks every 30 seconds; when the interval has passed
+since the previous probe run was queued and at least one video is active, it
+queues a run of the single `live` step (`kind: "live"`, ad hoc workflow
+`@live`, labelled `live-probe`) through the same single-flight queue. A busy
+queue or an idle channel waits for the next tick. Runs are recorded in
+`sync_runs` and `/api/admin/runs` with `candidates`, `requested`,
+`inspected`, `live`, `changed` and fixed error codes; a run whose pages all
+fail is `failed`, a mixed one `partial`.
+
+The probe may run more often than a saved workflow (15 minutes) because one
+run requests at most five watch pages and runs only while something is active;
+at the 5-minute minimum that is at most 60 watch pages an hour during a
+broadcast, comparable to a regular YouTube step every 15 minutes (feed,
+streams page and up to 12 detail pages, about 56 requests an hour). Longer than six hours would let a stale result
+outlive most streams. `live` is not a catalog step: saved workflows and full
+syncs never select it. `WORKFLOW_SCHEDULER_ENABLED=0` and `SKIP_YOUTUBE=1`
+stop the probe as well. Page loads, refreshes and revision requests never
+start it.
+
 Schedule-step outcomes combine post extraction and image verification. An
 image-only failure cannot be reported as success: a scan with failures and no
 successful/cached/uncertain work is `failed`; mixed outcomes are `partial`.

@@ -13,6 +13,14 @@ const (
 	KindSync     = "sync"
 	KindScan     = "scan"
 	KindWorkflow = "workflow"
+	// KindLive is the YouTube live-status probe, started by its own timer.
+	KindLive = "live"
+
+	// StepLive is the probe's only step. It is not part of StepOrder, so
+	// saved workflows and full synchronizations never select it.
+	StepLive = "live"
+	// TriggeredByLiveProbe labels probe runs in the run history.
+	TriggeredByLiveProbe = "live-probe"
 
 	StatusQueued    = "queued"
 	StatusRunning   = "running"

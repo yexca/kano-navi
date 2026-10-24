@@ -59,7 +59,9 @@ page whose player reports `isLiveContent: false` with a start time is a
 premiere: its event is a `release` and its video keeps the title-derived kind.
 A finished stream or premiere writes the `endTimestamp` from its
 `liveBroadcastDetails` as the event's `ends_at`; a later check without one keeps
-the stored end. Successful detail checks are recorded in incremental
+the stored end. Every successful watch-page check also records the broadcast
+state the page reported (see [Live-status probe](#live-status-probe)), and a
+broadcast reported live gets the status text `直播中`, never `已完成`. Successful detail checks are recorded in incremental
 `sync_state.metadata.streamDetailsCheckedIds` for currently discovered, recent
 RSS and active videos. Eligible discoveries and reservation
 refreshes share the durable rotating detail queue; failed checks remain eligible,
@@ -92,6 +94,48 @@ subdomains (including `i.ytimg.com` and its numbered hosts). A size YouTube
 never generated falls back to the next smaller one, and the thumbnail of an
 upcoming or recent video is revalidated because its URL stays the same when the
 creator replaces the image; see [Media cache](media-cache.md).
+
+#### Live-status probe
+
+Whether a stream is on air is read from YouTube rather than guessed from its
+start time. A separate probe step (`live`) requests **only watch pages**, no
+feed and no streams page, for at most five (`ytsource.MaxLiveProbes`) stored
+videos per run:
+
+- reservations whose scheduled start is within the next 15 minutes or has
+  passed;
+- broadcasts that started without a known end.
+
+Both are limited to starts in the last 24 hours. Videos the page already
+reported as over, events whose `ends_at` has passed, and manually confirmed
+cancellations are left out. Never-checked videos go first, then the least
+recently checked, so failures cannot starve the rest. With no active video,
+the probe makes no request and queues no run.
+
+`ParseWatch` keeps its completeness checks (matching ID, title, start time for
+an upcoming page) and then reads `videoDetails.isLive` / `isUpcoming` and
+`microformat.playerMicroformatRenderer.liveBroadcastDetails` (`isLiveNow`,
+`startTimestamp`, `endTimestamp`). It exposes `LiveNow` (live and not yet
+ended) and `LiveStatus`: `upcoming`, `live`, `ended` (an end time, or
+`isLiveNow: false` on a broadcast that is not upcoming), or empty when the page
+names none. A live or ended broadcast's `startTimestamp` is its actual start
+and replaces the reservation time.
+
+The store writes `videos.live_status` and `live_checked_at`, the actual start,
+`is_upcoming`, `ends_at` once reported and the status text through the same
+upsert as the regular step. It never adds a video, never moves the feed cursor
+or detail queue, keeps manual locks and tombstones, and increments
+`dashboard_revision` only when a public video or event field changed. A failed
+or incomplete page keeps its snapshot and is asked again on the next run. Each
+request uses the client's existing 10-second timeout, 4 MiB body limit and
+redirect rejection.
+
+The public dashboard projects `liveStatus` (`live`, `upcoming`, `ended` or
+null) on videos and on the events linked to them. `ended` is final; `live` and
+`upcoming` count only while the check is younger than two probe intervals, so
+stale results fall back to the start-time grace. A fresh `live` video stays
+listed beyond that grace. Run timing is described in
+[Workflows](workflows.md#live-status-probe).
 
 #### WebSub Push
 
@@ -147,7 +191,8 @@ string | null }`; omitted fields keep their value. The callback must be an
 
 The notification never writes snapshots; the RSS and stream-page reads above
 do. Live start/end and reservation-time changes are not reliably pushed, so
-reservation rechecks still depend on saved workflow timers. Runtime state is in
+reservation rechecks still depend on saved workflow timers, and live start/end
+on the [live-status probe](#live-status-probe). Runtime state is in
 memory: a restart subscribes again, and a missed push is caught by the next
 poll.
 

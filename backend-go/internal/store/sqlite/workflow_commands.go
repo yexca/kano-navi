@@ -118,6 +118,8 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, definition WorkflowDefini
 				adapter = "x_recent"
 			case "youtube":
 				adapter = "youtube_recent"
+			case "live":
+				adapter = "youtube_live"
 			case "media":
 				adapter = "media_download"
 			case "schedule":

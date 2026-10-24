@@ -118,6 +118,17 @@ export interface PushStatus {
   lastError: string | null
 }
 
+export interface LiveProbeStatus {
+  enabled: boolean
+  intervalMinutes: number
+  minIntervalMinutes: number
+  maxIntervalMinutes: number
+  available: boolean
+  lastRunAt: string | null
+  activeVideos: number
+  maxVideos: number
+}
+
 export interface Sources {
   x: {
     skipped: boolean
@@ -129,6 +140,7 @@ export interface Sources {
     historyAvailable: boolean
     oldest: string | null
     push: PushStatus
+    liveProbe: LiveProbeStatus
   }
 }
 

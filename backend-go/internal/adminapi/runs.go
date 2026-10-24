@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"math"
@@ -11,6 +12,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/jobs"
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
+	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
@@ -354,10 +356,95 @@ func (a *api) sources(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
+	probe, err := a.liveProbeState(ctx)
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"x":       map[string]any{"skipped": a.skipped("x"), "historyAvailable": a.historyAvailable("x"), "accounts": accounts},
-		"youtube": map[string]any{"skipped": a.skipped("youtube"), "historyAvailable": a.historyAvailable("youtube"), "oldest": oldest, "push": a.pushStatus()},
+		"youtube": map[string]any{"skipped": a.skipped("youtube"), "historyAvailable": a.historyAvailable("youtube"), "oldest": oldest, "push": a.pushStatus(), "liveProbe": probe},
 	})
+}
+
+// liveProbeState is the live-status probe as the console sees it: the
+// operator settings and their bounds, whether this process runs the probe,
+// when the newest probe run was queued and how many videos it would check now.
+func (a *api) liveProbeState(ctx context.Context) (map[string]any, error) {
+	settings, err := a.Store.LiveProbeSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	last, err := a.Store.LastLiveProbeAt(ctx)
+	if err != nil {
+		return nil, err
+	}
+	active, err := a.Store.YoutubeLiveCandidates(ctx, a.Now(), ytsource.MaxLiveProbes)
+	if err != nil {
+		return nil, err
+	}
+	available := false
+	if a.LiveProbe != nil {
+		available = a.LiveProbe()["available"] == true
+	}
+	var lastRunAt any
+	if last != nil {
+		lastRunAt = sqlite.ISOTime(*last)
+	}
+	return map[string]any{
+		"enabled": settings.Enabled, "intervalMinutes": settings.IntervalMinutes,
+		"minIntervalMinutes": sqlite.LiveProbeMinMinutes, "maxIntervalMinutes": sqlite.LiveProbeMaxMinutes,
+		"available": available && !a.skipped("youtube"), "lastRunAt": lastRunAt,
+		"activeVideos": len(active), "maxVideos": ytsource.MaxLiveProbes,
+	}, nil
+}
+
+func (a *api) liveProbe(w http.ResponseWriter, r *http.Request) {
+	state, err := a.liveProbeState(r.Context())
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, state)
+}
+
+// updateLiveProbe accepts { enabled?, intervalMinutes? }; omitted fields keep
+// their value.
+func (a *api) updateLiveProbe(w http.ResponseWriter, r *http.Request) {
+	body, err := httpx.Body(w, r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	settings, err := a.Store.LiveProbeSettings(r.Context())
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	for key, raw := range body {
+		switch key {
+		case "enabled":
+			if json.Unmarshal(raw, &settings.Enabled) != nil {
+				httpx.WriteError(w, httpx.Invalid("enabled must be a boolean"))
+				return
+			}
+		case "intervalMinutes":
+			minutes, rangeErr := integer(raw, "intervalMinutes", sqlite.LiveProbeMinMinutes, sqlite.LiveProbeMaxMinutes)
+			if rangeErr != nil {
+				httpx.WriteError(w, rangeErr)
+				return
+			}
+			settings.IntervalMinutes = minutes
+		default:
+			httpx.WriteError(w, httpx.Invalid("%s is not a live probe field", key))
+			return
+		}
+	}
+	if err = a.Store.SaveLiveProbeSettings(r.Context(), settings); err != nil {
+		workflowError(w, err, "not_found")
+		return
+	}
+	a.liveProbe(w, r)
 }
 
 func (a *api) pushStatus() map[string]any {

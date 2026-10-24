@@ -41,7 +41,7 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 	if m == nil || m.Store == nil || m.Queue == nil {
 		return StartResult{}, sqlite.ErrWorkflowUnavailable
 	}
-	if kind != KindScan && kind != KindWorkflow {
+	if kind != KindScan && kind != KindWorkflow && kind != KindLive {
 		kind = KindSync
 	}
 	if triggeredBy == "" {
@@ -51,7 +51,7 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 		triggeredBy = string([]rune(triggeredBy)[:64])
 	}
 	trigger := workflow.TriggerOperator
-	if triggeredBy == "scheduler" {
+	if triggeredBy == "scheduler" || triggeredBy == TriggeredByLiveProbe {
 		trigger = workflow.TriggerScheduler
 	}
 	source := "workflow"
@@ -77,6 +77,9 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 			windows[source] = normalized
 		}
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: steps, FetchWindows: windows}, trigger, recentDays(windows))
+	case kind == KindLive:
+		source = "youtube-live"
+		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocLiveWorkflow, Steps: []string{StepLive}}, trigger, nil)
 	case kind == KindScan:
 		source = "schedule"
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocScanWorkflow, Steps: []string{"schedule"}}, trigger, nil)
@@ -244,6 +247,8 @@ func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun, names m
 		job.Kind = KindSync
 	case sqlite.AdhocScanWorkflow:
 		job.Kind = KindScan
+	case sqlite.AdhocLiveWorkflow:
+		job.Kind = KindLive
 	}
 	if !sqlite.IsAdhocWorkflow(run.WorkflowID) {
 		id := run.WorkflowID

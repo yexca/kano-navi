@@ -50,7 +50,8 @@ func NewSnapshot(t testing.TB) string {
 		CREATE UNIQUE INDEX event_sources_identity_idx ON event_sources (source, source_item_id, source_key);
 		CREATE TABLE videos (
 			id TEXT PRIMARY KEY, source TEXT NOT NULL, title TEXT NOT NULL, published_at TEXT, scheduled_at TEXT,
-			url TEXT NOT NULL, thumbnail_url TEXT, kind TEXT, is_upcoming INTEGER DEFAULT 0, raw_json TEXT
+			url TEXT NOT NULL, thumbnail_url TEXT, kind TEXT, is_upcoming INTEGER DEFAULT 0, raw_json TEXT,
+			live_status TEXT, live_checked_at TEXT
 		);
 		CREATE TABLE focus (
 			id INTEGER PRIMARY KEY, video_id TEXT, date_label TEXT, title TEXT NOT NULL, description TEXT, image_url TEXT,

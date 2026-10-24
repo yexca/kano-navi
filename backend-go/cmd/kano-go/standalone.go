@@ -74,6 +74,15 @@ func runStandalone(cfg config.Config) int {
 	defer scheduler.Stop()
 
 	manager := &jobs.QueueManager{Store: store, Queue: queue}
+	// The live-status probe has its own operator interval but runs through the
+	// same queue, and only in this process.
+	probe := &workflow.LiveProbe{
+		Store:   store,
+		Submit:  liveProbeTrigger(manager),
+		Enabled: scheduler.Enabled && !run.steps.Skip[jobs.StepLive],
+	}
+	probe.Start()
+	defer probe.Stop()
 	// YouTube push is configured in /admin; it stays inactive until enabled
 	// there and while SKIP_YOUTUBE disables the source.
 	push := websub.New(ytsource.OptionsFromEnv().ChannelID, nil, youtubePushTrigger(manager))
@@ -89,6 +98,7 @@ func runStandalone(cfg config.Config) int {
 			Modules:          append(modules, pushAdmin),
 			Scheduler:        scheduler.Status,
 			YoutubePush:      pushAdmin.Status,
+			LiveProbe:        probe.Status,
 			SkippedSteps:     run.skipped,
 			XHandles:         run.xOptions.Handles,
 			HistoryAvailable: run.steps.History.Available,
@@ -114,6 +124,7 @@ func runStandalone(cfg config.Config) int {
 	select {
 	case <-ctx.Done():
 		push.Stop()
+		probe.Stop()
 		scheduler.Stop()
 		queue.Close()
 		shutdown, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
@@ -175,6 +186,8 @@ func newPipeline(store *sqlite.Store, key string) pipeline {
 			skipped = append(skipped, step)
 		}
 	}
+	// The live-status probe is part of the YouTube source.
+	skip[jobs.StepLive] = skip["youtube"]
 	xOptions := xsource.OptionsFromEnv()
 	youtubeOptions := ytsource.OptionsFromEnv()
 	steps := &workflow.SourceSteps{
@@ -198,7 +211,7 @@ func newPipeline(store *sqlite.Store, key string) pipeline {
 		Store: store,
 		Steps: steps,
 		// Every catalog step has a real adapter here; none is synthetic.
-		SyntheticSteps: map[string]bool{"x": false, "youtube": false, "media": false, "schedule": false, "reconcile": false},
+		SyntheticSteps: map[string]bool{"x": false, "youtube": false, jobs.StepLive: false, "media": false, "schedule": false, "reconcile": false},
 		// One unavailable source keeps the other source and post-processing.
 		TolerateFailure: map[string]bool{"x": true, "youtube": true},
 	}
@@ -219,6 +232,16 @@ func (s scheduleStep) RunSchedule(ctx context.Context) (string, map[string]any, 
 func youtubePushTrigger(manager *jobs.QueueManager) websub.TriggerFunc {
 	return func(ctx context.Context) (bool, error) {
 		result, err := manager.Start(ctx, jobs.KindWorkflow, "websub", jobs.Options{Steps: []string{"youtube", "media"}})
+		return result.Accepted, err
+	}
+}
+
+// liveProbeTrigger queues the YouTube live-status probe through the operator
+// job path, labelled "live-probe" in the run history. A busy queue leaves it
+// for the next tick.
+func liveProbeTrigger(manager *jobs.QueueManager) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) {
+		result, err := manager.Start(ctx, jobs.KindLive, jobs.TriggeredByLiveProbe, jobs.Options{})
 		return result.Accepted, err
 	}
 }

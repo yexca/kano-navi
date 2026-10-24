@@ -74,10 +74,12 @@ The board rederives event/video availability, counts, and focus candidates from
 its local snapshot every 30 seconds and when the page regains visibility/focus,
 even when `dashboard_revision` is unchanged. Expired activities yield to later
 events; date-only entries use the current Asia/Tokyo date and never acquire a
-synthetic start time. Streams and memberships retain a three-hour live grace
-period, or their explicit end time; other activities, including YouTube
+synthetic start time. A fresh probe-confirmed `liveStatus` decides first:
+`live` stays live until a known end, while `ended` and `upcoming` are never
+on air, and the On air badge uses the same rule. Without one, streams and
+memberships retain a three-hour live grace period, or their explicit end time; other activities, including YouTube
 premieres, count as live only before an explicit end. A started candidate
-without an explicit end is only presumed live: in `nextEvent`, `nextStream` and
+without an explicit end or a confirmed live state is only presumed live: in `nextEvent`, `nextStream` and
 `pickSpotlight` it yields to a later timed candidate that has started or starts
 within 30 minutes, while a candidate with an explicit end keeps its place until
 that end. Events and videos for the same YouTube video, matched by the identity

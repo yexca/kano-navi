@@ -1,6 +1,7 @@
 import { streamIdentity } from "../lib/stream-identity.ts"
 import { cleanVideoTitle, scheduleSortTime, eventIsUpcoming } from "./format.ts"
 import {
+  confirmedLiveStatus,
   eventIsLive,
   leadingCandidate,
   videoIsInFocus,
@@ -89,6 +90,8 @@ export function pickSpotlight(summary, now) {
     (candidate) => Date.parse(candidate.time || ""),
     (candidate) =>
       Date.parse((candidate.event || candidate.video).endsAt || ""),
+    (candidate) =>
+      confirmedLiveStatus(candidate.event || candidate.video) === "live",
   )
   if (lead) return withLayout(lead)
 
@@ -106,6 +109,17 @@ export function pickSpotlight(summary, now) {
     }
   }
   return null
+}
+
+/**
+ * Whether a ticket reads On air. A probe-confirmed state wins; only without
+ * one does a started time count as live.
+ */
+export function spotlightIsLive(item, now) {
+  if (item?.mode !== "next" || !item.time) return false
+  const confirmed = confirmedLiveStatus(item.event || item.video)
+  if (confirmed) return confirmed === "live"
+  return Date.parse(item.time) <= now
 }
 
 /** The latest video shown under a compact ticket, so the stage keeps a picture. */

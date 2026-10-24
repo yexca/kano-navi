@@ -78,7 +78,9 @@ A run is one single-flight unit of work on the durable workflow queue. Its
 shape is the `jobs.Job` projection shared with MCP control tools:
 `{id, kind, status, createdAt, startedAt, finishedAt, triggeredBy, workflowId,
 workflowName, steps, progress, fetchWindows, result, error, run}` where
-`kind` is `sync`, `scan` or `workflow`, `status` is `queued`, `running`,
+`kind` is `sync`, `scan`, `workflow` or `live` (the YouTube live-status
+probe, started only by its timer with `triggeredBy: "live-probe"` and the one
+step `live`), `status` is `queued`, `running`,
 `completed` or `failed`, and `progress` maps each step to `pending`,
 `running`, `completed`, `partial`, `failed`, `skipped` or `cancelled`.
 
@@ -119,17 +121,19 @@ Each workflow carries `lastRunAt`, `lastStatus` (durable run status) and
 
 ## Sources
 
-| Method and path                            | Body                     | Result                    |
-| ------------------------------------------ | ------------------------ | ------------------------- |
-| `GET /sources`                             |                          | per-source status (below) |
-| `GET /sources/youtube/push`                |                          | push status               |
-| `PUT /sources/youtube/push`                | `{enabled, callbackUrl}` | push status               |
-| `POST /sources/youtube/push/rotate-secret` |                          | push status               |
+| Method and path                            | Body                         | Result                    |
+| ------------------------------------------ | ---------------------------- | ------------------------- |
+| `GET /sources`                             |                              | per-source status (below) |
+| `GET /sources/youtube/push`                |                              | push status               |
+| `PUT /sources/youtube/push`                | `{enabled, callbackUrl}`     | push status               |
+| `POST /sources/youtube/push/rotate-secret` |                              | push status               |
+| `GET /sources/youtube/live-probe`          |                              | live probe status         |
+| `PUT /sources/youtube/live-probe`          | `{enabled, intervalMinutes}` | live probe status         |
 
 ```json
 {
   "x":       {"skipped", "historyAvailable", "accounts": [{"account", "oldest"}]},
-  "youtube": {"skipped", "historyAvailable", "oldest", "push": PushStatus}
+  "youtube": {"skipped", "historyAvailable", "oldest", "push": PushStatus, "liveProbe": LiveProbeStatus}
 }
 ```
 
@@ -137,6 +141,14 @@ Each workflow carries `lastRunAt`, `lastStatus` (durable run status) and
 secretConfigured, verified, leaseExpiresAt, nextRenewalAt, pending,
 lastNotificationAt, lastTriggeredAt, lastError}`. The signing secret is never
 returned.
+
+`LiveProbeStatus` is `{enabled, intervalMinutes, minIntervalMinutes,
+maxIntervalMinutes, available, lastRunAt, activeVideos, maxVideos}`.
+`available` is false while timers or YouTube are disabled for the process;
+`activeVideos` counts the videos the next probe would check (at most
+`maxVideos`), never their IDs. `PUT` accepts either field, keeps an omitted
+one, and rejects other fields and intervals outside 5–360 minutes with
+`400`.
 
 ## Events
 

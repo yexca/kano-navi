@@ -1,10 +1,22 @@
 import { useEffect, useState } from "react"
-import { Download, KeyRound, Radio, RotateCw, Save } from "lucide-react"
+import {
+  Download,
+  KeyRound,
+  Radio,
+  RadioTower,
+  RotateCw,
+  Save,
+} from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import { formatDateTime, formatRelative, japanToday } from "@/admin/format"
-import type { FetchWindow, PushStatus, Sources } from "@/admin/types"
+import type {
+  FetchWindow,
+  LiveProbeStatus,
+  PushStatus,
+  Sources,
+} from "@/admin/types"
 import {
   Badge,
   Button,
@@ -318,6 +330,112 @@ function PushPanel({
   )
 }
 
+function LiveProbePanel({
+  probe,
+  onChange,
+}: {
+  probe: LiveProbeStatus
+  onChange: (probe: LiveProbeStatus) => void
+}) {
+  const { t, locale } = useAppSettings()
+  const { api, act } = useAdmin()
+  const [minutes, setMinutes] = useState(probe.intervalMinutes)
+  const [busy, setBusy] = useState("")
+  useEffect(() => setMinutes(probe.intervalMinutes), [probe.intervalMinutes])
+  const save = async (body: {
+    enabled?: boolean
+    intervalMinutes?: number
+  }) => {
+    setBusy(body.enabled === undefined ? "save" : "toggle")
+    const next = await act(
+      () => api.updateLiveProbe(body),
+      "admin.notice.liveProbeSaved",
+    )
+    setBusy("")
+    if (next) onChange(next)
+  }
+  const running = probe.enabled && probe.available
+  return (
+    <Panel
+      icon={RadioTower}
+      title={t("admin.liveProbe.title")}
+      description={t("admin.liveProbe.description", { max: probe.maxVideos })}
+      actions={
+        running ? (
+          <Badge tone="leaf">{t("admin.liveProbe.on")}</Badge>
+        ) : (
+          <Badge>{t("admin.push.off")}</Badge>
+        )
+      }
+    >
+      <form
+        className="adm-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          save({ intervalMinutes: minutes })
+        }}
+      >
+        <Switch
+          checked={probe.enabled}
+          disabled={!probe.available || busy !== ""}
+          onChange={(enabled) => save({ enabled })}
+          label={t("admin.liveProbe.enable")}
+          description={
+            probe.available
+              ? t("admin.liveProbe.enableHint")
+              : t("admin.liveProbe.unavailable")
+          }
+        />
+        <Field
+          label={t("admin.liveProbe.interval")}
+          hint={t("admin.liveProbe.intervalHint", {
+            min: probe.minIntervalMinutes,
+            max: probe.maxIntervalMinutes,
+          })}
+        >
+          <input
+            type="number"
+            min={probe.minIntervalMinutes}
+            max={probe.maxIntervalMinutes}
+            step={1}
+            value={minutes}
+            onChange={(e) => setMinutes(Number(e.target.value))}
+            required
+          />
+        </Field>
+        <div className="adm-form-actions">
+          <Button
+            type="submit"
+            size="sm"
+            icon={Save}
+            busy={busy === "save"}
+            disabled={minutes === probe.intervalMinutes || busy !== ""}
+          >
+            {t("admin.action.save")}
+          </Button>
+        </div>
+        <Facts
+          items={[
+            [
+              t("admin.liveProbe.lastRun"),
+              probe.lastRunAt
+                ? `${formatDateTime(probe.lastRunAt, locale)} · ${formatRelative(probe.lastRunAt, locale)}`
+                : null,
+            ],
+            [
+              t("admin.liveProbe.active"),
+              t("admin.liveProbe.activeCount", {
+                count: probe.activeVideos,
+                max: probe.maxVideos,
+              }),
+            ],
+          ]}
+        />
+      </form>
+    </Panel>
+  )
+}
+
 export function SourcesView(_: ViewProps) {
   const { t } = useAppSettings()
   const { api } = useAdmin()
@@ -337,12 +455,23 @@ export function SourcesView(_: ViewProps) {
             <SourcePanel source="x" sources={data} />
             <SourcePanel source="youtube" sources={data} />
           </div>
-          <PushPanel
-            push={data.youtube.push}
-            onChange={(push) =>
-              sources.setData({ ...data, youtube: { ...data.youtube, push } })
-            }
-          />
+          <div className="adm-grid is-two">
+            <PushPanel
+              push={data.youtube.push}
+              onChange={(push) =>
+                sources.setData({ ...data, youtube: { ...data.youtube, push } })
+              }
+            />
+            <LiveProbePanel
+              probe={data.youtube.liveProbe}
+              onChange={(liveProbe) =>
+                sources.setData({
+                  ...data,
+                  youtube: { ...data.youtube, liveProbe },
+                })
+              }
+            />
+          </div>
         </>
       )}
     </div>

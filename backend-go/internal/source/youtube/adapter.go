@@ -111,26 +111,8 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 			result.Errors = append(result.Errors, safeError(err))
 			continue
 		}
-		old := state.Videos[id]
-		v.PublishedAt = old.PublishedAt
-		if v.ScheduledAt == "" {
-			v.ScheduledAt = old.ScheduledAt
-		}
-		if v.ThumbnailURL == "" {
-			v.ThumbnailURL = old.ThumbnailURL
-		}
-		if v.ThumbnailURL == "" {
-			v.ThumbnailURL = "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg"
-		}
+		v = completeDetails(v, state.Videos[id], now)
 		t, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
-		v.IsUpcoming = v.IsUpcoming || !t.IsZero() && !t.Before(now)
-		v.Kind = "LIVE ARCHIVE"
-		if v.IsUpcoming {
-			v.Kind = "UPCOMING LIVE"
-		}
-		if t.IsZero() || v.Premiere {
-			v.Kind = Classify(v.Title)
-		}
 		result.Videos = append(result.Videos, v)
 		result.Inspected++
 		checked[id] = true
@@ -145,6 +127,75 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 	}
 	return result, nil
 }
+
+// completeDetails fills what a watch page left out from the stored video and
+// derives the reservation state and kind.
+func completeDetails(v, old Video, now time.Time) Video {
+	v.PublishedAt = old.PublishedAt
+	if v.ScheduledAt == "" {
+		v.ScheduledAt = old.ScheduledAt
+	}
+	if v.ThumbnailURL == "" {
+		v.ThumbnailURL = old.ThumbnailURL
+	}
+	if v.ThumbnailURL == "" {
+		v.ThumbnailURL = "https://i.ytimg.com/vi/" + v.ID + "/hqdefault.jpg"
+	}
+	t, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
+	// A broadcast the page reports as live or over is not upcoming, even when
+	// it started before its reserved time.
+	started := v.LiveStatus == LiveStatusLive || v.LiveStatus == LiveStatusEnded
+	v.IsUpcoming = v.IsUpcoming || !started && !t.IsZero() && !t.Before(now)
+	v.Kind = "LIVE ARCHIVE"
+	if v.IsUpcoming {
+		v.Kind = "UPCOMING LIVE"
+	}
+	if t.IsZero() || v.Premiere {
+		v.Kind = Classify(v.Title)
+	}
+	return v
+}
+
+// MaxLiveProbes bounds the watch pages one live-status probe requests.
+const MaxLiveProbes = 5
+
+// ProbeResult is what one live-status probe learned. Videos holds only pages
+// that passed the watch-page completeness checks.
+type ProbeResult struct {
+	Videos               []Video
+	Errors               []string
+	Requested, Inspected int
+}
+
+// ProbeLive requests only the watch pages of the given stored videos, at most
+// MaxLiveProbes of them: no feed and no streams page. A failed or incomplete
+// page records its code and leaves that video's snapshot to the caller.
+func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, error) {
+	result := ProbeResult{Videos: []Video{}, Errors: []string{}}
+	if len(videos) > MaxLiveProbes {
+		videos = videos[:MaxLiveProbes]
+	}
+	for _, old := range videos {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		result.Requested++
+		body, err := a.Client.Watch(ctx, old.ID)
+		if err != nil {
+			result.Errors = append(result.Errors, safeError(err))
+			continue
+		}
+		v, err := ParseWatch(body, old.ID)
+		if err != nil {
+			result.Errors = append(result.Errors, safeError(err))
+			continue
+		}
+		result.Videos = append(result.Videos, completeDetails(v, old, a.Now()))
+		result.Inspected++
+	}
+	return result, nil
+}
+
 func safeError(err error) string {
 	if e, ok := err.(*Error); ok {
 		return e.Code

@@ -26,6 +26,12 @@ export interface MediaItem {
   alt?: string
 }
 
+/**
+ * A broadcast state a watch page confirmed. The server sends live and upcoming
+ * only while the check is fresh; null means only the start time is known.
+ */
+export type LiveStatus = "live" | "upcoming" | "ended"
+
 export interface Post {
   id: string
   source: string
@@ -62,6 +68,8 @@ export interface ScheduleEvent {
   cancellationStatus: string
   cancellationReason?: string | null
   cancellationEvidence?: string | null
+  /** The linked YouTube video's confirmed broadcast state. */
+  liveStatus?: LiveStatus | null
 }
 
 export interface Video {
@@ -78,6 +86,7 @@ export interface Video {
   kind: string
   isUpcoming: boolean
   isCancelled?: boolean
+  liveStatus?: LiveStatus | null
 }
 
 export interface ScheduleAsset {
