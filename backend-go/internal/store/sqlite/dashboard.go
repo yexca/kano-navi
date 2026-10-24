@@ -107,6 +107,8 @@ type DashboardEvent struct {
 	CancellationAt       *string
 	ManualLocked         bool
 	IsUpcoming           bool
+	// LiveStatus is the linked video's trusted broadcast state, or nil.
+	LiveStatus *string
 }
 
 type Video struct {
@@ -124,6 +126,9 @@ type Video struct {
 	ThumbnailStatus    string
 	ThumbnailSourceURL *string
 	IsCancelled        bool
+	// LiveStatus is the broadcast state a watch page reported: an end is
+	// final, while live and upcoming count only while fresh. Nil is unknown.
+	LiveStatus *string
 }
 
 type Focus struct {
@@ -297,7 +302,12 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 	if err != nil {
 		return nil, err
 	}
-	videos, err := s.queryVideos(ctx, now)
+	probe, err := s.LiveProbeSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	liveCutoff := now.Add(-probe.Freshness())
+	videos, err := s.queryVideos(ctx, now, liveCutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +330,7 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 		videos[i].ThumbnailURL = ref.PublicURL
 	}
 	if featuredID != nil && !containsVideo(videos, *featuredID) {
-		featured, getErr := s.getVideo(ctx, *featuredID)
+		featured, getErr := s.getVideo(ctx, *featuredID, liveCutoff)
 		if getErr != nil {
 			return nil, getErr
 		}
@@ -349,8 +359,17 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 			}
 		}
 	}
+	live := map[string]*string{}
 	for i := range videos {
 		videos[i].IsUpcoming = videoUpcoming(videos[i], now)
+		if videos[i].LiveStatus != nil {
+			live[streamIdentity(videos[i].URL)] = videos[i].LiveStatus
+		}
+	}
+	for i := range events {
+		if events[i].URL != nil {
+			events[i].LiveStatus = live[streamIdentity(*events[i].URL)]
+		}
 	}
 
 	sort.SliceStable(events, func(i, j int) bool {
@@ -711,10 +730,11 @@ func (s *Store) queryEventCounts(ctx context.Context, today string, now time.Tim
 	return total, up, nil
 }
 
-func (s *Store) queryVideos(ctx context.Context, now time.Time) ([]Video, error) {
+func (s *Store) queryVideos(ctx context.Context, now, liveCutoff time.Time) ([]Video, error) {
 	n := now.UTC().Format(time.RFC3339Nano)
-	q := `SELECT id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming FROM videos WHERE id IN (SELECT id FROM (SELECT id FROM videos ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT v.id FROM videos v WHERE (julianday(v.scheduled_at)>julianday(?,'-3 hours') OR (v.scheduled_at IS NULL AND v.is_upcoming=1) OR EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)>julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url))))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)<=julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url)))) ORDER BY julianday(v.scheduled_at) ASC,v.id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM videos WHERE scheduled_at IS NULL OR julianday(scheduled_at)<julianday(?) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 1)) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC`
-	rows, err := s.db.QueryContext(ctx, q, n, n, n, n)
+	// A confirmed live broadcast stays listed past the start-time grace.
+	q := `SELECT id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,live_status,live_checked_at FROM videos WHERE id IN (SELECT id FROM (SELECT id FROM videos ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT v.id FROM videos v WHERE (julianday(v.scheduled_at)>julianday(?,'-3 hours') OR (v.scheduled_at IS NULL AND v.is_upcoming=1) OR (v.live_status='live' AND julianday(v.live_checked_at)>julianday(?)) OR EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)>julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url))))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)<=julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url)))) ORDER BY julianday(v.scheduled_at) ASC,v.id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM videos WHERE scheduled_at IS NULL OR julianday(scheduled_at)<julianday(?) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 1)) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC`
+	rows, err := s.db.QueryContext(ctx, q, n, liveCutoff.UTC().Format(time.RFC3339Nano), n, n, n)
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -722,11 +742,12 @@ func (s *Store) queryVideos(ctx context.Context, now time.Time) ([]Video, error)
 	out := []Video{}
 	for rows.Next() {
 		var v Video
-		var pub, sch, thumb, kind sql.NullString
+		var pub, sch, thumb, kind, liveStatus, liveChecked sql.NullString
 		var upcoming int64
-		if err := rows.Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &upcoming); err != nil {
+		if err := rows.Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &upcoming, &liveStatus, &liveChecked); err != nil {
 			return nil, dbErr(err)
 		}
+		v.LiveStatus = liveView(liveStatus, liveChecked, liveCutoff)
 		if pub.Valid {
 			v.PublishedAt = &pub.String
 		}
@@ -747,11 +768,11 @@ func (s *Store) queryVideos(ctx context.Context, now time.Time) ([]Video, error)
 	}
 	return out, nil
 }
-func (s *Store) getVideo(ctx context.Context, id string) (*Video, error) {
+func (s *Store) getVideo(ctx context.Context, id string, liveCutoff time.Time) (*Video, error) {
 	var v Video
-	var pub, sch, thumb, kind sql.NullString
+	var pub, sch, thumb, kind, liveStatus, liveChecked sql.NullString
 	var up int64
-	err := s.db.QueryRowContext(ctx, `SELECT id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming FROM videos WHERE id=?`, id).Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &up)
+	err := s.db.QueryRowContext(ctx, `SELECT id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,live_status,live_checked_at FROM videos WHERE id=?`, id).Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &up, &liveStatus, &liveChecked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -771,6 +792,7 @@ func (s *Store) getVideo(ctx context.Context, id string) (*Video, error) {
 		v.Kind = &kind.String
 	}
 	v.IsUpcoming = up != 0
+	v.LiveStatus = liveView(liveStatus, liveChecked, liveCutoff)
 	return &v, nil
 }
 func (s *Store) queryLinkedEvent(ctx context.Context, v Video, now time.Time) (*DashboardEvent, error) {
@@ -1118,7 +1140,7 @@ func (s *Store) getFeaturedVideoID(ctx context.Context) (*string, error) {
 	if v == "" {
 		return nil, nil
 	}
-	exists, err := s.getVideo(ctx, v)
+	exists, err := s.getVideo(ctx, v, time.Time{})
 	if err != nil {
 		return nil, err
 	}

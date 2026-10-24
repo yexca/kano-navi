@@ -72,6 +72,7 @@ export const adminMessages = {
     "admin.step.youtube": "YouTube",
     "admin.step.media": "Media cache",
     "admin.step.schedule": "Schedule extraction",
+    "admin.step.live": "Live status",
     "admin.step.x.hint": "Read new posts from the configured accounts",
     "admin.step.youtube.hint": "Read new and upcoming videos",
     "admin.step.media.hint": "Cache images and thumbnails locally",
@@ -80,10 +81,12 @@ export const adminMessages = {
     "admin.run.kind.sync": "Full sync",
     "admin.run.kind.scan": "Schedule scan",
     "admin.run.kind.workflow": "Workflow",
+    "admin.run.kind.live": "Live-status probe",
     "admin.run.fetchTitle": "Fetch {sources}",
     "admin.run.by.admin": "Started here",
     "admin.run.by.scheduler": "Timer",
     "admin.run.by.websub": "YouTube push",
+    "admin.run.by.live-probe": "Live probe timer",
     "admin.run.by.mcp": "MCP control",
     "admin.run.by.other": "{source}",
 
@@ -407,6 +410,21 @@ export const adminMessages = {
     "admin.push.notified": "Last notification",
     "admin.push.triggered": "Last queued read",
     "admin.push.lastError": "Last error",
+    "admin.liveProbe.title": "Live-status probe",
+    "admin.liveProbe.description":
+      "Rechecks only the watch pages of streams that are about to start or still running, at most {max} per run, so the board shows On air from YouTube's own state.",
+    "admin.liveProbe.on": "On",
+    "admin.liveProbe.enable": "Probe active streams",
+    "admin.liveProbe.enableHint":
+      "Runs in the server's job queue on its own interval, and only while a video is active.",
+    "admin.liveProbe.unavailable":
+      "Not running: timers are off (WORKFLOW_SCHEDULER_ENABLED=0) or YouTube is disabled by SKIP_YOUTUBE.",
+    "admin.liveProbe.interval": "Interval (minutes)",
+    "admin.liveProbe.intervalHint":
+      "{min} to {max} minutes. A result counts for two intervals; after that the board falls back to the start time.",
+    "admin.liveProbe.lastRun": "Last probe",
+    "admin.liveProbe.active": "Active videos now",
+    "admin.liveProbe.activeCount": "{count} (up to {max} per run)",
 
     "admin.models.title": "Models & detection",
     "admin.models.description":
@@ -554,6 +572,7 @@ export const adminMessages = {
     "admin.notice.mediaDownloaded": "Image downloaded",
     "admin.notice.mediaSelected": "Profile image updated",
     "admin.notice.pushSaved": "Push settings saved",
+    "admin.notice.liveProbeSaved": "Live probe settings saved",
     "admin.notice.secretRotated": "Signing secret rotated",
     "admin.notice.extractionSaved": "Detection settings saved",
     "admin.notice.queueSaved": "Queue saved",
@@ -645,6 +664,7 @@ export const adminMessages = {
     "admin.step.youtube": "YouTube",
     "admin.step.media": "媒体缓存",
     "admin.step.schedule": "日程提取",
+    "admin.step.live": "直播状态",
     "admin.step.x.hint": "读取所配置账号的新贴文",
     "admin.step.youtube.hint": "读取新视频和预定直播",
     "admin.step.media.hint": "把图片和缩略图缓存到本地",
@@ -653,10 +673,12 @@ export const adminMessages = {
     "admin.run.kind.sync": "完整同步",
     "admin.run.kind.scan": "日程扫描",
     "admin.run.kind.workflow": "工作流",
+    "admin.run.kind.live": "直播状态探测",
     "admin.run.fetchTitle": "抓取 {sources}",
     "admin.run.by.admin": "后台发起",
     "admin.run.by.scheduler": "定时器",
     "admin.run.by.websub": "YouTube 推送",
+    "admin.run.by.live-probe": "直播探测定时器",
     "admin.run.by.mcp": "MCP 控制",
     "admin.run.by.other": "{source}",
 
@@ -964,6 +986,21 @@ export const adminMessages = {
     "admin.push.notified": "最近通知",
     "admin.push.triggered": "最近排队读取",
     "admin.push.lastError": "最近错误",
+    "admin.liveProbe.title": "直播状态探测",
+    "admin.liveProbe.description":
+      "只重新读取即将开始或仍在进行的直播的观看页，每次最多 {max} 个，让看板按 YouTube 自己的状态显示直播中。",
+    "admin.liveProbe.on": "开启",
+    "admin.liveProbe.enable": "探测进行中的直播",
+    "admin.liveProbe.enableHint":
+      "按独立的间隔在服务器任务队列中运行，且只在有活跃视频时运行。",
+    "admin.liveProbe.unavailable":
+      "未运行：定时器已关闭（WORKFLOW_SCHEDULER_ENABLED=0），或 YouTube 已被 SKIP_YOUTUBE 停用。",
+    "admin.liveProbe.interval": "间隔（分钟）",
+    "admin.liveProbe.intervalHint":
+      "{min} 到 {max} 分钟。结果在两个间隔内有效，之后看板改按开始时间推断。",
+    "admin.liveProbe.lastRun": "最近探测",
+    "admin.liveProbe.active": "当前活跃视频",
+    "admin.liveProbe.activeCount": "{count}（每次最多 {max} 个）",
 
     "admin.models.title": "模型与识别",
     "admin.models.description":
@@ -1104,6 +1141,7 @@ export const adminMessages = {
     "admin.notice.mediaDownloaded": "图片已下载",
     "admin.notice.mediaSelected": "头像或横幅已更新",
     "admin.notice.pushSaved": "推送设置已保存",
+    "admin.notice.liveProbeSaved": "直播探测设置已保存",
     "admin.notice.secretRotated": "签名密钥已轮换",
     "admin.notice.extractionSaved": "识别设置已保存",
     "admin.notice.queueSaved": "队列已保存",

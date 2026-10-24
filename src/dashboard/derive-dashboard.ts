@@ -1,4 +1,4 @@
-import type { Dashboard } from "../types.ts"
+import type { Dashboard, LiveStatus } from "../types.ts"
 import { streamIdentity } from "../lib/stream-identity.ts"
 import {
   eventIsUpcoming,
@@ -11,13 +11,24 @@ export const LIVE_GRACE_MS = 3 * 3600 * 1000
 /** How close a later reservation must be to replace a presumed-live item. */
 export const LIVE_YIELD_MS = 30 * 60 * 1000
 
-// Only streams and memberships are presumed live without an end; other YouTube
-// activities, such as a premiere, stay live only until their explicit end.
+/** The probe-confirmed broadcast state, or null when only the start is known. */
+export function confirmedLiveStatus(item): LiveStatus | null {
+  const status = item?.liveStatus
+  return status === "live" || status === "upcoming" || status === "ended"
+    ? status
+    : null
+}
+
+// A confirmed state decides first. Without one, only streams and memberships
+// are presumed live without an end; other YouTube activities, such as a
+// premiere, stay live only until their explicit end.
 export function eventIsLive(event, now: number) {
   const isStream = ["stream", "member"].includes(event.eventType)
   if (!isStream && event.source !== "youtube") return false
   const start = Date.parse(event.startsAt || "")
   const end = Date.parse(event.endsAt || "")
+  const confirmed = confirmedLiveStatus(event)
+  if (confirmed) return confirmed === "live" && !(end <= now)
   if (!(start <= now)) return false
   if (Number.isFinite(end)) return end > now
   return isStream && start > now - LIVE_GRACE_MS
@@ -25,18 +36,20 @@ export function eventIsLive(event, now: number) {
 
 /**
  * The first of start-ordered focus candidates. A started candidate without an
- * explicit end is only presumed live, so it yields to a later timed candidate
- * that has started or starts within LIVE_YIELD_MS.
+ * explicit end or a confirmed live state is only presumed live, so it yields
+ * to a later timed candidate that has started or starts within LIVE_YIELD_MS.
  */
 export function leadingCandidate<T>(
   candidates: T[],
   now: number,
   startOf: (candidate: T) => number,
   endOf: (candidate: T) => number,
+  confirmedLive: (candidate: T) => boolean = () => false,
 ): T | null {
   const lead = candidates.find((candidate, index) => {
     const start = startOf(candidate)
     if (!(start <= now) || Number.isFinite(endOf(candidate))) return true
+    if (confirmedLive(candidate)) return true
     return !candidates.slice(index + 1).some((later) => {
       const next = startOf(later)
       return next > start && next - now <= LIVE_YIELD_MS
@@ -49,6 +62,9 @@ export function videoIsInFocus(video, now: number) {
   if (video.isCancelled) return false
   const start = Date.parse(video.scheduledAt || "")
   const end = Date.parse(video.endsAt || "")
+  const confirmed = confirmedLiveStatus(video)
+  if (confirmed === "live") return !(end <= now)
+  if (confirmed === "ended") return false
   if (Number.isFinite(end)) return end > now && Number.isFinite(start)
   return Number.isFinite(start)
     ? start > now - LIVE_GRACE_MS
@@ -69,9 +85,14 @@ export function deriveDashboardAt(snapshot: Dashboard, now: number): Dashboard {
   const videos = snapshot.videos.map((video) => ({
     ...video,
     endsAt: streamEnds.get(streamIdentity(video.url)) || video.endsAt || null,
-    isUpcoming: video.scheduledAt
-      ? Date.parse(video.scheduledAt) >= now
-      : Boolean(video.isUpcoming),
+    // A waiting room past its reserved time is still upcoming, and a
+    // confirmed broadcast is not.
+    isUpcoming:
+      video.liveStatus === "upcoming" ||
+      (!confirmedLiveStatus(video) &&
+        (video.scheduledAt
+          ? Date.parse(video.scheduledAt) >= now
+          : Boolean(video.isUpcoming))),
   }))
   const eligible = events.filter(
     (event) =>
@@ -107,12 +128,14 @@ export function deriveDashboardAt(snapshot: Dashboard, now: number): Dashboard {
         now,
         (event) => Date.parse(event.startsAt || ""),
         (event) => Date.parse(event.endsAt || ""),
+        (event) => confirmedLiveStatus(event) === "live",
       ),
       nextStream: leadingCandidate(
         focusVideos,
         now,
         (video) => Date.parse(video.scheduledAt || ""),
         (video) => Date.parse(video.endsAt || ""),
+        (video) => confirmedLiveStatus(video) === "live",
       ),
       latestVideo: latestVideos[0] || null,
       counts: snapshot.summary.counts

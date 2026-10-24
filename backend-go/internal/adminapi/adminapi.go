@@ -42,6 +42,8 @@ type Options struct {
 	Scheduler func() map[string]any
 	// YoutubePush reports the WebSub settings and subscription.
 	YoutubePush func() map[string]any
+	// LiveProbe reports the in-process YouTube live-status probe timer.
+	LiveProbe func() map[string]any
 	// SkippedSteps lists steps disabled for the process through SKIP_* flags.
 	SkippedSteps []string
 	XHandles     []string
@@ -104,6 +106,8 @@ func (a *api) routes() []httpx.Route {
 		{Method: http.MethodDelete, Path: "/workflows/{id}", Handler: a.deleteWorkflow},
 
 		{Method: http.MethodGet, Path: "/sources", Handler: a.sources},
+		{Method: http.MethodGet, Path: "/sources/youtube/live-probe", Handler: a.liveProbe},
+		{Method: http.MethodPut, Path: "/sources/youtube/live-probe", Handler: a.updateLiveProbe},
 
 		{Method: http.MethodGet, Path: "/events", Handler: a.listEvents},
 		{Method: http.MethodPost, Path: "/events", Handler: a.createEvent},

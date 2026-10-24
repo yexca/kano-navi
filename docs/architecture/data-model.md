@@ -105,6 +105,13 @@ reservation with `manual_confirmed` cancellation is excluded from `nextStream`,
 including after source refresh. An `llm_suspected` overlay remains review evidence
 and does not definitively cancel its video.
 
+Videos have additive `live_status` (`upcoming`, `live`, `ended` or null) and
+`live_checked_at` columns, written by every successful watch-page check,
+including the [live-status probe](sources.md#live-status-probe). The
+dashboard projects only a sanitized `liveStatus`: `ended` always, `live` and
+`upcoming` while younger than two probe intervals. Older snapshots receive
+the columns empty on upgrade.
+
 Selected profile-media rows have additive `active_sha256` and
 `active_mime_type` columns describing the selected file independently of the
 latest candidate download. `download_status` and `last_download_at` record the

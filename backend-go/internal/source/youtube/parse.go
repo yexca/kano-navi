@@ -16,10 +16,24 @@ type Video struct {
 	// premiere finishes; it stays empty while unknown.
 	EndedAt    string
 	IsUpcoming bool
+	// LiveNow is the watch page's own live signal: the player's isLive or the
+	// broadcast details' isLiveNow, without a reported end.
+	LiveNow bool
+	// LiveStatus classifies a checked broadcast as LiveUpcoming, LiveNow or
+	// LiveEnded. It stays empty for an ordinary video and for pages that do not
+	// say, such as a feed entry that was never checked.
+	LiveStatus string
 	// Premiere marks a scheduled upload that is not live content.
 	Premiere bool
 	FeedOnly bool
 }
+
+// Broadcast states a watch page can report.
+const (
+	LiveStatusUpcoming = "upcoming"
+	LiveStatusLive     = "live"
+	LiveStatusEnded    = "ended"
+)
 
 func Classify(title string) string {
 	for _, rule := range []struct{ pattern, kind string }{
@@ -102,10 +116,22 @@ type playerResponse struct {
 		Title       string `json:"title"`
 		Upcoming    bool   `json:"isUpcoming"`
 		LiveContent *bool  `json:"isLiveContent"`
+		Live        bool   `json:"isLive"`
 	} `json:"videoDetails"`
 	Playability struct {
 		Status string `json:"status"`
 	} `json:"playabilityStatus"`
+	Microformat struct {
+		Renderer struct {
+			Broadcast *broadcastDetails `json:"liveBroadcastDetails"`
+		} `json:"playerMicroformatRenderer"`
+	} `json:"microformat"`
+}
+
+type broadcastDetails struct {
+	LiveNow *bool  `json:"isLiveNow"`
+	Start   string `json:"startTimestamp"`
+	End     string `json:"endTimestamp"`
 }
 
 func ParseWatch(body []byte, id string) (Video, error) {
@@ -174,8 +200,44 @@ func ParseWatch(body []byte, id string) (Video, error) {
 	}
 	live := player.VideoDetails.LiveContent
 	v.Premiere = found && v.ScheduledAt != "" && live != nil && !*live
+	liveState(&v, player, found)
 	v.ThumbnailURL = meta(text, "og:image")
 	return v, nil
+}
+
+// liveState reads the broadcast signals of a page that already passed the
+// completeness checks. An unreadable signal leaves the state unknown rather
+// than guessing it from the start time.
+func liveState(v *Video, player playerResponse, found bool) {
+	details := player.Microformat.Renderer.Broadcast
+	if !found || details == nil {
+		if v.IsUpcoming {
+			v.LiveStatus = LiveStatusUpcoming
+		}
+		return
+	}
+	if t, err := time.Parse(time.RFC3339Nano, details.End); err == nil {
+		v.EndedAt = t.UTC().Format(time.RFC3339Nano)
+	}
+	now := player.VideoDetails.Live || details.LiveNow != nil && *details.LiveNow
+	switch {
+	case v.IsUpcoming:
+		v.LiveStatus = LiveStatusUpcoming
+		return
+	case now && v.EndedAt == "":
+		v.LiveNow, v.LiveStatus = true, LiveStatusLive
+	case v.EndedAt != "" || details.LiveNow != nil:
+		// The player answered isLiveNow: false for a broadcast that is
+		// neither upcoming nor live, so it is over even without an end time.
+		v.LiveStatus = LiveStatusEnded
+	default:
+		return
+	}
+	// A started broadcast reports its actual start, which replaces the
+	// reservation time.
+	if t, err := time.Parse(time.RFC3339Nano, details.Start); err == nil {
+		v.ScheduledAt = t.UTC().Format(time.RFC3339Nano)
+	}
 }
 func jsonField(text, field string) string {
 	m := regexp.MustCompile(`"` + regexp.QuoteMeta(field) + `"\s*:\s*("(?:\\.|[^"\\])*")`).FindStringSubmatch(text)

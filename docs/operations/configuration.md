@@ -81,6 +81,14 @@ and save it only in the ignored environment file or deployment secret store.
 `WORKFLOW_SCHEDULER_ENABLED=0`. Page requests and admin reads never start a
 timer or a run. A saved workflow's interval is 15 minutes through seven days.
 
+The YouTube live-status probe is an operator setting, not an environment
+variable: `/admin` → Sources → Live-status probe turns it on or off and sets
+its interval (default 30 minutes, 5–360), stored in `app_settings` as
+`youtube_live_probe_enabled` and `youtube_live_probe_interval_minutes`. It
+uses the workflow timer process, so `WORKFLOW_SCHEDULER_ENABLED=0` or
+`SKIP_YOUTUBE=1` stops it. See
+[Workflows](../architecture/workflows.md#live-status-probe).
+
 ## Related Docs
 
 - [Local development](../development/local-dev.md)

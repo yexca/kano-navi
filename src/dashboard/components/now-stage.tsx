@@ -20,7 +20,8 @@ import {
   videoKindLabel,
   visitorIsInJapan,
 } from "../format"
-import { pickCompanion, pickSpotlight } from "../spotlight"
+import { confirmedLiveStatus } from "../derive-dashboard"
+import { pickCompanion, pickSpotlight, spotlightIsLive } from "../spotlight"
 
 export interface SyncState {
   tone: "leaf" | "honey" | "danger" | "muted"
@@ -234,7 +235,7 @@ function FullTicket({
         {item.mode === "next" && item.time && !isLive ? (
           <Countdown time={item.time} now={now} t={t} />
         ) : null}
-        {isLive ? (
+        {isLive && !confirmedLiveStatus(item.event || item.video) ? (
           <span className="ticket-note">{t("spotlight.started")}</span>
         ) : null}
         {item.url ? (
@@ -280,7 +281,7 @@ function CompactTicket({
         {item.time && !isLive ? (
           <Countdown time={item.time} now={now} t={t} />
         ) : null}
-        {isLive ? (
+        {isLive && !confirmedLiveStatus(item.event || item.video) ? (
           <span className="ticket-note">{t("spotlight.started")}</span>
         ) : null}
         {item.url ? (
@@ -378,8 +379,7 @@ function NextTicket({
     )
   }
 
-  const isLive =
-    item.mode === "next" && Boolean(item.time) && Date.parse(item.time) <= now
+  const isLive = spotlightIsLive(item, now)
   if (item.layout === "full") {
     return (
       <FullTicket item={item} isLive={isLive} locale={locale} now={now} t={t} />

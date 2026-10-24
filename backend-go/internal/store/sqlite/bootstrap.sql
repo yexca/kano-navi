@@ -312,7 +312,9 @@ CREATE TABLE videos (
     thumbnail_url TEXT,
     kind TEXT,
     is_upcoming INTEGER DEFAULT 0,
-    raw_json TEXT
+    raw_json TEXT,
+    live_status TEXT,
+    live_checked_at TEXT
   );
 
 CREATE TABLE workflows (

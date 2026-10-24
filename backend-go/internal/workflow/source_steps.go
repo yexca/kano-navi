@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/mediadownload"
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
@@ -60,6 +61,11 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 			return s.youtubeWindowAndFeed(ctx, in)
 		}
 		return s.youtubeRecent(ctx, in)
+	case "live":
+		if s.Youtube == nil {
+			break
+		}
+		return s.youtubeLive(ctx)
 	case "media":
 		if s.Media == nil {
 			break
@@ -138,6 +144,47 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 		status = "partial"
 	}
 	return AttemptResult{Status: status, Result: map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested}}, nil
+}
+
+// youtubeLive requests only the watch pages of a few active videos and
+// stores the broadcast state they report. Nothing active means no request.
+func (s *SourceSteps) youtubeLive(ctx context.Context) (AttemptResult, error) {
+	now := time.Now()
+	if s.Youtube.Now != nil {
+		now = s.Youtube.Now()
+	}
+	candidates, err := s.Store.YoutubeLiveCandidates(ctx, now, ytsource.MaxLiveProbes)
+	if err != nil {
+		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+	}
+	counts := map[string]any{"candidates": len(candidates), "requested": 0, "inspected": 0, "live": 0, "changed": false}
+	if len(candidates) == 0 {
+		return AttemptResult{Status: "succeeded", Result: counts}, nil
+	}
+	result, err := s.Youtube.ProbeLive(ctx, candidates)
+	if err != nil || ctx.Err() != nil {
+		return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
+	}
+	changed, err := s.Store.WriteYoutubeLive(ctx, result)
+	if err != nil {
+		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+	}
+	live := 0
+	for _, v := range result.Videos {
+		if v.LiveNow {
+			live++
+		}
+	}
+	counts["requested"], counts["inspected"], counts["live"], counts["changed"] = result.Requested, result.Inspected, live, changed
+	if len(result.Errors) == 0 {
+		return AttemptResult{Status: "succeeded", Result: counts}, nil
+	}
+	counts["errors"] = result.Errors
+	// Failed pages keep their snapshots; the next probe asks again.
+	if result.Inspected == 0 {
+		return AttemptResult{Status: "failed", Result: counts}, nil
+	}
+	return AttemptResult{Status: "partial", Result: counts}, nil
 }
 
 // youtubeWindowAndFeed serves a recent window from the API and still refreshes

@@ -139,7 +139,7 @@ func verifySchema(ctx context.Context, db schemaQuerier) error {
 		"post_llm_states":        {"post_id", "status", "route", "last_attempt_at", "last_processed_at", "last_error", "last_extraction_id", "reprocess_requested"},
 		"events":                 {"id", "source", "source_item_id", "source_key", "title", "detail", "starts_on", "starts_at", "ends_at", "timezone", "time_precision", "status", "event_type", "url", "provenance", "manual_locked", "cancellation_status", "cancellation_source", "cancellation_reason", "cancellation_evidence", "cancellation_source_item_id", "cancellation_confidence", "cancellation_at", "deleted_at", "created_at", "updated_at"},
 		"event_sources":          {"event_id", "source", "source_item_id", "deleted_at"},
-		"videos":                 {"id", "source", "title", "published_at", "scheduled_at", "url", "thumbnail_url", "kind", "is_upcoming"},
+		"videos":                 {"id", "source", "title", "published_at", "scheduled_at", "url", "thumbnail_url", "kind", "is_upcoming", "live_status", "live_checked_at"},
 		"focus":                  {"id", "video_id", "date_label", "title", "description", "image_url", "url", "source_url", "updated_at"},
 		"timeline":               {"id", "year", "title", "detail", "sort_order"},
 		"resources":              {"id", "title", "detail", "icon", "tone", "url", "sort_order"},

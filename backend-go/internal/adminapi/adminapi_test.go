@@ -484,3 +484,48 @@ func TestReadOnlySnapshotServesSanitizedListsAndRefusesWrites(t *testing.T) {
 		t.Fatalf("development login on a read-only store=%d %v", code, payload)
 	}
 }
+
+func TestLiveProbeSettings(t *testing.T) {
+	c := newConsole(t, "development", "", &gatedSteps{})
+	code, payload := c.call(t, "GET", "/api/admin/sources", "")
+	probe := payload["youtube"].(map[string]any)["liveProbe"].(map[string]any)
+	if code != 200 || probe["enabled"] != true || probe["intervalMinutes"] != float64(30) || probe["minIntervalMinutes"] != float64(5) ||
+		probe["maxIntervalMinutes"] != float64(360) || probe["available"] != false || probe["lastRunAt"] != nil || probe["activeVideos"] != float64(0) || probe["maxVideos"] != float64(5) {
+		t.Fatalf("status=%d %v", code, probe)
+	}
+	for body, message := range map[string]string{
+		`{"intervalMinutes":4}`:    "intervalMinutes must be an integer from 5 to 360",
+		`{"intervalMinutes":361}`:  "intervalMinutes must be an integer from 5 to 360",
+		`{"intervalMinutes":12.5}`: "intervalMinutes must be an integer from 5 to 360",
+		`{"enabled":"yes"}`:        "enabled must be a boolean",
+		`{"videos":["x"]}`:         "videos is not a live probe field",
+	} {
+		if code, payload := c.call(t, "PUT", "/api/admin/sources/youtube/live-probe", body); code != 400 || payload["message"] != message {
+			t.Fatalf("%s => %d %v", body, code, payload)
+		}
+	}
+	code, payload = c.call(t, "PUT", "/api/admin/sources/youtube/live-probe", `{"intervalMinutes":10}`)
+	if code != 200 || payload["intervalMinutes"] != float64(10) || payload["enabled"] != true {
+		t.Fatalf("save=%d %v", code, payload)
+	}
+	code, payload = c.call(t, "PUT", "/api/admin/sources/youtube/live-probe", `{"enabled":false}`)
+	if code != 200 || payload["intervalMinutes"] != float64(10) || payload["enabled"] != false {
+		t.Fatalf("toggle=%d %v", code, payload)
+	}
+	if got := c.text(t, `SELECT value FROM app_settings WHERE key='youtube_live_probe_interval_minutes'`); got != "10" {
+		t.Fatalf("stored interval=%s", got)
+	}
+	// A probe run reads as its own kind, labelled by its trigger.
+	runs := &jobs.QueueManager{Store: c.store, Queue: &workflow.Queue{Store: c.store, Executor: &workflow.Executor{Store: c.store, Steps: c.steps}}}
+	started, err := runs.Start(context.Background(), jobs.KindLive, jobs.TriggeredByLiveProbe, jobs.Options{})
+	if err != nil || !started.Accepted {
+		t.Fatalf("start=%#v err=%v", started, err)
+	}
+	run := c.waitForRun(t, started.Job.ID, "completed")
+	if run["kind"] != "live" || run["triggeredBy"] != "live-probe" || len(run["steps"].([]any)) != 1 || run["steps"].([]any)[0] != "live" {
+		t.Fatalf("run=%v", run)
+	}
+	if _, payload = c.call(t, "GET", "/api/admin/sources/youtube/live-probe", ""); payload["lastRunAt"] == nil {
+		t.Fatalf("lastRunAt missing: %v", payload)
+	}
+}
