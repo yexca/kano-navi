@@ -189,6 +189,10 @@ alias); `none` never needs review and keeps `previewUrl` null.
 | `GET /videos`          | `page`, `pageSize` (≤ 200), `status`, `kind`, `thumbnail` | list plus `featuredVideoId` |
 | `PUT /videos/featured` | `{videoId}` (`null` restores automatic selection)         | `{featuredVideoId}`         |
 
+Each video's `thumbnailUrl` is the local `/media/<id>?v=<sha256>` URL of its
+cached thumbnail, or `null` until that file is ready; the remote CDN address is
+never returned. `thumbnailStatus` is `ready`, `pending`, `failed` or `missing`.
+
 Changing the featured video advances the dashboard revision.
 
 ## Profile media

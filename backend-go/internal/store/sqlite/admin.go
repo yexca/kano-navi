@@ -35,9 +35,12 @@ type AdminVideo struct {
 	PublishedAt  *string `json:"publishedAt"`
 	ScheduledAt  *string `json:"scheduledAt"`
 	URL          string  `json:"url"`
-	ThumbnailURL *string `json:"thumbnailUrl"`
-	Kind         *string `json:"kind"`
-	IsUpcoming   bool    `json:"isUpcoming"`
+	// ThumbnailURL is the local /media URL of a ready cached file, never the
+	// remote CDN address; ThumbnailStatus explains a null URL.
+	ThumbnailURL    *string `json:"thumbnailUrl"`
+	ThumbnailStatus string  `json:"thumbnailStatus"`
+	Kind            *string `json:"kind"`
+	IsUpcoming      bool    `json:"isUpcoming"`
 }
 
 type AdminEvent struct {
@@ -338,6 +341,15 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 	}
 	if err := rows.Err(); err != nil {
 		return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
+	}
+	// Release the single connection before resolving each cached thumbnail.
+	rows.Close()
+	for i := range items {
+		ref, err := s.resolveMedia(ctx, items[i].ThumbnailURL)
+		if err != nil {
+			return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
+		}
+		items[i].ThumbnailURL, items[i].ThumbnailStatus = ref.PublicURL, ref.Status
 	}
 	return AdminVideosPage{
 		AdminPage:       AdminPage[AdminVideo]{Items: items, Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages},

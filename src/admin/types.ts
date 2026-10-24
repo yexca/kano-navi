@@ -223,7 +223,9 @@ export interface AdminVideo {
   publishedAt: string | null
   scheduledAt: string | null
   url: string
+  /** Local /media URL of the cached file; null until it is ready. */
   thumbnailUrl: string | null
+  thumbnailStatus: string
   kind: string | null
   isUpcoming: boolean
 }
