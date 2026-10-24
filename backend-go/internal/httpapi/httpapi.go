@@ -256,9 +256,10 @@ func (h *Handler) calendar(w http.ResponseWriter, r *http.Request) {
 	for _, event := range calendar.Items {
 		projected := publicview.PublicEvent(event, false)
 		// Calendar exposes the same manual lock marker as TypeScript's
-		// publicEvent(event, ["manualLocked"]), while omitting dashboard-only
-		// isUpcoming.
+		// publicEvent(event, ["manualLocked"]) and the board's trusted live
+		// state, while omitting dashboard-only isUpcoming.
 		projected["manualLocked"] = event.ManualLocked
+		projected["liveStatus"] = event.LiveStatus
 		items = append(items, projected)
 	}
 	images := make([]any, 0, len(calendar.ScheduleImages))

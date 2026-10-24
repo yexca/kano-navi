@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ImageIcon,
+  Radio,
   Sparkles,
 } from "lucide-react"
 
@@ -42,6 +43,12 @@ const typeTones: Record<string, string> = {
   event: "sky",
   release: "honey",
   video: "leaf",
+}
+
+const statusTones: Record<string, string> = {
+  live: "berry",
+  cancelled: "danger",
+  cancellation_review: "honey",
 }
 
 function GuideEvent({
@@ -101,15 +108,8 @@ function GuideEvent({
         <span className="guide-event-tags">
           {typeKey ? <span className="tag">{t(typeKey)}</span> : null}
           {status !== "upcoming" ? (
-            <span
-              className={`tag tone-${
-                status === "cancelled"
-                  ? "danger"
-                  : status === "cancellation_review"
-                    ? "honey"
-                    : "muted"
-              }`}
-            >
+            <span className={`tag tone-${statusTones[status] || "muted"}`}>
+              {status === "live" ? <Radio aria-hidden="true" /> : null}
               {t(`schedule.status.${status}`)}
             </span>
           ) : null}

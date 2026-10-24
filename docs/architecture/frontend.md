@@ -84,7 +84,10 @@ even when `dashboard_revision` is unchanged. Expired activities yield to later
 events; date-only entries use the current Asia/Tokyo date and never acquire a
 synthetic start time. A fresh probe-confirmed `liveStatus` decides first:
 `live` stays live until a known end, while `ended` and `upcoming` are never
-on air, and the On air badge uses the same rule. Without one, streams and
+on air, and the On air badge and the schedule's On air status use the same
+rule, so the week guide never shows a stream as ended while the stage shows
+it on air; a confirmed `upcoming` waiting room past its reserved time stays
+upcoming there. Without one, streams and
 memberships retain a three-hour live grace period, or their explicit end time; other activities, including YouTube
 premieres, count as live only before an explicit end. A started candidate
 without an explicit end or a confirmed live state is only presumed live: in `nextEvent`, `nextStream` and

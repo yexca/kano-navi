@@ -1,38 +1,17 @@
-import type { Dashboard, LiveStatus } from "../types.ts"
+import type { Dashboard } from "../types.ts"
 import { streamIdentity } from "../lib/stream-identity.ts"
 import {
+  confirmedLiveStatus,
+  eventIsLive,
   eventIsUpcoming,
   eventStatus,
+  LIVE_GRACE_MS,
   sortEvents,
   scheduleSortTime,
 } from "./format.ts"
 
-export const LIVE_GRACE_MS = 3 * 3600 * 1000
 /** How close a later reservation must be to replace a presumed-live item. */
 export const LIVE_YIELD_MS = 30 * 60 * 1000
-
-/** The probe-confirmed broadcast state, or null when only the start is known. */
-export function confirmedLiveStatus(item): LiveStatus | null {
-  const status = item?.liveStatus
-  return status === "live" || status === "upcoming" || status === "ended"
-    ? status
-    : null
-}
-
-// A confirmed state decides first. Without one, only streams and memberships
-// are presumed live without an end; other YouTube activities, such as a
-// premiere, stay live only until their explicit end.
-export function eventIsLive(event, now: number) {
-  const isStream = ["stream", "member"].includes(event.eventType)
-  if (!isStream && event.source !== "youtube") return false
-  const start = Date.parse(event.startsAt || "")
-  const end = Date.parse(event.endsAt || "")
-  const confirmed = confirmedLiveStatus(event)
-  if (confirmed) return confirmed === "live" && !(end <= now)
-  if (!(start <= now)) return false
-  if (Number.isFinite(end)) return end > now
-  return isStream && start > now - LIVE_GRACE_MS
-}
 
 /**
  * The first of start-ordered focus candidates. A started candidate without an

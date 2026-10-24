@@ -54,6 +54,9 @@ func TestCalendarRangePaginationAndPublicProjection(t *testing.T) {
 	if items[0].(map[string]any)["manualLocked"] != false || strings.Contains(recorder.Body.String(), "sourceItemId") {
 		t.Fatalf("calendar leaked private fields: %s", recorder.Body)
 	}
+	if value, ok := items[0].(map[string]any)["liveStatus"]; !ok || value != nil {
+		t.Fatalf("calendar live status projection=%#v", items[0])
+	}
 	counts := payload["dayCounts"].(map[string]any)
 	if counts["2026-10-10"] != float64(1) || counts["2026-10-11"] != float64(2) {
 		t.Fatalf("dayCounts=%#v", counts)

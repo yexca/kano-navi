@@ -10,6 +10,7 @@ import {
 
 import { ExternalLink, XLogo, YouTubeLogo } from "@/site/links"
 import {
+  confirmedLiveStatus,
   countdownParts,
   eventIsManual,
   eventTypeKey,
@@ -20,7 +21,6 @@ import {
   videoKindLabel,
   visitorIsInJapan,
 } from "../format"
-import { confirmedLiveStatus } from "../derive-dashboard"
 import { pickCompanion, pickSpotlight, spotlightIsLive } from "../spotlight"
 
 export interface SyncState {

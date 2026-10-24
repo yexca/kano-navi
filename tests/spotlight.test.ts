@@ -9,9 +9,9 @@ import {
 } from "../src/dashboard/spotlight.ts"
 import {
   deriveDashboardAt,
-  eventIsLive,
   videoIsInFocus,
 } from "../src/dashboard/derive-dashboard.ts"
+import { eventIsLive, eventStatus } from "../src/dashboard/format.ts"
 
 const now = Date.parse("2026-10-21T12:00:00Z")
 
@@ -356,4 +356,72 @@ test("a confirmed live stream keeps the stage before a near reservation", () => 
     deriveDashboardAt(snapshot(events), evening).summary.nextEvent.id
   assert.equal(lead([live, later]), "later")
   assert.equal(lead([{ ...live, liveStatus: "live" }, later]), "live")
+})
+
+test("the schedule reads On air exactly while the stage does", () => {
+  const stream = scheduled({
+    id: "youtube-synthetic05",
+    eventType: "stream",
+    startsAt: "2026-10-24T09:00:00Z",
+    url: "https://www.youtube.com/watch?v=synthetic05",
+  })
+  const premiere = scheduled({
+    id: "youtube-synthetic06",
+    eventType: "release",
+    startsAt: "2026-10-24T11:00:00Z",
+    endsAt: "2026-10-24T11:30:00Z",
+    url: "https://www.youtube.com/watch?v=synthetic06",
+  })
+  const onStage = (event, at) => {
+    const { summary } = deriveDashboardAt(snapshot([event]), at)
+    return spotlightIsLive(pickSpotlight(summary, at), at)
+  }
+  const cases = [
+    { event: stream, time: "2026-10-24T08:59:00Z", status: "upcoming" },
+    // Presumed live for the start-time grace, then ended.
+    { event: stream, time: "2026-10-24T11:24:00Z", status: "live" },
+    { event: stream, time: "2026-10-24T12:00:00Z", status: "done" },
+    // A probe result decides either way.
+    {
+      event: { ...stream, liveStatus: "ended" },
+      time: "2026-10-24T11:24:00Z",
+      status: "done",
+    },
+    {
+      event: { ...stream, liveStatus: "live" },
+      time: "2026-10-24T13:00:00Z",
+      status: "live",
+    },
+    // A late waiting room has not started, within the grace or after it.
+    {
+      event: { ...stream, liveStatus: "upcoming" },
+      time: "2026-10-24T11:24:00Z",
+      status: "upcoming",
+    },
+    {
+      event: { ...stream, liveStatus: "upcoming" },
+      time: "2026-10-24T13:00:00Z",
+      status: "upcoming",
+    },
+    // A premiere is live only until its explicit end.
+    { event: premiere, time: "2026-10-24T11:24:00Z", status: "live" },
+    { event: premiere, time: "2026-10-24T11:30:00Z", status: "done" },
+    // A cancellation is never on air.
+    {
+      event: { ...stream, cancellationStatus: "manual_confirmed" },
+      time: "2026-10-24T11:24:00Z",
+      status: "cancelled",
+    },
+    {
+      event: { ...stream, cancellationStatus: "llm_suspected" },
+      time: "2026-10-24T11:24:00Z",
+      status: "cancellation_review",
+    },
+  ]
+  for (const { event, time, status } of cases) {
+    const at = Date.parse(time)
+    const label = `${event.id} ${event.liveStatus ?? ""} at ${time}`
+    assert.equal(eventStatus(event, at), status, label)
+    assert.equal(onStage(event, at), status === "live", label)
+  }
 })

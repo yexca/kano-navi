@@ -1,3 +1,5 @@
+import type { LiveStatus } from "../types.ts"
+
 export const JAPAN_TIME_ZONE = "Asia/Tokyo"
 
 const intlLocales = {
@@ -214,6 +216,31 @@ export function eventIsUpcoming(event, now = Date.now()) {
   return Boolean(event.isUpcoming)
 }
 
+export const LIVE_GRACE_MS = 3 * 3600 * 1000
+
+/** The probe-confirmed broadcast state, or null when only the start is known. */
+export function confirmedLiveStatus(item): LiveStatus | null {
+  const status = item?.liveStatus
+  return status === "live" || status === "upcoming" || status === "ended"
+    ? status
+    : null
+}
+
+// A confirmed state decides first. Without one, only streams and memberships
+// are presumed live without an end; other YouTube activities, such as a
+// premiere, stay live only until their explicit end.
+export function eventIsLive(event, now: number) {
+  const isStream = ["stream", "member"].includes(event.eventType)
+  if (!isStream && event.source !== "youtube") return false
+  const start = Date.parse(event.startsAt || "")
+  const end = Date.parse(event.endsAt || "")
+  const confirmed = confirmedLiveStatus(event)
+  if (confirmed) return confirmed === "live" && !(end <= now)
+  if (!(start <= now)) return false
+  if (Number.isFinite(end)) return end > now
+  return isStream && start > now - LIVE_GRACE_MS
+}
+
 const cancelledStatuses = [
   "cancelled",
   "canceled",
@@ -233,7 +260,7 @@ const pendingStatuses = [
   "未定",
 ]
 
-/** upcoming | done | pending | cancelled | cancellation_review */
+/** upcoming | live | done | pending | cancelled | cancellation_review */
 export function eventStatus(event, now = Date.now()) {
   if (event.cancellationStatus === "manual_confirmed") return "cancelled"
   if (event.cancellationStatus === "llm_suspected") return "cancellation_review"
@@ -247,6 +274,10 @@ export function eventStatus(event, now = Date.now()) {
     status.startsWith("cancel")
   )
     return "cancelled"
+  // The stage's On air rule, so the schedule never calls it ended meanwhile.
+  if (eventIsLive(event, now)) return "live"
+  // A waiting room past its reserved time has not started, as the stage shows.
+  if (confirmedLiveStatus(event) === "upcoming") return "upcoming"
   if (eventIsUpcoming(event, now)) return "upcoming"
   if (event.timePrecision === "unknown" || pendingStatuses.includes(status))
     return "pending"

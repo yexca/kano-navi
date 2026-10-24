@@ -121,7 +121,8 @@ order. It returns sanitized `items` / `events`,
 `total`, `totalPages`, `hasNext`, `dayCounts`, `revision`, matching approved
 schedule images and `adjacent.previous` / `adjacent.next` event dates. Invalid
 ranges return 400. Every read uses the same public event projection as the
-board; it does not fetch platforms or models. MCP `schedule_list` remains the
+board, including the trusted `liveStatus` of an event's linked video; it does
+not fetch platforms or models. MCP `schedule_list` remains the
 bounded, paginated history reader; `dashboard_read` shares the bounded snapshot.
 Events merged into another event are excluded from every one of these reads,
 including totals, day counts, adjacent dates and summary candidates (see

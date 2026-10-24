@@ -1020,6 +1020,15 @@ a.guide-event:hover {
   outline-offset: -1px;
 }
 
+.guide-event.is-live {
+  outline: 1.5px solid var(--berry);
+  outline-offset: -1.5px;
+}
+
+.guide-event.is-live .tag svg {
+  animation: onair-pulse 1.6s ease-in-out infinite;
+}
+
 .guide-event.is-cancellation_review .guide-event-note {
   color: var(--honey);
 }
@@ -1368,6 +1377,14 @@ a.month-event:hover {
 .month-event.is-cancellation_review {
   outline: 1px dashed color-mix(in oklab, var(--honey) 70%, transparent);
   outline-offset: -1px;
+}
+
+/* A stream that began before midnight is still on air in the day it left. */
+.month-event.is-live,
+.month-day.is-past .month-event.is-live {
+  outline: 1px solid var(--berry);
+  outline-offset: -1px;
+  opacity: 1;
 }
 
 .month-more {

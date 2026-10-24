@@ -1,12 +1,13 @@
 import { eventDetailText } from "../lib/event-text.ts"
 import { streamIdentity } from "../lib/stream-identity.ts"
-import { cleanVideoTitle, scheduleSortTime, eventIsUpcoming } from "./format.ts"
 import {
+  cleanVideoTitle,
   confirmedLiveStatus,
   eventIsLive,
-  leadingCandidate,
-  videoIsInFocus,
-} from "./derive-dashboard.ts"
+  eventIsUpcoming,
+  scheduleSortTime,
+} from "./format.ts"
+import { leadingCandidate, videoIsInFocus } from "./derive-dashboard.ts"
 
 const watchHosts = ["youtube.com", "youtu.be", "twitch.tv"]
 const announcementHosts = ["x.com", "twitter.com"]

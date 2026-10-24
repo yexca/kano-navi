@@ -57,5 +57,8 @@
   result: a long stream stays on air past three hours, a late waiting room no
   longer shows as on air, and an ended stream leaves the stage. Without a
   result, the start-time grace still applies.
+- The week guide and month grid show On air whenever the stage does, instead
+  of calling a stream that is still within its live window ended, and a late
+  waiting room stays upcoming there.
 
 </details>

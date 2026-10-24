@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -93,9 +94,10 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 		return nil, dbErr(err)
 	}
 	defer rows.Close()
+	now := time.Now()
 	items := make([]DashboardEvent, 0, pageSize)
 	for rows.Next() {
-		event, scanErr := scanEvent(rows, time.Now())
+		event, scanErr := scanEvent(rows, now)
 		if scanErr != nil {
 			return nil, scanErr
 		}
@@ -106,6 +108,9 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 	}
 	if err := rows.Close(); err != nil {
 		return nil, dbErr(err)
+	}
+	if err := s.attachLiveStatus(ctx, items, now); err != nil {
+		return nil, err
 	}
 
 	dayCounts := make(map[string]int64)
@@ -156,4 +161,49 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 		result.Next = &next.String
 	}
 	return result, nil
+}
+
+// attachLiveStatus gives each linked event the trusted broadcast state of its
+// video, the same state the board reads, so the schedule and the board agree
+// on what is on air.
+func (s *Store) attachLiveStatus(ctx context.Context, events []DashboardEvent, now time.Time) error {
+	identities := []any{}
+	for _, event := range events {
+		if event.URL != nil {
+			identities = append(identities, streamIdentity(*event.URL))
+		}
+	}
+	if len(identities) == 0 {
+		return nil
+	}
+	probe, err := s.LiveProbeSettings(ctx)
+	if err != nil {
+		return err
+	}
+	cutoff := now.Add(-probe.Freshness())
+	rows, err := s.db.QueryContext(ctx, `SELECT url,live_status,live_checked_at FROM videos WHERE live_status IS NOT NULL AND stream_identity(url) IN (?`+strings.Repeat(",?", len(identities)-1)+`)`, identities...)
+	if err != nil {
+		return dbErr(err)
+	}
+	defer rows.Close()
+	live := map[string]*string{}
+	for rows.Next() {
+		var url string
+		var status, checked sql.NullString
+		if err := rows.Scan(&url, &status, &checked); err != nil {
+			return dbErr(err)
+		}
+		if view := liveView(status, checked, cutoff); view != nil {
+			live[streamIdentity(url)] = view
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return dbErr(err)
+	}
+	for i := range events {
+		if events[i].URL != nil {
+			events[i].LiveStatus = live[streamIdentity(*events[i].URL)]
+		}
+	}
+	return nil
 }
