@@ -243,6 +243,11 @@ hashes), provider endpoint/model identity, and the extractor version make these
 outcomes idempotent. Successful/uncertain posts stay eligible for cache checks
 and can run again when their input or provider configuration changes. Date-only events store `starts_on`, a null `starts_at`, and
 `time_precision = unknown`; the model must not invent a specific time.
+The extractor never deduplicates against other posts or reservations beyond
+shared IDs; the later `reconcile` step merges date-only and X-notice
+duplicates into the more precise event (see
+[Duplicate merging](data-model.md#duplicate-merging)). Re-extraction rewrites
+the source row but never its merge columns.
 
 Every stored post has an LLM processing state. Failed, skipped, and uncertain
 attempts remain visible to operators, and `POST /api/admin/posts/:id/reprocess`

@@ -1,4 +1,4 @@
-import { Lock, Sparkles } from "lucide-react"
+import { Combine, Lock, Sparkles, Split } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import { formatDay, formatTime } from "@/admin/format"
@@ -50,6 +50,25 @@ export function ProvenanceBadge({ event }: { event: AdminEvent }) {
       {t("admin.event.automatic")}
     </Badge>
   )
+}
+
+/** A merged duplicate names the entry it is hidden behind; an undone merge
+ * says the entry is kept apart from automatic merging. */
+export function MergeBadge({ event }: { event: AdminEvent }) {
+  const { t } = useAppSettings()
+  if (event.mergedInto)
+    return (
+      <Badge tone="lavender" icon={Combine} className="adm-merge-badge">
+        <span title={event.mergeReason || undefined}>
+          {t("admin.event.mergedInto", {
+            title: event.mergedIntoTitle || event.mergedInto,
+          })}
+        </span>
+      </Badge>
+    )
+  if (event.mergeSource === "manual")
+    return <Badge icon={Split}>{t("admin.event.keptSeparate")}</Badge>
+  return null
 }
 
 export function CancellationBadge({ event }: { event: AdminEvent }) {

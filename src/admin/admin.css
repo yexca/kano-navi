@@ -1581,7 +1581,8 @@ button.adm-run-line:hover,
   border-top: 1px solid var(--adm-line);
 }
 
-.adm-event-row.is-deleted {
+.adm-event-row.is-deleted,
+.adm-event-row.is-merged {
   opacity: 0.6;
 }
 
@@ -1589,6 +1590,18 @@ button.adm-run-line:hover,
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.adm-event-main .adm-chip-row {
+  min-width: 0;
+}
+
+/* A merge target title can be long; it wraps instead of widening the row. */
+.adm-badge.adm-merge-badge {
+  padding-block: 4px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .adm-event-main small {

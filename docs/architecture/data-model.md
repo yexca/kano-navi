@@ -16,7 +16,7 @@ belong to the TypeScript initializer. See
 | ------------------------ | ------------------------------------------------------------------------------------------------------ |
 | `profiles`               | Name, bio, avatar, banner, and official entry points                                                   |
 | `posts`                  | X posts, account source, publication time, engagement counts, and media                                |
-| `events`                 | Unified schedules, provenance, confidence, manual locks, and tombstones                                |
+| `events`                 | Unified schedules, provenance, confidence, manual locks, tombstones, and duplicate merges              |
 | `event_sources`          | Source post/reservation identities attached to each event                                              |
 | `videos`                 | Published YouTube videos and scheduled streams                                                         |
 | `focus`                  | The page's latest focus item and stable YouTube video ID                                               |
@@ -87,6 +87,14 @@ LLM matching compares start instants, so `Z` and `+09:00` offsets refer to the
 same event. The dashboard hides tombstones, keeps cancelled rows visible with
 their reason/evidence, and labels visible automatic/manual events.
 
+A duplicate of the same activity is hidden by a merge decision rather than
+deleted, with this precision rank: manual > YouTube reservation > X exact time
+
+> X approximate time > date-only. Manual or locked events are never merged
+> away but can receive merges, so an operator edit always wins; editing or
+> confirming a rule-merged event shows it again. See
+> [Duplicate merging](#duplicate-merging).
+
 X event IDs always include a hash of the date, time (or unknown), and normalized
 title, independently of the number of events in a result. Matching evidence in
 `event_sources` and the unique source tuple reuse existing IDs, including legacy
@@ -156,6 +164,48 @@ null URLs and uses the same deterministic YouTube/exact-URL identity rule as the
 frontend. Source evidence uses the existing `event_sources` identity index.
 Startup adds these indexes to existing snapshots without rewriting events,
 manual locks, tombstones, cancellation evidence or operator settings.
+
+## Duplicate Merging
+
+The additive `events` columns `merged_into` (target event ID), `merge_source`,
+`merge_reason` and `merged_at` record that an event duplicates another. They
+are a separate durable decision: the X upsert and the YouTube writer never
+name them, so re-extraction, retirement and relisting of the source row, or a
+reservation refresh, keep the merge. `merge_source` names the owner:
+
+- `rule`: the deterministic `reconcile` workflow step
+  (`backend-go/internal/store/sqlite/event_merge.go`). It recomputes its own
+  decisions from the current rows on every run, so it is idempotent and
+  releases a merge whose target was deleted, merged or moved to another
+  date, or whose event became manual or locked.
+- `manual`: an operator decision. `merge_source = manual` with a null
+  `merged_into` is an undone merge; the reconciler never merges that event
+  again.
+- Any other owner (reserved for a later model adjudication) is left untouched
+  by the rules in the same way.
+
+The rules consider active, non-deleted `stream`/`member` events from 30 days
+before to 60 days after the current Japan date:
+
+- Rule B: an automatic X event with an exact time merges into a YouTube event
+  on the same date that starts within 30 minutes. A generic stream may merge
+  into a members-only stream, not the reverse.
+- Rule A (after Rule B): a date-only automatic event merges into the timed
+  stream on the same date whose normalized title overlaps its own (one
+  contains the other or they share a token of at least two characters after
+  punctuation, brackets and medium words such as 配信 are removed). Without a
+  title overlap it merges only when the date has exactly one date-only event
+  and one timed stream.
+- Several plausible targets leave the event unmerged and are counted as
+  `ambiguous`. A cancellation overlay (`llm_suspected` or `manual_confirmed`)
+  on either side freezes the current decision.
+
+Every public reader excludes merged rows: the dashboard events, totals,
+upcoming counts and summary/spotlight candidates, calendar items, totals,
+pagination, day counts and adjacent dates, and MCP `schedule_list`. The
+operator console lists them with their target and can undo a merge. Startup
+adds the columns and the partial `events_merged_into_idx` index to existing
+snapshots without rewriting events.
 
 ## Schema Changes
 

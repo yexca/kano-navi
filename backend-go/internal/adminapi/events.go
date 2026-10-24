@@ -28,6 +28,7 @@ func (a *api) listEvents(w http.ResponseWriter, r *http.Request) {
 		Cancellation:   query(r, "cancellation"),
 		From:           query(r, "from"),
 		To:             query(r, "to"),
+		Merge:          query(r, "merge"),
 	})
 	if err != nil {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
@@ -159,8 +160,21 @@ func (a *api) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// unmergeEvent shows a merged duplicate again. The decision is durable: the
+// reconciler never merges that event automatically afterwards.
+func (a *api) unmergeEvent(w http.ResponseWriter, r *http.Request) {
+	event, err := a.Store.UnmergeEvent(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeEventError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"event": event})
+}
+
 func writeEventError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, sqlite.ErrEventNotMerged):
+		httpx.WriteError(w, httpx.Invalid("event is not merged"))
 	case errors.Is(err, sqlite.ErrReadOnly):
 		httpx.ReadOnly(w)
 	case errors.Is(err, sql.ErrNoRows):

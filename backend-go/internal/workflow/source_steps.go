@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/mediadownload"
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
@@ -97,6 +98,21 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 			return AttemptResult{Status: "partial", Result: counts}, nil
 		}
 		return AttemptResult{Status: "succeeded", Result: counts}, nil
+	case "reconcile":
+		if s.Store == nil {
+			break
+		}
+		counts, err := s.Store.ReconcileEventMerges(ctx, time.Now())
+		if err != nil {
+			if ctx.Err() != nil {
+				return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
+			}
+			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+		}
+		return AttemptResult{Status: "succeeded", Result: map[string]any{
+			"from": counts.From, "to": counts.To, "considered": counts.Considered, "merged": counts.Merged,
+			"retargeted": counts.Retargeted, "released": counts.Released, "kept": counts.Kept, "ambiguous": counts.Ambiguous,
+		}}, nil
 	}
 	return AttemptResult{}, NewStepError("capability_not_migrated", ErrBlocked)
 }

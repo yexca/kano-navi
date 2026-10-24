@@ -135,7 +135,7 @@ func main() {
 			os.Exit(1)
 		}
 		steps := &workflow.SourceSteps{Store: store}
-		capabilities := map[string]bool{}
+		capabilities := map[string]bool{"reconcile": false}
 		if cfg.EnableXSync {
 			opts := xsource.OptionsFromEnv()
 			steps.X = &workflow.XRecentExecutor{Store: store, Adapter: xsource.NewAdapter(xsource.NewClient(&http.Client{Timeout: 10 * time.Second}), opts), Options: opts}

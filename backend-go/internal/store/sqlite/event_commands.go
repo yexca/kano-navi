@@ -218,7 +218,9 @@ func (s *Store) UpdateManualEvent(ctx context.Context, id string, input EventInp
 	args = append(args, now, raw, id)
 	if _, err = tx.ExecContext(ctx, `UPDATE events SET title=?,detail=?,starts_on=?,starts_at=?,ends_at=?,timezone=?,time_precision=?,status=?,
  event_type=?,url=?,provenance='manual',cancellation_status=?,cancellation_source=?,cancellation_reason=?,cancellation_evidence=?,
- cancellation_source_item_id=?,cancellation_confidence=?,cancellation_at=?,manual_locked=1,deleted_at=NULL,updated_at=?,raw_json=? WHERE id=?`, args...); err != nil {
+ cancellation_source_item_id=?,cancellation_confidence=?,cancellation_at=?,manual_locked=1,deleted_at=NULL,updated_at=?,raw_json=?,
+ merged_into=CASE WHEN merge_source='rule' THEN NULL ELSE merged_into END,merge_reason=CASE WHEN merge_source='rule' THEN NULL ELSE merge_reason END,
+ merged_at=CASE WHEN merge_source='rule' THEN NULL ELSE merged_at END,merge_source=CASE WHEN merge_source='rule' THEN NULL ELSE merge_source END WHERE id=?`, args...); err != nil {
 		return AdminEvent{}, fmt.Errorf("%w: event", ErrUnavailable)
 	}
 	if err = upsertEventSource(ctx, tx, id, "manual", id, "confirmed", nullIfEmpty(input.URL), raw, now); err != nil {
@@ -261,7 +263,7 @@ func (s *Store) DeleteManualEvent(ctx context.Context, id string) (AdminEvent, e
 func (s *Store) event(ctx context.Context, id string) (AdminEvent, error) {
 	var e AdminEvent
 	var locked int
-	err := s.db.QueryRowContext(ctx, `SELECT id,source,source_item_id,source_key,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_source_item_id,cancellation_confidence,cancellation_at,deleted_at,created_at,updated_at FROM events WHERE id=?`, id).Scan(&e.ID, &e.Source, &e.SourceItemID, &e.SourceKey, &e.Title, &e.Detail, &e.StartsOn, &e.StartsAt, &e.EndsAt, &e.Timezone, &e.TimePrecision, &e.Status, &e.EventType, &e.URL, &e.Provenance, &locked, &e.CancellationStatus, &e.CancellationSource, &e.CancellationReason, &e.CancellationEvidence, &e.CancellationSourceItemID, &e.CancellationConfidence, &e.CancellationAt, &e.DeletedAt, &e.CreatedAt, &e.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id,source,source_item_id,source_key,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_source_item_id,cancellation_confidence,cancellation_at,deleted_at,created_at,updated_at,merged_into,(SELECT t.title FROM events t WHERE t.id=events.merged_into),merge_source,merge_reason,merged_at FROM events WHERE id=?`, id).Scan(&e.ID, &e.Source, &e.SourceItemID, &e.SourceKey, &e.Title, &e.Detail, &e.StartsOn, &e.StartsAt, &e.EndsAt, &e.Timezone, &e.TimePrecision, &e.Status, &e.EventType, &e.URL, &e.Provenance, &locked, &e.CancellationStatus, &e.CancellationSource, &e.CancellationReason, &e.CancellationEvidence, &e.CancellationSourceItemID, &e.CancellationConfidence, &e.CancellationAt, &e.DeletedAt, &e.CreatedAt, &e.UpdatedAt, &e.MergedInto, &e.MergedIntoTitle, &e.MergeSource, &e.MergeReason, &e.MergedAt)
 	e.ManualLocked = locked != 0
 	return e, err
 }

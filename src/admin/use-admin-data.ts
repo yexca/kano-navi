@@ -123,6 +123,8 @@ function createClient(run: Runner, slow: Runner) {
     confirmEvent: (id: string, body?: Partial<EventInput>) =>
       send<{ event: AdminEvent }>("POST", `/events/${enc(id)}/confirm`, body),
     deleteEvent: (id: string) => send<null>("DELETE", `/events/${enc(id)}`),
+    unmergeEvent: (id: string) =>
+      send<{ event: AdminEvent }>("POST", `/events/${enc(id)}/unmerge`),
 
     scheduleImages: () =>
       get<{ items: ScheduleImage[] }>("/schedule-images?limit=100"),

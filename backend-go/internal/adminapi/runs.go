@@ -25,6 +25,7 @@ var workflowSteps = []map[string]string{
 	{"id": "youtube", "group": "source"},
 	{"id": "media", "group": "process"},
 	{"id": "schedule", "group": "process"},
+	{"id": "reconcile", "group": "process"},
 }
 
 // --- runs -------------------------------------------------------------------

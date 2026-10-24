@@ -129,3 +129,38 @@ func TestConfirmingAutomaticEventKeepsIdentityAndCancellationOverlay(t *testing.
 		t.Fatalf("operator introduced an LLM overlay: %v", payload)
 	}
 }
+
+func TestMergedEventsCanBeListedAndUndone(t *testing.T) {
+	c := newConsole(t, "development", "", &gatedSteps{})
+	for _, statement := range []string{
+		`INSERT INTO events(id,source,title,starts_on,starts_at,time_precision,event_type,provenance,manual_locked,created_at,updated_at) VALUES('youtube-AAAAAAAAAAA','youtube','歌枠','2026-03-02','2026-03-02T11:00:00.000Z','exact','stream','automatic',0,'2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`,
+		`INSERT INTO events(id,source,title,starts_on,time_precision,event_type,provenance,manual_locked,created_at,updated_at,merged_into,merge_source,merge_reason,merged_at) VALUES('x-weekly','x','歌枠','2026-03-02','unknown','stream','automatic',0,'2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z','youtube-AAAAAAAAAAA','rule','rule_a:title','2026-03-01T00:00:00.000Z')`,
+	} {
+		c.exec(t, statement)
+	}
+	code, payload := c.call(t, "GET", "/api/admin/events?merge=merged", "")
+	items := payload["items"].([]any)
+	if code != 200 || len(items) != 1 {
+		t.Fatalf("merged=%d %v", code, payload)
+	}
+	if item := items[0].(map[string]any); item["id"] != "x-weekly" || item["mergedInto"] != "youtube-AAAAAAAAAAA" || item["mergedIntoTitle"] != "歌枠" || item["mergeSource"] != "rule" || item["mergeReason"] != "rule_a:title" {
+		t.Fatalf("item=%v", item)
+	}
+	if _, payload = c.call(t, "GET", "/api/admin/events?merge=visible", ""); payload["total"] != float64(1) {
+		t.Fatalf("visible=%v", payload)
+	}
+	revision := c.text(t, `SELECT value FROM app_settings WHERE key='dashboard_revision'`)
+	code, payload = c.call(t, "POST", "/api/admin/events/x-weekly/unmerge", "")
+	if event := payload["event"].(map[string]any); code != 200 || event["mergedInto"] != nil || event["mergeSource"] != "manual" || event["mergeReason"] != "unmerged_from:youtube-AAAAAAAAAAA" {
+		t.Fatalf("unmerge=%d %v", code, payload)
+	}
+	if c.text(t, `SELECT value FROM app_settings WHERE key='dashboard_revision'`) == revision {
+		t.Fatal("unmerge must bump the revision")
+	}
+	if code, payload = c.call(t, "POST", "/api/admin/events/x-weekly/unmerge", ""); code != 400 || payload["message"] != "event is not merged" {
+		t.Fatalf("second unmerge=%d %v", code, payload)
+	}
+	if code, payload = c.call(t, "POST", "/api/admin/events/missing/unmerge", ""); code != 404 || payload["error"] != "event_not_found" {
+		t.Fatalf("missing=%d %v", code, payload)
+	}
+}

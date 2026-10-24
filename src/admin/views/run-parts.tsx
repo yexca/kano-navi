@@ -1,5 +1,5 @@
 import type { SVGProps } from "react"
-import { AtSign, ImageDown, Sparkles } from "lucide-react"
+import { AtSign, Combine, ImageDown, Sparkles } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import {
@@ -24,6 +24,7 @@ export const stepIcons = {
   youtube: YouTubeIcon,
   media: ImageDown,
   schedule: Sparkles,
+  reconcile: Combine,
 }
 
 /** One chip per step, in execution order, coloured by its outcome. */

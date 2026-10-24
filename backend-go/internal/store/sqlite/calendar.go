@@ -72,7 +72,7 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 	}
 
 	var total int64
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE deleted_at IS NULL AND starts_on BETWEEN ? AND ?`, from, to).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on BETWEEN ? AND ?`, from, to).Scan(&total); err != nil {
 		return nil, dbErr(err)
 	}
 	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
@@ -86,7 +86,7 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at
 		FROM events
-		WHERE deleted_at IS NULL AND starts_on BETWEEN ? AND ?
+		WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on BETWEEN ? AND ?
 		ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) ASC, id ASC
 		LIMIT ? OFFSET ?`, from, to, pageSize, offset)
 	if err != nil {
@@ -109,7 +109,7 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 	}
 
 	dayCounts := make(map[string]int64)
-	countRows, err := s.db.QueryContext(ctx, `SELECT starts_on, COUNT(*) FROM events WHERE deleted_at IS NULL AND starts_on BETWEEN ? AND ? GROUP BY starts_on`, from, to)
+	countRows, err := s.db.QueryContext(ctx, `SELECT starts_on, COUNT(*) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on BETWEEN ? AND ? GROUP BY starts_on`, from, to)
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -129,10 +129,10 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 	_ = countRows.Close()
 
 	var previous, next sql.NullString
-	if err := s.db.QueryRowContext(ctx, `SELECT MAX(starts_on) FROM events WHERE deleted_at IS NULL AND starts_on < ?`, from).Scan(&previous); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT MAX(starts_on) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on < ?`, from).Scan(&previous); err != nil {
 		return nil, dbErr(err)
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT MIN(starts_on) FROM events WHERE deleted_at IS NULL AND starts_on > ?`, to).Scan(&next); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT MIN(starts_on) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on > ?`, to).Scan(&next); err != nil {
 		return nil, dbErr(err)
 	}
 

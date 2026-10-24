@@ -198,7 +198,7 @@ func newPipeline(store *sqlite.Store, key string) pipeline {
 		Store: store,
 		Steps: steps,
 		// Every catalog step has a real adapter here; none is synthetic.
-		SyntheticSteps: map[string]bool{"x": false, "youtube": false, "media": false, "schedule": false},
+		SyntheticSteps: map[string]bool{"x": false, "youtube": false, "media": false, "schedule": false, "reconcile": false},
 		// One unavailable source keeps the other source and post-processing.
 		TolerateFailure: map[string]bool{"x": true, "youtube": true},
 	}

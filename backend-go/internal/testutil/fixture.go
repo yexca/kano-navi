@@ -40,7 +40,8 @@ func NewSnapshot(t testing.TB) string {
 			confidence REAL, extraction_id INTEGER, cancellation_status TEXT NOT NULL DEFAULT 'none', cancellation_source TEXT,
 			cancellation_reason TEXT, cancellation_evidence TEXT, cancellation_source_item_id TEXT,
 			cancellation_confidence REAL, cancellation_at TEXT, deleted_at TEXT,
-			created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '', raw_json TEXT
+			created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '', raw_json TEXT,
+			merged_into TEXT, merge_source TEXT, merge_reason TEXT, merged_at TEXT
 		);
 		CREATE TABLE event_sources (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, source TEXT NOT NULL, source_item_id TEXT NOT NULL,

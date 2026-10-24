@@ -63,13 +63,22 @@ without fetch windows retains the existing incremental behavior described above.
 
 Synchronization is split into modular steps declared in
 `backend-go/internal/jobs` (`StepOrder`), executed in this order: `x`,
-`youtube`, `media`, `schedule`. `kano-go sync` (`make sync`) runs every step
+`youtube`, `media`, `schedule`, `reconcile`. `kano-go sync` (`make sync`) runs every step
 and records the ones disabled by `SKIP_*` as skipped.
 A saved workflow chooses a subset; its run records `sync_runs.source =
 workflow` and exposes per-step progress (`pending`, `running`, `completed`,
 `partial`, `failed`, `skipped`) through `/api/admin/runs`. When a selected
 step is disabled by `SKIP_*`, its result records `{ skipped: true, reason:
 "environment" }` instead of silently disappearing.
+
+`reconcile` applies the deterministic duplicate-merge rules in
+[Duplicate merging](data-model.md#duplicate-merging) to the Japan dates from
+30 days ago to 60 days ahead. Every run that includes `x`, `youtube` or
+`schedule` (sync, scan, fetch windows, WebSub pushes, MCP and timed workflows)
+appends it as its last step, so saved workflows need no edit; it can also be
+selected alone. Its result counts `considered`, `merged`, `retargeted`,
+`released`, `kept` and `ambiguous` events, and it advances the dashboard
+revision only when a merge decision changed.
 
 A workflow timer is 15 minutes to 7 days. Enabling a timer (or changing its
 interval) plans the next run one interval later; it never fires immediately.

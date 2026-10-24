@@ -60,7 +60,7 @@ CREATE TABLE events (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     raw_json TEXT
-  );
+  , merged_into TEXT, merge_source TEXT, merge_reason TEXT, merged_at TEXT);
 
 CREATE TABLE focus (
     id INTEGER PRIMARY KEY,
@@ -336,6 +336,8 @@ CREATE UNIQUE INDEX event_sources_identity_idx
     ON event_sources (source, source_item_id, source_key);
 
 CREATE INDEX events_instant_idx ON events (COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')), id) WHERE deleted_at IS NULL;
+
+CREATE INDEX events_merged_into_idx ON events (merged_into) WHERE merged_into IS NOT NULL;
 
 CREATE INDEX events_source_item_idx ON events (source, source_item_id, id);
 

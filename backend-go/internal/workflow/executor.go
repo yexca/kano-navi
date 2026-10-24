@@ -173,6 +173,9 @@ func (e *Executor) PrepareDefinition(ctx context.Context, definition sqlite.Work
 		return nil, errors.New("workflow store is required")
 	}
 	def := &definition
+	if _, declared := e.SyntheticSteps["reconcile"]; declared {
+		def.Steps = withReconcile(def.Steps)
+	}
 	if def.SourceLookbackDays == nil {
 		def.SourceLookbackDays = map[string]int{"x": 7, "youtube": 14}
 	}
@@ -191,6 +194,25 @@ func (e *Executor) PrepareDefinition(ctx context.Context, definition sqlite.Work
 	}
 	now := e.Clock().UTC()
 	return e.Store.CreateWorkflowRun(ctx, *def, string(trigger), key, synthetic, now)
+}
+
+// withReconcile appends duplicate-event reconciliation to a run whose steps
+// write events, so every timed, manual, push or MCP run leaves merges current
+// without editing saved workflows.
+func withReconcile(steps []string) []string {
+	writes := false
+	for _, step := range steps {
+		switch step {
+		case "reconcile":
+			return steps
+		case "x", "youtube", "schedule":
+			writes = true
+		}
+	}
+	if !writes {
+		return steps
+	}
+	return append(append([]string{}, steps...), "reconcile")
 }
 
 func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {

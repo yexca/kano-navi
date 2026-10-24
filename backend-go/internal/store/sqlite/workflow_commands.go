@@ -122,6 +122,8 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, definition WorkflowDefini
 				adapter = "media_download"
 			case "schedule":
 				adapter = "schedule_extract"
+			case "reconcile":
+				adapter = "event_reconcile"
 			}
 		}
 		if adapter != "" {

@@ -158,6 +158,13 @@ export interface AdminEvent {
   deletedAt: string | null
   createdAt: string
   updatedAt: string
+  /** Set while the entry is hidden as a duplicate of that event. */
+  mergedInto: string | null
+  mergedIntoTitle: string | null
+  /** "rule" or "manual"; manual without a target keeps the entry separate. */
+  mergeSource: string | null
+  mergeReason: string | null
+  mergedAt: string | null
 }
 
 export interface EventInput {

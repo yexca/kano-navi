@@ -5,6 +5,7 @@ import {
   ExternalLink,
   Pencil,
   Search,
+  Split,
   Trash2,
   Undo2,
 } from "lucide-react"
@@ -36,6 +37,7 @@ import { useAdmin, useResource } from "@/admin/use-admin-data"
 import {
   CancellationBadge,
   EventWhen,
+  MergeBadge,
   ProvenanceBadge,
 } from "@/admin/views/event-parts"
 
@@ -278,6 +280,7 @@ const blankFilters = {
   search: "",
   provenance: "",
   cancellation: "",
+  merge: "",
   from: "",
   to: "",
   deleted: false,
@@ -365,6 +368,17 @@ export function ScheduleView(_: ViewProps) {
               {t("admin.event.cancelled")}
             </option>
           </select>
+          <select
+            value={filters.merge}
+            onChange={(e) => update({ merge: e.target.value })}
+            aria-label={t("admin.schedule.filter.merge")}
+          >
+            <option value="">{t("admin.schedule.filter.anyMerge")}</option>
+            <option value="visible">
+              {t("admin.schedule.filter.visible")}
+            </option>
+            <option value="merged">{t("admin.schedule.filter.merged")}</option>
+          </select>
           <input
             type="date"
             value={filters.from}
@@ -410,7 +424,7 @@ export function ScheduleView(_: ViewProps) {
                 <div
                   key={event.id}
                   role="row"
-                  className={`adm-event-row${event.deletedAt ? " is-deleted" : ""}`}
+                  className={`adm-event-row${event.deletedAt ? " is-deleted" : ""}${event.mergedInto ? " is-merged" : ""}`}
                 >
                   <span role="cell">
                     <EventWhen event={event} />
@@ -424,6 +438,7 @@ export function ScheduleView(_: ViewProps) {
                       </Badge>
                       <ProvenanceBadge event={event} />
                       <CancellationBadge event={event} />
+                      <MergeBadge event={event} />
                       {event.status ? (
                         <Badge tone="sky">{event.status}</Badge>
                       ) : null}
@@ -449,6 +464,21 @@ export function ScheduleView(_: ViewProps) {
                       >
                         <ExternalLink aria-hidden />
                       </a>
+                    ) : null}
+                    {event.mergedInto && !event.deletedAt ? (
+                      <IconButton
+                        icon={Split}
+                        label={t("admin.schedule.unmerge")}
+                        onClick={async () => {
+                          if (
+                            await act(
+                              () => api.unmergeEvent(event.id),
+                              "admin.notice.eventUnmerged",
+                            )
+                          )
+                            void events.reload()
+                        }}
+                      />
                     ) : null}
                     {!event.manualLocked && !event.deletedAt ? (
                       <IconButton

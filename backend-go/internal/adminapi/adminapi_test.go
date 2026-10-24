@@ -3,6 +3,7 @@ package adminapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -78,7 +79,7 @@ func newConsole(t *testing.T, mode, password string, steps *gatedSteps) *console
 	steps.seen = make(chan string, 32)
 	executor := &workflow.Executor{
 		Store: store, Steps: steps,
-		SyntheticSteps:  map[string]bool{"x": false, "youtube": false, "media": false, "schedule": false},
+		SyntheticSteps:  map[string]bool{"x": false, "youtube": false, "media": false, "schedule": false, "reconcile": false},
 		TolerateFailure: map[string]bool{"x": true, "youtube": true},
 	}
 	queue := &workflow.Queue{Store: store, Executor: executor}
@@ -217,7 +218,7 @@ func TestSessionGuardsEveryRoute(t *testing.T) {
 func TestWorkflowLifecycle(t *testing.T) {
 	c := newConsole(t, "development", "", &gatedSteps{})
 	code, payload := c.call(t, "GET", "/api/admin/workflows", "")
-	if code != 200 || len(payload["items"].([]any)) != 0 || len(payload["steps"].([]any)) != 4 {
+	if code != 200 || len(payload["items"].([]any)) != 0 || len(payload["steps"].([]any)) != 5 {
 		t.Fatalf("empty=%d %v", code, payload)
 	}
 	if limits := payload["limits"].(map[string]any); limits["minIntervalMinutes"] != float64(15) || limits["maxIntervalMinutes"] != float64(10080) {
@@ -343,13 +344,14 @@ func TestRunsAreSingleFlightAndSurviveOneFailedSource(t *testing.T) {
 	if payload["activeRun"] != nil || len(payload["recentRuns"].([]any)) != 1 {
 		t.Fatalf("overview runs=%v", payload)
 	}
-	// A scan is its own kind and records a schedule history row.
+	// A scan is its own kind and records a schedule history row; its events
+	// are reconciled afterwards.
 	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"scan"}`)
 	if code != 202 {
 		t.Fatalf("scan=%d %v", code, payload)
 	}
 	scan := c.waitForRun(t, runID(t, payload), "completed")
-	if scan["kind"] != "scan" || scan["run"].(map[string]any)["source"] != "schedule" || len(scan["steps"].([]any)) != 1 {
+	if scan["kind"] != "scan" || scan["run"].(map[string]any)["source"] != "schedule" || fmt.Sprint(scan["steps"]) != "[schedule reconcile]" {
 		t.Fatalf("scan=%v", scan)
 	}
 }
@@ -392,7 +394,7 @@ func TestSourceFetchWindows(t *testing.T) {
 	}
 	run := c.waitForRun(t, runID(t, payload), "completed")
 	steps := run["steps"].([]any)
-	if run["kind"] != "workflow" || run["workflowId"] != nil || len(steps) != 2 || steps[0] != "youtube" || steps[1] != "media" {
+	if run["kind"] != "workflow" || run["workflowId"] != nil || fmt.Sprint(steps) != "[youtube media reconcile]" {
 		t.Fatalf("run=%v", run)
 	}
 	// An unsaved fetch never appears as a saved workflow.

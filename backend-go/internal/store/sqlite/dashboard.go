@@ -632,12 +632,12 @@ func (s *Store) queryPostMedia(ctx context.Context, id string) ([]PostMedia, err
 }
 
 func (s *Store) queryDashboardEvents(ctx context.Context, from, to string, now time.Time) ([]DashboardEvent, error) {
-	q := `SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at FROM events WHERE deleted_at IS NULL AND id IN (SELECT id FROM (SELECT id FROM events WHERE deleted_at IS NULL AND starts_on BETWEEN ? AND ? ORDER BY julianday(COALESCE(starts_at,starts_on)) ASC,id ASC LIMIT 100) UNION SELECT id FROM (SELECT id FROM events WHERE ` + eligibleEventSQL + ` AND (julianday(starts_at)>=julianday(?) OR (starts_at IS NULL AND starts_on>=?)) ORDER BY COALESCE(julianday(starts_at),julianday(starts_on||'T23:59:59.999+09:00')) ASC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM events WHERE ` + eligibleEventSQL + ` AND (julianday(starts_at)<=julianday(?) AND (julianday(ends_at)>julianday(?) OR (ends_at IS NULL AND event_type IN ('stream','member') AND julianday(starts_at)>julianday(?,'-3 hours')))) AND (event_type IN ('stream','member') OR source='youtube') ORDER BY julianday(starts_at) ASC,id ASC LIMIT 30)) ORDER BY COALESCE(julianday(starts_at),julianday(starts_on||'T23:59:59.999+09:00')) ASC,id ASC`
+	q := `SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND id IN (SELECT id FROM (SELECT id FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on BETWEEN ? AND ? ORDER BY julianday(COALESCE(starts_at,starts_on)) ASC,id ASC LIMIT 100) UNION SELECT id FROM (SELECT id FROM events WHERE ` + eligibleEventSQL + ` AND (julianday(starts_at)>=julianday(?) OR (starts_at IS NULL AND starts_on>=?)) ORDER BY COALESCE(julianday(starts_at),julianday(starts_on||'T23:59:59.999+09:00')) ASC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM events WHERE ` + eligibleEventSQL + ` AND (julianday(starts_at)<=julianday(?) AND (julianday(ends_at)>julianday(?) OR (ends_at IS NULL AND event_type IN ('stream','member') AND julianday(starts_at)>julianday(?,'-3 hours')))) AND (event_type IN ('stream','member') OR source='youtube') ORDER BY julianday(starts_at) ASC,id ASC LIMIT 30)) ORDER BY COALESCE(julianday(starts_at),julianday(starts_on||'T23:59:59.999+09:00')) ASC,id ASC`
 	args := []any{from, to, now.UTC().Format(time.RFC3339Nano), dateInJapan(now), now.UTC().Format(time.RFC3339Nano), now.UTC().Format(time.RFC3339Nano), now.UTC().Format(time.RFC3339Nano)}
 	return s.scanEvents(ctx, q, args, now)
 }
 
-const eligibleEventSQL = `deleted_at IS NULL AND lower(trim(COALESCE(status,''))) NOT LIKE 'cancel%' AND trim(COALESCE(status,'')) NOT IN ('取消','已取消','中止','キャンセル') AND cancellation_status NOT IN ('llm_suspected','manual_confirmed')`
+const eligibleEventSQL = `deleted_at IS NULL AND merged_into IS NULL AND lower(trim(COALESCE(status,''))) NOT LIKE 'cancel%' AND trim(COALESCE(status,'')) NOT IN ('取消','已取消','中止','キャンセル') AND cancellation_status NOT IN ('llm_suspected','manual_confirmed')`
 
 func (s *Store) scanEvents(ctx context.Context, q string, args []any, now time.Time) ([]DashboardEvent, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -704,7 +704,7 @@ func scanEvent(row scanner, now time.Time) (DashboardEvent, error) {
 }
 func (s *Store) queryEventCounts(ctx context.Context, today string, now time.Time) (int64, int64, error) {
 	var total, up int64
-	err := s.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL),(SELECT COUNT(*) FROM events WHERE `+eligibleEventSQL+` AND (julianday(starts_at)>=julianday(?) OR (starts_at IS NULL AND starts_on>=?)))`, now.UTC().Format(time.RFC3339Nano), today).Scan(&total, &up)
+	err := s.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL),(SELECT COUNT(*) FROM events WHERE `+eligibleEventSQL+` AND (julianday(starts_at)>=julianday(?) OR (starts_at IS NULL AND starts_on>=?)))`, now.UTC().Format(time.RFC3339Nano), today).Scan(&total, &up)
 	if err != nil {
 		return 0, 0, dbErr(err)
 	}

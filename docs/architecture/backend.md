@@ -123,6 +123,9 @@ schedule images and `adjacent.previous` / `adjacent.next` event dates. Invalid
 ranges return 400. Every read uses the same public event projection as the
 board; it does not fetch platforms or models. MCP `schedule_list` remains the
 bounded, paginated history reader; `dashboard_read` shares the bounded snapshot.
+Events merged into another event are excluded from every one of these reads,
+including totals, day counts, adjacent dates and summary candidates (see
+[Duplicate merging](data-model.md#duplicate-merging)).
 
 Dashboard SQL selects up to 100 recent post previews plus the latest-post
 fallback, up to 100 current-week event previews plus 30 upcoming and 30 live

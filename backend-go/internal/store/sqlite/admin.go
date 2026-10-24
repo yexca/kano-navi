@@ -29,12 +29,12 @@ type AdminPost struct {
 }
 
 type AdminVideo struct {
-	ID           string  `json:"id"`
-	Source       string  `json:"source"`
-	Title        string  `json:"title"`
-	PublishedAt  *string `json:"publishedAt"`
-	ScheduledAt  *string `json:"scheduledAt"`
-	URL          string  `json:"url"`
+	ID          string  `json:"id"`
+	Source      string  `json:"source"`
+	Title       string  `json:"title"`
+	PublishedAt *string `json:"publishedAt"`
+	ScheduledAt *string `json:"scheduledAt"`
+	URL         string  `json:"url"`
 	// ThumbnailURL is the local /media URL of a ready cached file, never the
 	// remote CDN address; ThumbnailStatus explains a null URL.
 	ThumbnailURL    *string `json:"thumbnailUrl"`
@@ -72,6 +72,13 @@ type AdminEvent struct {
 	DeletedAt                *string  `json:"deletedAt"`
 	CreatedAt                string   `json:"createdAt"`
 	UpdatedAt                string   `json:"updatedAt"`
+	// A merged event is hidden behind MergedInto on every public path.
+	// MergeSource manual without a target is an undone merge.
+	MergedInto      *string `json:"mergedInto"`
+	MergedIntoTitle *string `json:"mergedIntoTitle"`
+	MergeSource     *string `json:"mergeSource"`
+	MergeReason     *string `json:"mergeReason"`
+	MergedAt        *string `json:"mergedAt"`
 }
 
 type AdminRun struct {
@@ -132,6 +139,9 @@ type AdminEventFilter struct {
 	Page, PageSize                                     int
 	Ascending, IncludeDeleted                          bool
 	Search, Provenance, Source, Cancellation, From, To string
+	// Merge is "merged" (only merged duplicates), "visible" (excluding them,
+	// as every public reader does) or empty for both.
+	Merge string
 }
 
 // AdminCounts are the bounded aggregates behind the console overview.
@@ -408,6 +418,12 @@ func (s *Store) ListAdminEvents(ctx context.Context, f AdminEventFilter) (AdminP
 		clauses = append(clauses, "e.cancellation_status=?")
 		args = append(args, f.Cancellation)
 	}
+	switch f.Merge {
+	case "merged":
+		clauses = append(clauses, "e.merged_into IS NOT NULL")
+	case "visible":
+		clauses = append(clauses, "e.merged_into IS NULL")
+	}
 	if adminDateRE.MatchString(f.From) {
 		clauses = append(clauses, "e.starts_on >= ?")
 		args = append(args, f.From)
@@ -427,7 +443,7 @@ func (s *Store) ListAdminEvents(ctx context.Context, f AdminEventFilter) (AdminP
 	if f.Ascending {
 		direction = "ASC"
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.source,e.source_item_id,e.source_key,e.title,e.detail,e.starts_on,e.starts_at,e.ends_at,e.timezone,e.time_precision,e.status,e.event_type,e.url,e.provenance,e.manual_locked,e.confidence,e.extraction_id,e.cancellation_status,e.cancellation_source,e.cancellation_reason,e.cancellation_evidence,e.cancellation_source_item_id,e.cancellation_confidence,e.cancellation_at,e.deleted_at,e.created_at,e.updated_at FROM events e WHERE `+where+` ORDER BY COALESCE(julianday(e.starts_at),julianday(e.starts_on || 'T23:59:59.999+09:00')) `+direction+`,e.id ASC LIMIT ? OFFSET ?`, append(args, pageSize, (page-1)*pageSize)...)
+	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.source,e.source_item_id,e.source_key,e.title,e.detail,e.starts_on,e.starts_at,e.ends_at,e.timezone,e.time_precision,e.status,e.event_type,e.url,e.provenance,e.manual_locked,e.confidence,e.extraction_id,e.cancellation_status,e.cancellation_source,e.cancellation_reason,e.cancellation_evidence,e.cancellation_source_item_id,e.cancellation_confidence,e.cancellation_at,e.deleted_at,e.created_at,e.updated_at,e.merged_into,(SELECT t.title FROM events t WHERE t.id=e.merged_into),e.merge_source,e.merge_reason,e.merged_at FROM events e WHERE `+where+` ORDER BY COALESCE(julianday(e.starts_at),julianday(e.starts_on || 'T23:59:59.999+09:00')) `+direction+`,e.id ASC LIMIT ? OFFSET ?`, append(args, pageSize, (page-1)*pageSize)...)
 	if err != nil {
 		return AdminPage[AdminEvent]{}, fmt.Errorf("%w: admin events unavailable", ErrUnavailable)
 	}
@@ -436,10 +452,11 @@ func (s *Store) ListAdminEvents(ctx context.Context, f AdminEventFilter) (AdminP
 	for rows.Next() {
 		var e AdminEvent
 		var sourceItem, sourceKey, detail, startsAt, endsAt, status, eventType, url, cancelSource, cancelReason, cancelEvidence, cancelSourceItem, cancelAt, deletedAt sql.NullString
+		var mergedInto, mergedIntoTitle, mergeSource, mergeReason, mergedAt sql.NullString
 		var manual int
 		var confidence, cancelConfidence sql.NullFloat64
 		var extraction sql.NullInt64
-		if err := rows.Scan(&e.ID, &e.Source, &sourceItem, &sourceKey, &e.Title, &detail, &e.StartsOn, &startsAt, &endsAt, &e.Timezone, &e.TimePrecision, &status, &eventType, &url, &e.Provenance, &manual, &confidence, &extraction, &e.CancellationStatus, &cancelSource, &cancelReason, &cancelEvidence, &cancelSourceItem, &cancelConfidence, &cancelAt, &deletedAt, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.Source, &sourceItem, &sourceKey, &e.Title, &detail, &e.StartsOn, &startsAt, &endsAt, &e.Timezone, &e.TimePrecision, &status, &eventType, &url, &e.Provenance, &manual, &confidence, &extraction, &e.CancellationStatus, &cancelSource, &cancelReason, &cancelEvidence, &cancelSourceItem, &cancelConfidence, &cancelAt, &deletedAt, &e.CreatedAt, &e.UpdatedAt, &mergedInto, &mergedIntoTitle, &mergeSource, &mergeReason, &mergedAt); err != nil {
 			return AdminPage[AdminEvent]{}, fmt.Errorf("%w: admin events unavailable", ErrUnavailable)
 		}
 		e.SourceItemID = nullString(sourceItem)
@@ -460,6 +477,11 @@ func (s *Store) ListAdminEvents(ctx context.Context, f AdminEventFilter) (AdminP
 		e.CancellationConfidence = nullFloat(cancelConfidence)
 		e.CancellationAt = nullString(cancelAt)
 		e.DeletedAt = nullString(deletedAt)
+		e.MergedInto = nullString(mergedInto)
+		e.MergedIntoTitle = nullString(mergedIntoTitle)
+		e.MergeSource = nullString(mergeSource)
+		e.MergeReason = nullString(mergeReason)
+		e.MergedAt = nullString(mergedAt)
 		items = append(items, e)
 	}
 	if err := rows.Err(); err != nil {
@@ -473,8 +495,8 @@ func (s *Store) ListAdminEvents(ctx context.Context, f AdminEventFilter) (AdminP
 func (s *Store) AdminCounts(ctx context.Context, today string) (AdminCounts, error) {
 	var c AdminCounts
 	err := s.db.QueryRowContext(ctx, `SELECT
-	  (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL AND starts_on >= ? AND cancellation_status <> 'manual_confirmed'),
-	  (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL),
+	  (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on >= ? AND cancellation_status <> 'manual_confirmed'),
+	  (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL),
 	  (SELECT COUNT(*) FROM posts),
 	  (SELECT COUNT(*) FROM videos),
 	  (SELECT COUNT(*) FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id=a.id

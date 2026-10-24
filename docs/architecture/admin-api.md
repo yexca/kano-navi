@@ -140,13 +140,14 @@ returned.
 
 ## Events
 
-| Method and path             | Body / query                                                                                                   | Result            |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `GET /events`               | `page`, `pageSize` (≤ 100), `search`, `provenance`, `source`, `cancellation`, `from`, `to`, `order`, `deleted` | list of events    |
-| `POST /events`              | event fields                                                                                                   | `201 {event}`     |
-| `PUT /events/{id}`          | event fields                                                                                                   | `{event}`         |
-| `POST /events/{id}/confirm` | optional overrides                                                                                             | `{event}`         |
-| `DELETE /events/{id}`       |                                                                                                                | `204` (tombstone) |
+| Method and path             | Body / query                                                                                                            | Result            |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `GET /events`               | `page`, `pageSize` (≤ 100), `search`, `provenance`, `source`, `cancellation`, `merge`, `from`, `to`, `order`, `deleted` | list of events    |
+| `POST /events`              | event fields                                                                                                            | `201 {event}`     |
+| `PUT /events/{id}`          | event fields                                                                                                            | `{event}`         |
+| `POST /events/{id}/confirm` | optional overrides                                                                                                      | `{event}`         |
+| `POST /events/{id}/unmerge` |                                                                                                                         | `{event}`         |
+| `DELETE /events/{id}`       |                                                                                                                         | `204` (tombstone) |
 
 `provenance` is `automatic` or `manual`; `cancellation` is `none`,
 `llm_suspected` or `manual_confirmed`; `order` is `asc` or `desc` (default);
@@ -156,6 +157,16 @@ returned.
 `manual_confirmed`). Every write is manual: it locks the event against
 automatic extraction, and a delete is a durable tombstone. Confirming keeps
 the stored values unless the body overrides them.
+
+The list includes merged duplicates by default; `merge=merged` lists only
+them and `merge=visible` excludes them, as every public reader does. Each
+event carries `mergedInto`, `mergedIntoTitle`, `mergeSource` (`rule` or
+`manual`), `mergeReason` and `mergedAt`. `unmerge` shows a merged event again
+as a durable operator decision (`mergeSource = manual` without a target) that
+the reconciler never overrides; an event that is not merged answers `400`.
+Editing or confirming a rule-merged event also shows it again, because a
+manual event is never merged away. Unmerging and edits advance the dashboard
+revision.
 
 ## Schedule images
 

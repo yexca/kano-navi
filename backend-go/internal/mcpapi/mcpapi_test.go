@@ -1185,3 +1185,19 @@ func TestRequestIDsAreEchoedAsIntegersOrStrings(t *testing.T) {
 		t.Fatalf("distinct ids: %s", distinct.body)
 	}
 }
+
+func TestScheduleListOmitsMergedDuplicates(t *testing.T) {
+	handler, store := newHandler(t, nil)
+	if _, err := store.DB().Exec(`INSERT INTO events (id,source,title,starts_on,timezone,time_precision,event_type,provenance,manual_locked,cancellation_status,created_at,updated_at,merged_into,merge_source,merge_reason,merged_at)
+		 VALUES ('merged-duplicate','x','Automatic schedule','2026-09-02','Asia/Tokyo','unknown','stream','automatic',0,'none','2026-09-01T00:00:00.000Z','2026-09-01T00:00:00.000Z','automatic-public-event','rule','rule_a:title','2026-09-01T00:00:00.000Z')`); err != nil {
+		t.Fatal(err)
+	}
+	response := post(t, handler, toolCall("schedule_list", map[string]any{"pageSize": 100}))
+	page := toolValue(t, response)
+	if page["total"] != float64(2) || len(page["items"].([]any)) != 2 {
+		t.Fatalf("page = %v", page)
+	}
+	if strings.Contains(response.body, "merged-duplicate") || strings.Contains(response.body, "rule_a") {
+		t.Fatalf("merged duplicate leaked: %s", response.body)
+	}
+}
