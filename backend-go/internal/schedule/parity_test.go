@@ -32,16 +32,35 @@ type parityData struct {
 	AfterSecond    map[string][]map[string]any `json:"afterSecond"`
 }
 
-// The recording predates two deliberate request changes, applied to the
-// recorded bodies here: the Asia/Tokyo publication time in the model text, and
-// Anthropic's "auto" tool choice with a system instruction naming the tool.
-// Identities, fingerprints and stored JSON are still compared unchanged.
+// The recording predates three deliberate request changes, applied to the
+// recorded bodies here: the Asia/Tokyo publication time in the model text,
+// Anthropic's "auto" tool choice with a system instruction naming the tool, and
+// the instruction asking for English detail, reason and status. Identities and
+// fingerprints are compared unchanged; stored rows differ only in the English
+// pending status that replaced the recorded Chinese default.
 var (
-	recordedPublishedAt = regexp.MustCompile(`Source post published at ([^ ]+)\. Source URL`)
-	recordedForcedTool  = regexp.MustCompile(`"tool_choice":\{"type":"tool","name":"([^"]+)"\}`)
+	recordedPublishedAt  = regexp.MustCompile(`Source post published at ([^ ]+)\. Source URL`)
+	recordedForcedTool   = regexp.MustCompile(`"tool_choice":\{"type":"tool","name":"([^"]+)"\}`)
+	recordedInstructions = strings.Replace(scheduleInstructions, " "+scheduleLanguageInstruction, "", 1)
+	recordedPending      = strings.NewReplacer(`"status":"待确认"`, `"status":"pending"`)
 )
 
+// withPendingCode rewrites the recorded Chinese pending status in stored rows.
+func withPendingCode(tables map[string][]map[string]any) {
+	for _, rows := range tables {
+		for _, row := range rows {
+			if row["status"] == "待确认" {
+				row["status"] = "pending"
+			}
+			if raw, ok := row["raw_json"].(string); ok {
+				row["raw_json"] = recordedPending.Replace(raw)
+			}
+		}
+	}
+}
+
 func withLocalPublishedAt(body string) string {
+	body = strings.ReplaceAll(body, recordedInstructions, scheduleInstructions)
 	body = recordedPublishedAt.ReplaceAllStringFunc(body, func(match string) string {
 		value := recordedPublishedAt.FindStringSubmatch(match)[1]
 		return "Source post published at " + publishedAtText(value) + ". Source URL"
@@ -156,6 +175,8 @@ func TestParityWithTypeScriptExtractor(t *testing.T) {
 	if len(data.Requests) != 6 || len(data.AfterFirst["events"]) != 3 || len(data.AfterFirst["extractions"]) != 4 {
 		t.Fatalf("unexpected fixture shape")
 	}
+	withPendingCode(data.AfterFirst)
+	withPendingCode(data.AfterSecond)
 	replies := map[string]string{}
 	for _, row := range data.AfterFirst["extractions"] {
 		if result, ok := row["result_json"].(string); ok {

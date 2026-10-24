@@ -1,4 +1,5 @@
 import type { Translator } from "@/types"
+import { eventStatusCode } from "@/lib/event-text"
 
 // All operator times are shown in Asia/Tokyo, whatever the browser zone.
 const intlLocales = { "zh-CN": "zh-CN", ja: "ja-JP", en: "en-US" }
@@ -176,4 +177,10 @@ export function statusTone(status: string | null | undefined): any {
 export function statusLabel(status: string | null | undefined, t: Translator) {
   const value = String(status || "").toLowerCase()
   return value in tones ? t(`admin.status.${value}`) : t("admin.status.unknown")
+}
+
+/** An event's stored status: a translated code, or the operator's note. */
+export function eventStatusLabel(status: string, t: Translator) {
+  const code = eventStatusCode(status)
+  return code ? t(`admin.event.status.${code}`) : status
 }

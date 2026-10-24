@@ -283,6 +283,9 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 			return err
 		}
 	}
+	if err := backfillEventCodes(ctx, tx); err != nil {
+		return err
+	}
 	if added["assets.period_start"] {
 		if err := exec(`UPDATE assets SET period_start=week_start,period_end=date(week_start,'+6 days') WHERE kind='schedule'`); err != nil {
 			return err
@@ -347,6 +350,33 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 	}
 	if retired == 0 {
 		return retireDefaultModel(ctx, tx, now)
+	}
+	return nil
+}
+
+// backfillEventCodes replaces the Chinese status and detail text that earlier
+// releases generated for events with the stored codes and neutral wording.
+// Only rows synchronization still owns change; manual locks and tombstones
+// keep their text, which the frontend translates for display.
+func backfillEventCodes(ctx context.Context, tx *sql.Tx) error {
+	const owned = ` AND provenance='automatic' AND manual_locked=0 AND deleted_at IS NULL`
+	changed := int64(0)
+	for _, statement := range []string{
+		`UPDATE events SET status=CASE status WHEN '已完成' THEN 'ended' WHEN '直播中' THEN 'live' ELSE 'scheduled' END WHERE source='youtube' AND status IN ('已完成','直播中','已预约','会员限定')` + owned,
+		`UPDATE events SET detail=CASE detail WHEN 'YouTube Premiere / 预约' THEN 'YouTube Premiere' ELSE 'YouTube Live' END WHERE source='youtube' AND detail IN ('YouTube Live / 预约','YouTube Premiere / 预约','メンバーシップ限定 / YouTube')` + owned,
+		`UPDATE events SET status='pending' WHERE status='待确认'` + owned,
+	} {
+		result, err := tx.ExecContext(ctx, statement)
+		if err != nil {
+			return fmt.Errorf("%w: upgrade backfill failed", ErrSchema)
+		}
+		count, _ := result.RowsAffected()
+		changed += count
+	}
+	if changed > 0 {
+		if err := bumpRevision(ctx, tx, workflowTime(time.Now())); err != nil {
+			return fmt.Errorf("%w: upgrade backfill failed", ErrSchema)
+		}
 	}
 	return nil
 }

@@ -172,6 +172,24 @@ frontend. Source evidence uses the existing `event_sources` identity index.
 Startup adds these indexes to existing snapshots without rewriting events,
 manual locks, tombstones, cancellation evidence or operator settings.
 
+## Stored Event Text
+
+English is the base language of stored text. An event's `status` holds either a
+lowercase English code the interface translates or an operator's note, shown as
+written. YouTube synchronization writes `scheduled`, `live` or `ended`; an
+extraction entry without a status, or with a cancellation-like one, stores
+`pending`, and the model is asked for short English words such as `scheduled`,
+`tentative` or `released`. Automatic `detail` text is English: `YouTube Live`,
+`YouTube Premiere`, or the model's summary. Titles keep their source wording.
+The labels and the codes they cover live in `src/lib/event-text.ts`.
+
+Earlier releases stored Chinese display text (`已预约`, `会员限定`, `直播中`,
+`已完成`, `待确认` and `YouTube Live / 预约`-style details). Startup replaces it
+with the codes and English wording on rows synchronization owns (automatic,
+unlocked, not deleted) and increments the dashboard revision when a row
+changes. Manual locks and tombstones keep their text; the frontend reads those
+legacy values as the same codes and wording.
+
 ## Duplicate Merging
 
 The additive `events` columns `merged_into` (target event ID), `merge_source`,

@@ -10,6 +10,8 @@
 - Sources has a Live-status probe panel to turn the probe on or off and set
   its interval (default 30 minutes, 5 to 360); its runs appear in the run
   history as "Live-status probe".
+- Schedule status badges are translated, including the Chinese statuses that
+  older manual entries still store.
 
 </details>
 
@@ -33,12 +35,19 @@
   the end, the reservation state and the live status, and updates the board
   only when something changed.
 - A stream YouTube reports as live is no longer stored as completed.
+- Events store English status codes (`scheduled`, `live`, `ended`,
+  `pending`) and English details (`YouTube Live`, `YouTube Premiere`) instead
+  of Chinese text. Startup converts earlier automatic entries; manual and
+  deleted entries keep their text. Extraction asks the model for English
+  details and status words.
 
 </details>
 
 <details>
 <summary><strong>Public pages</strong></summary>
 
+- In English and Japanese, the schedule no longer shows Chinese reservation
+  text such as `YouTube Live / 预约`.
 - A started premiere or release no longer shows as on air for three hours;
   only streams are presumed live without an end, and a presumed-live item
   gives the spotlight to a reservation starting within 30 minutes.

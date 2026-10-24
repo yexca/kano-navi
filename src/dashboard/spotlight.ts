@@ -1,3 +1,4 @@
+import { eventDetailText } from "../lib/event-text.ts"
 import { streamIdentity } from "../lib/stream-identity.ts"
 import { cleanVideoTitle, scheduleSortTime, eventIsUpcoming } from "./format.ts"
 import {
@@ -63,7 +64,7 @@ export function pickSpotlight(summary, now) {
         time: event.startsAt || null,
         dateOnly: event.startsAt ? null : event.startsOn,
         title: cleanVideoTitle(event.title),
-        detail: event.detail,
+        detail: eventDetailText(event.detail),
         url: event.url,
         link: spotlightLink(event.url),
         event,

@@ -31,6 +31,7 @@ import {
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { eventToInput, EventWhen } from "@/admin/views/event-parts"
+import { eventDetailText } from "@/lib/event-text"
 
 const tabs = ["images", "cancellations", "posts"] as const
 type Tab = (typeof tabs)[number]
@@ -390,7 +391,9 @@ function CancellationCard({
         <EventWhen event={event} />
         <div>
           <h3>{event.title}</h3>
-          {event.detail ? <p className="adm-muted">{event.detail}</p> : null}
+          {event.detail ? (
+            <p className="adm-muted">{eventDetailText(event.detail)}</p>
+          ) : null}
         </div>
         {event.cancellationConfidence != null ? (
           <Badge tone="honey">

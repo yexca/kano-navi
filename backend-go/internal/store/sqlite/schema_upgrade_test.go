@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -120,6 +121,64 @@ func TestStandaloneUpgradesOlderSnapshotAdditively(t *testing.T) {
 	}
 	if count := query(`SELECT COUNT(*) FROM llm_route_targets`); count != "1" {
 		t.Fatalf("idempotent start duplicated routes: %s", count)
+	}
+}
+
+func TestStandaloneReplacesGeneratedEventText(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "snapshot.sqlite")
+	s, err := OpenStandalone(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	insert := `INSERT INTO events(id,source,title,detail,starts_on,status,event_type,provenance,manual_locked,deleted_at,created_at,updated_at) VALUES(?,?,'synthetic',?,'2026-03-02',?,'stream',?,?,?,'2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`
+	for _, row := range [][]any{
+		{"youtube-ended", "youtube", "YouTube Live / 预约", "已完成", "automatic", 0, nil},
+		{"youtube-live", "youtube", "YouTube Live / 预约", "直播中", "automatic", 0, nil},
+		{"youtube-member", "youtube", "メンバーシップ限定 / YouTube", "会员限定", "automatic", 0, nil},
+		{"youtube-premiere", "youtube", "YouTube Premiere / 预约", "已预约", "automatic", 0, nil},
+		{"x-pending", "x", "from a post", "待确认", "automatic", 0, nil},
+		{"youtube-locked", "youtube", "YouTube Live / 预约", "已预约", "manual", 1, nil},
+		{"youtube-tombstone", "youtube", "YouTube Live / 预约", "已预约", "automatic", 0, "2026-03-01T00:00:00.000Z"},
+		{"x-manual", "x", "operator note", "待确认", "manual", 1, nil},
+	} {
+		if _, err = s.db.Exec(insert, row...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, err := s.GetDashboardRevision(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	open := func() (string, int64) {
+		t.Helper()
+		s, err := OpenStandalone(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		var events string
+		if err = s.db.QueryRow(`SELECT group_concat(id||':'||detail||':'||status,',') FROM (SELECT * FROM events ORDER BY id)`).Scan(&events); err != nil {
+			t.Fatal(err)
+		}
+		revision, err := s.GetDashboardRevision(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return events, revision
+	}
+	events, revision := open()
+	// Rows synchronization owns get codes and neutral wording; operator text,
+	// locks and tombstones keep what they had.
+	want := "x-manual:operator note:待确认,x-pending:from a post:pending,youtube-ended:YouTube Live:ended,youtube-live:YouTube Live:live,youtube-locked:YouTube Live / 预约:已预约,youtube-member:YouTube Live:scheduled,youtube-premiere:YouTube Premiere:scheduled,youtube-tombstone:YouTube Live / 预约:已预约"
+	if events != want {
+		t.Fatalf("events = %q, want %q", events, want)
+	}
+	if revision <= before {
+		t.Fatalf("the replaced text must tell browsers to reload: %d -> %d", before, revision)
+	}
+	if again, quiet := open(); again != events || quiet != revision {
+		t.Fatalf("a second start changed events or the revision: %d -> %d", revision, quiet)
 	}
 }
 

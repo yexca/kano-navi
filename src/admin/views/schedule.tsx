@@ -13,6 +13,7 @@ import {
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import {
+  eventStatusLabel,
   formatDateTime,
   japanClock,
   japanDay,
@@ -20,6 +21,7 @@ import {
   japanToday,
 } from "@/admin/format"
 import type { AdminEvent, EventInput } from "@/admin/types"
+import { eventDetailText } from "@/lib/event-text"
 import {
   Badge,
   Button,
@@ -431,7 +433,9 @@ export function ScheduleView(_: ViewProps) {
                   </span>
                   <span role="cell" className="adm-event-main">
                     <strong>{event.title}</strong>
-                    {event.detail ? <small>{event.detail}</small> : null}
+                    {event.detail ? (
+                      <small>{eventDetailText(event.detail)}</small>
+                    ) : null}
                     <span className="adm-chip-row">
                       <Badge>
                         {t(`admin.event.type.${event.eventType || "event"}`)}
@@ -440,7 +444,9 @@ export function ScheduleView(_: ViewProps) {
                       <CancellationBadge event={event} />
                       <MergeBadge event={event} />
                       {event.status ? (
-                        <Badge tone="sky">{event.status}</Badge>
+                        <Badge tone="sky">
+                          {eventStatusLabel(event.status, t)}
+                        </Badge>
                       ) : null}
                       {event.deletedAt ? (
                         <Badge tone="danger">

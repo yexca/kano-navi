@@ -13,7 +13,8 @@ import (
 // the Node runtime before that implementation was removed. It is a frozen
 // reference that pins the JavaScript semantics this package re-implements: URL
 // normalization, string handling, number formatting and the result
-// normalizers.
+// normalizers. One deliberate change is applied to the recorded results: the
+// default status is the English pending code, not the recorded Chinese text.
 type vectorData struct {
 	Board        [][]any    `json:"board"`
 	Numbers      [][]any    `json:"numbers"`
@@ -182,8 +183,8 @@ func TestNormalizersMatchTypeScript(t *testing.T) {
 		got := stringify(obj(
 			"classification", result.classification, "events", events, "confidence", result.confidence,
 			"evidence", result.evidence, "reason", result.reason, "action", result.action))
-		if got != text(item[2]) {
-			t.Errorf("%s:\n got  %s\n want %s", name, got, text(item[2]))
+		if want := recordedPending.Replace(text(item[2])); got != want {
+			t.Errorf("%s:\n got  %s\n want %s", name, got, want)
 		}
 	}
 	for _, item := range data.Verification {

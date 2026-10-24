@@ -110,16 +110,16 @@ func TestLiveProbeWritesStateKeepsManualDataAndBumpsOnlyOnChange(t *testing.T) {
 		t.Fatalf("revision %d -> %d", revision, after)
 	}
 	// The actual start, the reservation state and the status text that says live.
-	if got := liveText(t, s, `SELECT starts_at||'|'||is_upcoming||'|'||status FROM events WHERE id='youtube-AAAAAAAAAAA'`); got != "2026-01-03T12:04:30Z|0|直播中" {
+	if got := liveText(t, s, `SELECT starts_at||'|'||is_upcoming||'|'||status FROM events WHERE id='youtube-AAAAAAAAAAA'`); got != "2026-01-03T12:04:30Z|0|live" {
 		t.Fatalf("event=%s", got)
 	}
 	if got := liveText(t, s, `SELECT scheduled_at||'|'||is_upcoming||'|'||live_status FROM videos WHERE id='AAAAAAAAAAA'`); got != "2026-01-03T12:04:30Z|0|live" {
 		t.Fatalf("video=%s", got)
 	}
-	if got := liveText(t, s, `SELECT title||'|'||status FROM events WHERE source_item_id='BBBBBBBBBBB'`); got != "manual title|已预约" {
+	if got := liveText(t, s, `SELECT title||'|'||status FROM events WHERE source_item_id='BBBBBBBBBBB'`); got != "manual title|scheduled" {
 		t.Fatalf("locked event changed: %s", got)
 	}
-	if got := liveText(t, s, `SELECT deleted_at||'|'||status FROM events WHERE source_item_id='CCCCCCCCCCC'`); got != "2026-01-02T00:00:00.000Z|已预约" {
+	if got := liveText(t, s, `SELECT deleted_at||'|'||status FROM events WHERE source_item_id='CCCCCCCCCCC'`); got != "2026-01-02T00:00:00.000Z|scheduled" {
 		t.Fatalf("tombstone changed: %s", got)
 	}
 	if got := liveText(t, s, `SELECT COUNT(*) FROM videos WHERE id='ZZZZZZZZZZZ'`); got != "0" {
@@ -135,14 +135,14 @@ func TestLiveProbeWritesStateKeepsManualDataAndBumpsOnlyOnChange(t *testing.T) {
 		t.Fatalf("unchanged probe bumped revision %d -> %d", after, again)
 	}
 
-	// The end arrives: ends_at, completed status, and the board revision.
+	// The end arrives: ends_at, the ended status, and the board revision.
 	ended := live("AAAAAAAAAAA")
 	ended.LiveNow, ended.LiveStatus, ended.EndedAt = false, ytsource.LiveStatusEnded, "2026-01-03T14:00:00Z"
 	changed, err = s.WriteYoutubeLive(ctx, ytsource.ProbeResult{Videos: []ytsource.Video{ended}})
 	if err != nil || !changed {
 		t.Fatalf("end changed=%v err=%v", changed, err)
 	}
-	if got := liveText(t, s, `SELECT ends_at||'|'||status FROM events WHERE id='youtube-AAAAAAAAAAA'`); got != "2026-01-03T14:00:00Z|已完成" {
+	if got := liveText(t, s, `SELECT ends_at||'|'||status FROM events WHERE id='youtube-AAAAAAAAAAA'`); got != "2026-01-03T14:00:00Z|ended" {
 		t.Fatalf("ended event=%s", got)
 	}
 	// The probe never moves the regular feed cursor or detail queue.
@@ -161,7 +161,7 @@ func TestRegularSyncNoLongerCompletesALiveStream(t *testing.T) {
 	if err := s.WriteYoutubeRecent(ctx, liveChannel, ytsource.Result{Videos: []ytsource.Video{v, member}, NextCursor: "AAAAAAAAAAA", NextCursorTime: "2026-01-01T00:00:00Z"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := liveText(t, s, `SELECT group_concat(event_type||':'||status,',') FROM (SELECT event_type,status FROM events ORDER BY id)`); got != "stream:直播中,member:直播中" {
+	if got := liveText(t, s, `SELECT group_concat(event_type||':'||status,',') FROM (SELECT event_type,status FROM events ORDER BY id)`); got != "stream:live,member:live" {
 		t.Fatalf("statuses=%s", got)
 	}
 }

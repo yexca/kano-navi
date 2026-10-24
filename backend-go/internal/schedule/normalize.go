@@ -229,9 +229,9 @@ func normalizeExtractedEvents(items []any, postID, postURL string, now time.Time
 			normalized.endsAt = &endsAt
 		}
 		normalized.cancellationSuspected = isCancelledEventStatus(statusValue)
-		status := "待确认"
+		status := "pending"
 		if !normalized.cancellationSuspected {
-			status = stringOr(statusValue, "待确认")
+			status = stringOr(statusValue, "pending")
 		}
 		normalized.status = sliceUTF16(jsTrim(status), 80)
 		confidence := jsNumber(confidenceValue, confidenceDefined)

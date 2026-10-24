@@ -226,6 +226,14 @@ export const adminMessages = {
     "admin.event.type.member": "Members",
     "admin.event.type.release": "Release",
     "admin.event.type.appearance": "Appearance",
+    "admin.event.status.scheduled": "Scheduled",
+    "admin.event.status.tentative": "Tentative",
+    "admin.event.status.pending": "Pending",
+    "admin.event.status.confirmed": "Confirmed",
+    "admin.event.status.released": "Released",
+    "admin.event.status.live": "Live",
+    "admin.event.status.ended": "Ended",
+    "admin.event.status.cancelled": "Cancelled",
 
     "admin.schedule.title": "Schedule",
     "admin.schedule.description":
@@ -823,6 +831,14 @@ export const adminMessages = {
     "admin.event.type.member": "会员",
     "admin.event.type.release": "发布",
     "admin.event.type.appearance": "出演",
+    "admin.event.status.scheduled": "已预定",
+    "admin.event.status.tentative": "暂定",
+    "admin.event.status.pending": "待确认",
+    "admin.event.status.confirmed": "已确认",
+    "admin.event.status.released": "已发布",
+    "admin.event.status.live": "直播中",
+    "admin.event.status.ended": "已结束",
+    "admin.event.status.cancelled": "已取消",
 
     "admin.schedule.title": "日程",
     "admin.schedule.description":

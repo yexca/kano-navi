@@ -60,8 +60,11 @@ premiere: its event is a `release` and its video keeps the title-derived kind.
 A finished stream or premiere writes the `endTimestamp` from its
 `liveBroadcastDetails` as the event's `ends_at`; a later check without one keeps
 the stored end. Every successful watch-page check also records the broadcast
-state the page reported (see [Live-status probe](#live-status-probe)), and a
-broadcast reported live gets the status text `直播中`, never `已完成`. Successful detail checks are recorded in incremental
+state the page reported (see [Live-status probe](#live-status-probe)). The
+reservation event stores the status code `scheduled`, `live` or `ended`, and a
+broadcast reported live is `live`, never `ended`; its detail is `YouTube Live`
+or `YouTube Premiere`, and a members-only title sets the `member` type (see
+[Stored event text](data-model.md#stored-event-text)). Successful detail checks are recorded in incremental
 `sync_state.metadata.streamDetailsCheckedIds` for currently discovered, recent
 RSS and active videos. Eligible discoveries and reservation
 refreshes share the durable rotating detail queue; failed checks remain eligible,
@@ -271,6 +274,9 @@ streamed bytes, and redirects are rejected. Connection tests and inference share
 the protocol-specific output limit: `max_output_tokens` for Responses,
 `max_completion_tokens` for Chat Completions, and `max_tokens` for Anthropic.
 
+The instruction keeps titles and cited evidence in the post's wording and asks
+for English detail and reason and a short lowercase English status word; an
+entry without a status, or with a cancellation-like one, stores `pending`.
 A local validator rejects invalid calendar dates, time formats, enumerations,
 or confidence values before any event write. `schedule` results update automatic
 events. A model never deletes or definitively cancels an event: `action=cancel`

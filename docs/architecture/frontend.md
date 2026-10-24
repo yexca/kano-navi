@@ -51,6 +51,14 @@ reload when a chunk fails (including after a deployment). Direct visits and
 trailing-slash routes work through the existing SPA fallback. History/about
 remain static and never mount the dashboard hook or request its API.
 
+English is the base locale. Every message exists in English, a key missing
+from Japanese or Simplified Chinese falls back to it, and a browser language
+that is none of the three selects it. Stored records are not interface copy:
+event status codes become labels through `src/lib/event-text.ts`, which also
+reads the Chinese text earlier releases stored, while titles, details and
+operator notes show as stored (see
+[Stored event text](data-model.md#stored-event-text)).
+
 SQLite stores one text per seeded timeline and link row. The board translates
 that text through src/dashboard/seed-copy.ts, keyed by the exact seed wording
 in static-seed.json, so a row whose text was changed shows as stored. Update

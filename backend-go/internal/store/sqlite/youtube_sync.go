@@ -98,27 +98,24 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 // whether a write changed what the board shows.
 const youtubeVideoState = `SELECT title||char(31)||COALESCE(published_at,'')||char(31)||COALESCE(scheduled_at,'')||char(31)||url||char(31)||COALESCE(thumbnail_url,'')||char(31)||COALESCE(kind,'')||char(31)||COALESCE(is_upcoming,0)||char(31)||COALESCE(live_status,'') FROM videos WHERE id=?`
 
-// youtubeEventFields derives a reservation event's type, detail and status
-// text. A broadcast the watch page reports as live is never "completed".
+// youtubeEventFields derives a reservation event's type, detail and status.
+// The status is a code the board translates (scheduled, live or ended) and the
+// detail names the YouTube format; members-only is carried by the type. A
+// broadcast the watch page reports as live is never "ended".
 func youtubeEventFields(v ytsource.Video) (typeName, detail, status string) {
-	typeName, detail, status = "stream", "YouTube Live / 预约", "已完成"
-	member := strings.Contains(v.Title, "メンバー") || strings.Contains(strings.ToLower(v.Title), "membership") || strings.Contains(v.Title, "限定")
-	if member {
+	typeName, detail, status = "stream", "YouTube Live", "ended"
+	if strings.Contains(v.Title, "メンバー") || strings.Contains(strings.ToLower(v.Title), "membership") || strings.Contains(v.Title, "限定") {
 		typeName = "member"
-		detail = "メンバーシップ限定 / YouTube"
 	}
 	switch {
 	case v.LiveNow:
-		status = "直播中"
+		status = "live"
 	case v.IsUpcoming:
-		status = "已预约"
-		if member {
-			status = "会员限定"
-		}
+		status = "scheduled"
 	}
 	// A premiere is a release, so it is never presumed live past its end.
 	if v.Premiere {
-		typeName, detail = "release", "YouTube Premiere / 预约"
+		typeName, detail = "release", "YouTube Premiere"
 	}
 	return typeName, detail, status
 }

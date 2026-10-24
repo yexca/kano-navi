@@ -11,6 +11,7 @@ import {
 
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
 import { ExternalLink } from "@/site/links"
+import { eventDetailText } from "@/lib/event-text"
 import {
   addDays,
   cleanVideoTitle,
@@ -93,7 +94,9 @@ function GuideEvent({
           {cleanVideoTitle(event.title)}
         </span>
         {event.detail ? (
-          <span className="guide-event-detail">{event.detail}</span>
+          <span className="guide-event-detail">
+            {eventDetailText(event.detail)}
+          </span>
         ) : null}
         <span className="guide-event-tags">
           {typeKey ? <span className="tag">{t(typeKey)}</span> : null}

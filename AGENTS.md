@@ -29,6 +29,9 @@ it. TypeScript is the frontend and the maintenance scripts only.
 - src/main.tsx composes /, /history, /about, and /admin. Keep board requests in
   src/dashboard/use-dashboard.ts and admin requests in src/admin/use-admin-data.ts.
   Reuse React, semantic Tailwind tokens, and the existing UI primitives.
+- English is the base locale and the fallback for missing messages. Sync and
+  extraction store codes or English text, never localized display strings;
+  the frontend translates the codes (see the data model's stored event text).
 - Manual event edits, confirmations, and deletions create durable locks or
   tombstones. Automatic sync/extraction must not replace or resurrect them.
   The LLM cancellation overlay may annotate a locked event without changing
