@@ -73,6 +73,8 @@ type Post struct {
 	MediaID        *string
 	MediaStatus    string
 	MediaSourceURL *string
+	// Translations resolves the text's translations by precedence.
+	Translations TranslationSet
 }
 
 type PostMedia struct {
@@ -129,6 +131,8 @@ type Video struct {
 	// LiveStatus is the broadcast state a watch page reported: an end is
 	// final, while live and upcoming count only while fresh. Nil is unknown.
 	LiveStatus *string
+	// Translations resolves the title's translations by precedence.
+	Translations TranslationSet
 }
 
 type Focus struct {
@@ -464,6 +468,20 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 		if err != nil {
 			return nil, err
 		}
+	}
+	postRefs := []*Post{latest}
+	for i := range posts {
+		postRefs = append(postRefs, &posts[i])
+	}
+	if err = s.attachPostTranslations(ctx, postRefs...); err != nil {
+		return nil, err
+	}
+	videoRefs := []*Video{}
+	for i := range videos {
+		videoRefs = append(videoRefs, &videos[i])
+	}
+	if err = s.attachVideoTranslations(ctx, videoRefs...); err != nil {
+		return nil, err
 	}
 	upcoming := make([]DashboardEvent, 0)
 	for i := range events {

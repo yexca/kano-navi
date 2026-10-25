@@ -32,6 +32,22 @@ export interface MediaItem {
  */
 export type LiveStatus = "live" | "upcoming" | "ended"
 
+/** Readers see a manual translation, then a platform's, then a model's. */
+export type TranslationOrigin = "manual" | "platform" | "machine"
+
+export interface Translation {
+  text: string
+  origin: TranslationOrigin
+  /** The platform of a platform translation, such as youtube or bilibili. */
+  platform?: string | null
+}
+
+/** The target locales; Japanese readers always see the source wording. */
+export type TranslationLocale = "en" | "zh-CN"
+
+/** At most one resolved translation per target locale. */
+export type Translations = Partial<Record<TranslationLocale, Translation>>
+
 export interface Post {
   id: string
   source: string
@@ -47,6 +63,9 @@ export interface Post {
   reposts?: number
   replies?: number
   type?: string
+  /** Translations of the text and its detected language (ja, en, zh, ...). */
+  translations?: Translations
+  sourceLanguage?: string | null
 }
 
 export interface ScheduleEvent {
@@ -87,6 +106,9 @@ export interface Video {
   isUpcoming: boolean
   isCancelled?: boolean
   liveStatus?: LiveStatus | null
+  /** Translations of the title and its detected language (ja, en, zh, ...). */
+  translations?: Translations
+  sourceLanguage?: string | null
 }
 
 export interface ScheduleAsset {

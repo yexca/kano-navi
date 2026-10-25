@@ -293,7 +293,9 @@ type llmResponse struct {
 	Providers []Provider    `json:"providers"`
 	Models    []Model       `json:"models"`
 	Queue     []RouteTarget `json:"queue"`
-	ModelTags []string      `json:"modelTags"`
+	// TranslationQueue is the separate translation route.
+	TranslationQueue []RouteTarget `json:"translationQueue"`
+	ModelTags        []string      `json:"modelTags"`
 }
 
 func (m *Module) getLLM(w http.ResponseWriter, r *http.Request) {
@@ -302,7 +304,9 @@ func (m *Module) getLLM(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if response.Providers, err = ListProviders(ctx, m.db); err == nil {
 		if response.Models, err = ListModels(ctx, m.db, ""); err == nil {
-			response.Queue, err = QueueTargets(ctx, m.db)
+			if response.Queue, err = QueueTargets(ctx, m.db); err == nil {
+				response.TranslationQueue, err = RouteTargets(ctx, m.db, TranslationRoute)
+			}
 		}
 	}
 	if err != nil {
@@ -718,22 +722,32 @@ func (m *Module) putQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	// route selects the schedule queue (the default) or the translation queue.
+	route := QueueRoute
+	if value, present := body["route"]; present {
+		if name, _ := value.(string); name == QueueRoute || name == TranslationRoute {
+			route = name
+		} else {
+			m.fail(w, httpx.Invalid("route must be schedule or translate"))
+			return
+		}
+	}
 	var queue []RouteTarget
 	err = m.write(ctx, func(tx *sql.Tx) error {
 		targets, targetErr := routeTargetsInput(body["targets"])
 		if targetErr != nil {
 			return targetErr
 		}
-		if err := m.setQueue(ctx, tx, targets); err != nil {
+		if err := m.setQueue(ctx, tx, route, targets); err != nil {
 			return err
 		}
 		var payloadErr error
-		queue, payloadErr = QueueTargets(ctx, tx)
+		queue, payloadErr = RouteTargets(ctx, tx, route)
 		return payloadErr
 	})
 	if err != nil {
 		m.fail(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"queue": queue})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"route": route, "queue": queue})
 }

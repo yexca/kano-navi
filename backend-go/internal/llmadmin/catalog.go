@@ -20,6 +20,9 @@ const (
 	// Every extraction stage walks it in order and skips targets whose
 	// capabilities do not fit the request.
 	QueueRoute = "schedule"
+	// TranslationRoute is the separate translation queue. Its targets need
+	// the text tag, and the translate step never falls back to QueueRoute.
+	TranslationRoute = "translate"
 
 	// MaxRetries is the fixed three-request provider contract.
 	MaxRetries = 2

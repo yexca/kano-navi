@@ -23,6 +23,10 @@ import {
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { QuickFetch } from "@/admin/views/fetch-parts"
 import { PostActions, PostStatus, RouteSelect } from "@/admin/views/review"
+import {
+  TranslationBacklog,
+  TranslationCell,
+} from "@/admin/views/translation-parts"
 
 /** Only local, already cached media is shown; never a remote CDN URL. */
 function localUrl(value: string | null | undefined) {
@@ -181,6 +185,13 @@ function PostTableRow({
       </div>
       <div role="cell" className="adm-post-body">
         <p className="adm-post-text">{post.text}</p>
+        <TranslationCell
+          owner="post"
+          id={post.id}
+          original={post.text}
+          translation={post.translation}
+          onChanged={onDone}
+        />
       </div>
       <div role="cell" className="adm-post-image">
         <PostImage post={post} />
@@ -206,6 +217,7 @@ function PostList({ sources }: { sources: Sources | undefined }) {
     account: "",
     llm: "",
     media: "",
+    translation: "",
   })
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
@@ -276,6 +288,19 @@ function PostList({ sources }: { sources: Sources | undefined }) {
           <option value="present">{t("admin.posts.withMedia")}</option>
           <option value="missing">{t("admin.posts.withoutMedia")}</option>
         </select>
+        <select
+          value={filters.translation}
+          onChange={(e) => update({ translation: e.target.value })}
+          aria-label={t("admin.translation.filter")}
+        >
+          <option value="">{t("admin.translation.anyStatus")}</option>
+          {["incomplete", "complete", "requested"].map((status) => (
+            <option key={status} value={status}>
+              {t(`admin.translation.filter.${status}`)}
+            </option>
+          ))}
+        </select>
+        <TranslationBacklog owner="post" onQueued={() => void posts.reload()} />
       </form>
       {!posts.data ? (
         <Loading />

@@ -22,6 +22,7 @@ import {
   visitorIsInJapan,
 } from "../format"
 import { pickCompanion, pickSpotlight, spotlightIsLive } from "../spotlight"
+import { TranslatedTitle } from "./translated-title"
 
 export interface SyncState {
   tone: "leaf" | "honey" | "danger" | "muted"
@@ -228,7 +229,13 @@ function FullTicket({
             <DateBlock item={item} locale={locale} />
           ) : null}
           <span className="ticket-copy">
-            <span className="ticket-title">{item.title}</span>
+            <TranslatedTitle
+              className="ticket-title"
+              title={item.title}
+              video={item.video}
+              locale={locale}
+              t={t}
+            />
             <TicketWhen item={item} locale={locale} now={now} t={t} />
           </span>
         </span>
@@ -275,7 +282,13 @@ function CompactTicket({
       <span className="ticket-stub">
         <TicketHead item={item} isLive={isLive} t={t} />
         <span className="ticket-copy">
-          <span className="ticket-title">{item.title}</span>
+          <TranslatedTitle
+            className="ticket-title"
+            title={item.title}
+            video={item.video}
+            locale={locale}
+            t={t}
+          />
           <TicketWhen item={item} locale={locale} now={now} t={t} />
         </span>
         {item.time && !isLive ? (
@@ -335,7 +348,13 @@ function LatestCard({
           <span className="kicker">{t("spotlight.latest")}</span>
           <span className="tag">{videoKindLabel(companion.video, t)}</span>
         </span>
-        <span className="latest-card-title">{companion.title}</span>
+        <TranslatedTitle
+          className="latest-card-title"
+          title={companion.title}
+          video={companion.video}
+          locale={locale}
+          t={t}
+        />
         {companion.time ? (
           <small>{formatRelative(companion.time, locale, now)}</small>
         ) : null}

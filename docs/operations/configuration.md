@@ -16,6 +16,8 @@
 | `SCHEDULE_MESSAGE_ENABLED`    | `1`                  | Enable single-message schedule detection                          |
 | `SCHEDULE_MESSAGE_ALL_POSTS`  | `0`                  | Send every post through the message route, skipping the heuristic |
 | `SCHEDULE_KEYWORDS`           | `schedule,...`       | Comma-separated schedule candidate keywords                       |
+| `TRANSLATION_SCAN_LIMIT`      | `20`                 | Posts and titles the translate step sends to a model per run      |
+| `TRANSLATION_LOOKBACK_DAYS`   | `30`                 | Days of posts and videos the translate step covers unrequested    |
 | `WORKFLOW_SCHEDULER_ENABLED`  | `1`                  | Start timed saved workflows inside the server process             |
 | `MCP_ENABLED`                 | `1`                  | Expose the stateless `/mcp` endpoint                              |
 | `MCP_CONTROL_TOKEN`           | Empty                | Bearer token for MCP mutation tools                               |
@@ -39,6 +41,11 @@
 | `MEDIA_MAX_BYTES`             | `10485760`           | Maximum bytes accepted for one image                              |
 | `SKIP_X`, `SKIP_YOUTUBE`      | `0`                  | Set an individual source flag to `1` to skip it                   |
 | `SKIP_MEDIA`, `SKIP_LLM`      | `0`                  | Set a post-processing stage flag to `1` to skip it                |
+
+`SKIP_LLM=1` skips both model steps, `schedule` and `translate`. Neither
+translation variable configures a model: the translate step reads only the
+translation queue set in `/admin` → Models, so it does nothing until that
+queue holds a text model.
 
 Docker Compose also uses `KANO_IMAGE` (default
 `yexca/kano-navi:latest` from Docker Hub) for the published image and `KANO_PORT`

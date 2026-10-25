@@ -197,11 +197,11 @@ type routeTarget struct {
 	modelID    string
 }
 
-func queueTargets(ctx context.Context, q queryer) ([]routeTarget, error) {
+func queueTargets(ctx context.Context, q queryer, route string) ([]routeTarget, error) {
 	rows, err := q.QueryContext(ctx, `SELECT r.provider_id, r.model_id
 		FROM llm_route_targets r
 		JOIN llm_providers p ON p.id = r.provider_id
-		WHERE r.route = ? ORDER BY r.priority ASC, r.provider_id ASC, r.model_id ASC`, routeQueue)
+		WHERE r.route = ? ORDER BY r.priority ASC, r.provider_id ASC, r.model_id ASC`, route)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func queueTargets(ctx context.Context, q queryer) ([]routeTarget, error) {
 }
 
 func queueProviders(ctx context.Context, q queryer) ([]string, error) {
-	targets, err := queueTargets(ctx, q)
+	targets, err := queueTargets(ctx, q, routeQueue)
 	if err != nil {
 		return nil, err
 	}

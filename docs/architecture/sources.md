@@ -462,6 +462,46 @@ the least recent check/review attempt. Reviews persist an input fingerprint
 including image hash, source gate input, and ordered provider/model targets;
 changed content or configuration can invalidate a successful verdict.
 
+### Translation
+
+The `translate` step machine-translates X post text and YouTube video titles
+into English and Simplified Chinese (see
+[Translations](data-model.md#translations) for storage and precedence).
+Bilibili metadata is already Chinese and is never sent to a model, and the
+step never requests a source. Its models come only from the separate
+translation queue (`llm_route_targets.route = 'translate'`), configured in
+`/admin` → Models; it never falls back to the schedule queue. Targets need
+the `text` tag, and each follows the same three-call failover as extraction.
+Without a usable target the step records `disabled` with the reason and
+keeps operator requests.
+
+Candidates are posts and YouTube videos whose current wording lacks a usable
+translation of a needed locale: operator requests first (forced passes that
+replace machine rows, whatever their age), then never-attempted wording, then
+the least recently attempted, newest first. Unrequested candidates are
+limited to the last `TRANSLATION_LOOKBACK_DAYS` (30) by publication, and at
+most `TRANSLATION_SCAN_LIMIT` (20) are sent per run. A locale already covered
+by a manual or platform row is not a reason to call a model.
+
+Wording with only links, hashtags, mentions or emoji is recorded as
+`skipped` with language `none` without a call; wording over 4000 characters
+is skipped without a call. The model receives the kind (X post or YouTube video
+title) and the text, returns `sourceLanguage` plus English and Simplified
+Chinese, and is told to keep URLs, tags, mentions, emoji and bracketed
+channel tags. A result is accepted only with a known language and a
+non-empty, bounded translation for every locale that differs from it. The
+result is stored only if the wording still has the hash that was sent.
+
+Platform translations belong to source synchronization, not to this step,
+which only reads them. Writers store them through
+`UpsertPlatformTranslationTx` and remove them through
+`DeletePlatformTranslationTx` (see [Translations](data-model.md#translations)).
+No source writes them yet. The planned writers are YouTube titles a creator
+localized, read at the follow-up checks (the watch page's
+`videoPrimaryInfoRenderer` title under `hl=en` or `hl=zh-CN` differs from the
+original, while `videoDetails.title` stays the original), and the Chinese title
+of a Bilibili upload merged into a YouTube video.
+
 ## Related Docs
 
 - [Workflow and historical fetch windows](workflows.md)

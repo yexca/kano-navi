@@ -15,6 +15,7 @@ import {
   Repeat2,
 } from "lucide-react"
 
+import { TranslatedText } from "@/components/translated-text"
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
 import { ExternalLink, XLogo } from "@/site/links"
 import {
@@ -120,7 +121,14 @@ function PostNote({
           <ArrowUpRight aria-hidden="true" />
         </ExternalLink>
       </header>
-      <p className="post-note-text">{post.text}</p>
+      <TranslatedText
+        className="post-note-text"
+        original={post.text}
+        translations={post.translations}
+        sourceLanguage={post.sourceLanguage}
+        locale={locale}
+        t={t}
+      />
       {media.length ? (
         <div className={`post-note-media count-${Math.min(4, media.length)}`}>
           {media.slice(0, 4).map((item, index) =>

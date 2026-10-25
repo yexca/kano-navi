@@ -1,0 +1,166 @@
+import { useState } from "react"
+import { Languages } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+import type { Locale, Translation, Translations, Translator } from "@/types"
+
+/** The lang attribute of wording in a detected source language. */
+const sourceLangs: Record<string, string> = {
+  ja: "ja",
+  en: "en",
+  zh: "zh",
+  ko: "ko",
+}
+
+const platforms = new Set(["youtube", "bilibili"])
+
+/**
+ * The translation a reader of the locale sees instead of the source wording,
+ * or null: Japanese readers and untranslated wording keep the source.
+ */
+export function pickTranslation(
+  translations: Translations | undefined | null,
+  locale: Locale,
+): Translation | null {
+  if (locale === "ja") return null
+  const translation = translations?.[locale]
+  return translation?.text ? translation : null
+}
+
+/** Names where a translation came from: AI, a platform or the editor. */
+export function translationOriginLabel(
+  translation: Translation,
+  t: Translator,
+): string {
+  if (translation.origin === "machine") return t("translation.machine")
+  if (translation.origin === "manual") return t("translation.manual")
+  const platform = platforms.has(translation.platform || "")
+    ? translation.platform
+    : "other"
+  return t(`translation.platform.${platform}`)
+}
+
+export interface TranslatedTextState {
+  /** The wording to show. */
+  text: string
+  /** The translation shown, or null while the source shows. */
+  shown: Translation | null
+  /** The translation this reader can switch to, shown or not. */
+  available: Translation | null
+  /** The lang attribute of the wording shown. */
+  lang: string | undefined
+  toggle: () => void
+}
+
+/** Shows a reader's translation by default and lets them switch back. */
+export function useTranslatedText(
+  original: string,
+  translations: Translations | undefined | null,
+  sourceLanguage: string | undefined | null,
+  locale: Locale,
+): TranslatedTextState {
+  const [showOriginal, setShowOriginal] = useState(false)
+  const available = pickTranslation(translations, locale)
+  const shown = available && !showOriginal ? available : null
+  return {
+    text: shown ? shown.text : original,
+    shown,
+    available,
+    lang: shown ? locale : sourceLangs[sourceLanguage || ""],
+    toggle: () => setShowOriginal((value) => !value),
+  }
+}
+
+/** The origin label and the show-original button under translated wording. */
+export function TranslationNote({
+  state,
+  t,
+  className,
+}: {
+  state: TranslatedTextState
+  t: Translator
+  className?: string
+}) {
+  const { available, shown } = state
+  if (!available) return null
+  return (
+    <p className={cn("translation-note", className)}>
+      <Languages aria-hidden="true" />
+      <span
+        title={
+          shown?.origin === "machine" ? t("translation.machineHint") : undefined
+        }
+      >
+        {shown
+          ? translationOriginLabel(shown, t)
+          : t("translation.originalShown")}
+      </span>
+      <button type="button" onClick={state.toggle} aria-pressed={!shown}>
+        {shown
+          ? t("translation.showOriginal")
+          : t("translation.showTranslation")}
+      </button>
+    </p>
+  )
+}
+
+/** Block wording, such as a post's text, followed by its translation note. */
+export function TranslatedText({
+  original,
+  translations,
+  sourceLanguage,
+  locale,
+  t,
+  className,
+}: {
+  original: string
+  translations?: Translations | null
+  sourceLanguage?: string | null
+  locale: Locale
+  t: Translator
+  className?: string
+}) {
+  const state = useTranslatedText(
+    original,
+    translations,
+    sourceLanguage,
+    locale,
+  )
+  return (
+    <>
+      <p className={className} lang={state.lang}>
+        {state.text}
+      </p>
+      <TranslationNote state={state} t={t} />
+    </>
+  )
+}
+
+/**
+ * A compact marker after translated wording inside a link, where a button
+ * cannot go. Its tooltip and accessible name carry the source wording.
+ */
+export function TranslationMark({
+  translation,
+  original,
+  t,
+}: {
+  translation: Translation
+  original: string
+  t: Translator
+}) {
+  const label = `${translationOriginLabel(translation, t)} · ${t(
+    "translation.originalIs",
+    { text: original },
+  )}`
+  return (
+    <span className="translation-mark" title={label}>
+      {translation.origin === "machine" ? (
+        <span aria-hidden="true">AI</span>
+      ) : (
+        <Languages aria-hidden="true" />
+      )}
+      <span className="sr-only">{label}</span>
+    </span>
+  )
+}

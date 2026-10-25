@@ -1788,6 +1788,63 @@ a:hover .video-thumb img {
   white-space: pre-wrap;
 }
 
+/* Where a translation came from, and the way back to the source wording. */
+.translation-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: -4px 0 0;
+  color: var(--soft);
+  font-size: 12px;
+}
+
+.translation-note svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.translation-note button {
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--berry);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.translation-note button:hover {
+  text-decoration: underline;
+}
+
+.translation-note button:focus-visible {
+  outline: 2px solid var(--berry);
+  outline-offset: 2px;
+}
+
+.translation-mark {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 16px;
+  vertical-align: 2px;
+}
+
+.translation-mark svg {
+  width: 10px;
+  height: 10px;
+}
+
 .post-note-media {
   display: grid;
   grid-template-columns: 1fr 1fr;

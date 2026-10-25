@@ -19,6 +19,7 @@ import {
   videoTime,
 } from "../format"
 import { ArchiveMore, ArchiveState } from "./archive-dialog"
+import { TranslatedHeading, TranslatedTitle } from "./translated-title"
 
 function Thumb({
   url,
@@ -109,9 +110,13 @@ function VideoRow({
               t={t}
             />
           </span>
-          <span className="video-row-title">
-            {cleanVideoTitle(video.title)}
-          </span>
+          <TranslatedTitle
+            className="video-row-title"
+            title={cleanVideoTitle(video.title)}
+            video={video}
+            locale={locale}
+            t={t}
+          />
         </span>
       </ExternalLink>
     </li>
@@ -153,7 +158,16 @@ function Featured({
             <VideoWhen video={video} locale={locale} now={now} t={t} />
           )}
         </p>
-        <h3>{title}</h3>
+        {usesFocus && focus.title ? (
+          <h3>{title}</h3>
+        ) : (
+          <TranslatedHeading
+            title={title}
+            video={video}
+            locale={locale}
+            t={t}
+          />
+        )}
         {usesFocus && focus.description ? <p>{focus.description}</p> : null}
         <div className="video-feature-actions">
           <ExternalLink className="pill-button is-solid" href={video.url}>

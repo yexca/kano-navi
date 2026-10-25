@@ -33,11 +33,17 @@ import type {
   ProfileMedia,
   ProfileMediaState,
   Provider,
+  QueueRoute,
   RouteTarget,
   Run,
   ScheduleImage,
   Session,
   Sources,
+  TranslationLocale,
+  TranslationOwner,
+  TranslationRequestResult,
+  TranslationSummary,
+  AdminTranslation,
   VideoCorrection,
   VideoHistory,
   Workflow,
@@ -159,6 +165,33 @@ function createClient(run: Runner, slow: Runner) {
         route ? { route } : {},
       ),
 
+    translations: () => get<TranslationSummary>("/translations"),
+    setTranslation: (
+      owner: TranslationOwner,
+      id: string,
+      locale: TranslationLocale,
+      text: string,
+    ) =>
+      send<{ translation: AdminTranslation }>(
+        "PUT",
+        `/translations/${owner}/${enc(id)}/${enc(locale)}`,
+        { text },
+      ),
+    clearTranslation: (
+      owner: TranslationOwner,
+      id: string,
+      locale: TranslationLocale,
+    ) =>
+      send<{ translation: AdminTranslation }>(
+        "DELETE",
+        `/translations/${owner}/${enc(id)}/${enc(locale)}`,
+      ),
+    /** Queue machine passes for owners, or for everything missing one. */
+    requestTranslations: (
+      body:
+        | { missing: true; ownerType?: TranslationOwner }
+        | { ownerType: TranslationOwner; ids: string[] },
+    ) => send<TranslationRequestResult>("POST", "/translations/request", body),
     videos: (filters: Record<string, any>) =>
       get<AdminVideosPage>(`/videos${query(filters)}`),
     setFeatured: (videoId: string | null) =>
@@ -239,8 +272,11 @@ function createClient(run: Runner, slow: Runner) {
         `/llm/providers/${enc(id)}/models/remove`,
         { ids },
       ),
-    updateQueue: (targets: RouteTarget[]) =>
-      send<{ queue: RouteTarget[] }>("PUT", "/llm/queue", { targets }),
+    updateQueue: (targets: RouteTarget[], route: QueueRoute = "schedule") =>
+      send<{ route: QueueRoute; queue: RouteTarget[] }>("PUT", "/llm/queue", {
+        route,
+        targets,
+      }),
   }
 }
 

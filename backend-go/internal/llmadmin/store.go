@@ -239,6 +239,11 @@ func ListModels(ctx context.Context, db Querier, providerID string) ([]Model, er
 
 // QueueTargets returns the model priority queue in order.
 func QueueTargets(ctx context.Context, db Querier) ([]RouteTarget, error) {
+	return RouteTargets(ctx, db, QueueRoute)
+}
+
+// RouteTargets returns one route's ordered targets.
+func RouteTargets(ctx context.Context, db Querier, route string) ([]RouteTarget, error) {
 	return collect(ctx, db, func(scan scanner) (RouteTarget, error) {
 		var target RouteTarget
 		var model sql.NullString
@@ -247,7 +252,7 @@ func QueueTargets(ctx context.Context, db Querier) ([]RouteTarget, error) {
 		return target, err
 	}, `SELECT r.provider_id, r.model_id FROM llm_route_targets r
 		JOIN llm_providers p ON p.id = r.provider_id
-		WHERE r.route = ? ORDER BY r.priority ASC, r.provider_id ASC, r.model_id ASC`, QueueRoute)
+		WHERE r.route = ? ORDER BY r.priority ASC, r.provider_id ASC, r.model_id ASC`, route)
 }
 
 func settingBoolean(value string, fallback bool) bool {
@@ -544,24 +549,27 @@ func (m *Module) deleteModels(ctx context.Context, db Querier, provider *Provide
 			return 0, err
 		}
 	}
-	targets, err := QueueTargets(ctx, db)
-	if err != nil {
-		return 0, err
-	}
-	if err = m.writeQueue(ctx, db, targets); err != nil {
-		return 0, err
+	// Rewrite both queues so their priorities stay contiguous.
+	for _, route := range []string{QueueRoute, TranslationRoute} {
+		targets, err := RouteTargets(ctx, db, route)
+		if err != nil {
+			return 0, err
+		}
+		if err = m.writeQueue(ctx, db, route, targets); err != nil {
+			return 0, err
+		}
 	}
 	return removed, nil
 }
 
-func (m *Module) writeQueue(ctx context.Context, db Querier, targets []RouteTarget) error {
+func (m *Module) writeQueue(ctx context.Context, db Querier, route string, targets []RouteTarget) error {
 	timestamp := m.stamp()
-	if _, err := db.ExecContext(ctx, `DELETE FROM llm_route_targets WHERE route = ?`, QueueRoute); err != nil {
+	if _, err := db.ExecContext(ctx, `DELETE FROM llm_route_targets WHERE route = ?`, route); err != nil {
 		return err
 	}
 	for priority, target := range targets {
 		_, err := db.ExecContext(ctx, `INSERT INTO llm_route_targets (route, provider_id, model_id, priority, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?)`, QueueRoute, target.ProviderID, target.ModelID, priority, timestamp, timestamp)
+			VALUES (?, ?, ?, ?, ?, ?)`, route, target.ProviderID, target.ModelID, priority, timestamp, timestamp)
 		if err != nil {
 			return err
 		}
@@ -569,9 +577,10 @@ func (m *Module) writeQueue(ctx context.Context, db Querier, targets []RouteTarg
 	return nil
 }
 
-// setQueue replaces the ordered queue. Every target names a model in its
-// provider's catalog. It must run inside a transaction.
-func (m *Module) setQueue(ctx context.Context, db Querier, targets []RouteTarget) error {
+// setQueue replaces one route's ordered queue. Every target names a model in
+// its provider's catalog; translation targets also need the text tag. It must
+// run inside a transaction.
+func (m *Module) setQueue(ctx context.Context, db Querier, route string, targets []RouteTarget) error {
 	seen := map[RouteTarget]bool{}
 	normalized := make([]RouteTarget, 0, len(targets))
 	for _, target := range targets {
@@ -596,11 +605,14 @@ func (m *Module) setQueue(ctx context.Context, db Querier, targets []RouteTarget
 		if model == nil {
 			return httpx.Invalid("LLM model does not exist: %s/%s", target.ProviderID, target.ModelID)
 		}
+		if route == TranslationRoute && !slices.Contains(model.Capabilities, "text") {
+			return httpx.Invalid("translation models need the text tag: %s/%s", target.ProviderID, target.ModelID)
+		}
 		if seen[target] {
 			continue
 		}
 		seen[target] = true
 		normalized = append(normalized, target)
 	}
-	return m.writeQueue(ctx, db, normalized)
+	return m.writeQueue(ctx, db, route, normalized)
 }

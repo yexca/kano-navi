@@ -78,9 +78,9 @@ A run is one single-flight unit of work on the durable workflow queue. Its
 shape is the `jobs.Job` projection shared with MCP control tools:
 `{id, kind, status, createdAt, startedAt, finishedAt, triggeredBy, workflowId,
 workflowName, steps, progress, fetchWindows, result, error, run}` where
-`kind` is `sync`, `scan`, `workflow` or `live` (the YouTube live-status
-probe, started only by its timer with `triggeredBy: "live-probe"` and the one
-step `live`), `status` is `queued`, `running`,
+`kind` is `sync`, `scan`, `translate`, `workflow` or `live` (the YouTube
+live-status probe, started only by its timer with `triggeredBy:
+"live-probe"` and the one step `live`), `status` is `queued`, `running`,
 `completed` or `failed`, and `progress` maps each step to `pending`,
 `running`, `completed`, `partial`, `failed`, `skipped` or `cancelled`.
 
@@ -94,8 +94,9 @@ step `live`), `status` is `queued`, `running`,
 
 `POST /runs` starts exactly one of:
 
-- `{"kind": "sync"}`: every source, media and schedule step.
+- `{"kind": "sync"}`: every source, media, schedule and translate step.
 - `{"kind": "scan"}`: the automatic schedule extraction only.
+- `{"kind": "translate"}`: the translate step only.
 - `{"kind": "workflow", "workflowId": "..."}`: a saved workflow;
   `404 workflow_not_found`.
 - `{"kind": "fetch", "source": "x" | "youtube", "window": Window}`: one
@@ -213,7 +214,11 @@ alias); `none` never needs review and keeps `previewUrl` null.
 
 `account` is an X handle, matched without case or a leading `@`; `media` is
 `present` or `missing`; `llm` is `never`, `pending`, `processed`, `failed`,
-`skipped` or `uncertain`; `reprocess=1` keeps only queued posts.
+`skipped` or `uncertain`; `reprocess=1` keeps only queued posts;
+`translation` is `incomplete`, `complete` or `requested`.
+
+An X post carries `translation` (see [Translations](#translations)); other
+posts carry `null`. `GET /videos` does the same for YouTube videos.
 
 Each post's `media` lists its images in order (linked post images, or else
 the stored media URL) as `{url, status, alt}`. `url` is the local
@@ -282,22 +287,52 @@ of `revisions`.
 | `POST /profile-media/{id}/download` |                     | `{item, items, active}`     |
 | `POST /profile-media/{id}/select`   |                     | `{item, items, active}`     |
 
+## Translations
+
+| Method and path                              | Body                                                | Result                    |
+| -------------------------------------------- | --------------------------------------------------- | ------------------------- |
+| `GET /translations`                          |                                                     | `{counts, locales}`       |
+| `POST /translations/request`                 | `{missing: true, ownerType?}` or `{ownerType, ids}` | `202 {queued, run, busy}` |
+| `PUT /translations/{owner}/{id}/{locale}`    | `{text}`                                            | `{translation}`           |
+| `DELETE /translations/{owner}/{id}/{locale}` |                                                     | `{translation}`           |
+
+`owner` and `ownerType` are `post` or `video`; `locale` is `en` or `zh-CN`.
+`counts` maps each owner type to `{total, incomplete, requested}` over the
+posts and videos the translate step covers. A translation summary is
+`{status, sourceLanguage, machineStatus, lastAttemptAt, lastError, requested,
+locales}` with `status` `complete` or `incomplete`, `machineStatus` `never`,
+`success`, `failed`, `skipped` or `outdated` (the wording changed after the
+last attempt), and one entry per locale: `{locale, status, origin, platform,
+text, manual, manualStale, machine, machineAt, model}`. A locale's `status` is
+`translated`, `missing`, `stale` (only an outdated machine row), `source`
+(already in that language) or `not_needed`; `text` and `origin` are what
+readers see.
+
+`PUT` stores a manual translation (trimmed, at most 8000 characters) that
+outranks platform and machine rows; `DELETE` removes it. Both answer the
+owner's new summary and `404 not_found` for an unknown owner. `POST
+/translations/request` queues forced machine passes for the listed owners
+(at most 200), or with `missing: true` for every post or video (of
+`ownerType`, or both) lacking a usable translation, whatever its age. When it
+queued any and the run queue is free it starts a `translate` run; `busy: true`
+means the requests wait for the next translate step.
+
 ## Extraction and models
 
-| Method and path                          | Body                                                                                       | Result                                            |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------- |
-| `GET /extraction`                        |                                                                                            | extraction settings                               |
-| `PUT /extraction`                        | any subset of `{keywordEnabled, visionEnabled, messageEnabled, messageAllPosts, keywords}` | extraction settings                               |
-| `GET /llm`                               |                                                                                            | `{providers, models, queue, modelTags}`           |
-| `POST /llm/providers`                    | provider fields                                                                            | `201 {provider}`                                  |
-| `PUT /llm/providers/{id}`                | provider fields                                                                            | `{provider}`                                      |
-| `DELETE /llm/providers/{id}`             |                                                                                            | `204`                                             |
-| `POST /llm/providers/{id}/test`          | `{model?}`                                                                                 | `{ok, method, model, remoteModelCount, provider}` |
-| `POST /llm/providers/{id}/discover`      |                                                                                            | `{provider, models}` remote catalog               |
-| `POST /llm/providers/{id}/models`        | `{models, origin?}`                                                                        | `201 {provider, models}`                          |
-| `PUT /llm/providers/{id}/models`         | one model `{id, ...}`                                                                      | `{provider, model, models}`                       |
-| `POST /llm/providers/{id}/models/remove` | `{ids}`                                                                                    | `{provider, models, removed}`                     |
-| `PUT /llm/queue`                         | `{targets: [{providerId, modelId}]}`                                                       | `{queue}`                                         |
+| Method and path                          | Body                                                                                       | Result                                                    |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| `GET /extraction`                        |                                                                                            | extraction settings                                       |
+| `PUT /extraction`                        | any subset of `{keywordEnabled, visionEnabled, messageEnabled, messageAllPosts, keywords}` | extraction settings                                       |
+| `GET /llm`                               |                                                                                            | `{providers, models, queue, translationQueue, modelTags}` |
+| `POST /llm/providers`                    | provider fields                                                                            | `201 {provider}`                                          |
+| `PUT /llm/providers/{id}`                | provider fields                                                                            | `{provider}`                                              |
+| `DELETE /llm/providers/{id}`             |                                                                                            | `204`                                                     |
+| `POST /llm/providers/{id}/test`          | `{model?}`                                                                                 | `{ok, method, model, remoteModelCount, provider}`         |
+| `POST /llm/providers/{id}/discover`      |                                                                                            | `{provider, models}` remote catalog                       |
+| `POST /llm/providers/{id}/models`        | `{models, origin?}`                                                                        | `201 {provider, models}`                                  |
+| `PUT /llm/providers/{id}/models`         | one model `{id, ...}`                                                                      | `{provider, model, models}`                               |
+| `POST /llm/providers/{id}/models/remove` | `{ids}`                                                                                    | `{provider, models, removed}`                             |
+| `PUT /llm/queue`                         | `{route?, targets: [{providerId, modelId}]}`                                               | `{route, queue}`                                          |
 
 Extraction settings are `{enabled, keywordEnabled, visionEnabled,
 messageEnabled, messageAllPosts, keywords}`; `enabled` is derived: the message
@@ -305,7 +340,10 @@ stage alone, or keyword candidates plus boards. `messageAllPosts` makes the
 message stage select every post instead of only heuristic matches. `queue` is
 the single ordered `[{providerId, modelId}]` list every extraction stage draws
 from; every target names a catalog model (`modelId` is required), and a save
-replaces the whole list. Providers have no default model: a provider response
+replaces the whole list. `route` selects the queue a save replaces: `schedule`
+(the default) or `translate`, the separate `translationQueue` of the
+translate step, whose targets must carry the `text` tag. Removing a model
+removes its targets from both. Providers have no default model: a provider response
 carries no `model` field, a `model` field in a provider write is ignored, and a
 provider test without `{model}` only lists the provider's models. Creating a
 provider or adding catalog models never queues anything. Model IDs may

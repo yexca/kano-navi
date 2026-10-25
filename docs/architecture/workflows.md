@@ -90,7 +90,7 @@ without fetch windows retains the existing incremental behavior described above.
 
 Synchronization is split into modular steps declared in
 `backend-go/internal/jobs` (`StepOrder`), executed in this order: `x`,
-`youtube`, `media`, `schedule`, `reconcile`. `kano-go sync` (`make sync`) runs every step
+`youtube`, `media`, `schedule`, `translate`, `reconcile`. `kano-go sync` (`make sync`) runs every step
 and records the ones disabled by `SKIP_*` as skipped.
 A saved workflow chooses a subset; its run records `sync_runs.source =
 workflow` and exposes per-step progress (`pending`, `running`, `completed`,
@@ -107,13 +107,20 @@ selected alone. Its result counts `considered`, `merged`, `retargeted`,
 `released`, `kept` and `ambiguous` events, and it advances the dashboard
 revision only when a merge decision changed.
 
+`translate` machine-translates X post text and YouTube titles that lack a
+usable translation (see [Translation](sources.md#translation)). Its final
+failure does not abort a run, so `reconcile` still runs after it. It reads
+only the translation queue and records a disabled result while that queue
+is empty. `POST /api/admin/translations/request` starts it alone as a
+`translate` run after queueing operator requests.
+
 A workflow timer is 15 minutes to 7 days. Enabling a timer (or changing its
 interval) plans the next run one interval later; it never fires immediately.
 The server process checks due workflows every 30 seconds and starts one
 through the same single-flight queue as manual and MCP jobs; a due workflow
 that finds the queue busy is retried on the next tick. Two workflows are seeded
-once (`full-refresh` "Full refresh" and `sources-only` "Sources only") without
-timers; deleting them does not recreate them, and seeding never renames an
+once (`full-refresh` "Full refresh", which also translates on a new
+installation, and `sources-only` "Sources only") without timers; deleting them does not recreate them, and seeding never renames an
 existing workflow. Set `WORKFLOW_SCHEDULER_ENABLED=0` to disable timers.
 
 ### Live-status probe

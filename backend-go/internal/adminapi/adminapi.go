@@ -126,6 +126,11 @@ func (a *api) routes() []httpx.Route {
 		{Method: http.MethodGet, Path: "/videos/{id}/history", Handler: a.videoHistory},
 		{Method: http.MethodPut, Path: "/videos/{id}", Handler: a.updateVideo},
 		{Method: http.MethodPost, Path: "/videos/{id}/refresh", Handler: a.refreshVideo},
+
+		{Method: http.MethodGet, Path: "/translations", Handler: a.translationSummary},
+		{Method: http.MethodPost, Path: "/translations/request", Handler: a.requestTranslations},
+		{Method: http.MethodPut, Path: "/translations/{owner}/{id}/{locale}", Handler: a.putManualTranslation},
+		{Method: http.MethodDelete, Path: "/translations/{owner}/{id}/{locale}", Handler: a.deleteManualTranslation},
 	}
 }
 

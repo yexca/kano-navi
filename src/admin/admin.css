@@ -3041,3 +3041,96 @@ button.adm-run-line:hover,
     flex: 1;
   }
 }
+
+/* Translations: chips beside a post or video, and the per-locale editor. */
+.adm-translation-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.adm-translation-status {
+  gap: 4px;
+}
+
+.adm-translation-chip {
+  min-height: 20px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.adm-translation-backlog {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.adm-translation-editor .adm-modal-content {
+  display: grid;
+  gap: 14px;
+}
+
+.adm-translation-original {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.adm-translation-original figcaption,
+.adm-translation-locale header label {
+  color: var(--adm-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.adm-translation-original blockquote {
+  max-height: 180px;
+  margin: 0;
+  padding: 10px 14px;
+  overflow: auto;
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-sunken);
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.adm-translation-locale {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-translation-locale header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adm-translation-locale textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.adm-translation-locale .adm-row-actions {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.adm-translation-reference {
+  margin: 0;
+  color: var(--adm-muted);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.adm-translation-reference span {
+  margin-right: 6px;
+  font-weight: 700;
+}

@@ -170,6 +170,13 @@ func (s *Store) GetPostArchive(ctx context.Context, from, to, account string, pa
 		}
 		items = append(items, post)
 	}
+	refs := make([]*Post, len(items))
+	for i := range items {
+		refs[i] = &items[i]
+	}
+	if err = s.attachPostTranslations(ctx, refs...); err != nil {
+		return nil, err
+	}
 
 	previous, next, err := s.adjacentDates(ctx, "posts", instant, filter, filterArgs, start, end)
 	if err != nil {
@@ -255,6 +262,13 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 	}
 
 	if err = s.pinVideoThumbnails(ctx, items); err != nil {
+		return nil, err
+	}
+	refs := make([]*Video, len(items))
+	for i := range items {
+		refs[i] = &items[i]
+	}
+	if err = s.attachVideoTranslations(ctx, refs...); err != nil {
 		return nil, err
 	}
 	previous, next, err := s.adjacentDates(ctx, "videos", instant, "", nil, start, end)

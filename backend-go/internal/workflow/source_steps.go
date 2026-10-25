@@ -17,11 +17,18 @@ type ScheduleRunner interface {
 	RunSchedule(context.Context) (status string, counts map[string]any, err error)
 }
 
+// TranslateRunner is the machine translation step, with the same result
+// contract as ScheduleRunner.
+type TranslateRunner interface {
+	RunTranslate(context.Context) (status string, counts map[string]any, err error)
+}
+
 type SourceSteps struct {
-	X        *XRecentExecutor
-	Youtube  *ytsource.Adapter
-	Media    *mediadownload.Client
-	Schedule ScheduleRunner
+	X         *XRecentExecutor
+	Youtube   *ytsource.Adapter
+	Media     *mediadownload.Client
+	Schedule  ScheduleRunner
+	Translate TranslateRunner
 	// History serves operator-selected windows through the source APIs.
 	History *HistorySource
 	Store   *sqlite.Store
@@ -88,11 +95,18 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 			status = "partial"
 		}
 		return AttemptResult{Status: status, Result: map[string]any{"attempted": result.Attempted, "ready": result.Ready, "unchanged": result.Unchanged, "failed": result.Failed}}, nil
-	case "schedule":
-		if s.Schedule == nil {
-			break
+	case "schedule", "translate":
+		var status string
+		var counts map[string]any
+		var err error
+		switch {
+		case in.StepID == "schedule" && s.Schedule != nil:
+			status, counts, err = s.Schedule.RunSchedule(ctx)
+		case in.StepID == "translate" && s.Translate != nil:
+			status, counts, err = s.Translate.RunTranslate(ctx)
+		default:
+			return AttemptResult{}, NewStepError("capability_not_migrated", ErrBlocked)
 		}
-		status, counts, err := s.Schedule.RunSchedule(ctx)
 		if ctx.Err() != nil {
 			return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
 		}

@@ -313,6 +313,36 @@ CREATE TABLE timeline (
     raw_json TEXT
   );
 
+CREATE TABLE translation_states (
+    owner_type TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    field TEXT NOT NULL,
+    source_hash TEXT,
+    source_language TEXT,
+    status TEXT NOT NULL DEFAULT 'never',
+    last_attempt_at TEXT,
+    last_error TEXT,
+    requested INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (owner_type, owner_id, field)
+  );
+
+CREATE TABLE translations (
+    owner_type TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    field TEXT NOT NULL,
+    locale TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    platform TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL,
+    source_hash TEXT NOT NULL,
+    provider_id TEXT,
+    model_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (owner_type, owner_id, field, locale, origin, platform)
+  );
+
 CREATE TABLE video_revisions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     video_id TEXT NOT NULL,

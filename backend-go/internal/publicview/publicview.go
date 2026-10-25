@@ -13,6 +13,16 @@ func value(v *string) any {
 	return *v
 }
 
+// publicTranslations keeps the resolved translation of each locale; machine
+// provenance (provider, model, hashes) stays in the console.
+func publicTranslations(set sqlite.TranslationSet) map[string]any {
+	out := map[string]any{}
+	for locale, t := range set.Locales {
+		out[locale] = map[string]any{"text": t.Text, "origin": t.Origin, "platform": value(t.Platform)}
+	}
+	return out
+}
+
 // Dashboard returns a sanitized JSON-ready map. The store types intentionally
 // omit sensitive columns; this second boundary also controls the exact public
 // field set used by the TypeScript service.
@@ -36,7 +46,7 @@ func Dashboard(d *sqlite.Dashboard) map[string]any {
 			media = append(media, map[string]any{"id": value(m.ID), "url": value(m.URL), "status": m.Status, "sourceUrl": value(m.SourceURL), "alt": value(m.Alt), "position": m.Position, "width": valueInt(m.Width), "height": valueInt(m.Height)})
 		}
 		posts = append(posts, map[string]any{
-			"id": p.ID, "source": p.Source, "accountHandle": value(p.AccountHandle), "type": p.Type, "label": value(p.Label), "text": p.Text, "publishedAt": p.PublishedAt, "url": p.URL, "likes": p.Likes, "reposts": p.Reposts, "replies": p.Replies, "mediaUrl": value(p.MediaURL), "mediaAlt": value(p.MediaAlt), "accountUrl": value(p.AccountURL), "media": media, "mediaId": value(p.MediaID), "mediaStatus": p.MediaStatus, "mediaSourceUrl": value(p.MediaSourceURL),
+			"id": p.ID, "source": p.Source, "accountHandle": value(p.AccountHandle), "type": p.Type, "label": value(p.Label), "text": p.Text, "publishedAt": p.PublishedAt, "url": p.URL, "likes": p.Likes, "reposts": p.Reposts, "replies": p.Replies, "mediaUrl": value(p.MediaURL), "mediaAlt": value(p.MediaAlt), "accountUrl": value(p.AccountURL), "media": media, "mediaId": value(p.MediaID), "mediaStatus": p.MediaStatus, "mediaSourceUrl": value(p.MediaSourceURL), "translations": publicTranslations(p.Translations), "sourceLanguage": value(p.Translations.SourceLanguage),
 		})
 	}
 	events := make([]any, 0, len(d.Events))
@@ -45,7 +55,7 @@ func Dashboard(d *sqlite.Dashboard) map[string]any {
 	}
 	videos := make([]any, 0, len(d.Videos))
 	for _, v := range d.Videos {
-		videos = append(videos, map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus)})
+		videos = append(videos, map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus), "translations": publicTranslations(v.Translations), "sourceLanguage": value(v.Translations.SourceLanguage)})
 	}
 	var focus any = nil
 	if f := d.Focus; f != nil {
@@ -112,10 +122,10 @@ func publicPost(p sqlite.Post) map[string]any {
 	for _, m := range p.Media {
 		media = append(media, map[string]any{"id": value(m.ID), "url": value(m.URL), "status": m.Status, "sourceUrl": value(m.SourceURL), "alt": value(m.Alt), "position": m.Position, "width": valueInt(m.Width), "height": valueInt(m.Height)})
 	}
-	return map[string]any{"id": p.ID, "source": p.Source, "accountHandle": value(p.AccountHandle), "type": p.Type, "label": value(p.Label), "text": p.Text, "publishedAt": p.PublishedAt, "url": p.URL, "likes": p.Likes, "reposts": p.Reposts, "replies": p.Replies, "mediaUrl": value(p.MediaURL), "mediaAlt": value(p.MediaAlt), "accountUrl": value(p.AccountURL), "media": media, "mediaId": value(p.MediaID), "mediaStatus": p.MediaStatus, "mediaSourceUrl": value(p.MediaSourceURL)}
+	return map[string]any{"id": p.ID, "source": p.Source, "accountHandle": value(p.AccountHandle), "type": p.Type, "label": value(p.Label), "text": p.Text, "publishedAt": p.PublishedAt, "url": p.URL, "likes": p.Likes, "reposts": p.Reposts, "replies": p.Replies, "mediaUrl": value(p.MediaURL), "mediaAlt": value(p.MediaAlt), "accountUrl": value(p.AccountURL), "media": media, "mediaId": value(p.MediaID), "mediaStatus": p.MediaStatus, "mediaSourceUrl": value(p.MediaSourceURL), "translations": publicTranslations(p.Translations), "sourceLanguage": value(p.Translations.SourceLanguage)}
 }
 func publicVideo(v sqlite.Video) map[string]any {
-	return map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus)}
+	return map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus), "translations": publicTranslations(v.Translations), "sourceLanguage": value(v.Translations.SourceLanguage)}
 }
 func publicAsset(a sqlite.Asset) map[string]any {
 	return map[string]any{"id": a.ID, "kind": a.Kind, "alt": value(a.Alt), "weekStart": value(a.WeekStart), "periodStart": value(a.PeriodStart), "periodEnd": value(a.PeriodEnd), "periodBasis": value(a.PeriodBasis), "sourceAccount": value(a.SourceAccount), "updatedAt": value(a.UpdatedAt), "url": value(a.URL), "sourceUrl": value(a.SourceURL), "mediaId": value(a.MediaID), "mediaStatus": a.MediaStatus, "mediaSourceUrl": value(a.MediaSourceURL)}
@@ -127,7 +137,7 @@ func PublicAsset(a sqlite.Asset) map[string]any { return publicAsset(a) }
 
 // PublicPost and PublicVideo are the archive-facing forms of a post and a
 // video, sharing the dashboard's field boundary.
-func PublicPost(p sqlite.Post) map[string]any { return publicPost(p) }
+func PublicPost(p sqlite.Post) map[string]any   { return publicPost(p) }
 func PublicVideo(v sqlite.Video) map[string]any { return publicVideo(v) }
 func publicProfileMedia(m *sqlite.ProfileMedia) any {
 	if m == nil {

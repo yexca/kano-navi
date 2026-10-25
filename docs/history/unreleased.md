@@ -3,6 +3,19 @@
 <details>
 <summary><strong>Operator console</strong></summary>
 
+- Models has a separate Translation queue for the models that translate X
+  posts and YouTube titles into English and Simplified Chinese.
+- Each X post on the Posts page shows whether its English and Chinese
+  translations are complete and where each comes from (manual, platform or
+  AI). A translation filter, a count of untranslated posts and a Translate
+  missing button queue an incremental pass, and each post's editor saves or
+  clears a manual translation per language or asks the AI to translate it
+  again. New routes: `GET /api/admin/translations`,
+  `POST /api/admin/translations/request` and
+  `PUT`/`DELETE /api/admin/translations/{owner}/{id}/{locale}`.
+  `PUT /api/admin/llm/queue` takes `route`.
+- Each YouTube video on the Videos page has the same translation chips and
+  editor, and the page counts and queues untranslated titles.
 - The Videos page shows each video's locally cached thumbnail, and vertical
   covers stay inside the 16:9 frame.
 - The Schedule page shows merged duplicates with the entry they are hidden
@@ -44,6 +57,11 @@
 <details>
 <summary><strong>Synchronization and extraction</strong></summary>
 
+- A new `translate` workflow step translates X posts and YouTube titles with
+  the translation queue. Manual translations outrank platform translations,
+  which outrank the AI's, and a changed post or title is translated again.
+  Bilibili titles are not machine-translated. `TRANSLATION_SCAN_LIMIT` and
+  `TRANSLATION_LOOKBACK_DAYS` bound it, and `SKIP_LLM` skips it.
 - Thumbnail downloads retry transient failures after 30 minutes, fall back to
   a smaller YouTube size when the larger one was never generated, and pick up
   a replaced cover for upcoming and recent videos.
@@ -89,6 +107,12 @@
 <details>
 <summary><strong>Public pages</strong></summary>
 
+- English and Chinese readers see X posts and video titles in their
+  language when a translation exists. An AI translation is labelled as one,
+  and a post's or the featured video's Show original button switches back
+  to the source wording; spotlight tickets and video rows mark a translated
+  title and show the original on hover.
+  Japanese readers always see the source.
 - In English and Japanese, the schedule no longer shows Chinese reservation
   text such as `YouTube Live / 预约`.
 - A started premiere or release no longer shows as on air for three hours;

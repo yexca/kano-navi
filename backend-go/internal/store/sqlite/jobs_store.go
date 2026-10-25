@@ -14,6 +14,8 @@ const (
 	AdhocSyncWorkflow  = "@sync"
 	AdhocScanWorkflow  = "@scan"
 	AdhocFetchWorkflow = "@fetch"
+	// AdhocTranslateWorkflow is an operator's incremental translation.
+	AdhocTranslateWorkflow = "@translate"
 )
 
 func IsAdhocWorkflow(id string) bool { return strings.HasPrefix(id, "@") }

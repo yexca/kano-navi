@@ -27,6 +27,7 @@ var workflowSteps = []map[string]string{
 	{"id": "youtube", "group": "source"},
 	{"id": "media", "group": "process"},
 	{"id": "schedule", "group": "process"},
+	{"id": "translate", "group": "process"},
 	{"id": "reconcile", "group": "process"},
 }
 
@@ -65,13 +66,13 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 	}
 	var kind string
 	if json.Unmarshal(body["kind"], &kind) != nil {
-		httpx.WriteError(w, httpx.Invalid("kind must be sync, scan, workflow or fetch"))
+		httpx.WriteError(w, httpx.Invalid("kind must be sync, scan, translate, workflow or fetch"))
 		return
 	}
-	allowed := map[string][]string{"sync": {"kind"}, "scan": {"kind"}, "workflow": {"kind", "workflowId"}, "fetch": {"kind", "source", "window"}}
+	allowed := map[string][]string{"sync": {"kind"}, "scan": {"kind"}, "translate": {"kind"}, "workflow": {"kind", "workflowId"}, "fetch": {"kind", "source", "window"}}
 	fields, known := allowed[kind]
 	if !known {
-		httpx.WriteError(w, httpx.Invalid("kind must be sync, scan, workflow or fetch"))
+		httpx.WriteError(w, httpx.Invalid("kind must be sync, scan, translate, workflow or fetch"))
 		return
 	}
 	for key := range body {
@@ -85,6 +86,8 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 	switch kind {
 	case "scan":
 		jobKind = jobs.KindScan
+	case "translate":
+		jobKind = jobs.KindTranslate
 	case "workflow":
 		jobKind = jobs.KindWorkflow
 		if json.Unmarshal(body["workflowId"], &options.WorkflowID) != nil || strings.TrimSpace(options.WorkflowID) == "" {

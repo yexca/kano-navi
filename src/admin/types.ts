@@ -34,7 +34,7 @@ export interface FetchWindow {
 
 export interface Run {
   id: string
-  kind: "sync" | "scan" | "workflow"
+  kind: "sync" | "scan" | "translate" | "workflow"
   status: "queued" | "running" | "completed" | "failed"
   createdAt: string
   startedAt: string | null
@@ -251,6 +251,61 @@ export interface AdminPost {
   llmLastAttemptAt: string | null
   llmLastError: string | null
   llmReprocessRequested: boolean
+  /** Null for posts the translate step does not cover (non-X). */
+  translation: AdminTranslation | null
+}
+
+export type TranslationOwner = "post" | "video"
+export type TranslationLocale = "en" | "zh-CN"
+
+/** One target locale of a post or video in the console. */
+export interface AdminTranslationLocale {
+  locale: TranslationLocale
+  /**
+   * translated, missing, stale (only an outdated machine row), source (the
+   * wording is already in this language) or not_needed (nothing to translate).
+   */
+  status: "translated" | "missing" | "stale" | "source" | "not_needed"
+  origin: "manual" | "platform" | "machine" | null
+  platform: string | null
+  /** The translation readers see. */
+  text: string | null
+  /** The operator's translation, which may predate the current wording. */
+  manual: string | null
+  manualStale: boolean
+  machine: string | null
+  machineAt: string | null
+  model: string | null
+}
+
+export interface AdminTranslation {
+  status: "complete" | "incomplete"
+  sourceLanguage: string | null
+  /** never, success, failed, skipped, or outdated after the wording changed. */
+  machineStatus: string
+  lastAttemptAt: string | null
+  lastError: string | null
+  /** An operator asked for a machine pass the translate step has not run. */
+  requested: boolean
+  locales: AdminTranslationLocale[]
+}
+
+export interface TranslationCounts {
+  total: number
+  incomplete: number
+  requested: number
+}
+
+export interface TranslationSummary {
+  counts: Record<TranslationOwner, TranslationCounts>
+  locales: TranslationLocale[]
+}
+
+export interface TranslationRequestResult {
+  queued: number
+  run: Run | null
+  /** The queue was busy; the requests wait for the next translate step. */
+  busy: boolean
 }
 
 export interface AdminVideo {
@@ -277,6 +332,8 @@ export interface AdminVideo {
   /** A refresh request the next YouTube step has not answered yet. */
   refreshRequestedAt: string | null
   revisions: number
+  /** Null for videos the translate step does not cover (non-YouTube). */
+  translation: AdminTranslation | null
 }
 
 export interface VideoThumbnailPin {
@@ -377,6 +434,8 @@ export interface Model {
   ownedBy: string | null
 }
 
+export type QueueRoute = "schedule" | "translate"
+
 export interface RouteTarget {
   providerId: string
   modelId: string
@@ -387,6 +446,8 @@ export interface LlmCatalog {
   models: Model[]
   /** The single model priority queue every extraction stage draws from. */
   queue: RouteTarget[]
+  /** The separate queue of the translate step; it never falls back. */
+  translationQueue?: RouteTarget[]
   modelTags: string[]
 }
 

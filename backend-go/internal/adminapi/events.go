@@ -39,16 +39,17 @@ func (a *api) listEvents(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) listPosts(w http.ResponseWriter, r *http.Request) {
 	page, err := a.Store.ListAdminPosts(r.Context(), sqlite.AdminPostFilter{
-		Page:      queryInt(r, "page", 1),
-		PageSize:  queryInt(r, "pageSize", 50),
-		Source:    query(r, "source"),
-		Account:   query(r, "account"),
-		From:      query(r, "from"),
-		To:        query(r, "to"),
-		Search:    query(r, "search"),
-		Media:     query(r, "media"),
-		LLM:       query(r, "llm"),
-		Reprocess: queryFlag(r, "reprocess"),
+		Page:        queryInt(r, "page", 1),
+		PageSize:    queryInt(r, "pageSize", 50),
+		Source:      query(r, "source"),
+		Account:     query(r, "account"),
+		From:        query(r, "from"),
+		To:          query(r, "to"),
+		Search:      query(r, "search"),
+		Media:       query(r, "media"),
+		LLM:         query(r, "llm"),
+		Reprocess:   queryFlag(r, "reprocess"),
+		Translation: query(r, "translation"),
 	})
 	if err != nil {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")

@@ -50,7 +50,14 @@ function WorkflowDialog({
   const { api, act } = useAdmin()
   const [name, setName] = useState(workflow?.name || "")
   const [steps, setSteps] = useState<string[]>(
-    workflow?.steps || ["x", "youtube", "media", "schedule", "reconcile"],
+    workflow?.steps || [
+      "x",
+      "youtube",
+      "media",
+      "schedule",
+      "translate",
+      "reconcile",
+    ],
   )
   const [scheduled, setScheduled] = useState(workflow?.scheduleEnabled ?? true)
   const [interval, setInterval] = useState(workflow?.intervalMinutes || 60)

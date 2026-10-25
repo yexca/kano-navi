@@ -38,6 +38,8 @@ belong to the TypeScript initializer. See
 | `llm_route_targets`      | The ordered provider + model failover queue (`route = 'schedule'`) shared by every extraction stage    |
 | `llm_route_providers`    | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                |
 | `workflows`              | Saved step selections, rolling source windows, timer settings, and last/next run metadata              |
+| `translations`           | Manual, platform, and machine translations of post text and video titles per target locale             |
+| `translation_states`     | Per-post/video machine translation state: source hash and language, last attempt, operator request     |
 
 The API maps snake_case columns to camelCase and removes `raw_json`. The
 frontend must not depend on database fields that are not declared in the API
@@ -191,6 +193,49 @@ with the codes and English wording on rows synchronization owns (automatic,
 unlocked, not deleted) and increments the dashboard revision when a row
 changes. Manual locks and tombstones keep their text; the frontend reads those
 legacy values as the same codes and wording.
+
+## Translations
+
+Post text and video titles keep their source wording in `posts.text` and
+`videos.title`. `translations` stores their translations for the target
+locales `en` and `zh-CN` (Japanese readers see the source), keyed by
+`(owner_type, owner_id, field, locale, origin, platform)`: `owner_type` is
+`post` (field `text`) or `video` (field `title`), `origin` is `manual`,
+`platform` or `machine`, and `platform` names the platform of a platform row
+(`youtube`, `bilibili`) and is empty otherwise. One row per origin lets the
+three coexist; readers resolve each locale by precedence: manual, then
+platform (YouTube before Bilibili, then any other), then machine.
+
+Every row stores `source_hash`, the SHA-256 of the trimmed source wording it
+translates; SQL compares it through the deterministic `translation_hash()`
+function. A machine row counts only while its hash matches the current
+wording, so a changed post or title retires it until the translate step
+replaces it. A manual row always counts; the console flags it when the
+wording changed after it was written. Platform rows are owned by the source
+writers that store them (`UpsertPlatformTranslationTx`,
+`DeletePlatformTranslationTx` in `backend-go/internal/store/sqlite/translations.go`),
+which keep them current and remove them when the platform no longer provides
+one; readers do not compare their hash. Automatic writers never change a
+manual row, and every write that changes what readers see increments the
+dashboard revision.
+
+`translation_states` holds one row per post or video the machine step has
+seen: the hash and detected `source_language` (`ja`, `en`, `zh`, `ko`,
+`other`, or `none` when there is nothing to translate) of the wording it last
+attempted, its `status` (`success`, `failed`, `skipped`), the last attempt and
+sanitized error, and `requested`, an operator's request for a forced pass. A
+locale whose language matches the detected source language needs no
+translation, and `none` needs none at all. A post or video is complete when
+every locale it needs has a usable row. The public dashboard, archives and
+video lists add `translations` (`{locale: {text, origin, platform}}`) and
+`sourceLanguage` to posts and videos; providers, models and hashes stay in
+the console. A Bilibili video, which the machine step never translates,
+reports `sourceLanguage` `zh`. A video's translations follow its effective
+title, `COALESCE(manual_title, title)`, so an operator's title correction
+retires its machine translations.
+
+Startup creates both tables in existing snapshots; no post, video or event
+row is rewritten.
 
 ## Duplicate Merging
 

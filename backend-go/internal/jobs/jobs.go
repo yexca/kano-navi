@@ -15,6 +15,12 @@ const (
 	KindWorkflow = "workflow"
 	// KindLive is the YouTube live-status probe, started by its own timer.
 	KindLive = "live"
+	// KindTranslate runs the machine translation step alone, as an
+	// operator's incremental translation does.
+	KindTranslate = "translate"
+
+	// StepTranslate translates post text and video titles.
+	StepTranslate = "translate"
 
 	// StepLive is the probe's only step. It is not part of StepOrder, so
 	// saved workflows and full synchronizations never select it.

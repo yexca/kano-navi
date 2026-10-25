@@ -152,6 +152,8 @@ func verifySchema(ctx context.Context, db schemaQuerier) error {
 		"media_links":            {"media_id", "owner_type", "owner_id", "role", "position", "alt"},
 		"sync_runs":              {"id", "source", "started_at", "finished_at", "status"},
 		"app_settings":           {"key", "value"},
+		"translations":           {"owner_type", "owner_id", "field", "locale", "origin", "platform", "text", "source_hash"},
+		"translation_states":     {"owner_type", "owner_id", "field", "source_hash", "source_language", "status", "requested"},
 	}
 	for table, columns := range required {
 		rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table+")")

@@ -30,6 +30,8 @@ type AdminPost struct {
 	// image's status, or "none" for a text-only post.
 	Media       []AdminPostImage `json:"media"`
 	MediaStatus string           `json:"mediaStatus"`
+	// Translation is nil for posts outside the machine scope (non-X).
+	Translation *AdminTranslation `json:"translation"`
 }
 
 // AdminPostImage is one post image. URL is the local /media URL of a ready
@@ -66,8 +68,31 @@ type AdminVideo struct {
 	CheckedAt          *string `json:"checkedAt"`
 	RefreshRequestedAt *string `json:"refreshRequestedAt"`
 	Revisions          int     `json:"revisions"`
+	// Translation is the title's translation state (translations.go).
+	Translation *AdminTranslation `json:"translation"`
 	// sourceThumbnail is the platform URL the board falls back to.
 	sourceThumbnail *string
+}
+
+// attachAdminVideoTranslations fills each YouTube video's title translation
+// state; other sources are outside the translate step and stay nil.
+func (s *Store) attachAdminVideoTranslations(ctx context.Context, videos []AdminVideo) error {
+	ids := []string{}
+	for i := range videos {
+		if videos[i].Source == "youtube" {
+			ids = append(ids, videos[i].ID)
+		}
+	}
+	states, err := s.AdminTranslations(ctx, TranslationOwnerVideo, ids)
+	if err != nil {
+		return err
+	}
+	for i := range videos {
+		if state, ok := states[videos[i].ID]; ok {
+			videos[i].Translation = &state
+		}
+	}
+	return nil
 }
 
 // AdminThumbnailPin is the cached thumbnail file an operator chose.
@@ -160,6 +185,8 @@ type AdminPostFilter struct {
 	Page, PageSize                                int
 	Source, Account, From, To, Search, Media, LLM string
 	Reprocess                                     bool
+	// Translation is "incomplete", "complete" or "requested".
+	Translation string
 }
 
 // AdminVideoFilter narrows the video list. Status is "published",
@@ -289,6 +316,14 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	if f.Reprocess {
 		clauses = append(clauses, "COALESCE(s.reprocess_requested, 0) = 1")
 	}
+	switch f.Translation {
+	case "incomplete":
+		clauses = append(clauses, "p.source = 'x' AND "+TranslationIncompleteSQL(TranslationOwnerPost, "p"))
+	case "complete":
+		clauses = append(clauses, "p.source = 'x' AND NOT "+TranslationIncompleteSQL(TranslationOwnerPost, "p"))
+	case "requested":
+		clauses = append(clauses, TranslationRequestedSQL(TranslationOwnerPost, "p"))
+	}
 	where := strings.Join(clauses, " AND ")
 	var total int
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE "+where, args...).Scan(&total); err != nil {
@@ -331,6 +366,21 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	for i := range items {
 		if err := s.resolveAdminPostMedia(ctx, &items[i]); err != nil {
 			return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
+		}
+	}
+	ids := []string{}
+	for _, item := range items {
+		if item.Source == "x" {
+			ids = append(ids, item.ID)
+		}
+	}
+	translations, err := s.AdminTranslations(ctx, TranslationOwnerPost, ids)
+	if err != nil {
+		return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
+	}
+	for i := range items {
+		if translation, ok := translations[items[i].ID]; ok {
+			items[i].Translation = &translation
 		}
 	}
 	return AdminPage[AdminPost]{Items: items, Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages}, nil
@@ -419,6 +469,9 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 			return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
 		}
 	}
+	if err := s.attachAdminVideoTranslations(ctx, items); err != nil {
+		return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
+	}
 	featured, err := s.adminFeaturedVideo(ctx, featuredID, items)
 	if err != nil {
 		return AdminVideosPage{}, err
@@ -498,7 +551,11 @@ func (s *Store) AdminVideoByID(ctx context.Context, id string) (AdminVideo, erro
 	if err = s.resolveAdminThumbnail(ctx, &v); err != nil {
 		return AdminVideo{}, fmt.Errorf("%w: video unavailable", ErrUnavailable)
 	}
-	return v, nil
+	one := []AdminVideo{v}
+	if err = s.attachAdminVideoTranslations(ctx, one); err != nil {
+		return AdminVideo{}, fmt.Errorf("%w: video unavailable", ErrUnavailable)
+	}
+	return one[0], nil
 }
 
 // adminFeaturedVideo reuses the listed copy of the pinned video when the page

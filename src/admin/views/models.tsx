@@ -6,6 +6,7 @@ import {
   Check,
   Globe,
   KeyRound,
+  Languages,
   ListOrdered,
   ListPlus,
   Pencil,
@@ -38,6 +39,7 @@ import type {
   Extraction,
   LlmCatalog,
   Provider,
+  QueueRoute,
   RouteTarget,
 } from "@/admin/types"
 import {
@@ -219,26 +221,40 @@ function ExtractionPanel() {
 
 // --- queue ------------------------------------------------------------------
 
+const noTargets: RouteTarget[] = []
+
+/**
+ * One ordered queue: the schedule queue every extraction stage walks, or the
+ * separate translation queue, whose models need the text tag.
+ */
 function QueueEditor({
   catalog,
+  route = "schedule",
   onSaved,
 }: {
   catalog: LlmCatalog
+  route?: QueueRoute
   onSaved: (catalog: LlmCatalog) => void
 }) {
   const { t } = useAppSettings()
   const { api, act } = useAdmin()
-  const [targets, setTargets] = useState<RouteTarget[]>(catalog.queue)
+  const translating = route === "translate"
+  const saved = translating
+    ? catalog.translationQueue || noTargets
+    : catalog.queue
+  const [targets, setTargets] = useState<RouteTarget[]>(saved)
   const [choice, setChoice] = useState("")
   const [busy, setBusy] = useState(false)
-  useEffect(() => setTargets(catalog.queue), [catalog.queue])
-  const dirty = JSON.stringify(targets) !== JSON.stringify(catalog.queue)
+  useEffect(() => setTargets(saved), [saved])
+  const dirty = JSON.stringify(targets) !== JSON.stringify(saved)
   const described = targets.map((target) =>
     describeTarget(target, catalog.providers, catalog.models),
   )
   const usable = described.filter((item) => !item.issue)
   // Each stage picks the first usable model with the capability it needs.
-  const missing = (["text", "image"] as const).filter(
+  const missing = (
+    translating ? (["text"] as const) : (["text", "image"] as const)
+  ).filter(
     (needs) =>
       usable.length > 0 &&
       !usable.some((item) => item.capabilities.includes(needs)),
@@ -246,6 +262,7 @@ function QueueEditor({
   const candidates = catalog.models.filter(
     (model) =>
       model.enabled &&
+      (!translating || model.capabilities.includes("text")) &&
       !targets.some(
         (target) =>
           target.providerId === model.providerId && target.modelId === model.id,
@@ -261,11 +278,16 @@ function QueueEditor({
   const save = async () => {
     setBusy(true)
     const result = await act(
-      () => api.updateQueue(targets),
+      () => api.updateQueue(targets, route),
       "admin.notice.queueSaved",
     )
     setBusy(false)
-    if (result) onSaved({ ...catalog, queue: result.queue })
+    if (result)
+      onSaved(
+        translating
+          ? { ...catalog, translationQueue: result.queue }
+          : { ...catalog, queue: result.queue },
+      )
   }
   return (
     <div className="adm-route">
@@ -316,13 +338,21 @@ function QueueEditor({
         </ol>
       ) : (
         <Empty title={t("admin.route.empty")}>
-          {t("admin.route.emptyHint")}
+          {t(
+            translating
+              ? "admin.route.translationEmptyHint"
+              : "admin.route.emptyHint",
+          )}
         </Empty>
       )}
       {missing.map((needs) => (
         <p key={needs} className="adm-inline-error">
           <TriangleAlert aria-hidden />
-          {t(`admin.route.needs.${needs}`)}
+          {t(
+            translating
+              ? "admin.route.translationNeedsText"
+              : `admin.route.needs.${needs}`,
+          )}
         </p>
       ))}
       <div className="adm-route-add">
@@ -1374,6 +1404,21 @@ export function ModelsView(_: ViewProps) {
           <Loading />
         ) : (
           <QueueEditor catalog={data} onSaved={catalog.setData} />
+        )}
+      </Panel>
+      <Panel
+        icon={Languages}
+        title={t("admin.models.translation")}
+        description={t("admin.models.translationHint")}
+      >
+        {!data ? (
+          <Loading />
+        ) : (
+          <QueueEditor
+            catalog={data}
+            route="translate"
+            onSaved={catalog.setData}
+          />
         )}
       </Panel>
       <Panel

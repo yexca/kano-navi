@@ -61,6 +61,22 @@ reads the Chinese text earlier releases stored, while titles, details and
 operator notes show as stored (see
 [Stored event text](data-model.md#stored-event-text)).
 
+Post text and video titles come with server-resolved `translations` (see
+[Translations](data-model.md#translations)). `src/components/translated-text.tsx`
+chooses what a reader sees: English and Chinese readers get their locale's
+translation by default and Japanese readers always get the source. Block
+text such as a post uses `TranslatedText`, which labels the origin (AI,
+platform or editor) and offers a Show original button; a title inside a
+link, where a button cannot go, uses `TranslationMark`, whose tooltip holds
+the source. Video titles go through
+`src/dashboard/components/translated-title.tsx`: `TranslatedTitle` for a
+title inside a link (spotlight tickets, shelf and archive rows) and
+`TranslatedHeading`, with the button, for the featured video. An operator's
+Featured title from the focus record shows as written. The wording shown
+carries its `lang` attribute. The console's
+completeness chips and translation editor are in
+`src/admin/views/translation-parts.tsx`, shared by posts and videos.
+
 SQLite stores one text per seeded timeline and link row. The board translates
 that text through src/dashboard/seed-copy.ts, keyed by the exact seed wording
 in static-seed.json, so a row whose text was changed shows as stored. Update

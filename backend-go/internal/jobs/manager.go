@@ -12,7 +12,7 @@ import (
 // StepOrder is the catalog execution order: sources first, then the
 // post-processing that consumes what the sources stored, and finally the
 // duplicate-event reconciliation over everything written before it.
-var StepOrder = []string{"x", "youtube", "media", "schedule", "reconcile"}
+var StepOrder = []string{"x", "youtube", "media", "schedule", StepTranslate, "reconcile"}
 
 // NormalizeSteps returns the known step IDs in catalog order.
 func NormalizeSteps(values []string) []string {
@@ -41,7 +41,7 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 	if m == nil || m.Store == nil || m.Queue == nil {
 		return StartResult{}, sqlite.ErrWorkflowUnavailable
 	}
-	if kind != KindScan && kind != KindWorkflow && kind != KindLive {
+	if kind != KindScan && kind != KindWorkflow && kind != KindLive && kind != KindTranslate {
 		kind = KindSync
 	}
 	if triggeredBy == "" {
@@ -81,6 +81,9 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 	case kind == KindLive:
 		source = "youtube-live"
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocLiveWorkflow, Steps: []string{StepLive}}, trigger, nil)
+	case kind == KindTranslate:
+		source = "translate"
+		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocTranslateWorkflow, Steps: []string{StepTranslate}}, trigger, nil)
 	case kind == KindScan:
 		source = "schedule"
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocScanWorkflow, Steps: []string{"schedule"}}, trigger, nil)
@@ -250,6 +253,8 @@ func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun, names m
 		job.Kind = KindScan
 	case sqlite.AdhocLiveWorkflow:
 		job.Kind = KindLive
+	case sqlite.AdhocTranslateWorkflow:
+		job.Kind = KindTranslate
 	}
 	if !sqlite.IsAdhocWorkflow(run.WorkflowID) {
 		id := run.WorkflowID

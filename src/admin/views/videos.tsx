@@ -26,6 +26,10 @@ import {
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { QuickFetch } from "@/admin/views/fetch-parts"
+import {
+  TranslationBacklog,
+  TranslationCell,
+} from "@/admin/views/translation-parts"
 import { VideoEditor } from "@/admin/views/video-editor"
 
 /** Only local, already cached media is shown; never a remote CDN URL. */
@@ -152,11 +156,13 @@ function VideoCard({
   featured,
   onFeature,
   onEdit,
+  onTranslated,
 }: {
   video: AdminVideo
   featured: boolean
   onFeature: (video: AdminVideo | null) => void
   onEdit: (video: AdminVideo) => void
+  onTranslated: () => void
 }) {
   const { t } = useAppSettings()
   const thumbnail = localUrl(video.thumbnailUrl)
@@ -178,6 +184,13 @@ function VideoCard({
         <strong>{video.title}</strong>
         <VideoWhen video={video} />
         <VideoMarks video={video} />
+        <TranslationCell
+          owner="video"
+          id={video.id}
+          original={video.title}
+          translation={video.translation}
+          onChanged={onTranslated}
+        />
         <div className="adm-actions">
           <Button
             size="sm"
@@ -282,6 +295,10 @@ function VideoList() {
             { value: "published", label: t("admin.videos.published") },
           ]}
         />
+        <TranslationBacklog
+          owner="video"
+          onQueued={() => void videos.reload()}
+        />
       </div>
       {!data ? (
         <Loading />
@@ -295,6 +312,7 @@ function VideoList() {
                 featured={video.id === data.featuredVideoId}
                 onFeature={feature}
                 onEdit={(chosen) => setEditing(chosen.id)}
+                onTranslated={() => void videos.reload()}
               />
             ))}
           </div>

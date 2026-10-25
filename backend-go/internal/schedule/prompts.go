@@ -16,11 +16,19 @@ const (
 	routeMessage = "schedule_message"
 	routeBoard   = "schedule_board"
 	routeQueue   = "schedule"
+	// routeTranslate is the separate translation queue; it never falls back
+	// to the schedule queue.
+	routeTranslate = "translate"
 
 	llmMaxRetries = 2
 
 	extractionToolName   = "kano_schedule_extraction"
 	verificationToolName = "kano_schedule_asset_verification"
+	translationToolName  = "kano_text_translation"
+
+	translationInstructions = "Translate one X post or YouTube video title by Kano Mahoro (鹿乃まほろ), a Japanese virtual singer, for readers of an unofficial fan status board. Set sourceLanguage to the language of the text: ja, en, zh, ko or other, or none when it has nothing to translate (only links, hashtags, @mentions, emoji or kaomoji). Translate the whole text into natural English (english) and Simplified Chinese (simplifiedChinese). Keep URLs, hashtags, @mentions, emoji, kaomoji, bracketed channel tags and line breaks as written. Use the usual romanization or official names of people, groups and games, and keep a song title in its original wording unless it has an official translation. Do not add explanations, quotation marks or notes. Return an empty string for a language that matches sourceLanguage, and empty strings for both when sourceLanguage is none."
+
+	translationSchema rawJSON = `{"type":"object","additionalProperties":false,"properties":{"sourceLanguage":{"type":"string","enum":["ja","en","zh","ko","other","none"]},"english":{"type":"string"},"simplifiedChinese":{"type":"string"}},"required":["sourceLanguage","english","simplifiedChinese"]}`
 
 	scheduleInstructions = "First classify whether this single Japanese X post is a concrete schedule notice. Return classification=not_schedule when it is ordinary conversation or has no concrete schedule, and classification=uncertain when the evidence is ambiguous. For classification=schedule, extract only entries explicitly supported by the post text or images. Interpret relative dates from the post publication time in Asia/Tokyo. Never invent a time. Use null time and timePrecision unknown when the date is known but the time is not. Set action=cancel only when the post is evidence that an existing schedule may have been cancelled; this is a judgement for review, never a deletion or definitive cancellation. Put the reason in the root reason field and cite the post wording in evidence. For cancellation, events should identify the affected date/title/time when possible. " + scheduleLanguageInstruction + " Return an empty events array for not_schedule."
 
