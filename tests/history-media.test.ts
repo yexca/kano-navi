@@ -3,17 +3,18 @@ import crypto from "node:crypto"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import test from "node:test"
+import test, { type TestContext } from "node:test"
 
 import {
   mediaIdForSourceUrl,
   packageHistoryMedia,
   sha256ForContent,
+  type HistoryCatalogItem,
 } from "../scripts/package-history-media.ts"
 import { historyMedia } from "../src/history/media.ts"
 import { milestones } from "../src/history/milestones.ts"
 
-async function fixture(t) {
+async function fixture(t: TestContext) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "kano-history-test-"))
   const content = Buffer.concat([
     Buffer.from(
@@ -23,11 +24,13 @@ async function fixture(t) {
     crypto.randomBytes(16),
   ])
   const sourceUrl = "https://images.example.invalid/history.png"
-  const image = {
+  const mediaId = mediaIdForSourceUrl(sourceUrl)
+  assert.ok(mediaId)
+  const image: HistoryCatalogItem = {
     id: "fixture-image",
     filename: "history.png",
     sourceUrl,
-    mediaId: mediaIdForSourceUrl(sourceUrl),
+    mediaId,
     sha256: sha256ForContent(content),
     byteSize: content.length,
     mimeType: "image/png",
@@ -73,13 +76,14 @@ test("history catalog preserves distinct source identities, dates, and milestone
     frames.every(
       (item) =>
         item.sourceKind === "streamArchive" &&
-        item.originalStream.includes("youtube.com/watch?") &&
+        item.originalStream?.includes("youtube.com/watch?") === true &&
         item.dateKind === "stream",
     ),
   )
   const portrait = historyMedia.find(
     (item) => item.id === "12_sona_2026_official_fullbody",
   )
+  assert.ok(portrait)
   assert.equal(portrait.dateKind, "capture")
   assert.equal(portrait.date, "2026-09-30")
 })

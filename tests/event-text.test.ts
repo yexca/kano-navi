@@ -27,9 +27,10 @@ test("stored codes and the earlier Chinese statuses read as codes", () => {
 
 test("every status code has English and Chinese admin labels", () => {
   for (const code of eventStatusCodes) {
-    const key = `admin.event.status.${code}`
+    const key =
+      `admin.event.status.${code}` as keyof (typeof adminMessages)["en"]
     assert.equal(typeof adminMessages.en[key], "string", key)
-    assert.doesNotMatch(adminMessages.en[key], cjk, key)
+    assert.doesNotMatch(String(adminMessages.en[key]), cjk, key)
     assert.equal(typeof adminMessages["zh-CN"][key], "string", key)
   }
 })

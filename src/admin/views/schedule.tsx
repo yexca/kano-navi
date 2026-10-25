@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type SubmitEvent } from "react"
 import {
   CalendarPlus,
   CheckCheck,
@@ -123,7 +123,7 @@ function EventDialog({
   const [busy, setBusy] = useState(false)
   const set = (patch: Partial<Draft>) =>
     setDraft((current) => ({ ...current, ...patch }))
-  const save = async (submit) => {
+  const save = async (submit: SubmitEvent<HTMLFormElement>) => {
     submit.preventDefault()
     setBusy(true)
     const input = inputOf(draft)

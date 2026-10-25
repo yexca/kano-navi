@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type SubmitEvent } from "react"
 import {
   CalendarClock,
   Pencil,
@@ -69,7 +69,7 @@ function WorkflowDialog({
   const options = intervals.includes(interval)
     ? intervals
     : [...intervals, interval].sort((a, b) => a - b)
-  const save = async (event) => {
+  const save = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
     const body = {
@@ -450,7 +450,8 @@ function HistoryPanel() {
           <div className="adm-run-list">
             {runs.data.items.map((listed) => {
               // The overview poll carries fresher progress for the active run.
-              const run = listed.id === activeId ? overview.activeRun : listed
+              const run =
+                (listed.id === activeId && overview?.activeRun) || listed
               return (
                 <div key={run.id}>
                   <RunLine

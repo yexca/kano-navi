@@ -8,18 +8,45 @@ import {
   scheduleSortTime,
 } from "./format.ts"
 import { leadingCandidate, videoIsInFocus } from "./derive-dashboard.ts"
+import type { Dashboard, ScheduleEvent, Video } from "../types.ts"
+
+type SpotlightSummary = Pick<
+  Dashboard["summary"],
+  "nextEvent" | "nextStream" | "latestVideo"
+>
+
+export type SpotlightLink = "watch" | "announcement" | "open"
+
+interface SpotlightCandidate {
+  mode: "next" | "latest"
+  time: string | null
+  dateOnly?: string | null
+  title: string
+  detail?: string | null
+  url: string | null
+  link: SpotlightLink | null
+  thumbnailUrl?: string | null
+  video?: Video
+  event?: ScheduleEvent
+}
+
+export interface SpotlightItem extends SpotlightCandidate {
+  layout: "full" | "compact"
+}
 
 const watchHosts = ["youtube.com", "youtu.be", "twitch.tv"]
 const announcementHosts = ["x.com", "twitter.com"]
 
-function hostMatches(host, domains) {
+function hostMatches(host: string, domains: string[]) {
   return domains.some(
     (domain) => host === domain || host.endsWith(`.${domain}`),
   )
 }
 
 /** What following the ticket opens: the stream, its announcement, or a page. */
-export function spotlightLink(url) {
+export function spotlightLink(
+  url: string | null | undefined,
+): SpotlightLink | null {
   if (!url) return null
   let host = ""
   try {
@@ -34,12 +61,15 @@ export function spotlightLink(url) {
 
 // Only artwork earns the full ticket; a schedule entry without it would leave
 // an empty art band, so it gets the compact date ticket instead.
-function withLayout(item) {
+function withLayout(item: SpotlightCandidate): SpotlightItem {
   return { ...item, layout: item.thumbnailUrl ? "full" : "compact" }
 }
 
-export function pickSpotlight(summary, now) {
-  const candidates = []
+export function pickSpotlight(
+  summary: SpotlightSummary | null | undefined,
+  now: number,
+): SpotlightItem | null {
+  const candidates: SpotlightCandidate[] = []
   if (summary?.nextStream?.scheduledAt) {
     const video = summary.nextStream
     candidates.push({
@@ -57,6 +87,7 @@ export function pickSpotlight(summary, now) {
     const duplicate = candidates.some(
       (candidate) =>
         event.url &&
+        candidate.url &&
         streamIdentity(candidate.url) === streamIdentity(event.url),
     )
     if (!duplicate) {
@@ -79,7 +110,7 @@ export function pickSpotlight(summary, now) {
           eventIsUpcoming(candidate.event, now) ||
           eventIsLive(candidate.event, now)
         )
-      return videoIsInFocus(candidate.video, now)
+      return candidate.video ? videoIsInFocus(candidate.video, now) : false
     })
     .sort(
       (a, b) =>
@@ -91,7 +122,7 @@ export function pickSpotlight(summary, now) {
     now,
     (candidate) => Date.parse(candidate.time || ""),
     (candidate) =>
-      Date.parse((candidate.event || candidate.video).endsAt || ""),
+      Date.parse((candidate.event || candidate.video)?.endsAt || ""),
     (candidate) =>
       confirmedLiveStatus(candidate.event || candidate.video) === "live",
   )
@@ -117,7 +148,10 @@ export function pickSpotlight(summary, now) {
  * Whether a ticket reads On air. A probe-confirmed state wins; only without
  * one does a started time count as live.
  */
-export function spotlightIsLive(item, now) {
+export function spotlightIsLive(
+  item: SpotlightCandidate | null | undefined,
+  now: number,
+) {
   if (item?.mode !== "next" || !item.time) return false
   const confirmed = confirmedLiveStatus(item.event || item.video)
   if (confirmed) return confirmed === "live"
@@ -125,7 +159,10 @@ export function spotlightIsLive(item, now) {
 }
 
 /** The latest video shown under a compact ticket, so the stage keeps a picture. */
-export function pickCompanion(summary, item) {
+export function pickCompanion(
+  summary: SpotlightSummary | null | undefined,
+  item: SpotlightItem | null | undefined,
+) {
   if (item?.layout !== "compact") return null
   const video = summary?.latestVideo
   if (!video || video.url === item.url) return null

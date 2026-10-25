@@ -8,7 +8,14 @@ import type {
   VideoMergeCandidate,
   VideoMergeSuggestion,
 } from "@/admin/types"
-import { Badge, Button, ConfirmButton, Facts, Field } from "@/admin/ui"
+import {
+  Badge,
+  Button,
+  ConfirmButton,
+  Facts,
+  Field,
+  type Tone,
+} from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 
 /** Only local, already cached media is shown; never a remote CDN URL. */
@@ -215,11 +222,11 @@ function Candidates({
   )
 }
 
-const statusTone = {
+const statusTone: Partial<Record<VideoMergeSuggestion["status"], Tone>> = {
   rule: "leaf",
   ambiguous: "honey",
   unverified: "sky",
-} as const
+}
 
 /**
  * Uploads the matching rule merges at its next run, or leaves to the

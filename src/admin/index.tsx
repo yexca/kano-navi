@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type SubmitEvent,
 } from "react"
 import {
   Bot,
@@ -107,7 +108,7 @@ function Login({ onLogin }: { onLogin: (password: string) => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Message | null>(null)
 
-  const submit = async (event) => {
+  const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
     setError(null)

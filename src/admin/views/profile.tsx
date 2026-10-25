@@ -251,13 +251,14 @@ export function ProfileView(_: ViewProps) {
   const { t } = useAppSettings()
   const { api } = useAdmin()
   const media = useResource(() => api.profileMedia(), [])
+  const state = media.data
   return (
     <div className="adm-view">
       <PageHeader
         title={t("admin.profile.title")}
         description={t("admin.profile.description")}
       />
-      {!media.data ? (
+      {!state ? (
         <Loading />
       ) : (
         <div className="adm-grid is-two">
@@ -265,7 +266,7 @@ export function ProfileView(_: ViewProps) {
             <SlotPanel
               key={slot}
               slot={slot}
-              state={media.data}
+              state={state}
               onState={media.setData}
             />
           ))}

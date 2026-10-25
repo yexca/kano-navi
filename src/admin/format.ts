@@ -2,22 +2,25 @@ import type { Translator } from "@/types"
 import { eventStatusCode } from "@/lib/event-text"
 
 // All operator times are shown in Asia/Tokyo, whatever the browser zone.
-const intlLocales = { "zh-CN": "zh-CN", ja: "ja-JP", en: "en-US" }
+const intlLocales: Record<string, string> = {
+  "zh-CN": "zh-CN",
+  ja: "ja-JP",
+  en: "en-US",
+}
 const formatters = new Map<string, Intl.DateTimeFormat>()
 const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>()
 
 function formatter(locale: string, options: Intl.DateTimeFormatOptions) {
   const key = `${locale}:${JSON.stringify(options)}`
-  if (!formatters.has(key)) {
-    formatters.set(
-      key,
-      new Intl.DateTimeFormat(intlLocales[locale] || intlLocales.en, {
-        timeZone: "Asia/Tokyo",
-        ...options,
-      }),
-    )
+  let cached = formatters.get(key)
+  if (!cached) {
+    cached = new Intl.DateTimeFormat(intlLocales[locale] || intlLocales.en, {
+      timeZone: "Asia/Tokyo",
+      ...options,
+    })
+    formatters.set(key, cached)
   }
-  return formatters.get(key)
+  return cached
 }
 
 function valid(value: string | null | undefined) {
@@ -70,16 +73,14 @@ export function formatRelative(
 ) {
   const date = valid(value)
   if (!date) return ""
-  if (!relativeFormatters.has(locale)) {
-    relativeFormatters.set(
-      locale,
-      new Intl.RelativeTimeFormat(intlLocales[locale] || intlLocales.en, {
-        numeric: "auto",
-        style: "short",
-      }),
+  let relative = relativeFormatters.get(locale)
+  if (!relative) {
+    relative = new Intl.RelativeTimeFormat(
+      intlLocales[locale] || intlLocales.en,
+      { numeric: "auto", style: "short" },
     )
+    relativeFormatters.set(locale, relative)
   }
-  const relative = relativeFormatters.get(locale)
   const seconds = Math.round((date.getTime() - now) / 1000)
   for (const [unit, size] of [
     ["day", 86_400],

@@ -46,8 +46,10 @@ export const adminMessages = {
     "admin.pager.total": "{total} total",
 
     "admin.interval.minutes": "{count} min",
-    "admin.interval.hours": ({ count }) => plural(count, "hour", "hours"),
-    "admin.interval.days": ({ count }) => plural(count, "day", "days"),
+    "admin.interval.hours": ({ count }: { count: number }) =>
+      plural(count, "hour", "hours"),
+    "admin.interval.days": ({ count }: { count: number }) =>
+      plural(count, "day", "days"),
 
     "admin.status.running": "Running",
     "admin.status.queued": "Queued",
@@ -111,16 +113,16 @@ export const adminMessages = {
     "admin.overview.attention": "Needs your attention",
     "admin.overview.attentionHint":
       "Automatic results that wait for an operator decision.",
-    "admin.overview.attention.images": ({ count }) =>
+    "admin.overview.attention.images": ({ count }: { count: number }) =>
       count === 1 ? "schedule image to review" : "schedule images to review",
-    "admin.overview.attention.cancellations": ({ count }) =>
+    "admin.overview.attention.cancellations": ({ count }: { count: number }) =>
       count === 1 ? "suspected cancellation" : "suspected cancellations",
-    "admin.overview.attention.posts": ({ count }) =>
+    "admin.overview.attention.posts": ({ count }: { count: number }) =>
       count === 1 ? "post failed extraction" : "posts failed extraction",
     "admin.overview.allClear": "All clear",
     "admin.overview.allClearHint":
       "No images, cancellations or failed posts are waiting.",
-    "admin.overview.reprocessQueued": ({ count }) =>
+    "admin.overview.reprocessQueued": ({ count }: { count: number }) =>
       `${plural(count, "post is", "posts are")} queued for the next schedule scan.`,
     "admin.overview.now": "Right now",
     "admin.overview.idle": "Idle",
@@ -517,10 +519,12 @@ export const adminMessages = {
     "admin.fetch.days": "Days",
     "admin.fetch.backfillDays": "Days per backfill",
     "admin.fetch.daysHint": "1 to 365",
-    "admin.fetch.daysCount": ({ count }) => plural(count, "day", "days"),
+    "admin.fetch.daysCount": ({ count }: { count: number }) =>
+      plural(count, "day", "days"),
     "admin.fetch.count": "Posts per account",
     "admin.fetch.countHint": "1 to 200",
-    "admin.fetch.postsCount": ({ count }) => plural(count, "post", "posts"),
+    "admin.fetch.postsCount": ({ count }: { count: number }) =>
+      plural(count, "post", "posts"),
     "admin.fetch.start": "First day",
     "admin.fetch.end": "Last day",
     "admin.fetch.needsKey.x":

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type SubmitEvent } from "react"
 import {
   Download,
   KeyRound,
@@ -63,7 +63,7 @@ function FetchForm({
     mode === "recent" && windows.includes("range")
       ? "admin.fetch.hint.recentAll"
       : `admin.fetch.hint.${mode}`
-  const submit = async (event) => {
+  const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
     await start({

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import type { Dashboard } from "../src/types.ts"
+import type { Dashboard, ScheduleEvent, Video } from "../src/types.ts"
 import {
   pickCompanion,
   pickSpotlight,
@@ -15,7 +15,7 @@ import { eventIsLive, eventStatus } from "../src/dashboard/format.ts"
 
 const now = Date.parse("2026-10-21T12:00:00Z")
 
-const latestVideo = {
+const latestVideo: Video = {
   id: "latest",
   source: "youtube",
   title: "Synthetic archive",
@@ -28,7 +28,7 @@ const latestVideo = {
   isUpcoming: false,
 }
 
-const dateOnlyEvent = {
+const dateOnlyEvent: ScheduleEvent = {
   id: "event-date-only",
   source: "x",
   title: "Synthetic collab",
@@ -36,7 +36,9 @@ const dateOnlyEvent = {
   startsOn: "2026-10-24",
   startsAt: null,
   endsAt: null,
+  timezone: "Asia/Tokyo",
   timePrecision: "unknown",
+  status: null,
   eventType: "stream",
   url: "https://x.com/example/status/1",
   provenance: "automatic",
@@ -48,17 +50,19 @@ const dateOnlyEvent = {
 test("a schedule entry without artwork gets the compact ticket and the latest video", () => {
   const summary = { nextEvent: dateOnlyEvent, nextStream: null, latestVideo }
   const item = pickSpotlight(summary, now)
-  assert.equal(item.layout, "compact")
+  assert.ok(item)
+  assert.equal(item?.layout, "compact")
   assert.equal(item.link, "announcement")
   assert.equal(item.dateOnly, "2026-10-24")
   assert.equal(item.time, null)
   const companion = pickCompanion(summary, item)
+  assert.ok(companion)
   assert.equal(companion.url, latestVideo.url)
   assert.equal(companion.thumbnailUrl, latestVideo.thumbnailUrl)
 })
 
 test("a reserved stream with artwork keeps the full ticket without a companion", () => {
-  const nextStream = {
+  const nextStream: Video = {
     ...latestVideo,
     id: "reserved",
     url: "https://www.youtube.com/watch?v=synthetic02",
@@ -69,7 +73,8 @@ test("a reserved stream with artwork keeps the full ticket without a companion",
   }
   const summary = { nextEvent: dateOnlyEvent, nextStream, latestVideo }
   const item = pickSpotlight(summary, now)
-  assert.equal(item.layout, "full")
+  assert.ok(item)
+  assert.equal(item?.layout, "full")
   assert.equal(item.link, "watch")
   assert.equal(item.url, nextStream.url)
   assert.equal(pickCompanion(summary, item), null)
@@ -78,8 +83,9 @@ test("a reserved stream with artwork keeps the full ticket without a companion",
 test("the latest-video fallback stays a full ticket", () => {
   const summary = { nextEvent: null, nextStream: null, latestVideo }
   const item = pickSpotlight(summary, now)
+  assert.ok(item)
   assert.equal(item.mode, "latest")
-  assert.equal(item.layout, "full")
+  assert.equal(item?.layout, "full")
   assert.equal(pickCompanion(summary, item), null)
 })
 
@@ -110,7 +116,7 @@ test("links name what they open", () => {
 
 const evening = Date.parse("2026-10-24T11:24:00Z")
 
-function scheduled(overrides) {
+function scheduled(overrides: Partial<ScheduleEvent>): ScheduleEvent {
   return {
     ...dateOnlyEvent,
     source: "youtube",
@@ -139,7 +145,7 @@ test("only streams are presumed live without an explicit end", () => {
   )
 })
 
-function snapshot(events, videos = []): Dashboard {
+function snapshot(events: ScheduleEvent[], videos: Video[] = []): Dashboard {
   return {
     profile: {
       displayName: "Synthetic",
@@ -187,8 +193,8 @@ test("a started premiere does not hold the stage before a later stream", () => {
     startsAt: "2026-10-24T12:00:00Z",
   })
   const derived = deriveDashboardAt(snapshot([premiere, collab]), evening)
-  assert.equal(derived.summary.nextEvent.id, "collab")
-  assert.equal(pickSpotlight(derived.summary, evening).event.id, "collab")
+  assert.equal(derived.summary.nextEvent?.id, "collab")
+  assert.equal(pickSpotlight(derived.summary, evening)?.event?.id, "collab")
 })
 
 test("a presumed-live stream yields once a later reservation is near", () => {
@@ -202,9 +208,9 @@ test("a presumed-live stream yields once a later reservation is near", () => {
     eventType: "stream",
     startsAt: "2026-10-24T12:00:00Z",
   })
-  const at = (time) =>
+  const at = (time: string) =>
     deriveDashboardAt(snapshot([earlier, later]), Date.parse(time)).summary
-      .nextEvent.id
+      .nextEvent?.id
   assert.equal(at("2026-10-24T11:20:00Z"), "earlier")
   assert.equal(at("2026-10-24T11:31:00Z"), "later")
   assert.equal(at("2026-10-24T12:05:00Z"), "later")
@@ -214,7 +220,7 @@ test("a presumed-live stream yields once a later reservation is near", () => {
     snapshot([ending, later]),
     Date.parse("2026-10-24T11:40:00Z"),
   ).summary
-  assert.equal(summary.nextEvent.id, "earlier")
+  assert.equal(summary.nextEvent?.id, "earlier")
 })
 
 test("the spotlight lets a presumed-live video yield to a near event", () => {
@@ -234,7 +240,7 @@ test("the spotlight lets a presumed-live video yield to a near event", () => {
     url: "https://x.com/example/status/2",
   })
   const item = pickSpotlight({ nextStream, nextEvent, latestVideo }, evening)
-  assert.equal(item.event.id, "near")
+  assert.equal(item?.event?.id, "near")
 })
 
 test("an event for the same YouTube video is not a second candidate", () => {
@@ -254,8 +260,8 @@ test("an event for the same YouTube video is not a second candidate", () => {
     url: "https://www.youtube.com/live/synthetic04?si=share",
   })
   const item = pickSpotlight({ nextStream, nextEvent, latestVideo }, evening)
-  assert.equal(item.video.id, "synthetic04")
-  assert.equal(item.layout, "full")
+  assert.equal(item?.video?.id, "synthetic04")
+  assert.equal(item?.layout, "full")
 })
 
 const longAgo = "2026-10-24T06:00:00Z"
@@ -289,7 +295,7 @@ test("a confirmed live stream stays on air past the start-time grace", () => {
     },
     evening,
   )
-  assert.equal(item.video.id, "long-live")
+  assert.equal(item?.video?.id, "long-live")
   assert.equal(spotlightIsLive(item, evening), true)
 })
 
@@ -323,7 +329,7 @@ test("a confirmed end or waiting room is never on air", () => {
     { nextStream: waiting, nextEvent: null, latestVideo },
     evening,
   )
-  assert.equal(item.video.id, "late")
+  assert.equal(item?.video?.id, "late")
   assert.equal(spotlightIsLive(item, evening), false)
   // Without a probe result the start time is the fallback.
   assert.equal(
@@ -352,8 +358,8 @@ test("a confirmed live stream keeps the stage before a near reservation", () => 
     eventType: "stream",
     startsAt: "2026-10-24T11:40:00Z",
   })
-  const lead = (events) =>
-    deriveDashboardAt(snapshot(events), evening).summary.nextEvent.id
+  const lead = (events: ScheduleEvent[]) =>
+    deriveDashboardAt(snapshot(events), evening).summary.nextEvent?.id
   assert.equal(lead([live, later]), "later")
   assert.equal(lead([{ ...live, liveStatus: "live" }, later]), "live")
 })
@@ -372,11 +378,11 @@ test("the schedule reads On air exactly while the stage does", () => {
     endsAt: "2026-10-24T11:30:00Z",
     url: "https://www.youtube.com/watch?v=synthetic06",
   })
-  const onStage = (event, at) => {
+  const onStage = (event: ScheduleEvent, at: number) => {
     const { summary } = deriveDashboardAt(snapshot([event]), at)
     return spotlightIsLive(pickSpotlight(summary, at), at)
   }
-  const cases = [
+  const cases: { event: ScheduleEvent; time: string; status: string }[] = [
     { event: stream, time: "2026-10-24T08:59:00Z", status: "upcoming" },
     // Presumed live for the start-time grace, then ended.
     { event: stream, time: "2026-10-24T11:24:00Z", status: "live" },

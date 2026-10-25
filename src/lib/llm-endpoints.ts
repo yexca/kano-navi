@@ -8,7 +8,7 @@ export function providerApiRoot(baseUrl: string) {
   try {
     const url = new URL(base)
     const path = url.pathname.replace(/\/+$/u, "")
-    const roots = {
+    const roots: Record<string, string> = {
       "openrouter.ai": "/api/v1",
       "generativelanguage.googleapis.com": "/v1beta/openai",
       "dashscope.aliyuncs.com": "/compatible-mode/v1",

@@ -46,6 +46,9 @@ interface ViewerImage {
   alt?: string
 }
 
+/** Images offered to the viewer; entries whose media is not cached are skipped. */
+type ViewerCandidate = Omit<ViewerImage, "url"> & { url: string | null }
+
 function syncStateFor(
   meta: Dashboard["meta"],
   error: Error | null,
@@ -150,8 +153,8 @@ export function DashboardApp() {
     )
   }, [reload])
 
-  const openImages = useCallback((items: ViewerImage[], index: number) => {
-    const ready = items.filter((item) => item.url)
+  const openImages = useCallback((items: ViewerCandidate[], index: number) => {
+    const ready = items.filter((item): item is ViewerImage => Boolean(item.url))
     if (ready.length) setViewer({ items: ready, index: Math.max(0, index) })
   }, [])
   const openScheduleImage = useCallback(
@@ -236,7 +239,7 @@ export function DashboardApp() {
   }
   const featuredVideoId = Object.hasOwn(meta, "featuredVideoId")
     ? meta.featuredVideoId
-    : dashboard.focus?.videoId
+    : (dashboard.focus?.videoId ?? null)
 
   return (
     <div className="site board" id="top">

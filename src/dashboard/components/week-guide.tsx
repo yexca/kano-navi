@@ -53,8 +53,12 @@ function groupByDay(
   for (const event of sortEvents(events)) {
     const key = eventDateKey(event)
     if (key < range.from || key > range.to) continue
-    if (!grouped.has(key)) grouped.set(key, [])
-    grouped.get(key).push(event)
+    let day = grouped.get(key)
+    if (!day) {
+      day = []
+      grouped.set(key, day)
+    }
+    day.push(event)
   }
   return grouped
 }
@@ -434,7 +438,7 @@ export function ScheduleMonth({
         error={error}
         onRetry={onRetry}
         loading={!archive && isLoading}
-        empty={Boolean(archive) && !archive.total}
+        empty={Boolean(archive && !archive.total)}
         emptyTitle={t("schedule.emptyMonth")}
         hint={t("schedule.emptyHint")}
         adjacent={archive?.adjacent}
@@ -701,7 +705,7 @@ export function WeekGuide({
               aria-label={t("schedule.imageView")}
             >
               <img
-                src={scheduleImage.url}
+                src={scheduleImage.url ?? undefined}
                 alt={scheduleImage.alt || t("schedule.imageAlt")}
                 loading="lazy"
               />

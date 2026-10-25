@@ -312,7 +312,7 @@ export function VideoArchive({
         error={error}
         onRetry={onRetry}
         loading={!archive && isLoading}
-        empty={Boolean(archive) && !archive.items.length}
+        empty={Boolean(archive && !archive.items.length)}
         emptyTitle={t("videos.archiveEmpty")}
         adjacent={archive?.adjacent}
         onJump={onJump}

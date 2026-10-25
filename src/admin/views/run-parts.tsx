@@ -1,4 +1,4 @@
-import type { SVGProps } from "react"
+import type { ComponentType, SVGProps } from "react"
 import { AtSign, Combine, ImageDown, RadioTower, Sparkles } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
@@ -9,6 +9,7 @@ import {
   statusTone,
 } from "@/admin/format"
 import type { Run } from "@/admin/types"
+import type { Translator } from "@/types"
 import { StatusBadge, Spinner } from "@/admin/ui"
 import { cn } from "@/lib/utils"
 import { YouTubeLogo } from "@/site/links"
@@ -19,7 +20,10 @@ function YouTubeIcon(props: SVGProps<SVGSVGElement>) {
   return <YouTubeLogo width={24} height={24} {...props} />
 }
 
-export const stepIcons = {
+/** Lucide icons and the YouTube logo, used as `<Icon aria-hidden />`. */
+type StepIcon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>
+
+export const stepIcons: Record<string, StepIcon> = {
   x: AtSign,
   youtube: YouTubeIcon,
   media: ImageDown,
@@ -54,7 +58,7 @@ export function RunSteps({ run }: { run: Run }) {
   )
 }
 
-export function runTitle(run: Run, t) {
+export function runTitle(run: Run, t: Translator) {
   if (run.workflowName) return run.workflowName
   if (run.kind === "workflow" && run.fetchWindows) {
     const sources = Object.keys(run.fetchWindows)

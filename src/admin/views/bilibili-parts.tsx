@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type SubmitEvent } from "react"
 import { KeyRound, Plus, ShieldAlert, Tv } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
@@ -26,7 +26,7 @@ export function BilibiliSource({
   const usable = Boolean(status?.available && !status.skipped)
   const blocked =
     status?.blockedUntil && Date.parse(status.blockedUntil) > Date.now()
-  const add = async (submit) => {
+  const add = async (submit: SubmitEvent<HTMLFormElement>) => {
     submit.preventDefault()
     if (!input.trim()) return
     setBusy(true)
@@ -75,7 +75,7 @@ export function BilibiliSource({
             [
               t("admin.bilibili.interval"),
               t("admin.bilibili.everyMinutes", {
-                count: status.minIntervalMinutes,
+                count: status.minIntervalMinutes ?? 0,
               }),
             ],
             [

@@ -456,7 +456,11 @@ function ProfileCard({
         ) : null}
       </div>
       <div className="profile-body">
-        <img className="profile-avatar" src={profile.avatarUrl} alt="" />
+        <img
+          className="profile-avatar"
+          src={profile.avatarUrl ?? undefined}
+          alt=""
+        />
         <p className="kicker">{t("hero.kicker")}</p>
         <h1 id="profile-name" className="profile-name">
           {profile.displayName}

@@ -15,6 +15,12 @@ export interface HistoryCatalogItem {
   mimeType: string
 }
 
+// Untrusted manifest entries: fields are validated before use.
+interface ArchiveManifestRecord {
+  filename?: unknown
+  file?: unknown
+}
+
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 const projectRoot = path.resolve(
@@ -82,8 +88,8 @@ export async function prepareHistoryMedia(
   )
   if (!Array.isArray(manifest.images))
     throw new Error("invalid history archive manifest")
-  const records = new Map<string, { file: string }>(
-    manifest.images.map((item) => [item.filename, item]),
+  const records = new Map<unknown, ArchiveManifestRecord>(
+    manifest.images.map((item: ArchiveManifestRecord) => [item.filename, item]),
   )
   const prepared: { item: HistoryCatalogItem; content: Buffer }[] = []
 
@@ -169,9 +175,11 @@ if (
       )
     } catch (error) {
       console.error(
-        error.code
+        error instanceof Error && "code" in error && error.code
           ? "Unable to read the local history archive."
-          : error.message,
+          : error instanceof Error
+            ? error.message
+            : String(error),
       )
       process.exitCode = 1
     }

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict"
 import path from "node:path"
-import test from "node:test"
+import test, { type TestContext } from "node:test"
 import { createElement } from "react"
 import { act, create, type ReactTestRenderer } from "react-test-renderer"
 import { createServer } from "vite"
+
+type ProbeProps = { request: unknown; revision?: number | null }
 
 test("month archives page by revision, follow the board and cancel on close", async (t) => {
   // Load the actual hook with its normal frontend imports, without the runtime
@@ -20,7 +22,7 @@ test("month archives page by revision, follow the board and cancel on close", as
       "/src/dashboard/use-dashboard.ts",
     )
     await vite.close()
-    const setup = async (context, initial) => {
+    const setup = async (context: TestContext, initial: ProbeProps) => {
       const previous = (globalThis as any).IS_REACT_ACT_ENVIRONMENT
       ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
       const requests: {
@@ -28,14 +30,22 @@ test("month archives page by revision, follow the board and cancel on close", as
         signal: AbortSignal
         resolve: (response: Response) => void
       }[] = []
-      context.mock.method(globalThis, "fetch", (url, options) => {
-        return new Promise<Response>((resolve) =>
-          requests.push({ url: String(url), signal: options.signal, resolve }),
-        )
-      })
+      context.mock.method(
+        globalThis,
+        "fetch",
+        (url: RequestInfo | URL, options: { signal: AbortSignal }) => {
+          return new Promise<Response>((resolve) =>
+            requests.push({
+              url: String(url),
+              signal: options.signal,
+              resolve,
+            }),
+          )
+        },
+      )
       let value: ReturnType<typeof useArchive>
       let root: ReactTestRenderer
-      function Probe({ request, revision }) {
+      function Probe({ request, revision }: ProbeProps) {
         value = useArchive(request, revision)
         return null
       }
@@ -63,13 +73,14 @@ test("month archives page by revision, follow the board and cancel on close", as
             json: async () => payload,
           } as Response),
         )
-      const rerender = async (props) =>
+      const rerender = async (props: ProbeProps) =>
         act(async () => root.update(createElement(Probe, props)))
       const unmount = async () => {
         await act(async () => root.unmount())
         ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = previous
       }
-      const ids = () => value.archive?.items.map((item) => item.id).join(",")
+      const ids = () =>
+        value.archive?.items.map((item: { id: string }) => item.id).join(",")
       return {
         requests,
         page,

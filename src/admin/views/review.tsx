@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, type SubmitEvent } from "react"
 import {
   CalendarCheck,
   CalendarRange,
@@ -68,7 +68,7 @@ function PeriodDialog({
   const [end, setEnd] = useState(image.periodEnd || "")
   const [reason, setReason] = useState(image.periodReason || "")
   const [busy, setBusy] = useState(false)
-  const save = async (event) => {
+  const save = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
     const result = await act(

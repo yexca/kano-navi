@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type SubmitEvent } from "react"
 import { ExternalLink, History, ImageOff, RefreshCw } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
@@ -102,7 +102,7 @@ export function VideoEditor({
       })
   }, [data, draft])
 
-  const save = async (submit) => {
+  const save = async (submit: SubmitEvent<HTMLFormElement>) => {
     submit.preventDefault()
     if (!draft || !data) return
     const file = data.thumbnails.find(

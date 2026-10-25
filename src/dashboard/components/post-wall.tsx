@@ -360,7 +360,7 @@ export function PostArchive({
         error={error}
         onRetry={onRetry}
         loading={!archive && isLoading}
-        empty={Boolean(archive) && !archive.items.length}
+        empty={Boolean(archive && !archive.items.length)}
         emptyTitle={t("feed.archiveEmpty")}
         adjacent={archive?.adjacent}
         onJump={onJump}

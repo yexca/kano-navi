@@ -12,10 +12,15 @@ import {
   parsePrivacyAllowlist,
   repositoryFiles,
   scanLine,
+  type ApprovedHosts,
+  type SensitiveFinding,
 } from "./check-sensitive.ts"
 
-function findingsFor(text, approvedHosts = new Map()) {
-  const findings = []
+function findingsFor(
+  text: string,
+  approvedHosts: ApprovedHosts = new Map(),
+): SensitiveFinding[] {
+  const findings: SensitiveFinding[] = []
   scanLine({ file: "fixture.txt", line: 1, text }, findings, approvedHosts)
   return findings
 }
@@ -127,7 +132,7 @@ test("rejects malformed allowlist documents", () => {
 test("lists Git-visible files, skipping ignored ones but keeping tracked ones", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "kano-sensitive-"))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
-  const git = (...args) =>
+  const git = (...args: string[]) =>
     assert.equal(spawnSync("git", args, { cwd: root }).status, 0)
   git("init", "--quiet")
   fs.writeFileSync(path.join(root, ".gitignore"), "*.log\n.tool/\n")
