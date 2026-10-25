@@ -106,6 +106,9 @@ type AdminPage[T any] struct {
 type AdminVideosPage struct {
 	AdminPage[AdminVideo]
 	FeaturedVideoID *string `json:"featuredVideoId"`
+	// FeaturedVideo is the pinned video itself, whatever page or filter is
+	// listed, so the console can show and clear it.
+	FeaturedVideo *AdminVideo `json:"featuredVideo"`
 }
 
 type AdminRunsPage struct {
@@ -329,24 +332,17 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 	totalPages := pageCount(total, pageSize)
 	page = safePage(page, totalPages)
 	offset := (page - 1) * pageSize
-	rows, err := s.db.QueryContext(ctx, `SELECT v.id,v.source,v.title,v.published_at,v.scheduled_at,v.url,v.thumbnail_url,v.kind,COALESCE(v.is_upcoming,0) FROM videos v WHERE `+where+` ORDER BY julianday(COALESCE(v.scheduled_at,v.published_at)) DESC,v.id ASC LIMIT ? OFFSET ?`, append(args, pageSize, offset)...)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+adminVideoColumns+` FROM videos v WHERE `+where+` ORDER BY julianday(COALESCE(v.scheduled_at,v.published_at)) DESC,v.id ASC LIMIT ? OFFSET ?`, append(args, pageSize, offset)...)
 	if err != nil {
 		return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
 	}
 	defer rows.Close()
 	items := []AdminVideo{}
 	for rows.Next() {
-		var v AdminVideo
-		var published, scheduled, thumbnail, kind sql.NullString
-		var upcoming int
-		if err := rows.Scan(&v.ID, &v.Source, &v.Title, &published, &scheduled, &v.URL, &thumbnail, &kind, &upcoming); err != nil {
+		v, err := scanAdminVideo(rows)
+		if err != nil {
 			return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
 		}
-		v.PublishedAt = nullString(published)
-		v.ScheduledAt = nullString(scheduled)
-		v.ThumbnailURL = nullString(thumbnail)
-		v.Kind = nullString(kind)
-		v.IsUpcoming = upcoming != 0
 		items = append(items, v)
 	}
 	if err := rows.Err(); err != nil {
@@ -361,10 +357,59 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 		}
 		items[i].ThumbnailURL, items[i].ThumbnailStatus = ref.PublicURL, ref.Status
 	}
+	featured, err := s.adminFeaturedVideo(ctx, featuredID, items)
+	if err != nil {
+		return AdminVideosPage{}, err
+	}
 	return AdminVideosPage{
 		AdminPage:       AdminPage[AdminVideo]{Items: items, Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages},
 		FeaturedVideoID: featuredID,
+		FeaturedVideo:   featured,
 	}, nil
+}
+
+const adminVideoColumns = `v.id,v.source,v.title,v.published_at,v.scheduled_at,v.url,v.thumbnail_url,v.kind,COALESCE(v.is_upcoming,0)`
+
+func scanAdminVideo(row scanner) (AdminVideo, error) {
+	var v AdminVideo
+	var published, scheduled, thumbnail, kind sql.NullString
+	var upcoming int
+	if err := row.Scan(&v.ID, &v.Source, &v.Title, &published, &scheduled, &v.URL, &thumbnail, &kind, &upcoming); err != nil {
+		return AdminVideo{}, err
+	}
+	v.PublishedAt = nullString(published)
+	v.ScheduledAt = nullString(scheduled)
+	v.ThumbnailURL = nullString(thumbnail)
+	v.Kind = nullString(kind)
+	v.IsUpcoming = upcoming != 0
+	return v, nil
+}
+
+// adminFeaturedVideo reuses the listed copy of the pinned video when the page
+// holds it and reads it by ID otherwise.
+func (s *Store) adminFeaturedVideo(ctx context.Context, id *string, listed []AdminVideo) (*AdminVideo, error) {
+	if id == nil {
+		return nil, nil
+	}
+	for i := range listed {
+		if listed[i].ID == *id {
+			v := listed[i]
+			return &v, nil
+		}
+	}
+	v, err := scanAdminVideo(s.db.QueryRowContext(ctx, `SELECT `+adminVideoColumns+` FROM videos v WHERE v.id=?`, *id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%w: featured video unavailable", ErrUnavailable)
+	}
+	ref, err := s.resolveMedia(ctx, v.ThumbnailURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: featured video unavailable", ErrUnavailable)
+	}
+	v.ThumbnailURL, v.ThumbnailStatus = ref.PublicURL, ref.Status
+	return &v, nil
 }
 
 func (s *Store) featuredVideoID(ctx context.Context) (*string, error) {

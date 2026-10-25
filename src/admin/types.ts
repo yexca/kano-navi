@@ -249,6 +249,12 @@ export interface AdminVideo {
   isUpcoming: boolean
 }
 
+export interface AdminVideosPage extends Page<AdminVideo> {
+  featuredVideoId: string | null
+  /** The pinned video itself, whatever page or filter is listed. */
+  featuredVideo: AdminVideo | null
+}
+
 export interface ProfileMedia {
   id: string
   slot: "avatar" | "banner"

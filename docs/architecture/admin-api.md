@@ -207,14 +207,17 @@ alias); `none` never needs review and keeps `previewUrl` null.
 
 ## Videos
 
-| Method and path        | Body / query                                              | Result                      |
-| ---------------------- | --------------------------------------------------------- | --------------------------- |
-| `GET /videos`          | `page`, `pageSize` (≤ 200), `status`, `kind`, `thumbnail` | list plus `featuredVideoId` |
-| `PUT /videos/featured` | `{videoId}` (`null` restores automatic selection)         | `{featuredVideoId}`         |
+| Method and path        | Body / query                                              | Result                                       |
+| ---------------------- | --------------------------------------------------------- | -------------------------------------------- |
+| `GET /videos`          | `page`, `pageSize` (≤ 200), `status`, `kind`, `thumbnail` | list plus `featuredVideoId`, `featuredVideo` |
+| `PUT /videos/featured` | `{videoId}` (`null` restores automatic selection)         | `{featuredVideoId}`                          |
 
 Each video's `thumbnailUrl` is the local `/media/<id>?v=<sha256>` URL of its
 cached thumbnail, or `null` until that file is ready; the remote CDN address is
 never returned. `thumbnailStatus` is `ready`, `pending`, `failed` or `missing`.
+
+`featuredVideo` is the pinned video in the same shape, whatever page or filter
+is listed, or `null` while the board chooses automatically.
 
 Changing the featured video advances the dashboard revision.
 

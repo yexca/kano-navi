@@ -20,7 +20,7 @@ import {
 import type {
   AdminEvent,
   AdminPost,
-  AdminVideo,
+  AdminVideosPage,
   DiscoveredModel,
   EventInput,
   Extraction,
@@ -157,9 +157,7 @@ function createClient(run: Runner, slow: Runner) {
       ),
 
     videos: (filters: Record<string, any>) =>
-      get<Page<AdminVideo> & { featuredVideoId: string | null }>(
-        `/videos${query(filters)}`,
-      ),
+      get<AdminVideosPage>(`/videos${query(filters)}`),
     setFeatured: (videoId: string | null) =>
       send<{ featuredVideoId: string | null }>("PUT", "/videos/featured", {
         videoId,

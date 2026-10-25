@@ -12,6 +12,13 @@
   history as "Live-status probe".
 - Schedule status badges are translated, including the Chinese statuses that
   older manual entries still store.
+- The Posts page is a paged table with separate columns for the source and
+  time, the text, the extraction state and the actions. A narrower page
+  moves the source above the text, and a phone stacks each row.
+- The Videos page shows the pinned featured video above the list, even when
+  it is on another page or outside the filter, and returns to the automatic
+  choice in one click. `GET /api/admin/videos` adds `featuredVideo`.
+- A post queued for extraction no longer shows "Queued" twice.
 
 </details>
 

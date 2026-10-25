@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ExternalLink, ImageOff, Star, StarOff } from "lucide-react"
+import { ExternalLink, ImageOff, Sparkles, Star, StarOff } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
@@ -23,6 +23,91 @@ function localUrl(value: string | null | undefined) {
   return value && value.startsWith("/") ? value : null
 }
 
+function VideoWhen({ video }: { video: AdminVideo }) {
+  const { t, locale } = useAppSettings()
+  return (
+    <small>
+      {video.isUpcoming
+        ? t("admin.videos.scheduled", {
+            time: formatDateTime(video.scheduledAt, locale),
+          })
+        : formatDateTime(video.publishedAt, locale)}
+      {video.kind ? ` · ${video.kind}` : ""}
+    </small>
+  )
+}
+
+/**
+ * The pinned video, wherever the list is paged or filtered, with a one-click
+ * return to the automatic choice.
+ */
+function FeaturedVideo({
+  video,
+  onClear,
+}: {
+  video: AdminVideo | null
+  onClear: () => Promise<void>
+}) {
+  const { t } = useAppSettings()
+  const [busy, setBusy] = useState(false)
+  if (!video)
+    return (
+      <div className="adm-featured is-automatic">
+        <span className="adm-featured-icon">
+          <Sparkles aria-hidden />
+        </span>
+        <div className="adm-featured-body">
+          <strong>{t("admin.videos.none")}</strong>
+          <small>{t("admin.videos.automatic")}</small>
+        </div>
+      </div>
+    )
+  const thumbnail = localUrl(video.thumbnailUrl)
+  return (
+    <div className="adm-featured">
+      <div className="adm-featured-thumb">
+        {thumbnail ? (
+          <img src={thumbnail} alt="" loading="lazy" />
+        ) : (
+          <ImageOff aria-hidden />
+        )}
+      </div>
+      <div className="adm-featured-body">
+        <span className="adm-featured-label">
+          <Star aria-hidden />
+          {t("admin.videos.current")}
+        </span>
+        <strong>{video.title}</strong>
+        <VideoWhen video={video} />
+      </div>
+      <div className="adm-actions">
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={StarOff}
+          busy={busy}
+          onClick={async () => {
+            setBusy(true)
+            await onClear()
+            setBusy(false)
+          }}
+        >
+          {t("admin.videos.unfeature")}
+        </Button>
+        <a
+          className="adm-link"
+          href={video.url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {t("admin.videos.open")}
+          <ExternalLink aria-hidden />
+        </a>
+      </div>
+    </div>
+  )
+}
+
 function VideoCard({
   video,
   featured,
@@ -30,9 +115,9 @@ function VideoCard({
 }: {
   video: AdminVideo
   featured: boolean
-  onFeature: (id: string | null) => void
+  onFeature: (video: AdminVideo | null) => void
 }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const thumbnail = localUrl(video.thumbnailUrl)
   return (
     <article className={`adm-video${featured ? " is-featured" : ""}`}>
@@ -50,14 +135,7 @@ function VideoCard({
       </div>
       <div className="adm-video-body">
         <strong>{video.title}</strong>
-        <small>
-          {video.isUpcoming
-            ? t("admin.videos.scheduled", {
-                time: formatDateTime(video.scheduledAt, locale),
-              })
-            : formatDateTime(video.publishedAt, locale)}
-          {video.kind ? ` · ${video.kind}` : ""}
-        </small>
+        <VideoWhen video={video} />
         <div className="adm-actions">
           {featured ? (
             <Button
@@ -69,7 +147,7 @@ function VideoCard({
               {t("admin.videos.unfeature")}
             </Button>
           ) : (
-            <Button size="sm" icon={Star} onClick={() => onFeature(video.id)}>
+            <Button size="sm" icon={Star} onClick={() => onFeature(video)}>
               {t("admin.videos.feature")}
             </Button>
           )}
@@ -100,16 +178,29 @@ function VideoList() {
     [status, page],
   )
   const data = videos.data
-  const feature = async (id: string | null) => {
+  const feature = async (video: AdminVideo | null) => {
     const result = await act(
-      () => api.setFeatured(id),
-      id ? "admin.notice.featured" : "admin.notice.unfeatured",
+      () => api.setFeatured(video?.id ?? null),
+      video ? "admin.notice.featured" : "admin.notice.unfeatured",
     )
-    if (result && data)
-      videos.setData({ ...data, featuredVideoId: result.featuredVideoId })
+    if (result)
+      videos.setData(
+        (current) =>
+          current && {
+            ...current,
+            featuredVideoId: result.featuredVideoId,
+            featuredVideo: result.featuredVideoId ? video : null,
+          },
+      )
   }
   return (
     <>
+      {data ? (
+        <FeaturedVideo
+          video={data.featuredVideo}
+          onClear={() => feature(null)}
+        />
+      ) : null}
       <div className="adm-toolbar">
         <Segmented
           label={t("admin.videos.filter")}
@@ -125,11 +216,6 @@ function VideoList() {
             { value: "published", label: t("admin.videos.published") },
           ]}
         />
-        <p className="adm-muted">
-          {data?.featuredVideoId
-            ? t("admin.videos.pinned")
-            : t("admin.videos.automatic")}
-        </p>
       </div>
       {!data ? (
         <Loading />

@@ -71,3 +71,35 @@ func TestAdminVideosServeOnlyLocalThumbnails(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminVideosReturnPinnedVideoOutsideThePage(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,url,kind) VALUES ('pinned','youtube','Pinned','2026-01-01T00:00:00.000Z','https://www.youtube.com/watch?v=pinned','video')`)
+	testutil.Exec(t, path, `INSERT INTO videos (id,source,title,scheduled_at,url,kind,is_upcoming) VALUES ('soon','youtube','Soon','2026-10-30T12:00:00.000Z','https://www.youtube.com/watch?v=soon','live',1)`)
+	testutil.Exec(t, path, `INSERT OR REPLACE INTO app_settings(key,value,updated_at) VALUES('featured_video_id','pinned','2026-10-20T00:00:00Z')`)
+	store, err := OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	page, err := store.ListAdminVideos(context.Background(), AdminVideoFilter{Status: "upcoming"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, video := range page.Items {
+		if video.ID == "pinned" {
+			t.Fatal("the upcoming filter listed the published pinned video")
+		}
+	}
+	if page.FeaturedVideo == nil || page.FeaturedVideo.ID != "pinned" || page.FeaturedVideo.Title != "Pinned" || page.FeaturedVideo.ThumbnailStatus != "missing" {
+		t.Fatalf("featured video = %+v", page.FeaturedVideo)
+	}
+	testutil.Exec(t, path, `UPDATE app_settings SET value='' WHERE key='featured_video_id'`)
+	page, err = store.ListAdminVideos(context.Background(), AdminVideoFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.FeaturedVideoID != nil || page.FeaturedVideo != nil {
+		t.Fatalf("automatic selection returned %v/%+v", page.FeaturedVideoID, page.FeaturedVideo)
+	}
+}

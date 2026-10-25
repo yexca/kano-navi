@@ -1,12 +1,46 @@
 import { useState } from "react"
-import { FileText, Search } from "lucide-react"
+import { FileText, ImageIcon, Search } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
-import { Empty, Loading, PageHeader, Pager, Panel } from "@/admin/ui"
+import { formatDateTime } from "@/admin/format"
+import type { AdminPost } from "@/admin/types"
+import { Badge, Empty, Loading, PageHeader, Pager, Panel } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { QuickFetch } from "@/admin/views/fetch-parts"
-import { PostRow } from "@/admin/views/review"
+import { PostActions, PostStatus } from "@/admin/views/review"
+
+function PostTableRow({
+  post,
+  onDone,
+}: {
+  post: AdminPost
+  onDone: () => void
+}) {
+  const { t, locale } = useAppSettings()
+  return (
+    <div role="row" className="adm-post-table-row">
+      <div role="cell" className="adm-post-origin">
+        <strong>{post.accountHandle || t(`admin.step.${post.source}`)}</strong>
+        <time dateTime={post.publishedAt}>
+          {formatDateTime(post.publishedAt, locale)}
+        </time>
+      </div>
+      <div role="cell" className="adm-post-body">
+        <p className="adm-post-text">{post.text}</p>
+        {post.mediaUrl ? (
+          <Badge icon={ImageIcon}>{t("admin.posts.withMedia")}</Badge>
+        ) : null}
+      </div>
+      <div role="cell" className="adm-chip-row adm-post-state">
+        <PostStatus post={post} />
+      </div>
+      <div role="cell" className="adm-post-controls">
+        <PostActions post={post} onDone={onDone} compact />
+      </div>
+    </div>
+  )
+}
 
 function PostList() {
   const { t } = useAppSettings()
@@ -88,9 +122,19 @@ function PostList() {
         <Loading />
       ) : posts.data.items.length ? (
         <>
-          <div className="adm-post-list">
+          <div
+            className="adm-table adm-post-table"
+            role="table"
+            aria-label={t("admin.posts.title")}
+          >
+            <div role="row" className="adm-post-table-row adm-table-head">
+              <span role="columnheader">{t("admin.posts.source")}</span>
+              <span role="columnheader">{t("admin.posts.column.text")}</span>
+              <span role="columnheader">{t("admin.posts.llm")}</span>
+              <span role="columnheader">{t("admin.posts.column.actions")}</span>
+            </div>
             {posts.data.items.map((post) => (
-              <PostRow
+              <PostTableRow
                 key={post.id}
                 post={post}
                 onDone={() => void posts.reload()}

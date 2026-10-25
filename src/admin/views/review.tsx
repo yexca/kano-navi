@@ -478,65 +478,87 @@ function CancellationsTab() {
   )
 }
 
-export function PostRow({
+/**
+ * The extraction state, last error and queue flag of one post. A queued state
+ * already says the post waits, so the flag is not repeated.
+ */
+export function PostStatus({ post }: { post: AdminPost }) {
+  const { t } = useAppSettings()
+  return (
+    <>
+      <StatusBadge status={post.llmStatus} />
+      {post.llmLastError ? (
+        <Badge tone="danger">
+          {t(`admin.posts.error.${post.llmLastError}`)}
+        </Badge>
+      ) : null}
+      {post.llmReprocessRequested && post.llmStatus !== "queued" ? (
+        <Badge tone="sky">{t("admin.posts.queued")}</Badge>
+      ) : null}
+    </>
+  )
+}
+
+/**
+ * Queue a post for extraction again, optionally on a chosen route. Compact
+ * actions fit a table cell and open the post from an icon.
+ */
+export function PostActions({
   post,
   onDone,
+  compact = false,
 }: {
   post: AdminPost
   onDone: () => void
+  compact?: boolean
 }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const [route, setRoute] = useState("")
   const [busy, setBusy] = useState(false)
   return (
-    <article className="adm-post-row">
-      <div className="adm-post-meta">
-        <strong>{post.accountHandle || t(`admin.step.${post.source}`)}</strong>
-        <time dateTime={post.publishedAt}>
-          {formatDateTime(post.publishedAt, locale)}
-        </time>
-        <StatusBadge status={post.llmStatus} />
-        {post.llmLastError ? (
-          <Badge tone="danger">
-            {t(`admin.posts.error.${post.llmLastError}`)}
-          </Badge>
-        ) : null}
-        {post.llmReprocessRequested ? (
-          <Badge tone="sky">{t("admin.posts.queued")}</Badge>
-        ) : null}
-      </div>
-      <p className="adm-post-text">{post.text}</p>
-      <div className="adm-actions">
-        <select
-          value={route}
-          onChange={(event) => setRoute(event.target.value)}
-          aria-label={t("admin.posts.route")}
+    <div className={compact ? "adm-post-actions" : "adm-actions"}>
+      <select
+        value={route}
+        onChange={(event) => setRoute(event.target.value)}
+        aria-label={t("admin.posts.route")}
+      >
+        <option value="">{t("admin.posts.routeAuto")}</option>
+        <option value="schedule_board">
+          {t("admin.route.schedule_board")}
+        </option>
+        <option value="schedule_message">
+          {t("admin.route.schedule_message")}
+        </option>
+      </select>
+      <Button
+        size="sm"
+        icon={RotateCcw}
+        busy={busy}
+        onClick={async () => {
+          setBusy(true)
+          const result = await act(
+            () => api.reprocessPost(post.id, route || undefined),
+            "admin.notice.postQueued",
+          )
+          setBusy(false)
+          if (result) onDone()
+        }}
+      >
+        {t("admin.posts.reprocess")}
+      </Button>
+      {compact ? (
+        <a
+          className="adm-icon-button"
+          href={post.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={t("admin.posts.open")}
+          title={t("admin.posts.open")}
         >
-          <option value="">{t("admin.posts.routeAuto")}</option>
-          <option value="schedule_board">
-            {t("admin.route.schedule_board")}
-          </option>
-          <option value="schedule_message">
-            {t("admin.route.schedule_message")}
-          </option>
-        </select>
-        <Button
-          size="sm"
-          icon={RotateCcw}
-          busy={busy}
-          onClick={async () => {
-            setBusy(true)
-            const result = await act(
-              () => api.reprocessPost(post.id, route || undefined),
-              "admin.notice.postQueued",
-            )
-            setBusy(false)
-            if (result) onDone()
-          }}
-        >
-          {t("admin.posts.reprocess")}
-        </Button>
+          <ExternalLink aria-hidden />
+        </a>
+      ) : (
         <a
           className="adm-link"
           href={post.url}
@@ -546,7 +568,30 @@ export function PostRow({
           {t("admin.posts.open")}
           <ExternalLink aria-hidden />
         </a>
+      )}
+    </div>
+  )
+}
+
+export function PostRow({
+  post,
+  onDone,
+}: {
+  post: AdminPost
+  onDone: () => void
+}) {
+  const { t, locale } = useAppSettings()
+  return (
+    <article className="adm-post-row">
+      <div className="adm-post-meta">
+        <strong>{post.accountHandle || t(`admin.step.${post.source}`)}</strong>
+        <time dateTime={post.publishedAt}>
+          {formatDateTime(post.publishedAt, locale)}
+        </time>
+        <PostStatus post={post} />
       </div>
+      <p className="adm-post-text">{post.text}</p>
+      <PostActions post={post} onDone={onDone} />
     </article>
   )
 }

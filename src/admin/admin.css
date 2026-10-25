@@ -1563,6 +1563,148 @@ button.adm-run-line:hover,
   width: auto !important;
 }
 
+/*
+ * The posts table: origin, text, extraction state and actions per row. It
+ * follows its own width, which the sidebar and viewport both change: a
+ * medium table moves the origin above the text, a narrow one stacks the row.
+ */
+.adm-post-table {
+  container-type: inline-size;
+}
+
+.adm-post-table-row {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) 140px 170px;
+  grid-template-areas: "origin body state actions";
+  align-items: center;
+  gap: 16px;
+  padding: 12px 4px;
+}
+
+.adm-post-table-row + .adm-post-table-row {
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-table-head {
+  padding-block: 0 10px;
+  color: var(--adm-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.adm-post-table .adm-post-origin {
+  display: grid;
+  grid-area: origin;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.adm-post-origin strong {
+  overflow-wrap: anywhere;
+}
+
+.adm-post-origin time {
+  color: var(--adm-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-post-body {
+  display: grid;
+  grid-area: body;
+  justify-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.adm-post-body .adm-post-text {
+  -webkit-line-clamp: 3;
+  font-size: 14px;
+}
+
+.adm-post-state {
+  grid-area: state;
+}
+
+.adm-post-controls {
+  grid-area: actions;
+}
+
+/* The route sits above the queue button so the column stays narrow. */
+.adm-post-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-post-table .adm-post-actions select {
+  grid-column: 1 / -1;
+  height: 32px;
+  font-size: 13px;
+}
+
+@container (max-width: 860px) {
+  .adm-post-table-row {
+    grid-template-columns: minmax(0, 1fr) 130px 160px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "origin state actions"
+      "body state actions";
+    row-gap: 4px;
+  }
+
+  .adm-table-head > :first-child {
+    display: none;
+  }
+
+  .adm-post-table .adm-post-origin {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+  }
+
+  .adm-post-body {
+    align-self: start;
+  }
+}
+
+@container (max-width: 560px) {
+  .adm-post-table-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: none;
+    grid-template-areas:
+      "origin state"
+      "body body"
+      "actions actions";
+    gap: 8px 12px;
+  }
+
+  .adm-post-table-row.adm-table-head {
+    display: none;
+  }
+
+  .adm-post-table-row:nth-child(2) {
+    border-top: 0;
+  }
+
+  .adm-post-state {
+    justify-content: flex-end;
+  }
+
+  .adm-post-actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .adm-post-table .adm-post-actions select {
+    flex: 0 1 200px;
+    width: auto !important;
+  }
+}
+
 /* --------------------------------------------------------------- schedule */
 
 .adm-table {
@@ -1677,6 +1819,86 @@ button.adm-run-line:hover,
 .adm-video-body small {
   color: var(--adm-muted);
   font-size: 12px;
+}
+
+/* The pinned video above the list, or the automatic choice when none is. */
+.adm-featured {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--berry);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-accent-soft);
+}
+
+.adm-featured.is-automatic {
+  grid-template-columns: auto minmax(0, 1fr);
+  border: 1px dashed var(--adm-line);
+  background: transparent;
+}
+
+.adm-featured-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  background: var(--adm-sunken);
+  color: var(--adm-muted);
+}
+
+.adm-featured-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.adm-featured-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--adm-sunken);
+  color: var(--adm-muted);
+}
+
+.adm-featured-icon svg,
+.adm-featured-label svg {
+  width: 16px;
+  height: 16px;
+}
+
+.adm-featured-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.adm-featured-body strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.adm-featured-body small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-featured-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--berry);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .adm-profile-current {
@@ -2551,6 +2773,14 @@ button.adm-run-line:hover,
 
   .adm-event-updated {
     display: none;
+  }
+
+  .adm-featured {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+
+  .adm-featured > .adm-actions {
+    grid-column: 1 / -1;
   }
 
   .adm-review-card header {
