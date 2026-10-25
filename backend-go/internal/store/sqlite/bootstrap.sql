@@ -374,7 +374,11 @@ CREATE TABLE videos (
     manual_thumbnail_media_id TEXT,
     manual_thumbnail_sha256 TEXT,
     manual_updated_at TEXT,
-    refresh_requested_at TEXT
+    refresh_requested_at TEXT,
+    merged_into TEXT,
+    merge_source TEXT,
+    merge_reason TEXT,
+    merged_at TEXT
   );
 
 CREATE TABLE workflows (
@@ -452,5 +456,7 @@ CREATE INDEX video_revisions_video_idx ON video_revisions (video_id, id DESC);
 CREATE INDEX videos_date_idx ON videos (COALESCE(scheduled_at, published_at) DESC);
 
 CREATE INDEX videos_instant_idx ON videos (julianday(COALESCE(scheduled_at, published_at)) DESC, id);
+
+CREATE INDEX videos_merged_into_idx ON videos (merged_into) WHERE merged_into IS NOT NULL;
 
 CREATE INDEX videos_schedule_instant_idx ON videos (julianday(scheduled_at), id);

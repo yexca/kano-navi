@@ -69,3 +69,28 @@ func TestBilibiliStepStoresUploadsOncePerIntervalAndRecordsCaptchas(t *testing.T
 		t.Fatalf("videos=%#v err=%v", page, err)
 	}
 }
+
+func TestReconcileStepMergesBilibiliUploads(t *testing.T) {
+	s, err := sqlite.OpenInitialized(filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite"), true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, statement := range []string{
+		`INSERT INTO videos(id,source,title,scheduled_at,url,kind,duration_seconds) VALUES('AAAAAAAAAAA','youtube','奏（スキマスイッチ） - 鹿乃まほろ cover.','2026-01-01T09:00:09Z','https://www.youtube.com/watch?v=AAAAAAAAAAA','MUSIC',289)`,
+		`INSERT INTO videos(id,source,title,published_at,url,kind,duration_seconds) VALUES('BV1AAAAAAAAA','bilibili','鹿乃 翻唱《奏》','2026-01-01T09:05:00Z','https://www.bilibili.com/video/BV1AAAAAAAAA','MUSIC',289)`,
+	} {
+		if _, err = s.DB().Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	steps := &SourceSteps{Store: s}
+	result, err := steps.Execute(context.Background(), StepInput{StepID: "reconcile", WorkflowID: sqlite.AdhocSyncWorkflow})
+	if err != nil || result.Status != "succeeded" || result.Result["videosMerged"] != 1 || result.Result["videosConsidered"] != 1 {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+	// A run that only reads Bilibili is reconciled afterwards.
+	if got := withReconcile([]string{"bilibili", "media"}); strings.Join(got, ",") != "bilibili,media,reconcile" {
+		t.Fatalf("steps=%v", got)
+	}
+}

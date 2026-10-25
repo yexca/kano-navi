@@ -18,7 +18,7 @@ belong to the TypeScript initializer. See
 | `posts`                  | X posts, account source, publication time, engagement counts, and media                                |
 | `events`                 | Unified schedules, provenance, confidence, manual locks, tombstones, and duplicate merges              |
 | `event_sources`          | Source post/reservation identities attached to each event                                              |
-| `videos`                 | YouTube videos and streams, Bilibili uploads, operator corrections, and refresh requests               |
+| `videos`                 | YouTube videos and streams, Bilibili uploads and their merges, corrections, and refresh requests       |
 | `video_revisions`        | Titles and thumbnails a platform replaced, one row per change                                          |
 | `focus`                  | The page's latest focus item and stable YouTube video ID                                               |
 | `timeline`               | Person and activity timeline                                                                           |
@@ -303,6 +303,57 @@ every linked video. `duration_seconds` and `refresh_requested_at` are
 described in [Sources](sources.md#follow-up-checks-and-refresh-requests).
 Startup adds the columns, both tables and `video_revisions_video_idx` to
 existing snapshots without rewriting videos or media rows.
+
+## Video Merging
+
+A Bilibili upload of the same work as a YouTube video is attached to it, so
+readers list one video with both links. The additive `videos` columns
+`merged_into` (the YouTube video's ID), `merge_source`, `merge_reason` and
+`merged_at` hold the decision on the Bilibili row. No source writer names
+them, so rereading either platform keeps the merge. `merge_source` names the
+owner as for [event merges](#duplicate-merging):
+
+- `rule`: the `reconcile` workflow step
+  (`backend-go/internal/store/sqlite/video_merge.go`), which recomputes its
+  decisions from the current rows on every run and releases a merge whose
+  basis no longer holds. `merge_reason` is `rule:time_duration_title`.
+- `manual`: an operator merge (`merge_reason` `manual`), which the rule never
+  changes. `manual` with a null `merged_into` is an undone merge
+  (`unmerged_from:<id>`); the rule never merges that upload again.
+
+An upload merges by rule into a YouTube video only when all of these hold:
+
+- the YouTube anchor (`scheduled_at`, else `published_at`) is within six
+  hours of the upload's `published_at`;
+- both `duration_seconds` are known and differ by at most three seconds;
+- the song titles match. A Bilibili title is reduced to its `《…》` name (or,
+  without one, the title less `【…】` labels) and a YouTube title to the part
+  before `（`/`(`, `-`, `歌ってみた` or `【`, after leading `【…】` labels.
+  Full-width ASCII is folded, punctuation and brackets split the rest, and
+  parts that only name the performer or format (`鹿乃`, `翻唱`, `cover`,
+  …) are dropped. The names match when they are equal, however short (`奏`),
+  or share a part of at least two characters.
+
+Effective titles (`COALESCE(manual_title, title)`) are compared. Several
+complete matches, or one video claimed by several uploads, leave the upload
+unmerged and are counted as `ambiguous`. A YouTube video receives at most
+one upload: a video an operator merged an upload into is no rule target. A
+video read before lengths were stored has no `duration_seconds`, so its
+upload is left to the operator. A Short of the same song, published another
+day or with another length, never matches.
+
+Whenever a merge is written or a merged upload's effective title changes (a
+Bilibili read, an operator correction or the reconcile step), the upload's
+title is stored in the same transaction as the YouTube video's `zh-CN`
+platform translation with platform `bilibili`; a release or undo removes it.
+A change of either moves the dashboard revision. The machine translation
+scope excludes merged rows.
+
+Public readers keep `source = 'youtube'`: the dashboard and video archive add
+`alternates` (`[{source, url}]`) to each YouTube video for its merged
+uploads, and Bilibili rows themselves stay in the console. Startup adds the
+columns and the partial `videos_merged_into_idx` index to existing snapshots
+without rewriting videos.
 
 ## Schema Changes
 

@@ -196,16 +196,16 @@ func (e *Executor) PrepareDefinition(ctx context.Context, definition sqlite.Work
 	return e.Store.CreateWorkflowRun(ctx, *def, string(trigger), key, synthetic, now)
 }
 
-// withReconcile appends duplicate-event reconciliation to a run whose steps
-// write events, so every timed, manual, push or MCP run leaves merges current
-// without editing saved workflows.
+// withReconcile appends duplicate reconciliation to a run whose steps write
+// events or videos, so every timed, manual, push or MCP run leaves merges
+// current without editing saved workflows.
 func withReconcile(steps []string) []string {
 	writes := false
 	for _, step := range steps {
 		switch step {
 		case "reconcile":
 			return steps
-		case "x", "youtube", "schedule":
+		case "x", "youtube", "bilibili", "schedule":
 			writes = true
 		}
 	}

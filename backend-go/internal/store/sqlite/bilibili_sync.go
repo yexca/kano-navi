@@ -195,11 +195,16 @@ func writeBilibiliVideos(ctx context.Context, tx *sql.Tx, videos []bilisource.Vi
 				return false, ErrSourceWrite
 			}
 		}
+		// A merged upload's title is its YouTube video's Bilibili translation.
+		translated, err := refreshMergeTranslations(ctx, tx, v.BVID, now)
+		if err != nil {
+			return false, ErrSourceWrite
+		}
 		var after string
 		if err = tx.QueryRowContext(ctx, youtubeVideoState, v.BVID).Scan(&after); err != nil {
 			return false, ErrSourceWrite
 		}
-		changed = changed || after != before
+		changed = changed || translated || after != before
 	}
 	return changed, nil
 }

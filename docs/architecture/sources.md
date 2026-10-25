@@ -303,11 +303,17 @@ YouTube does; operator corrections survive. Covers come only from
 the media step.
 
 Bilibili uploads stay in the console: the board, the video archive and MCP
-list only YouTube videos until an upload can be matched with its YouTube copy,
-so one cover is never listed twice. Operators can add an upload by BV ID or
-`bilibili.com` video link and read one again at once from `/admin` (see
-[Admin API](admin-api.md#bilibili-uploads)); those reads respect the same
-backoff and accept only uploads of the configured account.
+list only YouTube videos, so one cover is never listed twice. The `reconcile`
+step merges an upload into the YouTube video of the same work, which then
+lists it in `alternates` and shows its title as the video's Chinese platform
+translation; operators confirm, add or undo merges in `/admin` (see
+[Video merging](data-model.md#video-merging)). Showing those links and the
+unmatched uploads on the board belongs to a later redesign. Operators can
+add an upload by BV ID or `bilibili.com` video link and read one again at
+once from `/admin` (see [Admin API](admin-api.md#bilibili-uploads)); those
+reads respect the same backoff and accept only uploads of the configured
+account. A read that changes a merged upload's title rewrites the
+translation in the same transaction.
 
 ### Schedule Extraction Pipeline
 

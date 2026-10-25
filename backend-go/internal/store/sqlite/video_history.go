@@ -16,9 +16,9 @@ import (
 // videos and are not revisions.
 
 // publicVideoScope selects the videos public readers (the board, the video
-// archive and MCP) list. Bilibili uploads stay in the console until they can
-// be matched with the YouTube copy of the same work, so the board never lists
-// one cover twice.
+// archive and MCP) list. Bilibili uploads stay in the console, so the board
+// never lists one cover twice; an upload merged into the YouTube copy of the
+// same work reaches readers as that video's alternate (video_merge.go).
 const publicVideoScope = "source = 'youtube'"
 
 // Revision origins: a detail check that reported a new title or thumbnail

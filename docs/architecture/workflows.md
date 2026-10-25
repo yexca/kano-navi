@@ -106,12 +106,16 @@ their step lists, so an operator adds it on the Runs & workflows page.
 
 `reconcile` applies the deterministic duplicate-merge rules in
 [Duplicate merging](data-model.md#duplicate-merging) to the Japan dates from
-30 days ago to 60 days ahead. Every run that includes `x`, `youtube` or
-`schedule` (sync, scan, fetch windows, WebSub pushes, MCP and timed workflows)
-appends it as its last step, so saved workflows need no edit; it can also be
-selected alone. Its result counts `considered`, `merged`, `retargeted`,
-`released`, `kept` and `ambiguous` events, and it advances the dashboard
-revision only when a merge decision changed.
+30 days ago to 60 days ahead, then the
+[video merging](data-model.md#video-merging) rule to every Bilibili upload.
+Every run that includes `x`, `youtube`, `bilibili` or `schedule` (sync, scan,
+fetch windows, WebSub pushes, MCP and timed workflows) appends it as its last
+step, so saved workflows need no edit; it can also be selected alone. Its
+result counts `considered`, `merged`, `retargeted`, `released`, `kept` and
+`ambiguous` events, and `videosConsidered`, `videosMerged`, `videosReleased`,
+`videosKept` and `videosAmbiguous` uploads. It advances the dashboard
+revision only when a merge decision or a merged upload's translation
+changed.
 
 `translate` machine-translates X post text and YouTube titles that lack a
 usable translation (see [Translation](sources.md#translation)). Its final

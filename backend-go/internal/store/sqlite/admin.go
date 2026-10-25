@@ -70,8 +70,66 @@ type AdminVideo struct {
 	Revisions          int     `json:"revisions"`
 	// Translation is the title's translation state (translations.go).
 	Translation *AdminTranslation `json:"translation"`
+	// A Bilibili upload merged into a YouTube video names it in MergedInto
+	// (video_merge.go). MergeSource manual without a target is an undone
+	// merge the rules never redo.
+	MergedInto      *string `json:"mergedInto"`
+	MergedIntoTitle *string `json:"mergedIntoTitle"`
+	MergeSource     *string `json:"mergeSource"`
+	MergeReason     *string `json:"mergeReason"`
+	MergedAt        *string `json:"mergedAt"`
+	// Alternates are the uploads merged into this video.
+	Alternates []AdminVideoAlternate `json:"alternates"`
 	// sourceThumbnail is the platform URL the board falls back to.
 	sourceThumbnail *string
+}
+
+// AdminVideoAlternate is an upload merged into a video.
+type AdminVideoAlternate struct {
+	ID          string  `json:"id"`
+	Source      string  `json:"source"`
+	Title       string  `json:"title"`
+	URL         string  `json:"url"`
+	MergeSource *string `json:"mergeSource"`
+	MergeReason *string `json:"mergeReason"`
+	MergedAt    *string `json:"mergedAt"`
+}
+
+// attachAdminVideoAlternates lists the uploads merged into each video.
+func (s *Store) attachAdminVideoAlternates(ctx context.Context, videos []AdminVideo) error {
+	index := map[string][]int{}
+	ids := []string{}
+	for i := range videos {
+		videos[i].Alternates = []AdminVideoAlternate{}
+		if index[videos[i].ID] == nil {
+			ids = append(ids, videos[i].ID)
+		}
+		index[videos[i].ID] = append(index[videos[i].ID], i)
+	}
+	for _, chunk := range translationChunks(ids) {
+		rows, err := s.db.QueryContext(ctx, `SELECT merged_into,id,source,COALESCE(manual_title,title),url,merge_source,merge_reason,merged_at FROM videos
+			WHERE merged_into IN (`+placeholders(len(chunk))+`) ORDER BY julianday(published_at),id`, idArgs(chunk)...)
+		if err != nil {
+			return dbErr(err)
+		}
+		for rows.Next() {
+			var target string
+			var a AdminVideoAlternate
+			var source, reason, at sql.NullString
+			if err = rows.Scan(&target, &a.ID, &a.Source, &a.Title, &a.URL, &source, &reason, &at); err != nil {
+				rows.Close()
+				return dbErr(err)
+			}
+			a.MergeSource, a.MergeReason, a.MergedAt = nullString(source), nullString(reason), nullString(at)
+			for _, i := range index[target] {
+				videos[i].Alternates = append(videos[i].Alternates, a)
+			}
+		}
+		if err = rows.Close(); err != nil {
+			return dbErr(err)
+		}
+	}
+	return nil
 }
 
 // attachAdminVideoTranslations fills each YouTube video's title translation
@@ -477,6 +535,9 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 	if err := s.attachAdminVideoTranslations(ctx, items); err != nil {
 		return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
 	}
+	if err := s.attachAdminVideoAlternates(ctx, items); err != nil {
+		return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
+	}
 	featured, err := s.adminFeaturedVideo(ctx, featuredID, items)
 	if err != nil {
 		return AdminVideosPage{}, err
@@ -490,17 +551,23 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 
 const adminVideoColumns = `v.id,v.source,v.title,v.published_at,v.scheduled_at,v.url,v.thumbnail_url,v.kind,COALESCE(v.is_upcoming,0),
  v.manual_title,v.manual_kind,v.manual_thumbnail_media_id,v.manual_thumbnail_sha256,v.duration_seconds,v.live_checked_at,v.refresh_requested_at,
- (SELECT COUNT(*) FROM video_revisions r WHERE r.video_id=v.id)`
+ (SELECT COUNT(*) FROM video_revisions r WHERE r.video_id=v.id),
+ v.merged_into,(SELECT COALESCE(t.manual_title,t.title) FROM videos t WHERE t.id=v.merged_into),v.merge_source,v.merge_reason,v.merged_at`
 
 func scanAdminVideo(row scanner) (AdminVideo, error) {
 	var v AdminVideo
 	var published, scheduled, thumbnail, kind, manualTitle, manualKind, pinMedia, pinHash, checked, requested sql.NullString
+	var mergedInto, mergedTitle, mergeSource, mergeReason, mergedAt sql.NullString
 	var duration sql.NullInt64
 	var upcoming int
 	if err := row.Scan(&v.ID, &v.Source, &v.SourceTitle, &published, &scheduled, &v.URL, &thumbnail, &kind, &upcoming,
-		&manualTitle, &manualKind, &pinMedia, &pinHash, &duration, &checked, &requested, &v.Revisions); err != nil {
+		&manualTitle, &manualKind, &pinMedia, &pinHash, &duration, &checked, &requested, &v.Revisions,
+		&mergedInto, &mergedTitle, &mergeSource, &mergeReason, &mergedAt); err != nil {
 		return AdminVideo{}, err
 	}
+	v.MergedInto, v.MergedIntoTitle, v.MergeSource = nullString(mergedInto), nullString(mergedTitle), nullString(mergeSource)
+	v.MergeReason, v.MergedAt = nullString(mergeReason), nullString(mergedAt)
+	v.Alternates = []AdminVideoAlternate{}
 	v.PublishedAt = nullString(published)
 	v.ScheduledAt = nullString(scheduled)
 	v.sourceThumbnail = nullString(thumbnail)
@@ -560,7 +627,57 @@ func (s *Store) AdminVideoByID(ctx context.Context, id string) (AdminVideo, erro
 	if err = s.attachAdminVideoTranslations(ctx, one); err != nil {
 		return AdminVideo{}, fmt.Errorf("%w: video unavailable", ErrUnavailable)
 	}
+	if err = s.attachAdminVideoAlternates(ctx, one); err != nil {
+		return AdminVideo{}, fmt.Errorf("%w: video unavailable", ErrUnavailable)
+	}
 	return one[0], nil
+}
+
+// adminVideosByID reads several videos as the console lists them; unknown
+// IDs are left out.
+func (s *Store) adminVideosByID(ctx context.Context, ids []string) (map[string]AdminVideo, error) {
+	items := []AdminVideo{}
+	seen := map[string]bool{}
+	unique := []string{}
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			unique = append(unique, id)
+		}
+	}
+	for _, chunk := range translationChunks(unique) {
+		rows, err := s.db.QueryContext(ctx, `SELECT `+adminVideoColumns+` FROM videos v WHERE v.id IN (`+placeholders(len(chunk))+`)`, idArgs(chunk)...)
+		if err != nil {
+			return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)
+		}
+		for rows.Next() {
+			v, err := scanAdminVideo(rows)
+			if err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)
+			}
+			items = append(items, v)
+		}
+		if err = rows.Close(); err != nil {
+			return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)
+		}
+	}
+	for i := range items {
+		if err := s.resolveAdminThumbnail(ctx, &items[i]); err != nil {
+			return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)
+		}
+	}
+	if err := s.attachAdminVideoTranslations(ctx, items); err != nil {
+		return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)
+	}
+	if err := s.attachAdminVideoAlternates(ctx, items); err != nil {
+		return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)
+	}
+	out := make(map[string]AdminVideo, len(items))
+	for _, v := range items {
+		out[v.ID] = v
+	}
+	return out, nil
 }
 
 // adminFeaturedVideo reuses the listed copy of the pinned video when the page

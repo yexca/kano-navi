@@ -238,6 +238,10 @@ image's status, or is `none` for a text-only post.
 | `PUT /videos/{id}`          | `{title?, kind?, thumbnail?}`                             | `{video}`                                    |
 | `POST /videos/{id}/refresh` |                                                           | `202 {video, started, run}`                  |
 | `POST /videos/bilibili`     | `{input}` (BV ID or bilibili.com video link)              | `{video, started, run}`                      |
+| `GET /videos/merges`        |                                                           | `{items}` merge suggestions                  |
+| `GET /videos/{id}/merges`   |                                                           | `{items}` for one Bilibili upload            |
+| `POST /videos/{id}/merge`   | `{into}` (YouTube video ID or watch link)                 | `{video}`                                    |
+| `POST /videos/{id}/unmerge` |                                                           | `{video}`                                    |
 
 Each video's `thumbnailUrl` is the local `/media/<id>?v=<sha256>` URL of its
 cached thumbnail, or `null` until that file is ready; the remote CDN address is
@@ -264,6 +268,37 @@ upstream failures answer `502` with their `bilibili_*` code. `bilibili` in
 `GET /sources` reports the account, the stored uploads, whether a login cookie
 is configured (`signedIn`, never the cookie), the read interval and the
 latest attempt, success, backoff and error.
+
+### Video merging
+
+A Bilibili upload merged into the YouTube video of the same work (see
+[Video merging](data-model.md#video-merging)) reports `mergedInto`,
+`mergedIntoTitle`, `mergeSource` (`rule` or `manual`), `mergeReason` and
+`mergedAt`; `mergeSource: "manual"` with a null `mergedInto` is an undone
+merge. Every video lists the uploads merged into it in `alternates`
+(`{id, source, title, url, mergeSource, mergeReason, mergedAt}`).
+
+`POST /videos/{id}/merge` merges a Bilibili upload into the YouTube video
+`into` names, by ID or `youtube.com`/`youtu.be` link, as an operator decision
+the rule never changes. A rule merge of another upload into that video is
+released; another operator merge into it answers
+`409 {"error":"merge_conflict"}`. An `{id}` that is not a Bilibili upload,
+or an `into` that is not a stored YouTube video, answers `400`; an unknown
+`{id}` answers `404`. `POST /videos/{id}/unmerge` undoes a merge, rule or
+manual, and keeps the upload separate (`mergeReason: "unmerged_from:<id>"`);
+an upload that is not merged answers `400`. Both advance the dashboard
+revision and write or remove the target's Bilibili translation in the same
+transaction.
+
+`GET /videos/merges` lists, newest first and at most 50, the unmerged
+Bilibili uploads the rule would merge (`status: "rule"`), or leaves to the
+operator (`ambiguous`, or `unverified` when no candidate satisfies every
+rule), without writing. Uploads an operator kept separate are left out.
+Each item has `bilibili` (the upload as listed) and up to five `candidates`:
+`{youtube, complete, titleMatch, durationDelta, gapMinutes}`, where
+`durationDelta` is null when a length is unknown. `GET /videos/{id}/merges`
+describes one upload whatever its state, adding `merged`, `separate` and
+`none`.
 
 ### Video corrections and history
 

@@ -28,6 +28,7 @@ import {
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { BilibiliSource } from "@/admin/views/bilibili-parts"
 import { QuickFetch } from "@/admin/views/fetch-parts"
+import { MergeLine, MergeSuggestions } from "@/admin/views/merge-parts"
 import {
   TranslationBacklog,
   TranslationCell,
@@ -159,12 +160,14 @@ function VideoCard({
   onFeature,
   onEdit,
   onTranslated,
+  onMerged,
 }: {
   video: AdminVideo
   featured: boolean
   onFeature: (video: AdminVideo | null) => void
   onEdit: (video: AdminVideo) => void
   onTranslated: () => void
+  onMerged: () => void
 }) {
   const { t } = useAppSettings()
   const thumbnail = localUrl(video.thumbnailUrl)
@@ -192,6 +195,7 @@ function VideoCard({
         <strong>{video.title}</strong>
         <VideoWhen video={video} />
         <VideoMarks video={video} />
+        <MergeLine video={video} onChanged={onMerged} onMerge={onEdit} />
         <TranslationCell
           owner="video"
           id={video.id}
@@ -246,10 +250,13 @@ function VideoList({ reloadKey }: { reloadKey: number }) {
   const [source, setSource] = useState<"" | "youtube" | "bilibili">("")
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<string | null>(null)
+  // A merge or undo changes two cards and the suggestions, so all reload.
+  const [merges, setMerges] = useState(0)
   const videos = useResource(
     () => api.videos({ status, source, page, pageSize: 24 }),
-    [status, source, page, reloadKey],
+    [status, source, page, reloadKey, merges],
   )
+  const merged = () => setMerges((value) => value + 1)
   const data = videos.data
   // A saved correction replaces its card, and the pinned copy, in place.
   const replace = (video: AdminVideo) =>
@@ -289,6 +296,7 @@ function VideoList({ reloadKey }: { reloadKey: number }) {
           onClear={() => feature(null)}
         />
       ) : null}
+      <MergeSuggestions reloadKey={reloadKey + merges} onMerged={merged} />
       <div className="adm-toolbar">
         <Segmented
           label={t("admin.videos.filter")}
@@ -335,6 +343,7 @@ function VideoList({ reloadKey }: { reloadKey: number }) {
                 onFeature={feature}
                 onEdit={(chosen) => setEditing(chosen.id)}
                 onTranslated={() => void videos.reload()}
+                onMerged={merged}
               />
             ))}
           </div>
@@ -351,6 +360,7 @@ function VideoList({ reloadKey }: { reloadKey: number }) {
       {editing ? (
         <VideoEditor
           videoId={editing}
+          onMerged={merged}
           onClose={(changed) => {
             setEditing(null)
             if (changed) replace(changed)

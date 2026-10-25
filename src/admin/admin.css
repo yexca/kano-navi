@@ -1928,6 +1928,180 @@ button.adm-run-line:hover,
   gap: 6px;
 }
 
+/* A card's merge line: the badge, the other copy's link and the undo. */
+.adm-video-merge {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.adm-video-merge-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.adm-video-merge-item .adm-link {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 12px;
+}
+
+/* A long target title wraps inside the card instead of being cut off. */
+.adm-video-merge-item .adm-badge {
+  max-width: 100%;
+}
+
+.adm-video-merge-item .adm-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-video-merge-item small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+/* Rule suggestions above the list: each upload with its YouTube candidates. */
+.adm-merge-suggestions {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-sunken);
+}
+
+.adm-merge-suggestions h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.adm-merge-suggestions h3 svg {
+  width: 15px;
+  height: 15px;
+}
+
+.adm-merge-suggestions p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.adm-merge-suggestions > ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-merge-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 12px;
+  padding: 10px;
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface);
+}
+
+.adm-merge-upload {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.adm-merge-candidates {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-merge-candidates li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.adm-merge-video {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.adm-merge-video .adm-video-thumb {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.adm-merge-video-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.adm-merge-video-body strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.adm-merge-video-body small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-video-merge-section {
+  display: grid;
+  gap: 10px;
+}
+
+.adm-video-merge-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.adm-video-merge-section h3 svg {
+  width: 15px;
+  height: 15px;
+}
+
+.adm-video-merge-section .adm-link strong {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .adm-merge-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .adm-merge-candidates li {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+
+  .adm-merge-video {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+}
+
 /* The correction dialog: thumbnail files as radio tiles, then the history. */
 .adm-thumb-picker {
   margin: 0;

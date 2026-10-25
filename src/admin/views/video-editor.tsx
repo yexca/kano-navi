@@ -11,6 +11,7 @@ import type {
 } from "@/admin/types"
 import { Button, Facts, Field, Loading, Modal } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
+import { MergeSection } from "@/admin/views/merge-parts"
 
 /** The kinds the board labels; an empty choice follows the platform. */
 const videoKinds = ["VIDEO", "MUSIC", "LIVE ARCHIVE", "GAMEPLAY", "TALK"]
@@ -62,14 +63,18 @@ function ThumbnailChoice({
 
 /**
  * Corrections an operator layers over a video's platform title, kind and
- * thumbnail, with what the platform replaced and a refresh of its page.
+ * thumbnail, with what the platform replaced, a refresh of its page and the
+ * merge of a Bilibili upload with its YouTube copy.
  */
 export function VideoEditor({
   videoId,
   onClose,
+  onMerged,
 }: {
   videoId: string
   onClose: (changed?: AdminVideo) => void
+  /** A merge or undo changed this video and another one. */
+  onMerged?: () => void
 }) {
   const { t, locale } = useAppSettings()
   const { api, act } = useAdmin()
@@ -171,6 +176,13 @@ export function VideoEditor({
                     : t("admin.videos.refreshIdle"),
               ],
             ]}
+          />
+          <MergeSection
+            video={video}
+            onChanged={() => {
+              void history.reload()
+              onMerged?.()
+            }}
           />
           <Field
             label={t("admin.videos.field.title")}

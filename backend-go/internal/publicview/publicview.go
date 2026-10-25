@@ -55,7 +55,7 @@ func Dashboard(d *sqlite.Dashboard) map[string]any {
 	}
 	videos := make([]any, 0, len(d.Videos))
 	for _, v := range d.Videos {
-		videos = append(videos, map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus), "translations": publicTranslations(v.Translations), "sourceLanguage": value(v.Translations.SourceLanguage)})
+		videos = append(videos, publicVideo(v))
 	}
 	var focus any = nil
 	if f := d.Focus; f != nil {
@@ -125,7 +125,17 @@ func publicPost(p sqlite.Post) map[string]any {
 	return map[string]any{"id": p.ID, "source": p.Source, "accountHandle": value(p.AccountHandle), "type": p.Type, "label": value(p.Label), "text": p.Text, "publishedAt": p.PublishedAt, "url": p.URL, "likes": p.Likes, "reposts": p.Reposts, "replies": p.Replies, "mediaUrl": value(p.MediaURL), "mediaAlt": value(p.MediaAlt), "accountUrl": value(p.AccountURL), "media": media, "mediaId": value(p.MediaID), "mediaStatus": p.MediaStatus, "mediaSourceUrl": value(p.MediaSourceURL), "translations": publicTranslations(p.Translations), "sourceLanguage": value(p.Translations.SourceLanguage)}
 }
 func publicVideo(v sqlite.Video) map[string]any {
-	return map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus), "translations": publicTranslations(v.Translations), "sourceLanguage": value(v.Translations.SourceLanguage)}
+	return map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus), "translations": publicTranslations(v.Translations), "sourceLanguage": value(v.Translations.SourceLanguage), "alternates": publicAlternates(v.Alternates)}
+}
+
+// publicAlternates lists the other platforms' copies of a video by their
+// public links only.
+func publicAlternates(alternates []sqlite.VideoAlternate) []any {
+	out := make([]any, 0, len(alternates))
+	for _, a := range alternates {
+		out = append(out, map[string]any{"source": a.Source, "url": a.URL})
+	}
+	return out
 }
 func publicAsset(a sqlite.Asset) map[string]any {
 	return map[string]any{"id": a.ID, "kind": a.Kind, "alt": value(a.Alt), "weekStart": value(a.WeekStart), "periodStart": value(a.PeriodStart), "periodEnd": value(a.PeriodEnd), "periodBasis": value(a.PeriodBasis), "sourceAccount": value(a.SourceAccount), "updatedAt": value(a.UpdatedAt), "url": value(a.URL), "sourceUrl": value(a.SourceURL), "mediaId": value(a.MediaID), "mediaStatus": a.MediaStatus, "mediaSourceUrl": value(a.MediaSourceURL)}

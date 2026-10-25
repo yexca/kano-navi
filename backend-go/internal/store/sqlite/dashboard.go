@@ -133,6 +133,14 @@ type Video struct {
 	LiveStatus *string
 	// Translations resolves the title's translations by precedence.
 	Translations TranslationSet
+	// Alternates are the other platforms' uploads merged into this video.
+	Alternates []VideoAlternate
+}
+
+// VideoAlternate is the public link of an upload merged into a video.
+type VideoAlternate struct {
+	Source string
+	URL    string
 }
 
 type Focus struct {
@@ -481,6 +489,9 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 		videoRefs = append(videoRefs, &videos[i])
 	}
 	if err = s.attachVideoTranslations(ctx, videoRefs...); err != nil {
+		return nil, err
+	}
+	if err = s.attachVideoAlternates(ctx, videoRefs...); err != nil {
 		return nil, err
 	}
 	upcoming := make([]DashboardEvent, 0)

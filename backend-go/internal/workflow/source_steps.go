@@ -135,15 +135,22 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 			break
 		}
 		counts, err := s.Store.ReconcileEventMerges(ctx, time.Now())
+		var videos sqlite.VideoMergeCounts
+		if err == nil {
+			videos, err = s.Store.ReconcileVideoMerges(ctx, time.Now())
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
 			}
 			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 		}
+		// Video merges have their own flat counts, which the console lists.
 		return AttemptResult{Status: "succeeded", Result: map[string]any{
 			"from": counts.From, "to": counts.To, "considered": counts.Considered, "merged": counts.Merged,
 			"retargeted": counts.Retargeted, "released": counts.Released, "kept": counts.Kept, "ambiguous": counts.Ambiguous,
+			"videosConsidered": videos.Considered, "videosMerged": videos.Merged, "videosReleased": videos.Released,
+			"videosKept": videos.Kept, "videosAmbiguous": videos.Ambiguous,
 		}}, nil
 	}
 	return AttemptResult{}, NewStepError("capability_not_migrated", ErrBlocked)

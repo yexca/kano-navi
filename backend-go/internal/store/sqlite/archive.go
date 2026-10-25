@@ -271,6 +271,9 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 	if err = s.attachVideoTranslations(ctx, refs...); err != nil {
 		return nil, err
 	}
+	if err = s.attachVideoAlternates(ctx, refs...); err != nil {
+		return nil, err
+	}
 	previous, next, err := s.adjacentDates(ctx, "videos", instant, " AND "+publicVideoScope, nil, start, end)
 	if err != nil {
 		return nil, err

@@ -58,6 +58,16 @@
   dialog reads a Bilibili upload again at once. New route:
   `POST /api/admin/videos/bilibili`; `GET /api/admin/sources` adds `bilibili`
   and `GET /api/admin/videos` accepts `source`.
+- A Bilibili upload merged into its YouTube video shows the video it belongs
+  to, and the YouTube card links the upload; both can undo the merge, which
+  keeps the upload separate for good. The Correct dialog merges an upload by
+  hand, from its possible YouTube copies or any YouTube link, or merges a BV
+  ID into a YouTube video. A Bilibili matches list above the videos shows the
+  uploads the rule merges at its next run and those it leaves to the
+  operator. New routes: `GET /api/admin/videos/merges`,
+  `GET /api/admin/videos/{id}/merges`, `POST /api/admin/videos/{id}/merge`
+  and `POST /api/admin/videos/{id}/unmerge`; videos add their merge state
+  and `alternates`.
 
 </details>
 
@@ -112,8 +122,15 @@
   Bilibili's public web API, at most once every three hours by default. When
   Bilibili asks for a captcha it waits 6 hours, doubling up to a day, instead
   of retrying, and keeps every stored upload. Covers are cached from
-  `*.hdslb.com`. The uploads stay in the console until they can be matched
-  with their YouTube copy, so the board does not list a cover twice.
+  `*.hdslb.com`. The uploads stay in the console, so the board does not list
+  a cover twice.
+- The `reconcile` step also merges each Bilibili upload into the YouTube
+  video of the same work: the only one published within six hours whose
+  length is within three seconds and whose song title overlaps. Several
+  matches, or a YouTube video whose length is not stored yet, leave the
+  upload to the operator, and an operator's merge or undo is never changed.
+  It runs after the `bilibili` step too, and the merged upload's title
+  becomes the video's Chinese translation.
 
 </details>
 
@@ -153,6 +170,11 @@
   titles and the About page. Kano Navi stays the project name and appears
   beside the version on the About page. Between 601 and 680 px wide the
   header shows only the avatar.
+- YouTube videos on the board and in the video archive list their merged
+  Bilibili uploads in `alternates` (`source` and `url`), and Chinese readers
+  see a merged video's Bilibili title in place of an AI translation (a
+  manual or YouTube translation still comes first). The board does not show
+  the links yet.
 
 </details>
 

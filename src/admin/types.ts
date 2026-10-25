@@ -349,6 +349,42 @@ export interface AdminVideo {
   revisions: number
   /** Null for videos the translate step does not cover (non-YouTube). */
   translation: AdminTranslation | null
+  /** A merged Bilibili upload names its YouTube video; mergeSource manual
+   * without a target is an undone merge the rules never redo. */
+  mergedInto: string | null
+  mergedIntoTitle: string | null
+  mergeSource: "rule" | "manual" | null
+  mergeReason: string | null
+  mergedAt: string | null
+  /** The uploads merged into this video. */
+  alternates: AdminVideoAlternate[]
+}
+
+export interface AdminVideoAlternate {
+  id: string
+  source: string
+  title: string
+  url: string
+  mergeSource: "rule" | "manual" | null
+  mergeReason: string | null
+  mergedAt: string | null
+}
+
+/** A YouTube video published within six hours of a Bilibili upload. */
+export interface VideoMergeCandidate {
+  youtube: AdminVideo
+  /** Every rule holds: titles, lengths within three seconds and timing. */
+  complete: boolean
+  titleMatch: boolean
+  /** Length difference in seconds; null when a length is unknown. */
+  durationDelta: number | null
+  gapMinutes: number
+}
+
+export interface VideoMergeSuggestion {
+  bilibili: AdminVideo
+  status: "rule" | "ambiguous" | "unverified" | "merged" | "separate" | "none"
+  candidates: VideoMergeCandidate[]
 }
 
 export interface VideoThumbnailPin {

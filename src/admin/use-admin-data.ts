@@ -46,6 +46,7 @@ import type {
   AdminTranslation,
   VideoCorrection,
   VideoHistory,
+  VideoMergeSuggestion,
   Workflow,
   WorkflowCatalog,
 } from "@/admin/types"
@@ -214,6 +215,18 @@ function createClient(run: Runner, slow: Runner) {
         "/videos/bilibili",
         { input },
       ),
+    /** Uploads the merge rule would attach, or leaves to the operator. */
+    videoMerges: () => get<{ items: VideoMergeSuggestion[] }>("/videos/merges"),
+    /** One upload's merge state and candidates, whatever its state. */
+    uploadMerges: (id: string) =>
+      get<{ items: VideoMergeSuggestion[] }>(`/videos/${enc(id)}/merges`),
+    /** `into` is a YouTube video ID or watch link. */
+    mergeVideo: (id: string, into: string) =>
+      send<{ video: AdminVideo }>("POST", `/videos/${enc(id)}/merge`, {
+        into,
+      }),
+    unmergeVideo: (id: string) =>
+      send<{ video: AdminVideo }>("POST", `/videos/${enc(id)}/unmerge`, {}),
 
     profileMedia: () => get<ProfileMediaState>("/profile-media"),
     addProfileMedia: (slot: string, source: string, sourceUrl: string) =>

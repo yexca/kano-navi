@@ -114,6 +114,59 @@ func (a *api) refreshVideo(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusAccepted, response)
 }
 
+// videoMerges lists the Bilibili uploads the merge rule would attach to a
+// YouTube video, or leaves to the operator, without writing.
+func (a *api) videoMerges(w http.ResponseWriter, r *http.Request) {
+	a.writeMergeSuggestions(w, r, "")
+}
+
+// uploadMerges describes one upload's merge state and candidates, whatever
+// its state; another ID lists nothing.
+func (a *api) uploadMerges(w http.ResponseWriter, r *http.Request) {
+	a.writeMergeSuggestions(w, r, r.PathValue("id"))
+}
+
+func (a *api) writeMergeSuggestions(w http.ResponseWriter, r *http.Request, only string) {
+	items, err := a.Store.VideoMergeSuggestions(r.Context(), only)
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// mergeVideo accepts { into } with a YouTube video ID or watch link and
+// attaches the Bilibili upload to that video as an operator decision.
+func (a *api) mergeVideo(w http.ResponseWriter, r *http.Request) {
+	body, err := httpx.Body(w, r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	var into string
+	if json.Unmarshal(body["into"], &into) != nil || into == "" {
+		httpx.WriteError(w, httpx.Invalid("into must name a YouTube video"))
+		return
+	}
+	video, err := a.Store.MergeVideo(r.Context(), r.PathValue("id"), into, a.Now())
+	if err != nil {
+		writeVideoError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"video": video})
+}
+
+// unmergeVideo shows a merged upload on its own again. The decision is
+// durable: the rules never merge that upload automatically afterwards.
+func (a *api) unmergeVideo(w http.ResponseWriter, r *http.Request) {
+	video, err := a.Store.UnmergeVideo(r.Context(), r.PathValue("id"), a.Now())
+	if err != nil {
+		writeVideoError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"video": video})
+}
+
 // addBilibiliVideo accepts { input } with a BV ID or a bilibili.com video
 // link and stores that upload of the configured account.
 func (a *api) addBilibiliVideo(w http.ResponseWriter, r *http.Request) {
@@ -210,6 +263,12 @@ func writeVideoError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, sqlite.ErrVideoNotFound):
 		httpx.WriteCode(w, http.StatusNotFound, "video_not_found")
+	case errors.Is(err, sqlite.ErrVideoMergeInvalid):
+		httpx.WriteError(w, httpx.Invalid("only a Bilibili upload can be merged, into a stored YouTube video"))
+	case errors.Is(err, sqlite.ErrVideoMergeConflict):
+		httpx.WriteCode(w, http.StatusConflict, "merge_conflict")
+	case errors.Is(err, sqlite.ErrVideoNotMerged):
+		httpx.WriteError(w, httpx.Invalid("video is not merged"))
 	case errors.Is(err, sqlite.ErrVideoInvalid):
 		httpx.WriteError(w, httpx.Invalid("video correction is invalid"))
 	case errors.Is(err, sqlite.ErrReadOnly):

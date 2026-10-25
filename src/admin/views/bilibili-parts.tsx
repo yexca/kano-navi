@@ -10,7 +10,7 @@ import { useAdmin } from "@/admin/use-admin-data"
 /**
  * The Bilibili source on the Videos page: how its reads are going, and an
  * operator's way to add one upload by BV ID or link. Uploads stay in the
- * console until they can be matched with their YouTube copy.
+ * console; one merged into its YouTube copy is listed on that video.
  */
 export function BilibiliSource({
   status,

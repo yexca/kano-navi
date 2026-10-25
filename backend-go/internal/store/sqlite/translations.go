@@ -63,7 +63,7 @@ const videoTitleSource = "COALESCE(%[1]s.manual_title, %[1]s.title)"
 
 // videoTranslationScope selects the videos the machine step translates.
 // Bilibili metadata is already Chinese and is not sent to a model.
-const videoTranslationScope = "%[1]s.source = 'youtube'"
+const videoTranslationScope = "%[1]s.source = 'youtube' AND %[1]s.merged_into IS NULL"
 
 type translationOwner struct {
 	table, field, source, instant, scope string

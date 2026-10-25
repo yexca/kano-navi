@@ -109,6 +109,13 @@ export interface Video {
   /** Translations of the title and its detected language (ja, en, zh, ...). */
   translations?: Translations
   sourceLanguage?: string | null
+  /** The same work on other platforms, such as a merged Bilibili upload. */
+  alternates?: VideoAlternate[]
+}
+
+export interface VideoAlternate {
+  source: string
+  url: string
 }
 
 export interface ScheduleAsset {

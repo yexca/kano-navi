@@ -113,6 +113,10 @@ func (s *Store) SetVideoOverrides(ctx context.Context, id string, in VideoOverri
 		if _, err = tx.ExecContext(ctx, `UPDATE videos SET manual_title=?,manual_kind=?,manual_thumbnail_media_id=?,manual_thumbnail_sha256=?,manual_updated_at=? WHERE id=?`, title, kind, media, hash, stamp, id); err != nil {
 			return AdminVideo{}, ErrUnavailable
 		}
+		// A corrected title of a merged upload is its video's translation.
+		if _, err = refreshMergeTranslations(ctx, tx, id, stamp); err != nil {
+			return AdminVideo{}, ErrUnavailable
+		}
 		if err = bumpRevision(ctx, tx, stamp); err != nil {
 			return AdminVideo{}, ErrUnavailable
 		}
