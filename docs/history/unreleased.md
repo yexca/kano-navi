@@ -164,6 +164,12 @@
   Japanese readers always see the source.
 - In English and Japanese, the schedule no longer shows Chinese reservation
   text such as `YouTube Live / 预约`.
+- A YouTube schedule entry that still carries its video's title shows that
+  video's translation, marked like a video row, in the week guide, the month
+  grid and the spotlight; an entry with its own wording keeps the source.
+  The board, calendar and MCP dashboard events add `translations` and
+  `sourceLanguage`. The YouTube Live and YouTube Premiere details read in the
+  reader's language.
 - A started premiere or release no longer shows as on air for three hours;
   only streams are presumed live without an end, and a presumed-live item
   gives the spotlight to a reservation starting within 30 minutes.

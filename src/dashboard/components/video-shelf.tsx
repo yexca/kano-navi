@@ -113,7 +113,7 @@ function VideoRow({
           <TranslatedTitle
             className="video-row-title"
             title={cleanVideoTitle(video.title)}
-            video={video}
+            translations={video.translations}
             locale={locale}
             t={t}
           />

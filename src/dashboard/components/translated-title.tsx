@@ -1,4 +1,4 @@
-import type { Locale, Translator, Video } from "@/types"
+import type { Locale, Translations, Translator, Video } from "@/types"
 
 import {
   pickTranslation,
@@ -9,24 +9,25 @@ import {
 import { cleanVideoTitle } from "../format"
 
 /**
- * A video title inside a link (a ticket, a row): the reader's translation,
- * marked as one. A button cannot go inside a link, so the source wording sits
- * in the mark's tooltip. `title` is the source title as the card shows it.
+ * A video or schedule title inside a link (a ticket, a row): the reader's
+ * translation, marked as one. A button cannot go inside a link, so the source
+ * wording sits in the mark's tooltip. `title` is the source title as the
+ * card shows it; `translations` are its video's or event's.
  */
 export function TranslatedTitle({
   className,
   title,
-  video,
+  translations,
   locale,
   t,
 }: {
   className: string
   title: string
-  video?: Video | null
+  translations?: Translations | null
   locale: Locale
   t: Translator
 }) {
-  const translation = pickTranslation(video?.translations, locale)
+  const translation = pickTranslation(translations, locale)
   if (!translation) return <span className={className}>{title}</span>
   return (
     <span className={className}>

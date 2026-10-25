@@ -197,8 +197,9 @@ lowercase English code the interface translates or an operator's note, shown as
 written. YouTube synchronization writes `scheduled`, `live` or `ended`; an
 extraction entry without a status, or with a cancellation-like one, stores
 `pending`, and the model is asked for short English words such as `scheduled`,
-`tentative` or `released`. Automatic `detail` text is English: `YouTube Live`,
-`YouTube Premiere`, or the model's summary. Titles keep their source wording.
+`tentative` or `released`. Automatic `detail` text is English: `YouTube Live`
+or `YouTube Premiere`, which the interface reads as codes and translates, or
+the model's summary, shown as written. Titles keep their source wording.
 The labels and the codes they cover live in `src/lib/event-text.ts`.
 
 Earlier releases stored Chinese display text (`已预约`, `会员限定`, `直播中`,
@@ -247,6 +248,13 @@ the console. A Bilibili video, which the machine step never translates,
 reports `sourceLanguage` `zh`. A video's translations follow its effective
 title, `COALESCE(manual_title, title)`, so an operator's title correction
 retires its machine translations.
+
+Events have no translation rows of their own. A board or calendar event
+whose URL names a YouTube video in the translate step's scope (by
+`stream_identity`) carries that video's `translations` and `sourceLanguage`
+while its trimmed title equals the video's effective title; an event with
+an operator's or an extraction's own wording carries none. The projection is
+computed at read time, so a video translation's revision already covers it.
 
 Startup creates both tables in existing snapshots; no post, video or event
 row is rewritten.

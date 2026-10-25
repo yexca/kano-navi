@@ -4,7 +4,7 @@ type MessageCatalog = Record<
 >
 
 export type PageMessages = Partial<
-  Record<import("./types").Locale, MessageCatalog>
+  Record<import("./types.ts").Locale, MessageCatalog>
 >
 
 export const localeOptions = [
@@ -132,6 +132,8 @@ const messages = {
     "schedule.emptyWeek": "这一周还没有公开日程",
     "schedule.emptyHint": "新的安排通常会先出现在 X 的周程图里。",
     "schedule.publicEvent": "公开活动",
+    "schedule.detail.youtube_live": "YouTube 直播",
+    "schedule.detail.youtube_premiere": "YouTube 首播",
     "schedule.status.upcoming": "即将",
     "schedule.status.live": "直播中",
     "schedule.status.done": "已结束",
@@ -344,6 +346,8 @@ const messages = {
     "schedule.emptyHint":
       "新しい予定はまず X の週間スケジュールに載ることが多いです。",
     "schedule.publicEvent": "公開イベント",
+    "schedule.detail.youtube_live": "YouTube ライブ",
+    "schedule.detail.youtube_premiere": "YouTube プレミア公開",
     "schedule.status.upcoming": "予定",
     "schedule.status.live": "配信中",
     "schedule.status.done": "終了",
@@ -558,6 +562,8 @@ const messages = {
     "schedule.emptyHint":
       "New plans usually appear first in the weekly schedule image on X.",
     "schedule.publicEvent": "Public event",
+    "schedule.detail.youtube_live": "YouTube Live",
+    "schedule.detail.youtube_premiere": "YouTube Premiere",
     "schedule.status.upcoming": "Upcoming",
     "schedule.status.live": "On air",
     "schedule.status.done": "Ended",
@@ -665,9 +671,9 @@ export function detectLocale(languages = []) {
 }
 
 export function createTranslator(
-  locale: import("./types").Locale,
+  locale: import("./types.ts").Locale,
   pageMessages: PageMessages = {},
-): import("./types").Translator {
+): import("./types.ts").Translator {
   const selectedMessages: MessageCatalog = {
     ...messages[locale],
     ...(pageMessages[locale] || {}),

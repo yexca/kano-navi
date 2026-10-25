@@ -56,9 +56,9 @@ remain static and never mount the dashboard hook or request its API.
 English is the base locale. Every message exists in English, a key missing
 from Japanese or Simplified Chinese falls back to it, and a browser language
 that is none of the three selects it. Stored records are not interface copy:
-event status codes become labels through `src/lib/event-text.ts`, which also
-reads the Chinese text earlier releases stored, while titles, details and
-operator notes show as stored (see
+event status codes and the generated YouTube details become labels through
+`src/lib/event-text.ts`, which also reads the Chinese text earlier releases
+stored, while other details and operator notes show as stored (see
 [Stored event text](data-model.md#stored-event-text)).
 
 Post text and video titles come with server-resolved `translations` (see
@@ -68,10 +68,12 @@ translation by default and Japanese readers always get the source. Block
 text such as a post uses `TranslatedText`, which labels the origin (AI,
 platform or editor) and offers a Show original button; a title inside a
 link, where a button cannot go, uses `TranslationMark`, whose tooltip holds
-the source. Video titles go through
+the source. Video and schedule titles go through
 `src/dashboard/components/translated-title.tsx`: `TranslatedTitle` for a
-title inside a link (spotlight tickets, shelf and archive rows) and
-`TranslatedHeading`, with the button, for the featured video. An operator's
+title inside a link (spotlight tickets, shelf and archive rows, week-guide
+entries) and `TranslatedHeading`, with the button, for the featured video.
+Month-grid chips are too small for a mark and show the reader's wording
+unmarked; the week guide marks it and holds the source. An operator's
 Featured title from the focus record shows as written. The wording shown
 carries its `lang` attribute. The console's
 completeness chips and translation editor are in

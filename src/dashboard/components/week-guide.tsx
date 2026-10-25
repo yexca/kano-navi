@@ -20,6 +20,7 @@ import {
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
 import { ExternalLink } from "@/site/links"
 import { eventDetailText } from "@/lib/event-text"
+import { pickTranslation } from "@/components/translated-text"
 import {
   addDays,
   cleanVideoTitle,
@@ -38,6 +39,7 @@ import {
 } from "../format"
 import { archiveRange } from "../use-dashboard"
 import { ArchiveMore, ArchiveState } from "./archive-dialog"
+import { TranslatedTitle } from "./translated-title"
 
 function keyToDate(key: string) {
   const [year, month, day] = key.split("-").map(Number)
@@ -82,10 +84,12 @@ const statusTones: Record<string, string> = {
 
 function GuideEvent({
   event,
+  locale,
   now,
   t,
 }: {
   event: ScheduleEvent
+  locale: Locale
   now: number
   t: Translator
 }) {
@@ -126,12 +130,16 @@ function GuideEvent({
           )}
           {event.url ? <ArrowUpRight aria-hidden="true" /> : null}
         </span>
-        <span className="guide-event-title">
-          {cleanVideoTitle(event.title)}
-        </span>
+        <TranslatedTitle
+          className="guide-event-title"
+          title={cleanVideoTitle(event.title)}
+          translations={event.translations}
+          locale={locale}
+          t={t}
+        />
         {event.detail ? (
           <span className="guide-event-detail">
-            {eventDetailText(event.detail)}
+            {eventDetailText(event.detail, t)}
           </span>
         ) : null}
         <span className="guide-event-tags">
@@ -220,7 +228,13 @@ function WeekDays({
             {items.length ? (
               <ol className="guide-day-events">
                 {items.map((event) => (
-                  <GuideEvent key={event.id} event={event} now={now} t={t} />
+                  <GuideEvent
+                    key={event.id}
+                    event={event}
+                    locale={locale}
+                    now={now}
+                    t={t}
+                  />
                 ))}
               </ol>
             ) : (
@@ -322,7 +336,11 @@ function MonthGrid({
                     const time = event.startsAt
                       ? formatJapanTime(event.startsAt)
                       : null
-                    const label = `${time || t("common.pendingConfirmation")} ${cleanVideoTitle(event.title)} · ${t(`schedule.status.${status}`)}`
+                    const title = cleanVideoTitle(
+                      pickTranslation(event.translations, locale)?.text ||
+                        event.title,
+                    )
+                    const label = `${time || t("common.pendingConfirmation")} ${title} · ${t(`schedule.status.${status}`)}`
                     const Wrapper = event.url ? ExternalLink : "span"
                     return (
                       <li key={event.id}>
@@ -334,7 +352,7 @@ function MonthGrid({
                           <span className="sr-only">{label}</span>
                           <span aria-hidden="true">
                             {time ? <strong>{time}</strong> : null}
-                            {cleanVideoTitle(event.title)}
+                            {title}
                           </span>
                         </Wrapper>
                       </li>
@@ -474,6 +492,7 @@ export function ScheduleMonth({
                       <GuideEvent
                         key={event.id}
                         event={event}
+                        locale={locale}
                         now={now}
                         t={t}
                       />

@@ -111,6 +111,9 @@ type DashboardEvent struct {
 	IsUpcoming           bool
 	// LiveStatus is the linked video's trusted broadcast state, or nil.
 	LiveStatus *string
+	// Translations are the linked video's title translations while the
+	// event shows that video's title.
+	Translations TranslationSet
 }
 
 type Video struct {
@@ -497,6 +500,9 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 		return nil, err
 	}
 	if err = s.attachVideoAlternates(ctx, videoRefs...); err != nil {
+		return nil, err
+	}
+	if err = s.attachEventTranslations(ctx, events); err != nil {
 		return nil, err
 	}
 	upcoming := make([]DashboardEvent, 0)

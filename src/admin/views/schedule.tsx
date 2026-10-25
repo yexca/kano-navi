@@ -434,7 +434,7 @@ export function ScheduleView(_: ViewProps) {
                   <span role="cell" className="adm-event-main">
                     <strong>{event.title}</strong>
                     {event.detail ? (
-                      <small>{eventDetailText(event.detail)}</small>
+                      <small>{eventDetailText(event.detail, t)}</small>
                     ) : null}
                     <span className="adm-chip-row">
                       <Badge>

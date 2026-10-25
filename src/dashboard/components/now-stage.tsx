@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 
 import { ExternalLink, XLogo, YouTubeLogo } from "@/site/links"
+import { eventDetailText } from "@/lib/event-text"
 import {
   confirmedLiveStatus,
   countdownParts,
@@ -98,7 +99,7 @@ function TicketHead({
     ? videoKindLabel(item.video, t)
     : typeKey
       ? t(typeKey)
-      : item.detail || t("schedule.publicEvent")
+      : eventDetailText(item.detail, t) || t("schedule.publicEvent")
   const manual = item.event ? eventIsManual(item.event) : false
   return (
     <span className="ticket-head">
@@ -229,7 +230,7 @@ function FullTicket({
             <TranslatedTitle
               className="ticket-title"
               title={item.title}
-              video={item.video}
+              translations={(item.video || item.event)?.translations}
               locale={locale}
               t={t}
             />
@@ -282,7 +283,7 @@ function CompactTicket({
           <TranslatedTitle
             className="ticket-title"
             title={item.title}
-            video={item.video}
+            translations={(item.video || item.event)?.translations}
             locale={locale}
             t={t}
           />
@@ -348,7 +349,7 @@ function LatestCard({
         <TranslatedTitle
           className="latest-card-title"
           title={companion.title}
-          video={companion.video}
+          translations={companion.video.translations}
           locale={locale}
           t={t}
         />

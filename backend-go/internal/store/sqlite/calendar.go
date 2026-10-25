@@ -112,6 +112,9 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 	if err := s.attachLiveStatus(ctx, items, now); err != nil {
 		return nil, err
 	}
+	if err := s.attachEventTranslations(ctx, items); err != nil {
+		return nil, err
+	}
 
 	dayCounts := make(map[string]int64)
 	countRows, err := s.db.QueryContext(ctx, `SELECT starts_on, COUNT(*) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on BETWEEN ? AND ? GROUP BY starts_on`, from, to)

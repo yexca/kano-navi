@@ -109,7 +109,7 @@ func valueInt(v *int64) any {
 }
 
 func PublicEvent(e sqlite.DashboardEvent, extras bool) map[string]any {
-	out := map[string]any{"id": e.ID, "source": e.Source, "title": e.Title, "detail": value(e.Detail), "startsOn": e.StartsOn, "startsAt": value(e.StartsAt), "endsAt": value(e.EndsAt), "timezone": e.Timezone, "timePrecision": e.TimePrecision, "status": value(e.Status), "eventType": value(e.EventType), "url": value(e.URL), "provenance": e.Provenance, "cancellationStatus": e.CancellationStatus, "cancellationSource": value(e.CancellationSource), "cancellationReason": value(e.CancellationReason), "cancellationEvidence": value(e.CancellationEvidence), "cancellationAt": value(e.CancellationAt)}
+	out := map[string]any{"id": e.ID, "source": e.Source, "title": e.Title, "detail": value(e.Detail), "startsOn": e.StartsOn, "startsAt": value(e.StartsAt), "endsAt": value(e.EndsAt), "timezone": e.Timezone, "timePrecision": e.TimePrecision, "status": value(e.Status), "eventType": value(e.EventType), "url": value(e.URL), "provenance": e.Provenance, "cancellationStatus": e.CancellationStatus, "cancellationSource": value(e.CancellationSource), "cancellationReason": value(e.CancellationReason), "cancellationEvidence": value(e.CancellationEvidence), "cancellationAt": value(e.CancellationAt), "translations": publicTranslations(e.Translations), "sourceLanguage": value(e.Translations.SourceLanguage)}
 	if extras {
 		out["manualLocked"] = e.ManualLocked
 		out["isUpcoming"] = e.IsUpcoming

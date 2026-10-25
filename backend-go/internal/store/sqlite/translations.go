@@ -317,6 +317,62 @@ func (s *Store) attachVideoTranslations(ctx context.Context, videos ...*Video) e
 	return nil
 }
 
+// attachEventTranslations gives each event linked to a YouTube video by its
+// URL that video's title translations, but only while the event's title is
+// still the video's effective title: an operator's or an extraction's own
+// wording keeps the source.
+func (s *Store) attachEventTranslations(ctx context.Context, events []DashboardEvent) error {
+	identities := []any{}
+	for _, event := range events {
+		if event.URL != nil {
+			if identity := streamIdentity(*event.URL); strings.HasPrefix(identity, "youtube:") {
+				identities = append(identities, identity)
+			}
+		}
+	}
+	if len(identities) == 0 {
+		return nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT v.id,v.url,`+fmt.Sprintf(videoTitleSource, "v")+` FROM videos v WHERE `+fmt.Sprintf(videoTranslationScope, "v")+` AND stream_identity(v.url) IN (?`+strings.Repeat(",?", len(identities)-1)+`) ORDER BY v.id`, identities...)
+	if err != nil {
+		return dbErr(err)
+	}
+	defer rows.Close()
+	type linkedVideo struct{ id, title string }
+	videos := map[string]linkedVideo{}
+	ids := []string{}
+	for rows.Next() {
+		var id, url, title string
+		if err := rows.Scan(&id, &url, &title); err != nil {
+			return dbErr(err)
+		}
+		if identity := streamIdentity(url); videos[identity].id == "" {
+			videos[identity] = linkedVideo{id, title}
+			ids = append(ids, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return dbErr(err)
+	}
+	if err := rows.Close(); err != nil {
+		return dbErr(err)
+	}
+	sets, err := s.resolveTranslations(ctx, TranslationOwnerVideo, ids)
+	if err != nil {
+		return err
+	}
+	for i := range events {
+		if events[i].URL == nil {
+			continue
+		}
+		video, ok := videos[streamIdentity(*events[i].URL)]
+		if ok && strings.TrimSpace(video.title) == strings.TrimSpace(events[i].Title) {
+			events[i].Translations = sets[video.id]
+		}
+	}
+	return nil
+}
+
 // --- console ----------------------------------------------------------------
 
 // AdminTranslationLocale is one locale of an owner in the console.

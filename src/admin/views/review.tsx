@@ -393,7 +393,7 @@ function CancellationCard({
         <div>
           <h3>{event.title}</h3>
           {event.detail ? (
-            <p className="adm-muted">{eventDetailText(event.detail)}</p>
+            <p className="adm-muted">{eventDetailText(event.detail, t)}</p>
           ) : null}
         </div>
         {event.cancellationConfidence != null ? (

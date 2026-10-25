@@ -89,6 +89,9 @@ export interface ScheduleEvent {
   cancellationEvidence?: string | null
   /** The linked YouTube video's confirmed broadcast state. */
   liveStatus?: LiveStatus | null
+  /** The linked video's title translations while the event shows its title. */
+  translations?: Translations
+  sourceLanguage?: string | null
 }
 
 export interface Video {
