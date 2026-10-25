@@ -148,6 +148,21 @@ export interface Sources {
     push: PushStatus
     liveProbe: LiveProbeStatus
   }
+  bilibili: {
+    /** False when the process has no Bilibili reader. */
+    available: boolean
+    skipped: boolean
+    account?: string
+    videos?: number
+    /** A login cookie (BILIBILI_SESSDATA) is configured; it is never shown. */
+    signedIn?: boolean
+    minIntervalMinutes?: number
+    lastAttemptAt?: string | null
+    lastSuccessAt?: string | null
+    /** Reads wait until then after Bilibili asked for a captcha. */
+    blockedUntil?: string | null
+    lastError?: string | null
+  }
 }
 
 export type Cancellation = "none" | "llm_suspected" | "manual_confirmed"

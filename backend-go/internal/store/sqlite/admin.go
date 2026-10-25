@@ -190,10 +190,11 @@ type AdminPostFilter struct {
 }
 
 // AdminVideoFilter narrows the video list. Status is "published",
-// "upcoming" or "live"; Thumbnail is "ready", "present" or "missing".
+// "upcoming" or "live"; Thumbnail is "ready", "present" or "missing";
+// Source is "youtube" or "bilibili".
 type AdminVideoFilter struct {
-	Page, PageSize          int
-	Status, Kind, Thumbnail string
+	Page, PageSize                  int
+	Status, Kind, Thumbnail, Source string
 }
 
 // AdminEventFilter narrows the event list. Cancellation is "none",
@@ -421,6 +422,10 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 		clauses = append(clauses, "v.scheduled_at IS NOT NULL AND COALESCE(v.is_upcoming,0)=1")
 	case "live":
 		clauses = append(clauses, "lower(COALESCE(v.kind,'')) = 'live'")
+	}
+	if f.Source == "youtube" || f.Source == "bilibili" {
+		clauses = append(clauses, "v.source = ?")
+		args = append(args, f.Source)
 	}
 	if kind := strings.TrimSpace(f.Kind); kind != "" {
 		clauses = append(clauses, "COALESCE(v.manual_kind,v.kind) = ?")

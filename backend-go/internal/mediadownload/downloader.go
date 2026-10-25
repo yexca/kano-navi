@@ -44,7 +44,9 @@ func AllowedURL(raw string) bool {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
-	if !(host == "pbs.twimg.com" || strings.HasSuffix(host, ".twimg.com") || strings.HasSuffix(host, ".ytimg.com")) {
+	// X media, YouTube thumbnails and Bilibili covers (i0.hdslb.com and its
+	// numbered siblings); each needs a real subdomain of the CDN.
+	if !(host == "pbs.twimg.com" || strings.HasSuffix(host, ".twimg.com") || strings.HasSuffix(host, ".ytimg.com") || strings.HasSuffix(host, ".hdslb.com")) {
 		return false
 	}
 	for key := range u.Query() {

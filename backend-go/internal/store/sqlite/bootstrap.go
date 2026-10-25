@@ -215,8 +215,8 @@ func (s *Store) seedDefaultWorkflows(ctx context.Context) error {
 			id, name, steps string
 			interval        int
 		}{
-			{"full-refresh", "Full refresh", `["x","youtube","media","schedule","translate"]`, 60},
-			{"sources-only", "Sources only", `["x","youtube"]`, 30},
+			{"full-refresh", "Full refresh", `["x","youtube","bilibili","media","schedule","translate"]`, 60},
+			{"sources-only", "Sources only", `["x","youtube","bilibili"]`, 30},
 		} {
 			if _, err = tx.ExecContext(ctx, `INSERT INTO workflows(id,name,steps_json,source_lookback_json,schedule_enabled,interval_minutes,created_at,updated_at) VALUES(?,?,?,'{"x":7,"youtube":14}',0,?,?,?)`, workflow.id, workflow.name, workflow.steps, workflow.interval, now, now); err != nil {
 				return ErrSchema

@@ -177,7 +177,7 @@ func (s *Store) resolveMediaPath(relative string) (string, error) {
 	if strings.HasPrefix(normalized, "sha256/") {
 		root = filepath.Join(root, "cache", "media")
 	} else {
-		if len(parts) == 0 || (parts[0] != "x" && parts[0] != "youtube" && parts[0] != "avatar") {
+		if len(parts) == 0 || (parts[0] != "x" && parts[0] != "youtube" && parts[0] != "bilibili" && parts[0] != "avatar") {
 			return "", ErrMediaNotFound
 		}
 	}

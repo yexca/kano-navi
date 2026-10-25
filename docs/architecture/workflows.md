@@ -90,13 +90,19 @@ without fetch windows retains the existing incremental behavior described above.
 
 Synchronization is split into modular steps declared in
 `backend-go/internal/jobs` (`StepOrder`), executed in this order: `x`,
-`youtube`, `media`, `schedule`, `translate`, `reconcile`. `kano-go sync` (`make sync`) runs every step
+`youtube`, `bilibili`, `media`, `schedule`, `translate`, `reconcile`. `kano-go sync` (`make sync`) runs every step
 and records the ones disabled by `SKIP_*` as skipped.
 A saved workflow chooses a subset; its run records `sync_runs.source =
 workflow` and exposes per-step progress (`pending`, `running`, `completed`,
 `partial`, `failed`, `skipped`) through `/api/admin/runs`. When a selected
 step is disabled by `SKIP_*`, its result records `{ skipped: true, reason:
 "environment" }` instead of silently disappearing.
+
+`bilibili` paces itself: it reads the account's upload list at most once per
+`BILIBILI_MIN_INTERVAL_MINUTES` and never during a captcha backoff, so it is
+safe in a frequent workflow (see [Bilibili](sources.md#bilibili)). New
+installations include it in both starting workflows; existing workflows keep
+their step lists, so an operator adds it on the Runs & workflows page.
 
 `reconcile` applies the deterministic duplicate-merge rules in
 [Duplicate merging](data-model.md#duplicate-merging) to the Japan dates from

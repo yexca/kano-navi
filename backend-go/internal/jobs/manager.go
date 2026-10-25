@@ -12,7 +12,7 @@ import (
 // StepOrder is the catalog execution order: sources first, then the
 // post-processing that consumes what the sources stored, and finally the
 // duplicate-event reconciliation over everything written before it.
-var StepOrder = []string{"x", "youtube", "media", "schedule", StepTranslate, "reconcile"}
+var StepOrder = []string{"x", "youtube", "bilibili", "media", "schedule", StepTranslate, "reconcile"}
 
 // NormalizeSteps returns the known step IDs in catalog order.
 func NormalizeSteps(values []string) []string {

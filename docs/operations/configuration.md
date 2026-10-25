@@ -2,45 +2,49 @@
 
 ## Environment Variables
 
-| Variable                      | Default              | Purpose                                                           |
-| ----------------------------- | -------------------- | ----------------------------------------------------------------- |
-| `APP_MODE`                    | `production`         | Explicit `development` bypasses login; production requires it     |
-| `ADMIN_PASSWORD`              | Empty                | Production startup requires at least 12 non-padding characters    |
-| `ADMIN_ORIGIN`                | Empty                | Optional explicit origin accepted for admin mutations             |
-| `LLM_SECRETS_KEY`             | Empty                | Required non-blank encryption master key at startup in every mode |
-| `PORT`                        | `7657`               | Shared frontend/API port for development, preview, and production |
-| `KANO_API_PORT`               | `7658`               | Development only: loopback port of the backend behind Vite        |
-| `SCHEDULE_EXTRACTION_ENABLED` | `1`                  | Initial legacy default for independent schedule stages            |
-| `SCHEDULE_KEYWORD_ENABLED`    | `1`                  | Enable keyword candidate selection                                |
-| `SCHEDULE_VISION_ENABLED`     | `1`                  | Enable schedule-board LLM extraction                              |
-| `SCHEDULE_MESSAGE_ENABLED`    | `1`                  | Enable single-message schedule detection                          |
-| `SCHEDULE_MESSAGE_ALL_POSTS`  | `0`                  | Send every post through the message route, skipping the heuristic |
-| `SCHEDULE_KEYWORDS`           | `schedule,...`       | Comma-separated schedule candidate keywords                       |
-| `TRANSLATION_SCAN_LIMIT`      | `20`                 | Posts and titles the translate step sends to a model per run      |
-| `TRANSLATION_LOOKBACK_DAYS`   | `30`                 | Days of posts and videos the translate step covers unrequested    |
-| `WORKFLOW_SCHEDULER_ENABLED`  | `1`                  | Start timed saved workflows inside the server process             |
-| `MCP_ENABLED`                 | `1`                  | Expose the stateless `/mcp` endpoint                              |
-| `MCP_CONTROL_TOKEN`           | Empty                | Bearer token for MCP mutation tools                               |
-| `X_HANDLES`                   | `kano_2525,_Kanotic` | Comma-separated public X account names                            |
-| `X_HANDLE`                    | Empty                | Single-account compatibility fallback                             |
-| `X_API_BEARER_TOKEN`          | Empty                | Optional environment-only credential for X archive search         |
-| `YOUTUBE_API_KEY`             | Empty                | Optional environment-only credential for YouTube range search     |
-| `SOURCE_HISTORY_MAX_PAGES`    | `4`                  | Fetch window pages per account/run (1–20), also within X budget   |
-| `X_BOOTSTRAP_DAYS`            | `7`                  | First-run X lookback in days                                      |
-| `X_DISCOVERY_LIMIT`           | `50`                 | Maximum discovered status IDs; bounds timeline pages of 20 (≤10)  |
-| `X_MAX_STATUS_REQUESTS`       | `12`                 | Maximum X detail requests per run; X fetch window page budget     |
-| `X_REFRESH_KNOWN`             | `1`                  | Known X posts refreshed per run                                   |
-| `X_SCHEDULE_REFRESH_LIMIT`    | `1`                  | Missing schedule source posts prioritized per account             |
-| `YOUTUBE_CHANNEL_ID`          | Main channel         | YouTube channel identifier                                        |
-| `YOUTUBE_BOOTSTRAP_VIDEOS`    | `6`                  | First-run RSS entries stored                                      |
-| `YOUTUBE_MAX_DETAIL_REQUESTS` | `12`                 | Reservation pages inspected per run                               |
-| `SYNC_TIMEOUT_MS`             | `7000`               | Timeout for a source network request                              |
-| `SYNC_REQUEST_DELAY_MS`       | `150`                | Delay between source detail requests                              |
-| `MEDIA_DOWNLOAD_LIMIT`        | `20`                 | Pending images attempted per run                                  |
-| `MEDIA_DOWNLOAD_TIMEOUT_MS`   | `10000`              | Timeout for an image request                                      |
-| `MEDIA_MAX_BYTES`             | `10485760`           | Maximum bytes accepted for one image                              |
-| `SKIP_X`, `SKIP_YOUTUBE`      | `0`                  | Set an individual source flag to `1` to skip it                   |
-| `SKIP_MEDIA`, `SKIP_LLM`      | `0`                  | Set a post-processing stage flag to `1` to skip it                |
+| Variable                        | Default              | Purpose                                                           |
+| ------------------------------- | -------------------- | ----------------------------------------------------------------- |
+| `APP_MODE`                      | `production`         | Explicit `development` bypasses login; production requires it     |
+| `ADMIN_PASSWORD`                | Empty                | Production startup requires at least 12 non-padding characters    |
+| `ADMIN_ORIGIN`                  | Empty                | Optional explicit origin accepted for admin mutations             |
+| `LLM_SECRETS_KEY`               | Empty                | Required non-blank encryption master key at startup in every mode |
+| `PORT`                          | `7657`               | Shared frontend/API port for development, preview, and production |
+| `KANO_API_PORT`                 | `7658`               | Development only: loopback port of the backend behind Vite        |
+| `SCHEDULE_EXTRACTION_ENABLED`   | `1`                  | Initial legacy default for independent schedule stages            |
+| `SCHEDULE_KEYWORD_ENABLED`      | `1`                  | Enable keyword candidate selection                                |
+| `SCHEDULE_VISION_ENABLED`       | `1`                  | Enable schedule-board LLM extraction                              |
+| `SCHEDULE_MESSAGE_ENABLED`      | `1`                  | Enable single-message schedule detection                          |
+| `SCHEDULE_MESSAGE_ALL_POSTS`    | `0`                  | Send every post through the message route, skipping the heuristic |
+| `SCHEDULE_KEYWORDS`             | `schedule,...`       | Comma-separated schedule candidate keywords                       |
+| `TRANSLATION_SCAN_LIMIT`        | `20`                 | Posts and titles the translate step sends to a model per run      |
+| `TRANSLATION_LOOKBACK_DAYS`     | `30`                 | Days of posts and videos the translate step covers unrequested    |
+| `WORKFLOW_SCHEDULER_ENABLED`    | `1`                  | Start timed saved workflows inside the server process             |
+| `MCP_ENABLED`                   | `1`                  | Expose the stateless `/mcp` endpoint                              |
+| `MCP_CONTROL_TOKEN`             | Empty                | Bearer token for MCP mutation tools                               |
+| `X_HANDLES`                     | `kano_2525,_Kanotic` | Comma-separated public X account names                            |
+| `X_HANDLE`                      | Empty                | Single-account compatibility fallback                             |
+| `X_API_BEARER_TOKEN`            | Empty                | Optional environment-only credential for X archive search         |
+| `YOUTUBE_API_KEY`               | Empty                | Optional environment-only credential for YouTube range search     |
+| `SOURCE_HISTORY_MAX_PAGES`      | `4`                  | Fetch window pages per account/run (1–20), also within X budget   |
+| `X_BOOTSTRAP_DAYS`              | `7`                  | First-run X lookback in days                                      |
+| `X_DISCOVERY_LIMIT`             | `50`                 | Maximum discovered status IDs; bounds timeline pages of 20 (≤10)  |
+| `X_MAX_STATUS_REQUESTS`         | `12`                 | Maximum X detail requests per run; X fetch window page budget     |
+| `X_REFRESH_KNOWN`               | `1`                  | Known X posts refreshed per run                                   |
+| `X_SCHEDULE_REFRESH_LIMIT`      | `1`                  | Missing schedule source posts prioritized per account             |
+| `YOUTUBE_CHANNEL_ID`            | Main channel         | YouTube channel identifier                                        |
+| `YOUTUBE_BOOTSTRAP_VIDEOS`      | `6`                  | First-run RSS entries stored                                      |
+| `YOUTUBE_MAX_DETAIL_REQUESTS`   | `12`                 | Reservation pages inspected per run                               |
+| `BILIBILI_UID`                  | Kano's account       | Bilibili account (numeric mid) whose uploads are read             |
+| `BILIBILI_MIN_INTERVAL_MINUTES` | `180`                | Minimum minutes between Bilibili list reads (60–1440)             |
+| `BILIBILI_SESSDATA`             | Empty                | Optional environment-only Bilibili login cookie                   |
+| `SYNC_TIMEOUT_MS`               | `7000`               | Timeout for a source network request                              |
+| `SYNC_REQUEST_DELAY_MS`         | `150`                | Delay between source detail requests                              |
+| `MEDIA_DOWNLOAD_LIMIT`          | `20`                 | Pending images attempted per run                                  |
+| `MEDIA_DOWNLOAD_TIMEOUT_MS`     | `10000`              | Timeout for an image request                                      |
+| `MEDIA_MAX_BYTES`               | `10485760`           | Maximum bytes accepted for one image                              |
+| `SKIP_X`, `SKIP_YOUTUBE`        | `0`                  | Set an individual source flag to `1` to skip it                   |
+| `SKIP_BILIBILI`                 | `0`                  | Set to `1` to skip the Bilibili step and the console's reads      |
+| `SKIP_MEDIA`, `SKIP_LLM`        | `0`                  | Set a post-processing stage flag to `1` to skip it                |
 
 `SKIP_LLM=1` skips both model steps, `schedule` and `translate`. Neither
 translation variable configures a model: the translate step reads only the
@@ -51,8 +55,16 @@ Docker Compose also uses `KANO_IMAGE` (default
 `yexca/kano-navi:latest` from Docker Hub) for the published image and `KANO_PORT`
 (default `7657`) for the host port. The API also defaults to `7657` inside the container.
 
+`BILIBILI_SESSDATA` is the `SESSDATA` cookie of a browser signed in to
+Bilibili (developer tools → Application → Cookies → `.bilibili.com`). With
+it, the `bilibili` step and the console's reads are sent as that account,
+which Bilibili's captcha blocks far less often than anonymous reads. It is
+sent only to `api.bilibili.com`, never stored in SQLite, logged, or returned;
+the console shows only whether one is configured. Prefer a secondary account,
+and replace the value when it expires or the account signs out.
+
 `.env.example` is the complete non-secret inventory. `ADMIN_PASSWORD` and
-`LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, and provider API keys are credentials;
+`LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, `BILIBILI_SESSDATA`, and provider API keys are credentials;
 never place real values in source code, SQLite plaintext, URLs, API responses,
 or logs. `OPENAI_API_KEY` is accepted only by the one-time migration command.
 

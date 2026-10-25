@@ -79,8 +79,8 @@ func newConsole(t *testing.T, mode, password string, steps *gatedSteps) *console
 	steps.seen = make(chan string, 32)
 	executor := &workflow.Executor{
 		Store: store, Steps: steps,
-		SyntheticSteps:  map[string]bool{"x": false, "youtube": false, "media": false, "schedule": false, "translate": false, "reconcile": false},
-		TolerateFailure: map[string]bool{"x": true, "youtube": true, "translate": true},
+		SyntheticSteps:  map[string]bool{"x": false, "youtube": false, "bilibili": false, "media": false, "schedule": false, "translate": false, "reconcile": false},
+		TolerateFailure: map[string]bool{"x": true, "youtube": true, "bilibili": true, "translate": true},
 	}
 	queue := &workflow.Queue{Store: store, Executor: executor}
 	t.Cleanup(queue.Close)
@@ -226,7 +226,7 @@ func TestSessionGuardsEveryRoute(t *testing.T) {
 func TestWorkflowLifecycle(t *testing.T) {
 	c := newConsole(t, "development", "", &gatedSteps{})
 	code, payload := c.call(t, "GET", "/api/admin/workflows", "")
-	if code != 200 || len(payload["items"].([]any)) != 0 || len(payload["steps"].([]any)) != 6 {
+	if code != 200 || len(payload["items"].([]any)) != 0 || len(payload["steps"].([]any)) != 7 {
 		t.Fatalf("empty=%d %v", code, payload)
 	}
 	if limits := payload["limits"].(map[string]any); limits["minIntervalMinutes"] != float64(15) || limits["maxIntervalMinutes"] != float64(10080) {

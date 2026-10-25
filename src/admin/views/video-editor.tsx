@@ -116,16 +116,23 @@ export function VideoEditor({
     setBusy("")
     if (result) onClose(result.video)
   }
+  // A YouTube video waits for the next YouTube step; a Bilibili upload is
+  // read at once, so its history may already have changed.
+  const bilibili = data?.video.source === "bilibili"
   const refresh = async () => {
     setBusy("refresh")
     const result = await act(
       () => api.refreshVideo(videoId),
-      "admin.notice.videoRefresh",
+      bilibili ? "admin.notice.bilibiliRead" : "admin.notice.videoRefresh",
     )
     setBusy("")
     if (!result) return
     setRefreshed(result.video)
-    history.setData((current) => current && { ...current, video: result.video })
+    if (bilibili) void history.reload()
+    else
+      history.setData(
+        (current) => current && { ...current, video: result.video },
+      )
   }
 
   const video = data?.video
@@ -159,7 +166,9 @@ export function VideoEditor({
                   ? t("admin.videos.refreshPending", {
                       time: formatDateTime(video.refreshRequestedAt, locale),
                     })
-                  : t("admin.videos.refreshIdle"),
+                  : bilibili
+                    ? t("admin.videos.refreshBilibili")
+                    : t("admin.videos.refreshIdle"),
               ],
             ]}
           />
@@ -265,13 +274,15 @@ export function VideoEditor({
             )}
           </section>
           <div className="adm-form-actions adm-video-editor-actions">
-            {video.source === "youtube" ? (
+            {video.source === "youtube" || bilibili ? (
               <Button
                 icon={RefreshCw}
                 busy={busy === "refresh"}
                 onClick={refresh}
               >
-                {t("admin.videos.refresh")}
+                {bilibili
+                  ? t("admin.videos.refreshBilibiliButton")
+                  : t("admin.videos.refresh")}
               </Button>
             ) : null}
             <a

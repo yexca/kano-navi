@@ -18,7 +18,7 @@ belong to the TypeScript initializer. See
 | `posts`                  | X posts, account source, publication time, engagement counts, and media                                |
 | `events`                 | Unified schedules, provenance, confidence, manual locks, tombstones, and duplicate merges              |
 | `event_sources`          | Source post/reservation identities attached to each event                                              |
-| `videos`                 | Published YouTube videos and scheduled streams, operator corrections, and refresh requests             |
+| `videos`                 | YouTube videos and streams, Bilibili uploads, operator corrections, and refresh requests               |
 | `video_revisions`        | Titles and thumbnails a platform replaced, one row per change                                          |
 | `focus`                  | The page's latest focus item and stable YouTube video ID                                               |
 | `timeline`               | Person and activity timeline                                                                           |
@@ -28,7 +28,7 @@ belong to the TypeScript initializer. See
 | `media_links`            | Links from cached media to posts, videos, profiles, and focus items                                    |
 | `media_versions`         | Earlier cached files of an asset whose bytes a revalidation replaced                                   |
 | `sync_runs`              | Status, counts, error summaries, trigger, and asynchronous job identity                                |
-| `sync_state`             | Durable per-account X and YouTube cursors                                                              |
+| `sync_state`             | Durable per-account X, YouTube and Bilibili cursors and read bookkeeping                               |
 | `app_settings`           | Model, schedule-extractor, X-account, Featured, and YouTube push settings (push secret sealed)         |
 | `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                         |
 | `post_llm_states`        | Per-post LLM status, last attempt, error, and reprocess queue state                                    |

@@ -17,6 +17,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/jobs"
+	bilisource "github.com/yexca/kano-navi/backend-go/internal/source/bilibili"
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
@@ -48,6 +49,9 @@ type Options struct {
 	// SkippedSteps lists steps disabled for the process through SKIP_* flags.
 	SkippedSteps []string
 	XHandles     []string
+	// Bilibili reads single uploads for operators; nil disables the routes
+	// that need it.
+	Bilibili *bilisource.Adapter
 	// HistoryAvailable reports whether a source's official API can read past
 	// windows, which needs its credential.
 	HistoryAvailable func(source string) bool
@@ -126,6 +130,7 @@ func (a *api) routes() []httpx.Route {
 		{Method: http.MethodGet, Path: "/videos/{id}/history", Handler: a.videoHistory},
 		{Method: http.MethodPut, Path: "/videos/{id}", Handler: a.updateVideo},
 		{Method: http.MethodPost, Path: "/videos/{id}/refresh", Handler: a.refreshVideo},
+		{Method: http.MethodPost, Path: "/videos/bilibili", Handler: a.addBilibiliVideo},
 
 		{Method: http.MethodGet, Path: "/translations", Handler: a.translationSummary},
 		{Method: http.MethodPost, Path: "/translations/request", Handler: a.requestTranslations},

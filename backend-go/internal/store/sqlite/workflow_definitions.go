@@ -19,13 +19,13 @@ func (s *Store) SaveWorkflow(ctx context.Context, input WorkflowDefinition, crea
 	}
 	seen := map[string]bool{}
 	for _, step := range input.Steps {
-		if step != "x" && step != "youtube" && step != "media" && step != "schedule" && step != "translate" && step != "reconcile" {
+		if step != "x" && step != "youtube" && step != "bilibili" && step != "media" && step != "schedule" && step != "translate" && step != "reconcile" {
 			return nil, ErrWorkflowValidation
 		}
 		seen[step] = true
 	}
 	input.Steps = []string{}
-	for _, step := range []string{"x", "youtube", "media", "schedule", "translate", "reconcile"} {
+	for _, step := range []string{"x", "youtube", "bilibili", "media", "schedule", "translate", "reconcile"} {
 		if seen[step] {
 			input.Steps = append(input.Steps, step)
 		}

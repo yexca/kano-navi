@@ -25,6 +25,7 @@ const (
 var workflowSteps = []map[string]string{
 	{"id": "x", "group": "source"},
 	{"id": "youtube", "group": "source"},
+	{"id": "bilibili", "group": "source"},
 	{"id": "media", "group": "process"},
 	{"id": "schedule", "group": "process"},
 	{"id": "translate", "group": "process"},
@@ -373,9 +374,15 @@ func (a *api) sources(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
+	bilibili, err := a.bilibiliStatus(ctx)
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"x":       map[string]any{"skipped": a.skipped("x"), "historyAvailable": a.historyAvailable("x"), "windows": a.windows("x"), "accounts": accounts},
-		"youtube": map[string]any{"skipped": a.skipped("youtube"), "historyAvailable": a.historyAvailable("youtube"), "windows": a.windows("youtube"), "oldest": oldest, "push": a.pushStatus(), "liveProbe": probe},
+		"x":        map[string]any{"skipped": a.skipped("x"), "historyAvailable": a.historyAvailable("x"), "windows": a.windows("x"), "accounts": accounts},
+		"youtube":  map[string]any{"skipped": a.skipped("youtube"), "historyAvailable": a.historyAvailable("youtube"), "windows": a.windows("youtube"), "oldest": oldest, "push": a.pushStatus(), "liveProbe": probe},
+		"bilibili": bilibili,
 	})
 }
 

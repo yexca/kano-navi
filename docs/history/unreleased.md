@@ -51,6 +51,13 @@
   mark corrected videos, their history
   and a pending refresh. New routes: `GET /api/admin/videos/{id}/history`,
   `PUT /api/admin/videos/{id}` and `POST /api/admin/videos/{id}/refresh`.
+- The Videos page has a Bilibili panel: the account's read state (signed in
+  or anonymous, last read, captcha backoff, last error) and a field that adds
+  one upload by BV ID or bilibili.com link. A Platform filter separates
+  YouTube and Bilibili videos, Bilibili cards are labelled, and the Correct
+  dialog reads a Bilibili upload again at once. New route:
+  `POST /api/admin/videos/bilibili`; `GET /api/admin/sources` adds `bilibili`
+  and `GET /api/admin/videos` accepts `source`.
 
 </details>
 
@@ -101,6 +108,12 @@
 - A title or thumbnail the platform replaces is kept as history, and a
   thumbnail file replaced at the same URL stays in the cache as an earlier
   version that `/media/<id>?v=<hash>` still serves.
+- A new `bilibili` step stores the configured account's newest uploads from
+  Bilibili's public web API, at most once every three hours by default. When
+  Bilibili asks for a captcha it waits 6 hours, doubling up to a day, instead
+  of retrying, and keeps every stored upload. Covers are cached from
+  `*.hdslb.com`. The uploads stay in the console until they can be matched
+  with their YouTube copy, so the board does not list a cover twice.
 
 </details>
 
@@ -149,5 +162,10 @@
 - A new installation names its two starting workflows "Full refresh" and
   "Sources only" instead of Chinese names. Existing workflows keep their
   names; rename them on the Runs & workflows page.
+- New settings `BILIBILI_UID`, `BILIBILI_MIN_INTERVAL_MINUTES`,
+  `BILIBILI_SESSDATA` (an optional Bilibili login cookie, kept only in the
+  environment) and `SKIP_BILIBILI`. New installations include the `bilibili`
+  step in both starting workflows; existing workflows need it added on the
+  Runs & workflows page.
 
 </details>

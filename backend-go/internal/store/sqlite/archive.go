@@ -203,7 +203,7 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 		return nil, err
 	}
 	const instant = `julianday(COALESCE(scheduled_at,published_at))`
-	inRange := ` WHERE ` + instant + ` >= julianday(?) AND ` + instant + ` < julianday(?)`
+	inRange := ` WHERE ` + instant + ` >= julianday(?) AND ` + instant + ` < julianday(?) AND ` + publicVideoScope
 	var total int64
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM videos`+inRange, start, end).Scan(&total); err != nil {
 		return nil, dbErr(err)
@@ -271,7 +271,7 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 	if err = s.attachVideoTranslations(ctx, refs...); err != nil {
 		return nil, err
 	}
-	previous, next, err := s.adjacentDates(ctx, "videos", instant, "", nil, start, end)
+	previous, next, err := s.adjacentDates(ctx, "videos", instant, " AND "+publicVideoScope, nil, start, end)
 	if err != nil {
 		return nil, err
 	}

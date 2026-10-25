@@ -15,6 +15,12 @@ import (
 // pin any recorded version. Operator overrides are separate columns on
 // videos and are not revisions.
 
+// publicVideoScope selects the videos public readers (the board, the video
+// archive and MCP) list. Bilibili uploads stay in the console until they can
+// be matched with the YouTube copy of the same work, so the board never lists
+// one cover twice.
+const publicVideoScope = "source = 'youtube'"
+
 // Revision origins: a detail check that reported a new title or thumbnail
 // URL, or a thumbnail revalidation that downloaded new bytes for the same URL.
 const (

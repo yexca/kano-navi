@@ -1,12 +1,15 @@
 package adminapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/jobs"
+	bilisource "github.com/yexca/kano-navi/backend-go/internal/source/bilibili"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
@@ -79,7 +82,17 @@ func (a *api) updateVideo(w http.ResponseWriter, r *http.Request) {
 
 // refreshVideo records a refresh request and starts the YouTube and media
 // steps. A busy queue keeps the request for the next run that reads YouTube.
+// A Bilibili upload is read again at once instead.
 func (a *api) refreshVideo(w http.ResponseWriter, r *http.Request) {
+	current, err := a.Store.AdminVideoByID(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeVideoError(w, err)
+		return
+	}
+	if current.Source == "bilibili" {
+		a.readBilibili(w, r, current.ID)
+		return
+	}
 	if a.skipped("youtube") {
 		httpx.WriteError(w, httpx.Invalid("the YouTube source is disabled for this process"))
 		return
@@ -99,6 +112,98 @@ func (a *api) refreshVideo(w http.ResponseWriter, r *http.Request) {
 		response["started"], response["run"] = result.Accepted, result.Job
 	}
 	httpx.WriteJSON(w, http.StatusAccepted, response)
+}
+
+// addBilibiliVideo accepts { input } with a BV ID or a bilibili.com video
+// link and stores that upload of the configured account.
+func (a *api) addBilibiliVideo(w http.ResponseWriter, r *http.Request) {
+	body, err := httpx.Body(w, r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	var input string
+	_ = json.Unmarshal(body["input"], &input)
+	bvid, ok := bilisource.ParseBVID(input)
+	if !ok {
+		httpx.WriteError(w, httpx.Invalid("enter a BV ID or a bilibili.com video link"))
+		return
+	}
+	a.readBilibili(w, r, bvid)
+}
+
+// readBilibili reads one upload now, which costs one or two Bilibili
+// requests, stores it and starts the media step for its cover. A captcha
+// block is respected rather than retried.
+func (a *api) readBilibili(w http.ResponseWriter, r *http.Request, bvid string) {
+	if a.Bilibili == nil || a.skipped("bilibili") {
+		httpx.WriteError(w, httpx.Invalid("the Bilibili source is disabled for this process"))
+		return
+	}
+	ctx := r.Context()
+	account := a.Bilibili.Options.Account
+	state, err := a.Store.BilibiliState(ctx, account)
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	upload, next, err := a.Bilibili.FetchVideo(ctx, state, bvid)
+	if err != nil {
+		_ = a.Store.SaveBilibiliState(ctx, account, next)
+		writeBilibiliError(w, err, next)
+		return
+	}
+	if _, err = a.Store.WriteBilibiliVideo(ctx, account, upload, next); err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	video, err := a.Store.AdminVideoByID(ctx, upload.BVID)
+	if err != nil {
+		writeVideoError(w, err)
+		return
+	}
+	response := map[string]any{"video": video, "started": false, "run": nil}
+	if a.Runs != nil && !a.skipped("media") {
+		if result, startErr := a.Runs.Start(ctx, jobs.KindWorkflow, "admin", jobs.Options{Steps: []string{"media"}}); startErr == nil {
+			response["started"], response["run"] = result.Accepted, result.Job
+		}
+	}
+	httpx.WriteJSON(w, http.StatusOK, response)
+}
+
+func writeBilibiliError(w http.ResponseWriter, err error, state bilisource.State) {
+	switch code := bilisource.ErrorCode(err); code {
+	case "bilibili_risk_control", "bilibili_rate_limited":
+		until := state.BlockedUntil.UTC().Format(time.RFC3339)
+		httpx.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "bilibili_blocked", "blockedUntil": until,
+			"message": "Bilibili is asking this server for a captcha; requests resume after " + until,
+		})
+	case "bilibili_not_found":
+		httpx.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "video_not_found", "message": "Bilibili does not list this video"})
+	case "bilibili_other_account":
+		httpx.WriteError(w, httpx.Invalid("this video was not uploaded by the configured Bilibili account"))
+	default:
+		httpx.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": code, "message": "Bilibili did not answer (" + code + ")"})
+	}
+}
+
+// bilibiliStatus is the Bilibili source as the console sees it.
+func (a *api) bilibiliStatus(ctx context.Context) (map[string]any, error) {
+	if a.Bilibili == nil {
+		return map[string]any{"available": false, "skipped": a.skipped("bilibili")}, nil
+	}
+	status, err := a.Store.BilibiliStatus(ctx, a.Bilibili.Options.Account)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"available": true, "skipped": a.skipped("bilibili"), "account": status.Account, "videos": status.Videos,
+		"signedIn":           a.Bilibili.Options.SignedIn(),
+		"minIntervalMinutes": int(a.Bilibili.Options.MinInterval / time.Minute),
+		"lastAttemptAt":      status.LastAttemptAt, "lastSuccessAt": status.LastSuccessAt,
+		"blockedUntil": status.BlockedUntil, "lastError": status.LastError,
+	}, nil
 }
 
 func writeVideoError(w http.ResponseWriter, err error) {

@@ -18,6 +18,8 @@ data/
     sha256/<first-two>/<content-sha256>.<extension>
   youtube/
     sha256/<first-two>/<content-sha256>.<extension>
+  bilibili/
+    sha256/<first-two>/<content-sha256>.<extension>
   avatar/
     avatar.<extension>
     banner.<extension>
@@ -110,7 +112,8 @@ served as active same-origin content.
    unreferenced files deliberately.
 
 The downloader accepts only HTTPS URLs on X's `*.twimg.com` media CDN
-subdomains and YouTube's `*.ytimg.com` thumbnail CDN subdomains. It revalidates
+subdomains, YouTube's `*.ytimg.com` thumbnail CDN subdomains and Bilibili's
+`*.hdslb.com` cover CDN subdomains (`i0`, `i1`, `i2` and so on). It revalidates
 every redirect against the same suffix-bounded allowlist, requiring a real
 subdomain boundary; lookalike hosts and the bare parent domains are rejected.
 The host policy is kept in code because this is also an SSRF boundary; the

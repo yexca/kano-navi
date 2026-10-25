@@ -208,6 +208,12 @@ function createClient(run: Runner, slow: Runner) {
         `/videos/${enc(id)}/refresh`,
         {},
       ),
+    addBilibiliVideo: (input: string) =>
+      send<{ video: AdminVideo; started: boolean; run: Run | null }>(
+        "POST",
+        "/videos/bilibili",
+        { input },
+      ),
 
     profileMedia: () => get<ProfileMediaState>("/profile-media"),
     addProfileMedia: (slot: string, source: string, sourceUrl: string) =>

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/mediadownload"
+	bilisource "github.com/yexca/kano-navi/backend-go/internal/source/bilibili"
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
@@ -26,6 +27,7 @@ type TranslateRunner interface {
 type SourceSteps struct {
 	X         *XRecentExecutor
 	Youtube   *ytsource.Adapter
+	Bilibili  *bilisource.Adapter
 	Media     *mediadownload.Client
 	Schedule  ScheduleRunner
 	Translate TranslateRunner
@@ -79,6 +81,11 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 			break
 		}
 		return s.youtubeLive(ctx)
+	case "bilibili":
+		if s.Bilibili == nil {
+			break
+		}
+		return s.bilibiliRecent(ctx)
 	case "media":
 		if s.Media == nil {
 			break
@@ -179,6 +186,35 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 		status = "partial"
 	}
 	return AttemptResult{Status: status, Result: map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested}}, nil
+}
+
+// bilibiliRecent reads the account's newest uploads at most once per
+// interval and never during a backoff, so a workflow timer cannot drive
+// Bilibili's captcha. A failed read is recorded, not retried: the next run
+// after the interval or backoff asks again.
+func (s *SourceSteps) bilibiliRecent(ctx context.Context) (AttemptResult, error) {
+	account := s.Bilibili.Options.Account
+	state, err := s.Store.BilibiliState(ctx, account)
+	if err != nil {
+		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+	}
+	result, fetchErr := s.Bilibili.FetchRecent(ctx, state)
+	if ctx.Err() != nil {
+		return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
+	}
+	if result.Skipped != "" {
+		return AttemptResult{Status: "succeeded", Result: map[string]any{"skipped": true, "reason": result.Skipped, "requested": 0}}, nil
+	}
+	changed, err := s.Store.WriteBilibiliRecent(ctx, account, result)
+	if err != nil {
+		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+	}
+	counts := map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "requested": result.Requested, "changed": changed}
+	if fetchErr != nil {
+		counts["errors"] = []string{bilisource.ErrorCode(fetchErr)}
+		return AttemptResult{Status: "failed", Result: counts}, nil
+	}
+	return AttemptResult{Status: "succeeded", Result: counts}, nil
 }
 
 // youtubeLive requests only the watch pages of a few active videos and

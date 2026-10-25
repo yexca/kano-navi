@@ -262,6 +262,53 @@ on the [live-status probe](#live-status-probe). Runtime state is in
 memory: a restart subscribes again, and a missed push is caught by the next
 poll.
 
+### Bilibili
+
+The `bilibili` step reads the uploads of `BILIBILI_UID` (Kano's account by
+default) from Bilibili's public web API, `api.bilibili.com`, using only
+endpoints that need no request signature:
+
+- `/x/frontend/finger/spi` returns the anonymous device identity
+  (`buvid3`/`buvid4`) Bilibili's own pages send. It is reused for seven days
+  and kept in `sync_state` (source `bilibili`).
+- `/x/series/recArchivesByKeywords` lists the account's newest 20 uploads
+  with title, cover, publication time, length and description. Entries of
+  another uploader are skipped.
+- `/x/web-interface/view` reads one upload for an operator.
+
+Bilibili answers a few anonymous requests and then puts the server's address
+behind a captcha for hours: HTTP 412, an HTML page, or the JSON codes `-352`
+and `-412`. The client never retries and reports these as
+`bilibili_risk_control` (`-799`/`-509`/429 as `bilibili_rate_limited`). The
+adapter then waits 6 hours, doubled for each consecutive block up to a day,
+and the step makes no request until then; independently, list reads are at
+least `BILIBILI_MIN_INTERVAL_MINUTES` (180 by default) apart whatever the
+workflow timer. A skipped read records `{ skipped: true, reason: "interval" |
+"blocked" }`; a failed one records its code as a failed step without a retry,
+keeps every stored upload, and lets the rest of the run continue.
+
+`BILIBILI_SESSDATA` optionally adds an operator's login cookie to the API
+requests (never to the device-identity request). Signed-in reads meet the
+captcha far less often. The cookie stays in memory: it is not part of the
+persisted state, not logged and not returned; see
+[Configuration](../operations/configuration.md).
+
+Uploads are `videos` rows with `source = 'bilibili'` and the BV ID as their
+ID, linked to `https://www.bilibili.com/video/<BV>`. The kind comes from the
+title (`翻唱`/cover → `MUSIC`, `直播`/`录播` → `LIVE ARCHIVE`, and so on);
+the description and `aid` stay in `raw_json`. Every list read replaces the
+platform fields and keeps a replaced title or cover in `video_revisions`, as
+YouTube does; operator corrections survive. Covers come only from
+`*.hdslb.com`, upgraded to HTTPS, and are cached under `data/bilibili/` by
+the media step.
+
+Bilibili uploads stay in the console: the board, the video archive and MCP
+list only YouTube videos until an upload can be matched with its YouTube copy,
+so one cover is never listed twice. Operators can add an upload by BV ID or
+`bilibili.com` video link and read one again at once from `/admin` (see
+[Admin API](admin-api.md#bilibili-uploads)); those reads respect the same
+backoff and accept only uploads of the configured account.
+
 ### Schedule Extraction Pipeline
 
 Schedule extraction has two independent candidate paths:

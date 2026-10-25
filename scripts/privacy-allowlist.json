@@ -126,6 +126,14 @@
       "reason": "Public Bilibili profile link."
     },
     {
+      "host": "api.bilibili.com",
+      "reason": "Bilibili source: the account's public upload list, single uploads and the anonymous device identity, read server-side with a fixed host, timeout, size limit and captcha backoff."
+    },
+    {
+      "host": "hdslb.com",
+      "reason": "Bilibili cover CDN (i0/i1/i2.hdslb.com) for uploads of the configured account, downloaded server-side into the media cache."
+    },
+    {
       "host": "twitcasting.tv",
       "reason": "Public livestream archive link."
     },

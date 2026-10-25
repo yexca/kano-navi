@@ -2029,6 +2029,19 @@ button.adm-run-line:hover,
   flex: 1;
 }
 
+/* The Bilibili panel's add form: the field grows, the button sits beside it. */
+.adm-bilibili-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.adm-bilibili-add .adm-field {
+  flex: 1 1 260px;
+}
+
 @media (max-width: 560px) {
   .adm-video-history li {
     grid-template-columns: 72px minmax(0, 1fr);

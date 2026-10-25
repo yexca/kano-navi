@@ -19,7 +19,7 @@ type transport func(*http.Request) (*http.Response, error)
 
 func (f transport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func TestMediaDestinationsAndResponseBounds(t *testing.T) {
-	for _, raw := range []string{"https://twimg.com.attacker.invalid/a", "https://example.invalid/a", "http://pbs.twimg.com/a", "https://pbs.twimg.com:8443/a", "https://pbs.twimg.com/a?token=synthetic"} {
+	for _, raw := range []string{"https://twimg.com.attacker.invalid/a", "https://example.invalid/a", "http://pbs.twimg.com/a", "https://pbs.twimg.com:8443/a", "https://pbs.twimg.com/a?token=synthetic", "https://hdslb.com/a", "https://hdslb.com.attacker.invalid/a", "http://i0.hdslb.com/a"} {
 		if AllowedURL(raw) {
 			t.Fatalf("allowed %s", raw)
 		}
@@ -28,7 +28,7 @@ func TestMediaDestinationsAndResponseBounds(t *testing.T) {
 	if AllowedURL(userURL.String()) {
 		t.Fatal("accepted userinfo")
 	}
-	for _, raw := range []string{"https://pbs.twimg.com/a", "https://i.ytimg.com/a", "https://sub.twimg.com/a"} {
+	for _, raw := range []string{"https://pbs.twimg.com/a", "https://i.ytimg.com/a", "https://sub.twimg.com/a", "https://i0.hdslb.com/bfs/archive/a.jpg"} {
 		if !AllowedURL(raw) {
 			t.Fatalf("rejected %s", raw)
 		}

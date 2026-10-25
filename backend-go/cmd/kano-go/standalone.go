@@ -22,6 +22,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/mcpapi"
 	"github.com/yexca/kano-navi/backend-go/internal/mediadownload"
 	"github.com/yexca/kano-navi/backend-go/internal/schedule"
+	bilisource "github.com/yexca/kano-navi/backend-go/internal/source/bilibili"
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
@@ -32,7 +33,7 @@ import (
 
 // stepSkipFlags are the process-wide kill switches for each workflow step.
 // SKIP_LLM stops every model call: schedule extraction and translation.
-var stepSkipFlags = map[string]string{"x": "SKIP_X", "youtube": "SKIP_YOUTUBE", "media": "SKIP_MEDIA", "schedule": "SKIP_LLM", jobs.StepTranslate: "SKIP_LLM"}
+var stepSkipFlags = map[string]string{"x": "SKIP_X", "youtube": "SKIP_YOUTUBE", "bilibili": "SKIP_BILIBILI", "media": "SKIP_MEDIA", "schedule": "SKIP_LLM", jobs.StepTranslate: "SKIP_LLM"}
 
 func fail(message string, code int) int {
 	fmt.Fprintln(os.Stderr, "kano-go: "+message)
@@ -102,6 +103,7 @@ func runStandalone(cfg config.Config) int {
 			LiveProbe:        probe.Status,
 			SkippedSteps:     run.skipped,
 			XHandles:         run.xOptions.Handles,
+			Bilibili:         run.steps.Bilibili,
 			HistoryAvailable: run.steps.History.Available,
 			WindowAvailable:  run.steps.History.WindowAvailable,
 		}),
@@ -201,6 +203,7 @@ func newPipeline(store *sqlite.Store, key string) pipeline {
 		Skip:      skip,
 		X:         &workflow.XRecentExecutor{Store: store, Adapter: xAdapter, Options: xOptions},
 		Youtube:   ytsource.NewAdapter(nil, youtubeOptions),
+		Bilibili:  bilisource.NewAdapter(nil, bilisource.OptionsFromEnv()),
 		Media:     mediadownload.NewClient(nil),
 		Schedule:  scheduleStep{schedule.New(store, schedule.Options{SecretsKey: key})},
 		Translate: translateStep{schedule.NewTranslator(store, schedule.Options{SecretsKey: key})},
@@ -218,10 +221,10 @@ func newPipeline(store *sqlite.Store, key string) pipeline {
 		Store: store,
 		Steps: steps,
 		// Every catalog step has a real adapter here; none is synthetic.
-		SyntheticSteps: map[string]bool{"x": false, "youtube": false, jobs.StepLive: false, "media": false, "schedule": false, jobs.StepTranslate: false, "reconcile": false},
+		SyntheticSteps: map[string]bool{"x": false, "youtube": false, "bilibili": false, jobs.StepLive: false, "media": false, "schedule": false, jobs.StepTranslate: false, "reconcile": false},
 		// One unavailable source keeps the other source and post-processing,
 		// and a failed translation keeps event reconciliation.
-		TolerateFailure: map[string]bool{"x": true, "youtube": true, jobs.StepTranslate: true},
+		TolerateFailure: map[string]bool{"x": true, "youtube": true, "bilibili": true, jobs.StepTranslate: true},
 	}
 	return pipeline{steps: steps, executor: executor, skipped: skipped, xOptions: xOptions}
 }

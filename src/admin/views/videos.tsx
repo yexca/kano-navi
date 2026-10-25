@@ -8,6 +8,7 @@ import {
   Sparkles,
   Star,
   StarOff,
+  Tv,
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
@@ -25,6 +26,7 @@ import {
   Segmented,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
+import { BilibiliSource } from "@/admin/views/bilibili-parts"
 import { QuickFetch } from "@/admin/views/fetch-parts"
 import {
   TranslationBacklog,
@@ -166,6 +168,8 @@ function VideoCard({
 }) {
   const { t } = useAppSettings()
   const thumbnail = localUrl(video.thumbnailUrl)
+  // Bilibili uploads are not on the board yet, so they cannot be featured.
+  const bilibili = video.source === "bilibili"
   return (
     <article className={`adm-video${featured ? " is-featured" : ""}`}>
       <div className="adm-video-thumb">
@@ -177,6 +181,10 @@ function VideoCard({
         {featured ? (
           <Badge tone="berry" icon={Star}>
             {t("admin.videos.featured")}
+          </Badge>
+        ) : bilibili ? (
+          <Badge tone="sky" icon={Tv}>
+            {t("admin.videos.source.bilibili")}
           </Badge>
         ) : null}
       </div>
@@ -209,7 +217,7 @@ function VideoCard({
             >
               {t("admin.videos.unfeature")}
             </Button>
-          ) : (
+          ) : bilibili ? null : (
             <Button size="sm" icon={Star} onClick={() => onFeature(video)}>
               {t("admin.videos.feature")}
             </Button>
@@ -229,17 +237,18 @@ function VideoCard({
   )
 }
 
-function VideoList() {
+function VideoList({ reloadKey }: { reloadKey: number }) {
   const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const [status, setStatus] = useState<"" | "published" | "upcoming" | "live">(
     "",
   )
+  const [source, setSource] = useState<"" | "youtube" | "bilibili">("")
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<string | null>(null)
   const videos = useResource(
-    () => api.videos({ status, page, pageSize: 24 }),
-    [status, page],
+    () => api.videos({ status, source, page, pageSize: 24 }),
+    [status, source, page, reloadKey],
   )
   const data = videos.data
   // A saved correction replaces its card, and the pinned copy, in place.
@@ -295,6 +304,19 @@ function VideoList() {
             { value: "published", label: t("admin.videos.published") },
           ]}
         />
+        <Segmented
+          label={t("admin.videos.source")}
+          value={source}
+          onChange={(value) => {
+            setSource(value)
+            setPage(1)
+          }}
+          options={[
+            { value: "", label: t("admin.videos.all") },
+            { value: "youtube", label: t("admin.videos.source.youtube") },
+            { value: "bilibili", label: t("admin.videos.source.bilibili") },
+          ]}
+        />
         <TranslationBacklog
           owner="video"
           onQueued={() => void videos.reload()}
@@ -343,6 +365,8 @@ export function VideosView({ navigate }: ViewProps) {
   const { t } = useAppSettings()
   const { api } = useAdmin()
   const sources = useResource(() => api.sources(), [])
+  // An added Bilibili upload reloads the list and the source state.
+  const [reloadKey, setReloadKey] = useState(0)
   return (
     <div className="adm-view">
       <PageHeader
@@ -350,8 +374,15 @@ export function VideosView({ navigate }: ViewProps) {
         description={t("admin.videos.description")}
       />
       <QuickFetch source="youtube" sources={sources.data} navigate={navigate} />
+      <BilibiliSource
+        status={sources.data?.bilibili}
+        onAdded={() => {
+          setReloadKey((key) => key + 1)
+          void sources.reload()
+        }}
+      />
       <Panel>
-        <VideoList />
+        <VideoList reloadKey={reloadKey} />
       </Panel>
     </div>
   )

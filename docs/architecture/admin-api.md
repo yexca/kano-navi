@@ -139,7 +139,8 @@ Each workflow carries `lastRunAt`, `lastStatus` (durable run status) and
 ```json
 {
   "x":       {"skipped", "historyAvailable", "windows", "accounts": [{"account", "oldest"}]},
-  "youtube": {"skipped", "historyAvailable", "windows", "oldest", "push": PushStatus, "liveProbe": LiveProbeStatus}
+  "youtube": {"skipped", "historyAvailable", "windows", "oldest", "push": PushStatus, "liveProbe": LiveProbeStatus},
+  "bilibili": {"available", "skipped", "account", "videos", "signedIn", "minIntervalMinutes", "lastAttemptAt", "lastSuccessAt", "blockedUntil", "lastError"}
 }
 ```
 
@@ -236,6 +237,7 @@ image's status, or is `none` for a text-only post.
 | `GET /videos/{id}/history`  |                                                           | `{video, revisions, thumbnails}`             |
 | `PUT /videos/{id}`          | `{title?, kind?, thumbnail?}`                             | `{video}`                                    |
 | `POST /videos/{id}/refresh` |                                                           | `202 {video, started, run}`                  |
+| `POST /videos/bilibili`     | `{input}` (BV ID or bilibili.com video link)              | `{video, started, run}`                      |
 
 Each video's `thumbnailUrl` is the local `/media/<id>?v=<sha256>` URL of its
 cached thumbnail, or `null` until that file is ready; the remote CDN address is
@@ -245,6 +247,23 @@ never returned. `thumbnailStatus` is `ready`, `pending`, `failed` or `missing`.
 is listed, or `null` while the board chooses automatically.
 
 Changing the featured video advances the dashboard revision.
+
+`GET /videos` also accepts `source` (`youtube` or `bilibili`).
+
+### Bilibili uploads
+
+`POST /videos/bilibili` reads one upload of the configured Bilibili account
+now and stores it; `POST /videos/{id}/refresh` on a Bilibili video reads it
+again the same way and answers `200`. Both start the `media` step for the
+cover (`started` is false while another run holds the queue). An input that
+is neither a BV ID nor a `bilibili.com` video link, or an upload of another
+account, answers `400`; a video Bilibili does not list answers `404`. While
+Bilibili asks for a captcha, both answer `503 {"error":"bilibili_blocked",
+blockedUntil, message}` without sending a request until that time; other
+upstream failures answer `502` with their `bilibili_*` code. `bilibili` in
+`GET /sources` reports the account, the stored uploads, whether a login cookie
+is configured (`signedIn`, never the cookie), the read interval and the
+latest attempt, success, backoff and error.
 
 ### Video corrections and history
 

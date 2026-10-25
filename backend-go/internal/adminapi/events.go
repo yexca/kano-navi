@@ -65,6 +65,7 @@ func (a *api) listVideos(w http.ResponseWriter, r *http.Request) {
 		Status:    query(r, "status"),
 		Kind:      query(r, "kind"),
 		Thumbnail: query(r, "thumbnail"),
+		Source:    query(r, "source"),
 	})
 	if err != nil {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")

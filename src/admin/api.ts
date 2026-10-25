@@ -2,9 +2,13 @@
 // or a model provider directly; every external request is made by the server
 // after an operator action. Endpoint calls live in use-admin-data.ts.
 
+import { formatDateTime } from "@/admin/format"
+
 export class ApiError extends Error {
   status: number
   code: string
+  /** When a Bilibili captcha backoff ends (bilibili_blocked). */
+  blockedUntil?: string
   constructor(status: number, code: string, message: string) {
     super(message)
     this.name = "ApiError"
@@ -50,8 +54,12 @@ export async function request<T = any>(
       payload.error || "request_failed",
       payload.message || payload.error || `API ${response.status}`,
     )
-    // A busy queue answers with the run that holds it.
-    Object.assign(error, { run: payload.run })
+    // A busy queue answers with the run that holds it; a Bilibili captcha
+    // backoff with the time reads resume.
+    Object.assign(error, {
+      run: payload.run,
+      blockedUntil: payload.blockedUntil,
+    })
     throw error
   }
   return payload as T
@@ -86,6 +94,12 @@ export function errorMessage(error: any): Message {
   if (!(error instanceof ApiError)) return message("admin.error.network")
   if (error.code === "invalid_input") return { text: error.message }
   if (errorKeys[error.code]) return message(errorKeys[error.code])
+  if (error.code === "bilibili_blocked")
+    return message("admin.error.bilibiliBlocked", {
+      time: formatDateTime(error.blockedUntil, document.documentElement.lang),
+    })
+  if (error.code.startsWith("bilibili_"))
+    return message("admin.error.bilibiliUnavailable", { code: error.code })
   if (error.status === 404) return message("admin.error.notFound")
   return message("admin.error.requestFailed")
 }
