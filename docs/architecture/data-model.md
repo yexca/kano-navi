@@ -237,6 +237,13 @@ retires its machine translations.
 Startup creates both tables in existing snapshots; no post, video or event
 row is rewritten.
 
+Translation model attempts also record bounded diagnostics in
+`sync_runs.counts_json` under `translate.diagnostics`: configured model and
+provider, owner reference, attempt and output budget, known stop reason,
+numeric token usage and a fixed error category. These are protected run
+metadata, not public translation fields. The payload contains no provider
+response text or reasoning; see [Translation](sources.md#translation).
+
 ## Duplicate Merging
 
 The additive `events` columns `merged_into` (target event ID), `merge_source`,

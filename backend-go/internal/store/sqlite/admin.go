@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 )
@@ -964,6 +965,18 @@ func sanitizeDiagnostic(value any) any {
 		out := map[string]any{}
 		for k, item := range v {
 			lower := strings.ToLower(k)
+			// These provider usage fields contain numbers, never credentials.
+			// All other token-like fields retain the generic redaction below.
+			if lower == "inputtokens" || lower == "outputtokens" || lower == "maxtokens" {
+				if n, ok := item.(float64); ok && n >= 0 && n <= 1_000_000_000 && n == math.Trunc(n) {
+					out[k] = n
+				}
+				continue
+			}
+			if k == "stopReason" && (item == "max_tokens" || item == "max_output_tokens") {
+				out[k] = item
+				continue
+			}
 			if lower == "stack" || lower == "trace" || lower == "traceback" || lower == "path" || lower == "filepath" || lower == "database" || strings.Contains(lower, "secret") || strings.Contains(lower, "token") || strings.Contains(lower, "cipher") || strings.Contains(lower, "raw") {
 				continue
 			}

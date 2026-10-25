@@ -530,7 +530,8 @@ Bilibili metadata is already Chinese and is never sent to a model, and the
 step never requests a source. Its models come only from the separate
 translation queue (`llm_route_targets.route = 'translate'`), configured in
 `/admin` → Models; it never falls back to the schedule queue. Targets need
-the `text` tag, and each follows the same three-call failover as extraction.
+the `text` tag. Each target gets at most three calls before moving to the
+next configured target, in queue order.
 Without a usable target the step records `disabled` with the reason and
 keeps operator requests.
 
@@ -550,6 +551,30 @@ Chinese, and is told to keep URLs, tags, mentions, emoji and bracketed
 channel tags. A result is accepted only with a known language and a
 non-empty, bounded translation for every locale that differs from it. The
 result is stored only if the wording still has the hash that was sent.
+The translation fields hold the complete displayed text. Preserving an
+untranslated song title or name means including that wording in the result,
+even if the whole title stays unchanged; it never justifies an empty field.
+
+Translation uses native JSON Schema output for all three provider protocols;
+Anthropic sends `output_config.format` and reads text blocks rather than
+asking the model to call a result tool. Schedule extraction keeps its tool
+protocol. Haiku 5.5 translation requests explicitly disable thinking and set
+`effort` to `low`; these model-specific options are not sent to other models.
+The initial output budget is `max(1024, 400 + 3 * source characters)`, capped
+at 4000 tokens. A truncated response is never saved, even if its JSON parses:
+the next call doubles the budget up to 4000, without a backoff wait. Invalid
+JSON, missing fields or invalid translation values get one corrective prompt;
+a repeated validation failure moves to the next target. Connection failures,
+timeouts, HTTP 408/429 and 5xx retry with bounded backoff. Other HTTP errors
+and model refusals move directly to the next target. No target is added to
+the operator's queue automatically.
+
+The protected run's translation counts include `diagnostics`: at most 600
+model-attempt entries with owner type/ID, configured provider/model, attempt,
+output budget, allowlisted stop reason, bounded input/output token usage
+when reported, and a fixed error category. Additional entries increment
+`diagnosticsOmitted`. No response text, reasoning, refusal wording, headers
+or credentials are stored in these diagnostics. Public projections omit them.
 
 Platform translations belong to source synchronization, not to this step,
 which only reads them. Writers store them through

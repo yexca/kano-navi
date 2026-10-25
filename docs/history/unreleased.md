@@ -79,6 +79,10 @@
   which outrank the AI's, and a changed post or title is translated again.
   Bilibili titles are not machine-translated. `TRANSLATION_SCAN_LIMIT` and
   `TRANSLATION_LOOKBACK_DAYS` bound it, and `SKIP_LLM` skips it.
+- Translation uses native JSON output and recovers incomplete model replies
+  with a larger output budget or one corrective request. Unchanged song titles
+  remain in the returned text, and protected runs record safe per-attempt
+  diagnostics for operators.
 - Thumbnail downloads retry transient failures after 30 minutes, fall back to
   a smaller YouTube size when the larger one was never generated, and pick up
   a replaced cover for upcoming and recent videos.

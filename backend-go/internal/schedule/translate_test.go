@@ -2,7 +2,11 @@ package schedule
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -134,10 +138,10 @@ func TestTranslatorFailsOverAndRecordsInvalidResults(t *testing.T) {
 		return http.StatusOK, translationReply("ja", "Streaming tomorrow too", "明天也会直播")
 	}
 	result := runTranslator(t, translator)
-	if result.Counts["success"] != 1 || f.provider.count() != 4 {
+	if result.Counts["success"] != 1 || f.provider.count() != 3 {
 		t.Fatalf("result=%v requests=%d hosts=%v", result.Counts, f.provider.count(), f.provider.hosts())
 	}
-	if hosts := f.provider.hosts(); hosts[0] != "first.example.test" || hosts[3] != "second.example.test" {
+	if hosts := f.provider.hosts(); hosts[0] != "first.example.test" || hosts[2] != "second.example.test" {
 		t.Fatalf("an image-only model must be skipped and the first retried: %v", hosts)
 	}
 	if got := f.text(`SELECT provider_id FROM translations WHERE owner_id = '1' AND locale = 'zh-CN'`); got != "second" {
@@ -155,6 +159,181 @@ func TestTranslatorFailsOverAndRecordsInvalidResults(t *testing.T) {
 	}
 	if n := f.number(`SELECT COUNT(*) FROM translations WHERE owner_id = '2'`); n != 0 {
 		t.Fatalf("a failed post must keep no rows")
+	}
+}
+
+func TestAnthropicTranslationUsesJSONWithoutThinking(t *testing.T) {
+	f, translator := newTranslatorFixture(t)
+	f.addProvider("anth", protocolAnthropic, "https://anth.example.test", "claude-haiku-5-5", `["text"]`)
+	f.queueTranslation("anth")
+	f.addPost("1", "", "おはよう", recent(1), "")
+	f.provider.respond = func(request recordedRequest) (int, string) {
+		var body map[string]any
+		if err := json.Unmarshal([]byte(request.body), &body); err != nil {
+			t.Fatal(err)
+		}
+		output := body["output_config"].(map[string]any)
+		format := output["format"].(map[string]any)
+		if body["tools"] != nil || body["tool_choice"] != nil || format["type"] != "json_schema" || output["effort"] != "low" || body["thinking"].(map[string]any)["type"] != "disabled" || body["max_tokens"] != float64(1024) {
+			t.Fatalf("translation request=%v", body)
+		}
+		return http.StatusOK, stringify(obj("stop_reason", "end_turn", "usage", obj("input_tokens", 120, "output_tokens", 40), "content", []any{
+			obj("type", "thinking", "thinking", "synthetic private reasoning"),
+			obj("type", "text", "text", stringify(obj("sourceLanguage", "ja", "english", "Good morning", "simplifiedChinese", "早上好"))),
+		}))
+	}
+	result := runTranslator(t, translator)
+	if result.Status != "success" || f.provider.count() != 1 {
+		t.Fatalf("result=%v requests=%d", result, f.provider.count())
+	}
+	entry := result.Counts["diagnostics"].([]any)[0].(map[string]any)
+	if entry["stopReason"] != "end_turn" || entry["inputTokens"] != 120 || entry["outputTokens"] != 40 || entry["model"] != "claude-haiku-5-5" || strings.Contains(stringify(entry), "private reasoning") {
+		t.Fatalf("diagnostic=%v", entry)
+	}
+}
+
+func TestTranslationTruncationRaisesBudgetWithoutSavingPartialText(t *testing.T) {
+	for _, protocol := range []string{protocolAnthropic, protocolChat, protocolResponses} {
+		t.Run(protocol, func(t *testing.T) {
+			f, translator := newTranslatorFixture(t)
+			f.addProvider("main", protocol, "https://translate.example.test", "synthetic-model", `["text"]`)
+			f.queueTranslation("main")
+			f.addPost("1", "", "今日は配信します", recent(1), "")
+			var budgets []int
+			f.provider.respond = func(request recordedRequest) (int, string) {
+				body, err := parseJSON([]byte(request.body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				key := map[string]string{protocolAnthropic: "max_tokens", protocolChat: "max_completion_tokens", protocolResponses: "max_output_tokens"}[protocol]
+				budgets = append(budgets, int(property(body, key).(float64)))
+				if f.number(`SELECT COUNT(*) FROM translations`) != 0 {
+					t.Fatal("a truncated translation was saved")
+				}
+				value := stringify(obj("sourceLanguage", "ja", "english", "Streaming today", "simplifiedChinese", "今天直播"))
+				// Even valid JSON must not be saved with a truncated stop reason.
+				truncated := len(budgets) < 3
+				switch protocol {
+				case protocolAnthropic:
+					reason := "end_turn"
+					if truncated {
+						reason = "max_tokens"
+					}
+					return 200, stringify(obj("stop_reason", reason, "content", []any{obj("type", "text", "text", value)}))
+				case protocolChat:
+					reason := "stop"
+					if truncated {
+						reason = "length"
+					}
+					return 200, stringify(obj("choices", []any{obj("finish_reason", reason, "message", obj("content", value))}))
+				default:
+					status := "completed"
+					if truncated {
+						status = "incomplete"
+					}
+					return 200, stringify(obj("status", status, "incomplete_details", obj("reason", "max_output_tokens"), "output_text", value))
+				}
+			}
+			result := runTranslator(t, translator)
+			if result.Status != "success" || !reflect.DeepEqual(budgets, []int{1024, 2048, 4000}) || f.number(`SELECT COUNT(*) FROM translations`) != 2 {
+				t.Fatalf("result=%v budgets=%v", result, budgets)
+			}
+		})
+	}
+}
+
+func TestTranslationRepairAndFallbackResetTheRequest(t *testing.T) {
+	f, translator := newTranslatorFixture(t)
+	for _, id := range []string{"first", "second"} {
+		f.addProvider(id, protocolChat, "https://"+id+".example.test", "synthetic-"+id, `["text"]`)
+	}
+	f.queueTranslation("first", "second")
+	f.addPost("1", "", "明日の配信", recent(1), "")
+	f.provider.respond = func(request recordedRequest) (int, string) {
+		repair := strings.Contains(request.body, "previous response failed validation")
+		if strings.Contains(request.url, "first.example.test") {
+			if repair != (f.provider.count() == 2) {
+				t.Fatal("missing repair instruction")
+			}
+			return 200, translationReply("ja", "Tomorrow's stream", "")
+		}
+		if repair {
+			t.Fatal("fallback inherited a repair for another model")
+		}
+		return 200, translationReply("ja", "Tomorrow's stream", "明天的直播")
+	}
+	result := runTranslator(t, translator)
+	if result.Status != "success" || f.provider.count() != 3 {
+		t.Fatalf("result=%v", result)
+	}
+}
+
+func TestTranslationRepairKeepsUnchangedSongTitlesNonEmpty(t *testing.T) {
+	f, translator := newTranslatorFixture(t)
+	f.addProvider("main", protocolChat, "https://translate.example.test", "synthetic-model", `["text"]`)
+	f.queueTranslation("main")
+	const title = "星のうた - 架空アーティスト cover."
+	f.exec(`INSERT INTO videos(id,source,title,published_at,url,kind) VALUES ('song','youtube',?,?,'https://video.example.test/song','VIDEO')`, title, recent(1))
+	f.provider.respond = func(request recordedRequest) (int, string) {
+		if !strings.Contains(request.body, "even when the whole title stays unchanged") {
+			t.Fatal("song-title instruction missing")
+		}
+		if f.provider.count() == 1 {
+			return 200, translationReply("ja", "", title)
+		}
+		if !strings.Contains(request.body, "missing_translation_en") || !strings.Contains(request.body, "copy it into the complete displayed text") {
+			t.Fatal("missing-locale repair is not explicit")
+		}
+		return 200, translationReply("ja", title, title)
+	}
+	result := runTranslator(t, translator)
+	if result.Status != "success" || f.provider.count() != 2 || f.text(`SELECT text FROM translations WHERE owner_id='song' AND locale='en'`) != title {
+		t.Fatalf("result=%v requests=%d", result, f.provider.count())
+	}
+}
+
+func TestTranslationRetriesOnlyTransientRequestsAndKeepsKnownRows(t *testing.T) {
+	for _, check := range []struct{ status, calls, waits int }{
+		{401, 1, 0}, {400, 1, 0}, {429, 3, 2}, {503, 3, 2}, {0, 3, 2},
+	} {
+		t.Run(strconv.Itoa(check.status), func(t *testing.T) {
+			f, translator := newTranslatorFixture(t)
+			f.addProvider("main", protocolChat, "https://translate.example.test", "synthetic-model", `["text"]`)
+			f.queueTranslation("main")
+			f.addPost("1", "", "おはよう", recent(1), "")
+			f.provider.respond = func(recordedRequest) (int, string) { return 200, translationReply("ja", "Good morning", "早上好") }
+			runTranslator(t, translator)
+			before := f.text(`SELECT group_concat(text) FROM translations`)
+			if _, err := f.store.RequestTranslations(context.Background(), "post", []string{"1"}); err != nil {
+				t.Fatal(err)
+			}
+			initial, waits := f.provider.count(), 0
+			translator.e.sleep = func(context.Context, time.Duration) error { waits++; return nil }
+			f.provider.respond = func(recordedRequest) (int, string) {
+				return check.status, `{"message":"synthetic private provider message"}`
+			}
+			result := runTranslator(t, translator)
+			if result.Status != "failed" || f.provider.count()-initial != check.calls || waits != check.waits || f.text(`SELECT group_concat(text) FROM translations`) != before {
+				t.Fatalf("result=%v calls=%d waits=%d", result, f.provider.count()-initial, waits)
+			}
+			if strings.Contains(f.text(`SELECT last_error FROM translation_states`), "private") {
+				t.Fatal("provider payload was stored")
+			}
+		})
+	}
+}
+
+func TestTranslationCancellationStopsBackoff(t *testing.T) {
+	f, translator := newTranslatorFixture(t)
+	f.addProvider("main", protocolChat, "https://translate.example.test", "synthetic-model", `["text"]`)
+	f.queueTranslation("main")
+	f.addPost("1", "", "おはよう", recent(1), "")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	translator.e.sleep = func(context.Context, time.Duration) error { cancel(); return ctx.Err() }
+	_, err := translator.Run(ctx)
+	if !errors.Is(err, context.Canceled) || f.provider.count() != 1 {
+		t.Fatalf("err=%v requests=%d", err, f.provider.count())
 	}
 }
 

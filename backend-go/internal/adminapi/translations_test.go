@@ -81,3 +81,26 @@ func TestTranslationConsole(t *testing.T) {
 		}
 	}
 }
+
+func TestTranslationConsoleReportsSafeFailureCategories(t *testing.T) {
+	c := newConsole(t, "development", "", &gatedSteps{})
+	c.exec(t, `INSERT INTO posts (id, source, account_handle, type, text, published_at, url) VALUES ('1', 'x', 'synthetic_one', 'daily', 'おはよう', '2026-03-01T00:00:00.000Z', 'https://x.example.invalid/1')`)
+	for message, want := range map[string]string{
+		"LLM output was truncated":                       "output_truncated",
+		"translation result is missing zh-CN":            "missing_translation_zh_cn",
+		"LLM response did not contain structured output": "no_structured_output",
+		"synthetic upstream payload":                     "provider_error",
+	} {
+		c.exec(t, `INSERT INTO translation_states(owner_type,owner_id,field,source_hash,status,last_error,updated_at)
+			VALUES ('post','1','text',translation_hash('おはよう'),'failed',?,'2026-03-01T00:00:00.000Z')
+			ON CONFLICT(owner_type,owner_id,field) DO UPDATE SET last_error=excluded.last_error`, message)
+		code, payload := c.call(t, "GET", "/api/admin/posts", "")
+		if code != 200 {
+			t.Fatalf("posts=%d %v", code, payload)
+		}
+		item := payload["items"].([]any)[0].(map[string]any)["translation"].(map[string]any)
+		if item["lastError"] != want {
+			t.Fatalf("error=%v want=%s", item["lastError"], want)
+		}
+	}
+}

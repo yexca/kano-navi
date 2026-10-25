@@ -330,6 +330,10 @@ type modelCall struct {
 	text         string
 	includeText  bool
 	images       []cachedImage
+	// JSON output is used by translation, which returns data rather than a
+	// tool action. Schedule extraction keeps its existing tool protocol.
+	jsonOutput  bool
+	diagnostics *modelDiagnostics
 }
 
 func property(value any, key string) any {
@@ -368,21 +372,42 @@ func (e *Extractor) callModel(ctx context.Context, p provider, call modelCall) (
 		if call.includeText {
 			content = append(content, obj("type", "text", "text", call.text))
 		}
-		payload, err := e.requestLLM(ctx, p, stringify(obj(
+		request := obj(
 			"model", p.model,
 			"max_tokens", min(4000, max(1, call.maxTokens)),
-			"system", anthropicToolInstruction(call.instructions, call.name),
+			"system", call.instructions,
 			"messages", []any{obj("role", "user", "content", content)},
-			"tools", []any{obj(
+		)
+		if call.jsonOutput {
+			request.set("system", call.instructions)
+			output := obj("format", obj("type", "json_schema", "schema", call.schema))
+			// Haiku 5.5 thinks by default, sharing max_tokens with its reply.
+			// Simple translations do not need that extra budget. Keep these
+			// model-specific options away from other configured models.
+			if p.model == "claude-haiku-5-5" || strings.HasPrefix(p.model, "claude-haiku-5-5-") {
+				request.set("thinking", obj("type", "disabled"))
+				output.set("effort", "low")
+			}
+			request.set("output_config", output)
+		} else {
+			request.set("system", anthropicToolInstruction(call.instructions, call.name))
+			request.set("tools", []any{obj(
 				"name", call.name,
 				"description", "Return the structured classification result.",
-				"input_schema", call.schema)},
-			"tool_choice", obj("type", "auto", "disable_parallel_tool_use", true),
-		)))
+				"input_schema", call.schema)})
+			request.set("tool_choice", obj("type", "auto", "disable_parallel_tool_use", true))
+		}
+		payload, err := e.requestLLM(ctx, p, stringify(request))
 		if err != nil {
 			return nil, err
 		}
+		if err = call.checkResponse(payload, p.protocol); err != nil {
+			return nil, err
+		}
 		parts, _ := property(payload, "content").([]any)
+		if call.jsonOutput {
+			return parseTextParts(parts, "text")
+		}
 		for _, part := range parts {
 			if property(part, "type") != "tool_use" || property(part, "name") != call.name {
 				continue
@@ -415,6 +440,9 @@ func (e *Extractor) callModel(ctx context.Context, p provider, call modelCall) (
 			"max_completion_tokens", call.maxTokens,
 		)))
 		if err != nil {
+			return nil, err
+		}
+		if err = call.checkResponse(payload, p.protocol); err != nil {
 			return nil, err
 		}
 		choices, _ := property(payload, "choices").([]any)
@@ -460,6 +488,9 @@ func (e *Extractor) callModel(ctx context.Context, p provider, call modelCall) (
 	if err != nil {
 		return nil, err
 	}
+	if err = call.checkResponse(payload, p.protocol); err != nil {
+		return nil, err
+	}
 	if text, ok := property(payload, "output_text").(string); ok {
 		return parseModelText(text)
 	}
@@ -481,6 +512,19 @@ func (e *Extractor) callModel(ctx context.Context, p provider, call modelCall) (
 		}
 	}
 	return nil, fail("OpenAI response did not contain structured output")
+}
+
+func parseTextParts(parts []any, kind string) (any, error) {
+	var texts []string
+	for _, part := range parts {
+		if text, ok := property(part, "text").(string); ok && property(part, "type") == kind {
+			texts = append(texts, text)
+		}
+	}
+	if len(texts) == 0 {
+		return nil, fail(noStructuredOutput)
+	}
+	return parseModelText(strings.Join(texts, "\n"))
 }
 
 func parseModelText(text string) (any, error) {

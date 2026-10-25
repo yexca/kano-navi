@@ -116,7 +116,7 @@ func (t *Translator) translatePending(ctx context.Context) (map[string]any, erro
 		if err = ctx.Err(); err != nil {
 			return counts, err
 		}
-		status, err := t.translate(ctx, item, providers)
+		status, err := t.translate(ctx, item, providers, counts)
 		if err != nil {
 			return counts, err
 		}
@@ -130,7 +130,7 @@ func (t *Translator) translatePending(ctx context.Context) (map[string]any, erro
 
 // translate handles one candidate and returns success, skipped, failed or
 // dropped (the wording changed while the model was working).
-func (t *Translator) translate(ctx context.Context, item sqlite.TranslationCandidate, providers []provider) (string, error) {
+func (t *Translator) translate(ctx context.Context, item sqlite.TranslationCandidate, providers []provider, counts map[string]any) (string, error) {
 	e := t.e
 	outcome := sqlite.TranslationOutcome{OwnerType: item.OwnerType, OwnerID: item.OwnerID, SourceHash: item.SourceHash}
 	if !hasTranslatableText(item.Text) {
@@ -142,18 +142,23 @@ func (t *Translator) translate(ctx context.Context, item sqlite.TranslationCandi
 		outcome.Status, outcome.Error = "skipped", "text is too long to translate"
 		return "skipped", e.store.RecordTranslationOutcome(ctx, outcome, e.now())
 	}
-	call := modelCall{
+	baseCall := modelCall{
 		instructions: translationInstructions,
 		name:         translationToolName,
 		schema:       translationSchema,
-		maxTokens:    min(4000, 400+3*utf8.RuneCountInString(item.Text)),
+		maxTokens:    min(4000, max(1024, 400+3*utf8.RuneCountInString(item.Text))),
 		text:         "Kind: " + translationKindText[item.OwnerType] + "\n\n" + item.Text,
 		includeText:  true,
+		jsonOutput:   true,
 	}
 	message := "provider request failed"
 	for _, target := range providers {
+		call, repaired := baseCall, false
 		for attempt := 0; attempt <= llmMaxRetries; attempt++ {
+			diagnostics := modelDiagnostics{}
+			call.diagnostics = &diagnostics
 			result, err := t.attempt(ctx, item, target, call)
+			recordTranslationDiagnostic(counts, item, target, attempt, call.maxTokens, diagnostics, err)
 			if err == nil {
 				saved, err := e.store.SaveMachineTranslation(ctx, result, e.now())
 				if err != nil {
@@ -171,7 +176,14 @@ func (t *Translator) translate(ctx context.Context, item sqlite.TranslationCandi
 				return "", ctx.Err()
 			}
 			message = storedMessage(err)
-			if attempt < llmMaxRetries {
+			if attempt == llmMaxRetries {
+				break
+			}
+			retry, wait := retryTranslation(&call, message, &repaired)
+			if !retry {
+				break
+			}
+			if wait {
 				if err = e.sleep(ctx, retryDelay(attempt)); err != nil {
 					return "", err
 				}
@@ -183,6 +195,65 @@ func (t *Translator) translate(ctx context.Context, item sqlite.TranslationCandi
 	}
 	outcome.Status, outcome.Error = "failed", message
 	return "failed", e.store.RecordTranslationOutcome(ctx, outcome, e.now())
+}
+
+// Each target gets at most three calls. A truncated reply needs more output
+// room, an invalid result gets one explicit correction, and only transient
+// request failures wait before retrying. Other failures advance the queue.
+func retryTranslation(call *modelCall, message string, repaired *bool) (retry, wait bool) {
+	switch sqlite.TranslationErrorCode(message) {
+	case "output_truncated":
+		if call.maxTokens >= 4000 {
+			return false, false
+		}
+		call.maxTokens = min(4000, call.maxTokens*2)
+		return true, false
+	case "missing_translation_en", "missing_translation_zh_cn", "invalid_translation", "invalid_response", "no_structured_output":
+		if *repaired {
+			return false, false
+		}
+		*repaired = true
+		call.instructions += "\n\nThe previous response failed validation (" + sqlite.TranslationErrorCode(message) + "). Return the complete JSON object matching the schema, with sourceLanguage, english and simplifiedChinese. For every target language different from sourceLanguage, provide a non-empty translation. If a song title or name needs to stay unchanged, copy it into the complete displayed text rather than returning an empty string. Do not omit fields or add commentary."
+		return true, false
+	}
+	if message == "LLM request failed" || message == "LLM request timed out" {
+		return true, true
+	}
+	const prefix = "LLM request failed (HTTP "
+	if strings.HasPrefix(message, prefix) {
+		status, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(message, prefix), ")"))
+		if err == nil && (status == 408 || status == 429 || status >= 500 && status <= 599) {
+			return true, true
+		}
+	}
+	return false, false
+}
+
+func recordTranslationDiagnostic(counts map[string]any, item sqlite.TranslationCandidate, target provider, attempt, budget int, d modelDiagnostics, err error) {
+	entries, _ := counts["diagnostics"].([]any)
+	// Bound the durable diagnostic payload even with a long fallback queue.
+	if len(entries) >= 600 {
+		counts["diagnosticsOmitted"] = countOf(counts, "diagnosticsOmitted") + 1
+		return
+	}
+	entry := map[string]any{
+		"ownerType": item.OwnerType, "ownerId": item.OwnerID,
+		"provider": target.id, "model": target.model,
+		"attempt": attempt + 1, "maxTokens": budget,
+	}
+	if d.stopReason != "" {
+		entry["stopReason"] = d.stopReason
+	}
+	if d.inputTokens != nil {
+		entry["inputTokens"] = *d.inputTokens
+	}
+	if d.outputTokens != nil {
+		entry["outputTokens"] = *d.outputTokens
+	}
+	if err != nil {
+		entry["error"] = sqlite.TranslationErrorCode(storedMessage(err))
+	}
+	counts["diagnostics"] = append(entries, entry)
 }
 
 func (t *Translator) attempt(ctx context.Context, item sqlite.TranslationCandidate, target provider, call modelCall) (sqlite.MachineTranslation, error) {

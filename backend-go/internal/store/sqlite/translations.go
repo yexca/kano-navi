@@ -416,7 +416,9 @@ func (s *Store) AdminTranslations(ctx context.Context, ownerType string, ids []s
 		if known {
 			item.Requested = st.requested
 			item.LastAttemptAt = nullString(st.attempt)
-			item.LastError = sanitizeLLMError(st.lastErr)
+			if st.lastErr.Valid && strings.TrimSpace(st.lastErr.String) != "" {
+				item.LastError = strPtr(TranslationErrorCode(st.lastErr.String))
+			}
 			if st.current {
 				item.MachineStatus = st.status
 				if SourceLanguages[st.language] {
@@ -473,6 +475,29 @@ func (s *Store) AdminTranslations(ctx context.Context, ownerType string, ids []s
 		out[id] = item
 	}
 	return out, nil
+}
+
+// TranslationErrorCode projects only known validation messages and generic
+// request categories. Legacy or provider-controlled text is never returned.
+func TranslationErrorCode(message string) string {
+	switch message {
+	case "LLM output was truncated":
+		return "output_truncated"
+	case "LLM refused translation":
+		return "model_refused"
+	case "LLM response did not contain structured output", "OpenAI response did not contain structured output":
+		return "no_structured_output"
+	case "translation result is missing en":
+		return "missing_translation_en"
+	case "translation result is missing zh-CN":
+		return "missing_translation_zh_cn"
+	case "translation result was not an object", "translation result has an unknown source language", "translation result is too long":
+		return "invalid_translation"
+	}
+	if code := sanitizeLLMError(sql.NullString{String: message, Valid: true}); code != nil {
+		return *code
+	}
+	return "provider_error"
 }
 
 // TranslationCounts are the console totals of one owner type.

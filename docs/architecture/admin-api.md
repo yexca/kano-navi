@@ -365,6 +365,14 @@ text, manual, manualStale, machine, machineAt, model}`. A locale's `status` is
 (already in that language) or `not_needed`; `text` and `origin` are what
 readers see.
 
+Translation `lastError` distinguishes `output_truncated`,
+`no_structured_output`, `missing_translation_en`,
+`missing_translation_zh_cn`, `invalid_translation` and `model_refused`,
+alongside the generic request categories (for example `timeout` or
+`authentication`). It never contains upstream response wording. A run's
+`run.counts.translate.diagnostics` records bounded, sanitized per-attempt
+metadata; see [Translation](sources.md#translation).
+
 `PUT` stores a manual translation (trimmed, at most 8000 characters) that
 outranks platform and machine rows; `DELETE` removes it. Both answer the
 owner's new summary and `404 not_found` for an unknown owner. `POST
