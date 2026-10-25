@@ -81,3 +81,12 @@
   `/api/videos` endpoints.
 
 </details>
+
+<details>
+<summary><strong>Runtime and development</strong></summary>
+
+- A new installation names its two starting workflows "Full refresh" and
+  "Sources only" instead of Chinese names. Existing workflows keep their
+  names; rename them on the Runs & workflows page.
+
+</details>

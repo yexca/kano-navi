@@ -86,8 +86,9 @@ interval) plans the next run one interval later; it never fires immediately.
 The server process checks due workflows every 30 seconds and starts one
 through the same single-flight queue as manual and MCP jobs; a due workflow
 that finds the queue busy is retried on the next tick. Two workflows are seeded
-once (`full-refresh` and `sources-only`) without timers; deleting them does not
-recreate them. Set `WORKFLOW_SCHEDULER_ENABLED=0` to disable timers.
+once (`full-refresh` "Full refresh" and `sources-only` "Sources only") without
+timers; deleting them does not recreate them, and seeding never renames an
+existing workflow. Set `WORKFLOW_SCHEDULER_ENABLED=0` to disable timers.
 
 ### Live-status probe
 

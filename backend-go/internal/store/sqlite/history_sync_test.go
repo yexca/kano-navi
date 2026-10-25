@@ -133,7 +133,7 @@ func TestHistoryVideosKeepReservationStateAndRestartAfterSearchLimit(t *testing.
 func TestStandaloneSeedsDefaultWorkflowsOnceAndRestoresStaticWording(t *testing.T) {
 	s, query := openHistoryStore(t)
 	ctx := context.Background()
-	if got := query(`SELECT group_concat(id||':'||schedule_enabled||':'||interval_minutes,',') FROM (SELECT * FROM workflows ORDER BY id)`); got != "full-refresh:0:60,sources-only:0:30" {
+	if got := query(`SELECT group_concat(id||':'||name||':'||schedule_enabled||':'||interval_minutes,',') FROM (SELECT * FROM workflows ORDER BY id)`); got != "full-refresh:Full refresh:0:60,sources-only:Sources only:0:30" {
 		t.Fatalf("workflows=%s", got)
 	}
 	// A deleted starting workflow is the operator's decision and stays deleted.
