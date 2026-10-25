@@ -388,7 +388,8 @@ func (a *api) sources(w http.ResponseWriter, r *http.Request) {
 
 // liveProbeState is the live-status probe as the console sees it: the
 // operator settings and their bounds, whether this process runs the probe,
-// when the newest probe run was queued and how many videos it would check now.
+// when the newest probe run was queued, how many videos are active and when
+// the next run is planned.
 func (a *api) liveProbeState(ctx context.Context) (map[string]any, error) {
 	settings, err := a.Store.LiveProbeSettings(ctx)
 	if err != nil {
@@ -398,7 +399,8 @@ func (a *api) liveProbeState(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	active, err := a.Store.YoutubeLiveCandidates(ctx, a.Now(), ytsource.MaxLiveProbes)
+	now := a.Now()
+	active, err := a.Store.LiveProbeTargets(ctx, now, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -406,14 +408,18 @@ func (a *api) liveProbeState(ctx context.Context) (map[string]any, error) {
 	if a.LiveProbe != nil {
 		available = a.LiveProbe()["available"] == true
 	}
-	var lastRunAt any
+	available = available && !a.skipped("youtube")
+	var lastRunAt, nextRunAt any
 	if last != nil {
 		lastRunAt = sqlite.ISOTime(*last)
+	}
+	if next := sqlite.NextLiveProbeAt(active, last, now); next != nil && settings.Enabled && available {
+		nextRunAt = sqlite.ISOTime(*next)
 	}
 	return map[string]any{
 		"enabled": settings.Enabled, "intervalMinutes": settings.IntervalMinutes,
 		"minIntervalMinutes": sqlite.LiveProbeMinMinutes, "maxIntervalMinutes": sqlite.LiveProbeMaxMinutes,
-		"available": available && !a.skipped("youtube"), "lastRunAt": lastRunAt,
+		"available": available, "lastRunAt": lastRunAt, "nextRunAt": nextRunAt,
 		"activeVideos": len(active), "maxVideos": ytsource.MaxLiveProbes,
 	}, nil
 }

@@ -513,8 +513,9 @@ func TestLiveProbeSettings(t *testing.T) {
 	c := newConsole(t, "development", "", &gatedSteps{})
 	code, payload := c.call(t, "GET", "/api/admin/sources", "")
 	probe := payload["youtube"].(map[string]any)["liveProbe"].(map[string]any)
-	if code != 200 || probe["enabled"] != true || probe["intervalMinutes"] != float64(30) || probe["minIntervalMinutes"] != float64(5) ||
-		probe["maxIntervalMinutes"] != float64(360) || probe["available"] != false || probe["lastRunAt"] != nil || probe["activeVideos"] != float64(0) || probe["maxVideos"] != float64(5) {
+	if code != 200 || probe["enabled"] != true || probe["intervalMinutes"] != float64(15) || probe["minIntervalMinutes"] != float64(5) ||
+		probe["maxIntervalMinutes"] != float64(360) || probe["available"] != false || probe["lastRunAt"] != nil || probe["nextRunAt"] != nil ||
+		probe["activeVideos"] != float64(0) || probe["maxVideos"] != float64(5) {
 		t.Fatalf("status=%d %v", code, probe)
 	}
 	for body, message := range map[string]string{

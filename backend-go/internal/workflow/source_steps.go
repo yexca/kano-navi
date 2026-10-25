@@ -224,18 +224,29 @@ func (s *SourceSteps) bilibiliRecent(ctx context.Context) (AttemptResult, error)
 	return AttemptResult{Status: "succeeded", Result: counts}, nil
 }
 
-// youtubeLive requests only the watch pages of a few active videos and
-// stores the broadcast state they report. Nothing active means no request.
+// youtubeLive requests only the watch pages of the few active videos that are
+// due by their phase and stores the broadcast state they report. Nothing due
+// means no request.
 func (s *SourceSteps) youtubeLive(ctx context.Context) (AttemptResult, error) {
 	now := time.Now()
 	if s.Youtube.Now != nil {
 		now = s.Youtube.Now()
 	}
-	candidates, err := s.Store.YoutubeLiveCandidates(ctx, now, ytsource.MaxLiveProbes)
+	settings, err := s.Store.LiveProbeSettings(ctx)
 	if err != nil {
 		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 	}
-	counts := map[string]any{"candidates": len(candidates), "requested": 0, "inspected": 0, "live": 0, "changed": false}
+	targets, err := s.Store.LiveProbeTargets(ctx, now, settings)
+	if err != nil {
+		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+	}
+	candidates := []ytsource.Video{}
+	for _, target := range targets {
+		if !now.Before(target.DueAt) && len(candidates) < ytsource.MaxLiveProbes {
+			candidates = append(candidates, target.Video)
+		}
+	}
+	counts := map[string]any{"active": len(targets), "candidates": len(candidates), "requested": 0, "inspected": 0, "live": 0, "changed": false}
 	if len(candidates) == 0 {
 		return AttemptResult{Status: "succeeded", Result: counts}, nil
 	}

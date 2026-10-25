@@ -154,10 +154,13 @@ lastNotificationAt, lastTriggeredAt, lastError}`. The signing secret is never
 returned.
 
 `LiveProbeStatus` is `{enabled, intervalMinutes, minIntervalMinutes,
-maxIntervalMinutes, available, lastRunAt, activeVideos, maxVideos}`.
-`available` is false while timers or YouTube are disabled for the process;
-`activeVideos` counts the videos the next probe would check (at most
-`maxVideos`), never their IDs. `PUT` accepts either field, keeps an omitted
+maxIntervalMinutes, available, lastRunAt, nextRunAt, activeVideos,
+maxVideos}`. `available` is false while timers or YouTube are disabled for
+the process; `activeVideos` counts the videos the probe is following, never
+their IDs, and one run checks at most `maxVideos` of them. `nextRunAt` is when
+the next run is planned (the earliest due video, at least two minutes after
+`lastRunAt`, and no earlier than now), or null while nothing is active or the
+probe is off or unavailable. `PUT` accepts either field, keeps an omitted
 one, and rejects other fields and intervals outside 5–360 minutes with
 `400`.
 

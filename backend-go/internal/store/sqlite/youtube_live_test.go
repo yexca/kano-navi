@@ -64,22 +64,122 @@ func TestLiveCandidatesAreBoundedActiveVideos(t *testing.T) {
 	// Never-checked videos go first, then the least recently checked.
 	testutil.Exec(t, p, `UPDATE videos SET live_checked_at=NULL WHERE id='HHHHHHHHHHH'`)
 	testutil.Exec(t, p, `UPDATE videos SET live_checked_at='2026-01-03T11:00:00.000Z' WHERE id='CCCCCCCCCCC'`)
-	got, err := s.YoutubeLiveCandidates(ctx, now, ytsource.MaxLiveProbes)
+	testutil.Exec(t, p, `UPDATE videos SET live_checked_at='2026-01-03T11:58:00.000Z' WHERE id='AAAAAAAAAAA'`)
+	got, err := s.LiveProbeTargets(ctx, now, LiveProbeSettings{Enabled: true, IntervalMinutes: 15})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := []string{}
-	for _, v := range got {
-		ids = append(ids, v.ID)
+	plan := []string{}
+	for _, target := range got {
+		plan = append(plan, target.Video.ID+":"+target.Phase+"@"+target.DueAt.Format("15:04"))
 	}
-	if strings.Join(ids, ",") != "HHHHHHHHHHH,CCCCCCCCCCC,AAAAAAAAAAA" {
-		t.Fatalf("candidates=%v", ids)
+	// The never-checked waiting room is due at once, the overdue stream one
+	// interval after its check and the near reservation at its start, as it
+	// was already checked inside its lead.
+	if strings.Join(plan, ",") != "HHHHHHHHHHH:starting@00:03,CCCCCCCCCCC:overdue@11:15,AAAAAAAAAAA:prestart@12:10" {
+		t.Fatalf("plan=%v", plan)
 	}
-	if limited, _ := s.YoutubeLiveCandidates(ctx, now, 1); len(limited) != 1 || limited[0].ID != "HHHHHHHHHHH" {
-		t.Fatalf("limited=%v", limited)
-	}
-	if got[1].PublishedAt != "2026-01-01T00:00:00Z" || got[1].ThumbnailURL == "" {
+	if got[1].Video.PublishedAt != "2026-01-01T00:00:00Z" || got[1].Video.ThumbnailURL == "" {
 		t.Fatalf("candidate lost stored fields: %#v", got[1])
+	}
+}
+
+func TestLiveProbePhasesFollowTheStart(t *testing.T) {
+	settings := LiveProbeSettings{Enabled: true, IntervalMinutes: 15}
+	at := func(clock string) time.Time {
+		t, _ := time.Parse(time.RFC3339, "2026-01-03T"+clock+":00Z")
+		return t
+	}
+	start := at("12:00")
+	for _, tc := range []struct {
+		name, now, last, status, phase, due string
+	}{
+		{"near and never checked", "11:45", "", ytsource.LiveStatusUpcoming, LivePhasePrestart, "11:45"},
+		{"checked inside its lead", "11:50", "11:46", ytsource.LiveStatusUpcoming, LivePhasePrestart, "12:00"},
+		{"checked before its lead", "11:50", "11:30", ytsource.LiveStatusUpcoming, LivePhasePrestart, "11:45"},
+		{"the start has come", "12:00", "11:46", ytsource.LiveStatusUpcoming, LivePhaseStarting, "11:49"},
+		{"still waiting", "12:05", "12:04", ytsource.LiveStatusUpcoming, LivePhaseStarting, "12:07"},
+		{"no state reported", "12:05", "12:04", "", LivePhaseStarting, "12:07"},
+		{"waiting past the window", "12:50", "12:44", ytsource.LiveStatusUpcoming, LivePhaseOverdue, "12:59"},
+		{"on air", "12:10", "12:04", ytsource.LiveStatusLive, LivePhaseLive, "12:19"},
+	} {
+		var last time.Time
+		if tc.last != "" {
+			last = at(tc.last)
+		}
+		phase, due := settings.liveProbeDue(start, last, tc.status, at(tc.now))
+		if phase != tc.phase || !due.Equal(at(tc.due)) {
+			t.Fatalf("%s: phase=%s due=%s", tc.name, phase, due.Format("15:04"))
+		}
+	}
+	// The operator interval paces streams on air and overdue reservations,
+	// never the starting window.
+	slow := LiveProbeSettings{Enabled: true, IntervalMinutes: 60}
+	if _, due := slow.liveProbeDue(start, at("12:01"), ytsource.LiveStatusUpcoming, at("12:02")); !due.Equal(at("12:04")) {
+		t.Fatalf("starting due=%s", due.Format("15:04"))
+	}
+	if _, due := slow.liveProbeDue(start, at("12:01"), ytsource.LiveStatusLive, at("12:02")); !due.Equal(at("13:01")) {
+		t.Fatalf("live due=%s", due.Format("15:04"))
+	}
+}
+
+func TestLiveProbeAttemptsPaceFailedPages(t *testing.T) {
+	s, p := openLiveStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	waiting := liveVideo("AAAAAAAAAAA", now.Add(-10*time.Minute).Format(time.RFC3339), true)
+	if err := s.WriteYoutubeRecent(ctx, liveChannel, ytsource.Result{Videos: []ytsource.Video{waiting}, NextCursor: "AAAAAAAAAAA", NextCursorTime: "2026-01-01T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Exec(t, p, `UPDATE videos SET live_checked_at=NULL WHERE id='AAAAAAAAAAA'`)
+	// An attempt from long ago is forgotten on the next write.
+	testutil.Exec(t, p, `INSERT INTO sync_state(source,account_id,metadata_json) VALUES('youtube-live','','{"attempts":{"ZZZZZZZZZZZ":"2025-12-01T00:00:00.000Z"}}')`)
+	settings := LiveProbeSettings{Enabled: true, IntervalMinutes: 15}
+	due := func() bool {
+		t.Helper()
+		targets, err := s.LiveProbeTargets(ctx, time.Now(), settings)
+		if err != nil || len(targets) != 1 {
+			t.Fatalf("targets=%v err=%v", targets, err)
+		}
+		return !time.Now().Before(targets[0].DueAt)
+	}
+	if !due() {
+		t.Fatal("a never-checked waiting room was not due")
+	}
+	// The page failed: nothing is stored about the video, but the attempt
+	// still waits a starting interval before the next request.
+	if _, err := s.WriteYoutubeLive(ctx, ytsource.ProbeResult{Attempted: []string{"AAAAAAAAAAA"}, Errors: []string{"youtube_upstream_5xx"}, Requested: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if due() {
+		t.Fatal("a failed page was due again at once")
+	}
+	if got := liveText(t, s, `SELECT live_checked_at FROM videos WHERE id='AAAAAAAAAAA'`); got != "<null>" {
+		t.Fatalf("a failed page counted as a check: %s", got)
+	}
+	meta := liveText(t, s, `SELECT metadata_json FROM sync_state WHERE source='youtube-live'`)
+	if !strings.Contains(meta, `"AAAAAAAAAAA"`) || strings.Contains(meta, "ZZZZZZZZZZZ") {
+		t.Fatalf("attempts=%s", meta)
+	}
+}
+
+func TestNextLiveProbeAtKeepsTheMinimumGap(t *testing.T) {
+	now := time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC)
+	if NextLiveProbeAt(nil, nil, now) != nil {
+		t.Fatal("planned a run with nothing active")
+	}
+	targets := []LiveProbeTarget{{DueAt: now.Add(10 * time.Minute)}, {DueAt: now.Add(3 * time.Minute)}}
+	if next := NextLiveProbeAt(targets, nil, now); !next.Equal(now.Add(3 * time.Minute)) {
+		t.Fatalf("next=%s", next)
+	}
+	// Overdue work runs now, but not within the gap after the previous run.
+	targets[1].DueAt = now.Add(-time.Hour)
+	if next := NextLiveProbeAt(targets, nil, now); !next.Equal(now) {
+		t.Fatalf("overdue next=%s", next)
+	}
+	last := now.Add(-time.Minute)
+	if next := NextLiveProbeAt(targets, &last, now); !next.Equal(last.Add(LiveProbeMinGap)) {
+		t.Fatalf("gap next=%s", next)
 	}
 }
 
@@ -170,7 +270,7 @@ func TestLiveSettingsDefaultAndValidate(t *testing.T) {
 	s, _ := openLiveStore(t)
 	ctx := context.Background()
 	settings, err := s.LiveProbeSettings(ctx)
-	if err != nil || !settings.Enabled || settings.IntervalMinutes != LiveProbeDefaultMinutes || settings.Freshness() != time.Hour {
+	if err != nil || !settings.Enabled || settings.IntervalMinutes != LiveProbeDefaultMinutes || settings.Freshness() != 30*time.Minute {
 		t.Fatalf("defaults=%#v err=%v", settings, err)
 	}
 	s.writable = true

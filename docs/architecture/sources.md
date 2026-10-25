@@ -174,8 +174,12 @@ videos per run:
 
 Both are limited to starts in the last 24 hours. Videos the page already
 reported as over, events whose `ends_at` has passed, and manually confirmed
-cancellations are left out. Never-checked videos go first, then the least
-recently checked, so failures cannot starve the rest. With no active video,
+cancellations are left out. Each active video is due by its phase: once before
+its start, every 3 minutes from the start until the page reports it live (for
+up to 45 minutes), then every operator interval (see
+[Workflows](workflows.md#live-status-probe)). A run requests only due videos,
+the earliest due first and, among equals, never-checked videos before the
+least recently checked, so failures cannot starve the rest. With nothing due,
 the probe makes no request and queues no run.
 
 `ParseWatch` keeps its completeness checks (matching ID, title, start time for
@@ -191,10 +195,12 @@ The store writes `videos.live_status` and `live_checked_at`, the actual start,
 `is_upcoming`, `ends_at` once reported and the status text through the same
 upsert as the regular step. It never adds a video, never moves the feed cursor
 or detail queue, keeps manual locks and tombstones, and increments
-`dashboard_revision` only when a public video or event field changed. A failed
-or incomplete page keeps its snapshot and is asked again on the next run. Each
-request uses the client's existing 10-second timeout, 4 MiB body limit and
-redirect rejection.
+`dashboard_revision` only when a public video or event field changed. In the
+same transaction it records when each page was requested in the
+`youtube-live` `sync_state` row. A failed or incomplete page keeps its
+snapshot and is asked again when its phase next makes it due. Each request
+uses the client's existing 10-second timeout, 4 MiB body limit and redirect
+rejection.
 
 The public dashboard projects `liveStatus` (`live`, `upcoming`, `ended` or
 null) on videos and on the events linked to them. `ended` is final; `live` and

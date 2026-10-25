@@ -13,29 +13,38 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
-func TestLiveProbeRunsOnItsIntervalThroughTheQueue(t *testing.T) {
+func TestLiveProbeFollowsTheStartThroughTheQueue(t *testing.T) {
 	s, err := sqlite.OpenInitialized(filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite"), true, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
 	ctx := context.Background()
+	// Stored checks carry the real time, so the probe's clock starts there and
+	// only moves forward.
 	now := time.Now().UTC()
-	started := now.Add(-5 * time.Minute).Format(time.RFC3339)
+	clock := now
+	scheduled := now.Add(-time.Minute).Format(time.RFC3339)
+	onAir := false
 	var requested []string
 	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
 		if r.URL.Host != "www.youtube.com" || r.URL.Path != "/watch" {
 			t.Fatalf("probe requested %s%s", r.URL.Host, r.URL.Path)
 		}
 		requested = append(requested, r.URL.Query().Get("v"))
-		body := `var ytInitialPlayerResponse={"videoDetails":{"videoId":"AAAAAAAAAAA","title":"synthetic stream","isLive":true,"isLiveContent":true},"playabilityStatus":{"status":"OK"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":true,"startTimestamp":"` + started + `"}}}};`
+		state := `"isUpcoming":true,"isLiveContent":true},"playabilityStatus":{"status":"OK"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":false,"startTimestamp":"` + scheduled + `"}}}`
+		if onAir {
+			state = `"isLive":true,"isLiveContent":true},"playabilityStatus":{"status":"OK"},"microformat":{"playerMicroformatRenderer":{"liveBroadcastDetails":{"isLiveNow":true,"startTimestamp":"` + scheduled + `"}}}`
+		}
+		body := `var ytInitialPlayerResponse={"videoDetails":{"videoId":"AAAAAAAAAAA","title":"synthetic stream",` + state + `};`
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/html"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})
 	yt := ytsource.NewAdapter(ytsource.NewClient(&http.Client{Transport: rt}), ytsource.Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 1})
+	yt.Now = func() time.Time { return clock }
 	q := &Queue{Store: s, Executor: &Executor{Store: s, Steps: &SourceSteps{Store: s, Youtube: yt}, SyntheticSteps: map[string]bool{"live": false}}}
 	defer q.Close()
 	var runs []*Run
-	probe := &LiveProbe{Store: s, Enabled: true, Now: func() time.Time { return now }, Submit: func(ctx context.Context) (bool, error) {
+	probe := &LiveProbe{Store: s, Enabled: true, Now: func() time.Time { return clock }, Submit: func(ctx context.Context) (bool, error) {
 		run, err := q.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocLiveWorkflow, Steps: []string{"live"}}, TriggerScheduler, nil)
 		if err != nil {
 			return false, err
@@ -43,53 +52,71 @@ func TestLiveProbeRunsOnItsIntervalThroughTheQueue(t *testing.T) {
 		runs = append(runs, run)
 		return true, nil
 	}}
+	at := func(offset time.Duration) bool {
+		t.Helper()
+		clock = now.Add(offset)
+		accepted, err := probe.Tick(ctx)
+		if err != nil {
+			t.Fatalf("tick at %s: %v", offset, err)
+		}
+		if accepted {
+			done := waitRun(t, s, runs[len(runs)-1].ID, "succeeded", "failed", "partial")
+			if done.Status != "succeeded" || len(done.Steps) != 1 || done.Steps[0].Capability != "youtube_live" {
+				t.Fatalf("run at %s=%#v", offset, done)
+			}
+		}
+		return accepted
+	}
+	status := func() string {
+		t.Helper()
+		dashboard, err := s.GetDashboard(ctx, 3, clock)
+		if err != nil || len(dashboard.Videos) != 1 || dashboard.Videos[0].LiveStatus == nil {
+			t.Fatalf("videos=%#v err=%v", dashboard.Videos, err)
+		}
+		return *dashboard.Videos[0].LiveStatus
+	}
 
 	// Nothing active: no run and no request.
-	if accepted, err := probe.Tick(ctx); accepted || err != nil || len(requested) != 0 {
-		t.Fatalf("idle accepted=%v err=%v requests=%v", accepted, err, requested)
+	if at(0) || len(requested) != 0 {
+		t.Fatalf("idle requests=%v", requested)
 	}
-	reservation := ytsource.Video{ID: "AAAAAAAAAAA", Title: "synthetic stream", PublishedAt: now.Add(-24 * time.Hour).Format(time.RFC3339), ScheduledAt: now.Add(-10 * time.Minute).Format(time.RFC3339), URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", Kind: "UPCOMING LIVE", IsUpcoming: true}
+	// A feed entry whose start has just passed is checked at once.
+	reservation := ytsource.Video{ID: "AAAAAAAAAAA", Title: "synthetic stream", PublishedAt: now.Add(-24 * time.Hour).Format(time.RFC3339), ScheduledAt: scheduled, URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", Kind: "UPCOMING LIVE", IsUpcoming: true, FeedOnly: true}
 	if err = s.WriteYoutubeRecent(ctx, "UCAAAAAAAAAAAAAAAAAAAAAA", ytsource.Result{Videos: []ytsource.Video{reservation}, NextCursor: "AAAAAAAAAAA", NextCursorTime: reservation.PublishedAt}); err != nil {
 		t.Fatal(err)
 	}
-	if accepted, err := probe.Tick(ctx); !accepted || err != nil {
-		t.Fatalf("due accepted=%v err=%v", accepted, err)
+	if !at(0) || len(requested) != 1 || status() != "upcoming" {
+		t.Fatalf("first check requests=%v", requested)
 	}
-	done := waitRun(t, s, runs[0].ID, "succeeded", "failed", "partial")
-	if done.Status != "succeeded" || len(done.Steps) != 1 || done.Steps[0].Capability != "youtube_live" || len(requested) != 1 {
-		t.Fatalf("run=%#v requests=%v", done, requested)
+	// Still waiting: the next check comes a starting interval later, not a
+	// whole operator interval.
+	if at(time.Minute) {
+		t.Fatal("probe ran again within the starting interval")
 	}
-	dashboard, err := s.GetDashboard(ctx, 3, now)
-	if err != nil {
-		t.Fatal(err)
+	onAir = true
+	if !at(3*time.Minute+5*time.Second) || len(requested) != 2 || status() != "live" {
+		t.Fatalf("start requests=%v", requested)
 	}
-	if len(dashboard.Videos) != 1 || dashboard.Videos[0].LiveStatus == nil || *dashboard.Videos[0].LiveStatus != "live" || dashboard.Videos[0].IsUpcoming {
-		t.Fatalf("videos=%#v", dashboard.Videos)
+	// On air, the operator interval (15 minutes by default) paces it.
+	if at(10 * time.Minute) {
+		t.Fatal("probe ran again within its interval while live")
 	}
-
-	// The interval has not passed yet.
-	if accepted, _ := probe.Tick(ctx); accepted {
-		t.Fatal("probe ran again within its interval")
+	if !at(16*time.Minute) || len(requested) != 3 {
+		t.Fatalf("live requests=%v", requested)
 	}
-	probe.Now = func() time.Time { return now.Add(31 * time.Minute) }
-	if accepted, err := probe.Tick(ctx); !accepted || err != nil {
-		t.Fatalf("next interval accepted=%v err=%v", accepted, err)
-	}
-	waitRun(t, s, runs[1].ID, "succeeded", "failed", "partial")
 
 	// The operator can turn it off; timers being disabled stops it too.
 	if err = s.SaveLiveProbeSettings(ctx, sqlite.LiveProbeSettings{Enabled: false, IntervalMinutes: 5}); err != nil {
 		t.Fatal(err)
 	}
-	probe.Now = func() time.Time { return now.Add(2 * time.Hour) }
-	if accepted, _ := probe.Tick(ctx); accepted {
+	if at(2 * time.Hour) {
 		t.Fatal("disabled probe ran")
 	}
 	if err = s.SaveLiveProbeSettings(ctx, sqlite.LiveProbeSettings{Enabled: true, IntervalMinutes: 5}); err != nil {
 		t.Fatal(err)
 	}
 	probe.Enabled = false
-	if accepted, _ := probe.Tick(ctx); accepted {
+	if at(2 * time.Hour) {
 		t.Fatal("probe ran with timers disabled")
 	}
 }

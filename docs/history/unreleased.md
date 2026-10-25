@@ -21,8 +21,8 @@
 - The Schedule page shows merged duplicates with the entry they are hidden
   behind, filters them, and can undo a merge so the entry stays separate.
 - Sources has a Live-status probe panel to turn the probe on or off and set
-  its interval (default 30 minutes, 5 to 360); its runs appear in the run
-  history as "Live-status probe".
+  its interval (default 15 minutes, 5 to 360) and to show when it runs next;
+  its runs appear in the run history as "Live-status probe".
 - Schedule status badges are translated, including the Chinese statuses that
   older manual entries still store.
 - The Posts page is a paged table with separate columns for the account and
@@ -92,9 +92,12 @@
   cancellations are left alone, and merges survive re-extraction.
 - A lightweight live-status probe rechecks only the watch pages of up to five
   reservations that are starting or started and streams without a known end,
-  on its own interval through the job queue. It records the actual start,
-  the end, the reservation state and the live status, and updates the board
-  only when something changed.
+  through the job queue. It follows each stream's start: one check shortly
+  before it, every 3 minutes from the start until the stream is live (for up
+  to 45 minutes), then the operator interval, so an on-time start reaches the
+  board within minutes. It records the actual start, the end, the
+  reservation state and the live status, and updates the board only when
+  something changed.
 - A stream YouTube reports as live is no longer stored as completed.
 - Events store English status codes (`scheduled`, `live`, `ended`,
   `pending`) and English details (`YouTube Live`, `YouTube Premiere`) instead

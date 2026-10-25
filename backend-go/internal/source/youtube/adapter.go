@@ -198,8 +198,10 @@ const MaxLiveProbes = 5
 // ProbeResult is what one live-status probe learned. Videos holds only pages
 // that passed the watch-page completeness checks.
 type ProbeResult struct {
-	Videos               []Video
-	Errors               []string
+	Videos []Video
+	Errors []string
+	// Attempted lists the IDs whose pages were requested, answered or not.
+	Attempted            []string
 	Requested, Inspected int
 }
 
@@ -207,7 +209,7 @@ type ProbeResult struct {
 // MaxLiveProbes of them: no feed and no streams page. A failed or incomplete
 // page records its code and leaves that video's snapshot to the caller.
 func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, error) {
-	result := ProbeResult{Videos: []Video{}, Errors: []string{}}
+	result := ProbeResult{Videos: []Video{}, Errors: []string{}, Attempted: []string{}}
 	if len(videos) > MaxLiveProbes {
 		videos = videos[:MaxLiveProbes]
 	}
@@ -216,6 +218,7 @@ func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, e
 			return result, err
 		}
 		result.Requested++
+		result.Attempted = append(result.Attempted, old.ID)
 		body, err := a.Client.Watch(ctx, old.ID)
 		if err != nil {
 			result.Errors = append(result.Errors, safeError(err))

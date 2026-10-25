@@ -8,10 +8,11 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
-// LiveProbe starts the YouTube live-status probe on its operator interval. It
-// runs in the API process only and submits through the single-flight queue,
-// so it never overlaps another run. A busy queue, an absent active video or a
-// failed lookup simply waits for the next tick.
+// LiveProbe starts the YouTube live-status probe whenever an active video is
+// due by its phase (see sqlite.LiveProbeTargets). It runs in the API process
+// only and submits through the single-flight queue, so it never overlaps
+// another run. A busy queue, nothing due or a failed lookup simply waits for
+// the next tick.
 type LiveProbe struct {
 	Store *sqlite.Store
 	// Submit queues one probe run and reports whether the queue accepted it.
@@ -67,8 +68,8 @@ func (p *LiveProbe) Status() map[string]any {
 	return map[string]any{"available": p.Enabled, "running": p.cancel != nil, "tickSeconds": int(p.tick() / time.Second)}
 }
 
-// Tick queues a probe when it is enabled, its interval has passed since the
-// previous probe run and at least one video is active. It reports whether a
+// Tick queues a probe when it is enabled and an active video is due, at least
+// sqlite.LiveProbeMinGap after the previous probe run. It reports whether a
 // run was accepted.
 func (p *LiveProbe) Tick(ctx context.Context) (bool, error) {
 	if !p.Enabled || p.Store == nil || p.Submit == nil {
@@ -86,12 +87,12 @@ func (p *LiveProbe) Tick(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if last != nil && now.Before(last.Add(time.Duration(settings.IntervalMinutes)*time.Minute)) {
-		return false, nil
-	}
-	active, err := p.Store.YoutubeLiveCandidates(ctx, now, 1)
-	if err != nil || len(active) == 0 {
+	targets, err := p.Store.LiveProbeTargets(ctx, now, settings)
+	if err != nil {
 		return false, err
+	}
+	if next := sqlite.NextLiveProbeAt(targets, last, now); next == nil || now.Before(*next) {
+		return false, nil
 	}
 	return p.Submit(ctx)
 }

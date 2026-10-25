@@ -127,6 +127,7 @@ export interface LiveProbeStatus {
   maxIntervalMinutes: number
   available: boolean
   lastRunAt: string | null
+  nextRunAt: string | null
   activeVideos: number
   maxVideos: number
 }

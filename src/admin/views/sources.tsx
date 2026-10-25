@@ -437,6 +437,12 @@ function LiveProbePanel({
                 : null,
             ],
             [
+              t("admin.liveProbe.nextRun"),
+              probe.nextRunAt
+                ? `${formatDateTime(probe.nextRunAt, locale)} · ${formatRelative(probe.nextRunAt, locale)}`
+                : null,
+            ],
+            [
               t("admin.liveProbe.active"),
               t("admin.liveProbe.activeCount", {
                 count: probe.activeVideos,

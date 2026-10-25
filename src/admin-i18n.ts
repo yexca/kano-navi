@@ -554,13 +554,14 @@ export const adminMessages = {
     "admin.liveProbe.on": "On",
     "admin.liveProbe.enable": "Probe active streams",
     "admin.liveProbe.enableHint":
-      "Runs in the server's job queue on its own interval, and only while a video is active.",
+      "Runs in the server's job queue, every few minutes around a stream's start, and only while a video is active.",
     "admin.liveProbe.unavailable":
       "Not running: timers are off (WORKFLOW_SCHEDULER_ENABLED=0) or YouTube is disabled by SKIP_YOUTUBE.",
     "admin.liveProbe.interval": "Interval (minutes)",
     "admin.liveProbe.intervalHint":
-      "{min} to {max} minutes. A result counts for two intervals; after that the board falls back to the start time.",
+      "{min} to {max} minutes between checks of a stream on air, or of a waiting room still closed 45 minutes after its start. From the start until it goes live, it checks every 3 minutes. A result counts for two intervals; after that the board falls back to the start time.",
     "admin.liveProbe.lastRun": "Last probe",
+    "admin.liveProbe.nextRun": "Next probe",
     "admin.liveProbe.active": "Active videos now",
     "admin.liveProbe.activeCount": "{count} (up to {max} per run)",
 
@@ -1326,13 +1327,14 @@ export const adminMessages = {
     "admin.liveProbe.on": "开启",
     "admin.liveProbe.enable": "探测进行中的直播",
     "admin.liveProbe.enableHint":
-      "按独立的间隔在服务器任务队列中运行，且只在有活跃视频时运行。",
+      "在服务器任务队列中运行：直播开始前后每隔几分钟检查一次，且只在有活跃视频时运行。",
     "admin.liveProbe.unavailable":
       "未运行：定时器已关闭（WORKFLOW_SCHEDULER_ENABLED=0），或 YouTube 已被 SKIP_YOUTUBE 停用。",
     "admin.liveProbe.interval": "间隔（分钟）",
     "admin.liveProbe.intervalHint":
-      "{min} 到 {max} 分钟。结果在两个间隔内有效，之后看板改按开始时间推断。",
+      "{min} 到 {max} 分钟，用于直播中的视频，以及开始 45 分钟后仍未开播的待机室。从预定开始到确认开播，每 3 分钟检查一次。结果在两个间隔内有效，之后看板改按开始时间推断。",
     "admin.liveProbe.lastRun": "最近探测",
+    "admin.liveProbe.nextRun": "下次探测",
     "admin.liveProbe.active": "当前活跃视频",
     "admin.liveProbe.activeCount": "{count}（每次最多 {max} 个）",
 
