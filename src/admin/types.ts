@@ -220,6 +220,14 @@ export interface ScheduleImage {
   mediaStatus: string
 }
 
+export interface AdminPostImage {
+  /** Local /media URL of the cached file; null until it is ready. */
+  url: string | null
+  /** ready, pending, failed or missing. */
+  status: string
+  alt: string | null
+}
+
 export interface AdminPost {
   id: string
   source: string
@@ -228,6 +236,10 @@ export interface AdminPost {
   publishedAt: string
   url: string
   mediaUrl: string | null
+  mediaAlt: string | null
+  media: AdminPostImage[]
+  /** "none" for a text-only post, else the first image's status. */
+  mediaStatus: string
   llmStatus: string
   llmRoute: string | null
   llmLastAttemptAt: string | null

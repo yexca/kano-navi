@@ -202,8 +202,16 @@ alias); `none` never needs review and keeps `previewUrl` null.
 | `GET /posts`                 | `page`, `pageSize` (≤ 200), `source`, `account`, `from`, `to`, `search`, `media`, `llm`, `reprocess` | list of posts |
 | `POST /posts/{id}/reprocess` | `{route?}`                                                                                           | `{state}`     |
 
-`media` is `present` or `missing`; `llm` is `never`, `pending`, `processed`,
-`failed`, `skipped` or `uncertain`; `reprocess=1` keeps only queued posts.
+`account` is an X handle, matched without case or a leading `@`; `media` is
+`present` or `missing`; `llm` is `never`, `pending`, `processed`, `failed`,
+`skipped` or `uncertain`; `reprocess=1` keeps only queued posts.
+
+Each post's `media` lists its images in order (linked post images, or else
+the stored media URL) as `{url, status, alt}`. `url` is the local
+`/media/<id>?v=<sha256>` URL of the cached file, or `null` until that file is
+ready; the remote address stays in `mediaUrl` and is never shown. `status` is
+`ready`, `pending`, `failed` or `missing`. `mediaStatus` repeats the first
+image's status, or is `none` for a text-only post.
 
 ## Videos
 

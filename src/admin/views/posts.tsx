@@ -1,14 +1,164 @@
-import { useState } from "react"
-import { FileText, ImageIcon, Search } from "lucide-react"
+import { useEffect, useState } from "react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  ImageOff,
+  Search,
+} from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import { formatDateTime } from "@/admin/format"
 import type { AdminPost } from "@/admin/types"
-import { Badge, Empty, Loading, PageHeader, Pager, Panel } from "@/admin/ui"
+import {
+  Empty,
+  IconButton,
+  Loading,
+  Modal,
+  PageHeader,
+  Pager,
+  Panel,
+} from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { QuickFetch } from "@/admin/views/fetch-parts"
-import { PostActions, PostStatus } from "@/admin/views/review"
+import { PostActions, PostStatus, RouteSelect } from "@/admin/views/review"
+
+/** Only local, already cached media is shown; never a remote CDN URL. */
+function localUrl(value: string | null | undefined) {
+  return value && value.startsWith("/") ? value : null
+}
+
+/** The message key for an image that has no cached file to show yet. */
+function missingKey(status: string) {
+  return `admin.review.media.${["pending", "failed"].includes(status) ? status : "missing"}`
+}
+
+function PostAccount({ post }: { post: AdminPost }) {
+  const { t } = useAppSettings()
+  return post.accountHandle
+    ? `@${post.accountHandle.replace(/^@/, "")}`
+    : t(`admin.step.${post.source}`)
+}
+
+/**
+ * The post's images one at a time inside the page, fitted to the viewport.
+ * The buttons and arrow keys step through a post with several images.
+ */
+function PostImageViewer({
+  post,
+  start,
+  onClose,
+}: {
+  post: AdminPost
+  start: number
+  onClose: () => void
+}) {
+  const { t, locale } = useAppSettings()
+  const [index, setIndex] = useState(start)
+  const count = post.media.length
+  const image = post.media[index]
+  const url = localUrl(image?.url)
+  const step = (delta: number) =>
+    setIndex((current) => (current + delta + count) % count)
+  useEffect(() => {
+    if (count < 2) return undefined
+    const onKey = (event: KeyboardEvent) => {
+      const delta =
+        event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0
+      if (delta) setIndex((current) => (current + delta + count) % count)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [count])
+  return (
+    <Modal
+      open
+      className="adm-image-viewer"
+      title={
+        <>
+          <PostAccount post={post} /> ·{" "}
+          {formatDateTime(post.publishedAt, locale)}
+        </>
+      }
+      onClose={onClose}
+    >
+      <div className="adm-image-viewer-stage">
+        {url ? (
+          <img src={url} alt={image.alt || post.mediaAlt || ""} />
+        ) : (
+          <span>
+            <ImageOff aria-hidden />
+            {t(missingKey(image?.status || ""))}
+          </span>
+        )}
+      </div>
+      {count > 1 ? (
+        <div className="adm-image-viewer-nav">
+          <IconButton
+            icon={ChevronLeft}
+            label={t("admin.posts.imagePrevious")}
+            onClick={() => step(-1)}
+          />
+          <span aria-live="polite">
+            {index + 1} / {count}
+          </span>
+          <IconButton
+            icon={ChevronRight}
+            label={t("admin.posts.imageNext")}
+            onClick={() => step(1)}
+          />
+        </div>
+      ) : null}
+    </Modal>
+  )
+}
+
+/**
+ * The post's first cached image, or why there is none to show yet. Clicking
+ * it enlarges the images in the page.
+ */
+function PostImage({ post }: { post: AdminPost }) {
+  const { t } = useAppSettings()
+  const [viewing, setViewing] = useState(false)
+  if (!post.media.length) return <span className="adm-post-no-image">—</span>
+  const first = post.media.findIndex((image) => localUrl(image.url))
+  const preview = first < 0 ? null : localUrl(post.media[first].url)
+  const count =
+    post.media.length > 1 ? (
+      <span className="adm-post-thumb-count">×{post.media.length}</span>
+    ) : null
+  if (!preview) {
+    const label = t(missingKey(post.mediaStatus))
+    return (
+      <span className="adm-post-thumb is-empty" title={label}>
+        <ImageOff aria-label={label} />
+        {count}
+      </span>
+    )
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="adm-post-thumb"
+        onClick={() => setViewing(true)}
+        aria-label={t("admin.posts.imageView")}
+        title={t("admin.posts.imageView")}
+      >
+        <img src={preview} alt="" loading="lazy" />
+        {count}
+      </button>
+      {viewing ? (
+        <PostImageViewer
+          post={post}
+          start={first}
+          onClose={() => setViewing(false)}
+        />
+      ) : null}
+    </>
+  )
+}
 
 function PostTableRow({
   post,
@@ -17,26 +167,32 @@ function PostTableRow({
   post: AdminPost
   onDone: () => void
 }) {
-  const { t, locale } = useAppSettings()
+  const { locale } = useAppSettings()
+  const [route, setRoute] = useState("")
   return (
     <div role="row" className="adm-post-table-row">
       <div role="cell" className="adm-post-origin">
-        <strong>{post.accountHandle || t(`admin.step.${post.source}`)}</strong>
+        <strong>
+          <PostAccount post={post} />
+        </strong>
         <time dateTime={post.publishedAt}>
           {formatDateTime(post.publishedAt, locale)}
         </time>
       </div>
       <div role="cell" className="adm-post-body">
         <p className="adm-post-text">{post.text}</p>
-        {post.mediaUrl ? (
-          <Badge icon={ImageIcon}>{t("admin.posts.withMedia")}</Badge>
-        ) : null}
+      </div>
+      <div role="cell" className="adm-post-image">
+        <PostImage post={post} />
       </div>
       <div role="cell" className="adm-chip-row adm-post-state">
         <PostStatus post={post} />
       </div>
+      <div role="cell" className="adm-post-route">
+        <RouteSelect value={route} onChange={setRoute} />
+      </div>
       <div role="cell" className="adm-post-controls">
-        <PostActions post={post} onDone={onDone} compact />
+        <PostActions post={post} route={route} onDone={onDone} compact />
       </div>
     </div>
   )
@@ -45,9 +201,10 @@ function PostTableRow({
 function PostList() {
   const { t } = useAppSettings()
   const { api } = useAdmin()
+  const sources = useResource(() => api.sources(), [])
   const [filters, setFilters] = useState({
     search: "",
-    source: "",
+    account: "",
     llm: "",
     media: "",
   })
@@ -81,13 +238,16 @@ function PostList() {
           />
         </label>
         <select
-          value={filters.source}
-          onChange={(e) => update({ source: e.target.value })}
-          aria-label={t("admin.posts.source")}
+          value={filters.account}
+          onChange={(e) => update({ account: e.target.value })}
+          aria-label={t("admin.posts.account")}
         >
-          <option value="">{t("admin.posts.anySource")}</option>
-          <option value="x">{t("admin.step.x")}</option>
-          <option value="youtube">{t("admin.step.youtube")}</option>
+          <option value="">{t("admin.posts.anyAccount")}</option>
+          {sources.data?.x.accounts.map(({ account }) => (
+            <option key={account} value={account}>
+              @{account}
+            </option>
+          ))}
         </select>
         <select
           value={filters.llm}
@@ -128,9 +288,11 @@ function PostList() {
             aria-label={t("admin.posts.title")}
           >
             <div role="row" className="adm-post-table-row adm-table-head">
-              <span role="columnheader">{t("admin.posts.source")}</span>
+              <span role="columnheader">{t("admin.posts.account")}</span>
               <span role="columnheader">{t("admin.posts.column.text")}</span>
+              <span role="columnheader">{t("admin.posts.column.image")}</span>
               <span role="columnheader">{t("admin.posts.llm")}</span>
+              <span role="columnheader">{t("admin.posts.route")}</span>
               <span role="columnheader">{t("admin.posts.column.actions")}</span>
             </div>
             {posts.data.items.map((post) => (

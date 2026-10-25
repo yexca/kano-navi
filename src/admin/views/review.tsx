@@ -22,6 +22,7 @@ import {
   Empty,
   Facts,
   Field,
+  IconButton,
   Loading,
   Modal,
   PageHeader,
@@ -499,55 +500,66 @@ export function PostStatus({ post }: { post: AdminPost }) {
   )
 }
 
+/** The route a queued post is extracted on; empty lets extraction choose. */
+export function RouteSelect({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const { t } = useAppSettings()
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label={t("admin.posts.route")}
+    >
+      <option value="">{t("admin.posts.routeAuto")}</option>
+      <option value="schedule_board">{t("admin.route.schedule_board")}</option>
+      <option value="schedule_message">
+        {t("admin.route.schedule_message")}
+      </option>
+    </select>
+  )
+}
+
 /**
- * Queue a post for extraction again, optionally on a chosen route. Compact
- * actions fit a table cell and open the post from an icon.
+ * Queue a post for extraction again on the chosen route, and open it. Compact
+ * actions are icons that fit a table cell; the caller lays them out.
  */
 export function PostActions({
   post,
+  route,
   onDone,
   compact = false,
 }: {
   post: AdminPost
+  route: string
   onDone: () => void
   compact?: boolean
 }) {
   const { t } = useAppSettings()
   const { api, act } = useAdmin()
-  const [route, setRoute] = useState("")
   const [busy, setBusy] = useState(false)
-  return (
-    <div className={compact ? "adm-post-actions" : "adm-actions"}>
-      <select
-        value={route}
-        onChange={(event) => setRoute(event.target.value)}
-        aria-label={t("admin.posts.route")}
-      >
-        <option value="">{t("admin.posts.routeAuto")}</option>
-        <option value="schedule_board">
-          {t("admin.route.schedule_board")}
-        </option>
-        <option value="schedule_message">
-          {t("admin.route.schedule_message")}
-        </option>
-      </select>
-      <Button
-        size="sm"
-        icon={RotateCcw}
-        busy={busy}
-        onClick={async () => {
-          setBusy(true)
-          const result = await act(
-            () => api.reprocessPost(post.id, route || undefined),
-            "admin.notice.postQueued",
-          )
-          setBusy(false)
-          if (result) onDone()
-        }}
-      >
-        {t("admin.posts.reprocess")}
-      </Button>
-      {compact ? (
+  const reprocess = async () => {
+    setBusy(true)
+    const result = await act(
+      () => api.reprocessPost(post.id, route || undefined),
+      "admin.notice.postQueued",
+    )
+    setBusy(false)
+    if (result) onDone()
+  }
+  if (compact)
+    return (
+      <>
+        <IconButton
+          icon={RotateCcw}
+          label={t("admin.posts.reprocess")}
+          busy={busy}
+          onClick={reprocess}
+        />
         <a
           className="adm-icon-button"
           href={post.url}
@@ -558,18 +570,18 @@ export function PostActions({
         >
           <ExternalLink aria-hidden />
         </a>
-      ) : (
-        <a
-          className="adm-link"
-          href={post.url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {t("admin.posts.open")}
-          <ExternalLink aria-hidden />
-        </a>
-      )}
-    </div>
+      </>
+    )
+  return (
+    <>
+      <Button size="sm" icon={RotateCcw} busy={busy} onClick={reprocess}>
+        {t("admin.posts.reprocess")}
+      </Button>
+      <a className="adm-link" href={post.url} target="_blank" rel="noreferrer">
+        {t("admin.posts.open")}
+        <ExternalLink aria-hidden />
+      </a>
+    </>
   )
 }
 
@@ -581,6 +593,7 @@ export function PostRow({
   onDone: () => void
 }) {
   const { t, locale } = useAppSettings()
+  const [route, setRoute] = useState("")
   return (
     <article className="adm-post-row">
       <div className="adm-post-meta">
@@ -591,7 +604,10 @@ export function PostRow({
         <PostStatus post={post} />
       </div>
       <p className="adm-post-text">{post.text}</p>
-      <PostActions post={post} onDone={onDone} />
+      <div className="adm-actions">
+        <RouteSelect value={route} onChange={setRoute} />
+        <PostActions post={post} route={route} onDone={onDone} />
+      </div>
     </article>
   )
 }

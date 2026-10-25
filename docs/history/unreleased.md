@@ -12,9 +12,15 @@
   history as "Live-status probe".
 - Schedule status badges are translated, including the Chinese statuses that
   older manual entries still store.
-- The Posts page is a paged table with separate columns for the source and
-  time, the text, the extraction state and the actions. A narrower page
-  moves the source above the text, and a phone stacks each row.
+- The Posts page is a paged table with separate columns for the account and
+  time, the text, the image, the extraction state, the extraction route and
+  the actions. The image column shows the first locally cached image and how
+  many the post has, and clicking it enlarges the images inside the page,
+  one at a time; Queue again and Open post are icons. A narrower page moves
+  the account above the text, and a phone stacks each row.
+- The Posts filter picks one of the configured X accounts instead of the
+  legacy X / YouTube source choice. `GET /api/admin/posts` matches `account`
+  without case or a leading `@` and adds `media` and `mediaStatus`.
 - The Videos page shows the pinned featured video above the list, even when
   it is on another page or outside the filter, and returns to the automatic
   choice in one click. `GET /api/admin/videos` adds `featuredVideo`.

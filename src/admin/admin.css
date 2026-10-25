@@ -1564,9 +1564,10 @@ button.adm-run-line:hover,
 }
 
 /*
- * The posts table: origin, text, extraction state and actions per row. It
- * follows its own width, which the sidebar and viewport both change: a
- * medium table moves the origin above the text, a narrow one stacks the row.
+ * The posts table: account, text, image, extraction state, route and actions
+ * per row. It follows its own width, which the sidebar and viewport both
+ * change: a medium table moves the account above the text, a narrow one
+ * stacks the row.
  */
 .adm-post-table {
   container-type: inline-size;
@@ -1574,8 +1575,8 @@ button.adm-run-line:hover,
 
 .adm-post-table-row {
   display: grid;
-  grid-template-columns: 130px minmax(0, 1fr) 140px 170px;
-  grid-template-areas: "origin body state actions";
+  grid-template-columns: 120px minmax(0, 1fr) 56px 130px 150px 72px;
+  grid-template-areas: "origin body image state route actions";
   align-items: center;
   gap: 16px;
   padding: 12px 4px;
@@ -1623,35 +1624,135 @@ button.adm-run-line:hover,
   font-size: 14px;
 }
 
+.adm-post-image {
+  grid-area: image;
+}
+
+/* A square crop of the first cached image; the count marks more images. */
+.adm-post-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-sunken);
+  color: var(--adm-muted);
+  cursor: zoom-in;
+}
+
+.adm-post-thumb:hover {
+  border-color: var(--adm-line-strong);
+}
+
+.adm-post-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.adm-post-thumb.is-empty {
+  border-style: dashed;
+  cursor: default;
+}
+
+.adm-post-thumb-count {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--adm-surface);
+  color: var(--adm-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.adm-post-no-image {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  color: var(--adm-muted);
+}
+
+/* The in-page post image viewer: one image at a time, fitted to the screen. */
+.adm-modal.adm-image-viewer {
+  width: min(960px, calc(100vw - 32px));
+}
+
+.adm-image-viewer .adm-modal-content {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.adm-image-viewer-stage {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  min-height: 240px;
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-sunken);
+  color: var(--adm-muted);
+}
+
+.adm-image-viewer-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 220px);
+  object-fit: contain;
+}
+
+.adm-image-viewer-stage > span {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.adm-image-viewer-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--adm-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
 .adm-post-state {
   grid-area: state;
 }
 
-.adm-post-controls {
-  grid-area: actions;
+.adm-post-route {
+  grid-area: route;
 }
 
-/* The route sits above the queue button so the column stays narrow. */
-.adm-post-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-}
-
-.adm-post-table .adm-post-actions select {
-  grid-column: 1 / -1;
+.adm-post-table .adm-post-route select {
   height: 32px;
   font-size: 13px;
 }
 
-@container (max-width: 860px) {
+.adm-post-controls {
+  display: flex;
+  grid-area: actions;
+  align-items: center;
+  gap: 4px;
+}
+
+@container (max-width: 900px) {
   .adm-post-table-row {
-    grid-template-columns: minmax(0, 1fr) 130px 160px;
+    grid-template-columns: minmax(0, 1fr) 56px 130px 150px 72px;
     grid-template-rows: auto 1fr;
     grid-template-areas:
-      "origin state actions"
-      "body state actions";
+      "origin image state route actions"
+      "body image state route actions";
     row-gap: 4px;
   }
 
@@ -1671,14 +1772,14 @@ button.adm-run-line:hover,
   }
 }
 
-@container (max-width: 560px) {
+@container (max-width: 640px) {
   .adm-post-table-row {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: none;
     grid-template-areas:
       "origin state"
-      "body body"
-      "actions actions";
+      "body image"
+      "route actions";
     gap: 8px 12px;
   }
 
@@ -1690,18 +1791,18 @@ button.adm-run-line:hover,
     border-top: 0;
   }
 
-  .adm-post-state {
+  .adm-post-state,
+  .adm-post-controls {
     justify-content: flex-end;
   }
 
-  .adm-post-actions {
-    display: flex;
-    flex-wrap: wrap;
+  .adm-post-image {
+    align-self: start;
+    justify-self: end;
   }
 
-  .adm-post-table .adm-post-actions select {
-    flex: 0 1 200px;
-    width: auto !important;
+  .adm-post-table .adm-post-route select {
+    max-width: 220px;
   }
 }
 

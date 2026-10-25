@@ -26,6 +26,18 @@ type AdminPost struct {
 	LLMLastError          *string `json:"llmLastError"`
 	LLMLastExtractionID   *int64  `json:"llmLastExtractionId"`
 	LLMReprocessRequested bool    `json:"llmReprocessRequested"`
+	// Media lists the post's images in order. MediaStatus is the first
+	// image's status, or "none" for a text-only post.
+	Media       []AdminPostImage `json:"media"`
+	MediaStatus string           `json:"mediaStatus"`
+}
+
+// AdminPostImage is one post image. URL is the local /media URL of a ready
+// cached file, never the remote address; Status explains a null URL.
+type AdminPostImage struct {
+	URL    *string `json:"url"`
+	Status string  `json:"status"`
+	Alt    *string `json:"alt"`
 }
 
 type AdminVideo struct {
@@ -225,8 +237,8 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 		clauses = append(clauses, "p.source = ?")
 		args = append(args, source)
 	}
-	if account := strings.TrimSpace(f.Account); account != "" {
-		clauses = append(clauses, "p.account_handle = ?")
+	if account := strings.TrimPrefix(strings.TrimSpace(f.Account), "@"); account != "" {
+		clauses = append(clauses, "lower(p.account_handle) = lower(?)")
 		args = append(args, account)
 	}
 	if adminDateRE.MatchString(f.From) {
@@ -293,7 +305,38 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	if err := rows.Err(); err != nil {
 		return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
 	}
+	// Release the single connection before resolving each cached image.
+	rows.Close()
+	for i := range items {
+		if err := s.resolveAdminPostMedia(ctx, &items[i]); err != nil {
+			return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
+		}
+	}
 	return AdminPage[AdminPost]{Items: items, Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages}, nil
+}
+
+// resolveAdminPostMedia lists a post's images as the board does: linked post
+// images, or else the stored media URL.
+func (s *Store) resolveAdminPostMedia(ctx context.Context, p *AdminPost) error {
+	p.Media, p.MediaStatus = []AdminPostImage{}, "none"
+	links, err := s.queryPostMedia(ctx, p.ID)
+	if err != nil {
+		return err
+	}
+	for _, link := range links {
+		p.Media = append(p.Media, AdminPostImage{URL: link.URL, Status: link.Status, Alt: link.Alt})
+	}
+	if len(p.Media) == 0 && p.MediaURL != nil && strings.TrimSpace(*p.MediaURL) != "" {
+		ref, err := s.resolveMedia(ctx, p.MediaURL)
+		if err != nil {
+			return err
+		}
+		p.Media = append(p.Media, AdminPostImage{URL: ref.PublicURL, Status: ref.Status, Alt: p.MediaAlt})
+	}
+	if len(p.Media) > 0 {
+		p.MediaStatus = p.Media[0].Status
+	}
+	return nil
 }
 
 func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminVideosPage, error) {
