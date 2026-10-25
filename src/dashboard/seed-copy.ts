@@ -30,6 +30,11 @@ const seedCopy: Record<string, Partial<Record<Locale, string>>> = {
     ja: "「Stella-rium」でメジャーデビュー。",
     en: "Debuted with “Stella-rium”.",
   },
+  "First album": { "zh-CN": "首张专辑", ja: "初のソロアルバム" },
+  "Released the first solo album, “Bambino”, on January 16.": {
+    "zh-CN": "1 月 16 日发行首张个人专辑《ばんび～の》。",
+    ja: "1 月 16 日に初のソロアルバム「ばんび～の」をリリース。",
+  },
   第一首投稿: { ja: "はじめての投稿", en: "First upload" },
   "从 NicoNico 的歌唱投稿开始。": {
     ja: "ニコニコ動画への歌ってみた投稿から。",

@@ -690,6 +690,36 @@ a.latest-card:hover .latest-card-open {
   font-variant-numeric: tabular-nums;
 }
 
+.profile-sources {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  margin: 0;
+  padding: 0 12px;
+  color: var(--soft);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.profile-sources > div {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.profile-sources dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 0;
+}
+
+.profile-source-stale {
+  color: var(--honey);
+  font-weight: 700;
+}
+
 @media (max-width: 980px) {
   .stage {
     grid-template-columns: 1fr;

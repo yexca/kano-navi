@@ -31,6 +31,7 @@ func olderSnapshot(t *testing.T) (string, string) {
 	}
 	defer db.Close()
 	for _, statement := range []string{
+		`ALTER TABLE media_assets DROP COLUMN retry_attempts`, `ALTER TABLE media_assets DROP COLUMN next_retry_at`,
 		`DROP INDEX events_instant_idx`, `DROP INDEX events_source_item_idx`, `DROP INDEX events_stream_identity_idx`,
 		`DROP INDEX posts_instant_idx`, `DROP INDEX posts_url_published_at_idx`, `DROP INDEX videos_instant_idx`, `DROP INDEX videos_schedule_instant_idx`,
 		`ALTER TABLE assets DROP COLUMN asset_version`, `ALTER TABLE assets DROP COLUMN period_start`, `ALTER TABLE assets DROP COLUMN period_end`,
@@ -90,6 +91,7 @@ func TestStandaloneUpgradesOlderSnapshotAdditively(t *testing.T) {
 	}
 	sum := sha256.Sum256(png)
 	for statement, want := range map[string]string{
+		`SELECT COUNT(*) FROM pragma_table_info('media_assets') WHERE name IN('retry_attempts','next_retry_at')`:                         "2",
 		`SELECT period_start||'/'||period_end||'/'||period_basis||'/'||asset_version FROM assets WHERE id='synthetic-board'`:             "2026-03-02/2026-03-08/legacy/1",
 		`SELECT account_handle FROM posts WHERE id='synthetic-post'`:                                                                     "synthetic_handle",
 		`SELECT text FROM posts WHERE id='synthetic-post'`:                                                                               "retained",

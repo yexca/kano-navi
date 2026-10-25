@@ -1,7 +1,8 @@
 // Curated public milestones for the /history page.
 //
 // Compiled from the maintainer's kano_official archive (PROFILE.md and
-// TIMELINE.md, reviewed 2026-10-04/05). Dates keep their original precision:
+// TIMELINE.md, reviewed 2026-10-04/05; first album and the cancelled 2022 CD
+// rechecked 2026-10-25). Dates keep their original precision:
 // release days are label release dates, stream days are the original stream
 // dates, and month/range entries are not narrowed to a guessed day. The array
 // entries are sorted chronologically without inventing missing dates.
@@ -60,6 +61,24 @@ const originalMilestones = [
       en: "Began posting song covers to video sites as an utaite.",
     },
     source: "https://www.teichiku.co.jp/artist/kano/profile/",
+  },
+  {
+    id: "bambino",
+    date: "2011-01-16",
+    branch: "singer",
+    kind: "release",
+    highlight: true,
+    title: {
+      "zh-CN": "首张个人专辑《ばんび～の》",
+      ja: "初のソロアルバム「ばんび～の」",
+      en: "First solo album “ばんび～の”",
+    },
+    detail: {
+      "zh-CN": "由 Sevencolors 发行，收录《ハロ/ハワユ》等 10 首歌曲。",
+      ja: "Sevencolors より発売。「ハロ/ハワユ」など全 10 曲を収録。",
+      en: "Released by Sevencolors with 10 tracks, including “ハロ/ハワユ”.",
+    },
+    source: "https://www.suruga-ya.jp/product/detail/186110819",
   },
   {
     id: "stella-rium",
@@ -412,20 +431,27 @@ const originalMilestones = [
   },
   {
     id: "ichigo-ichie",
-    date: "2022-11-30",
-    branch: "mklntic",
+    date: "2022-10-07",
+    branch: "singer",
     kind: "release",
     title: {
-      "zh-CN": "《いちごいちえ Celebration / はっぴーらいふ》",
-      ja: "「いちごいちえ Celebration / はっぴーらいふ」",
-      en: "“いちごいちえ Celebration / はっぴーらいふ”",
+      "zh-CN": "《いちごいちえ Celebration》MV 公开",
+      ja: "「いちごいちえ Celebration」MV 公開",
+      en: "“いちごいちえ Celebration” MV",
     },
     detail: {
-      "zh-CN": "鹿乃盘与 MKLNtic 盘同时发行。",
-      ja: "鹿乃盤と MKLNtic 盤を同時リリース。",
-      en: "Released in Kano and MKLNtic editions.",
+      "zh-CN":
+        "动画《宇崎ちゃんは遊びたい！ω》片头曲 MV。原定 11 月 30 日发行的鹿乃 / MKLNtic split EP 两版 CD，后于 11 月 7 日公告中止发售。",
+      ja: "TV アニメ『宇崎ちゃんは遊びたい！ω』OP 曲の MV。11 月 30 日発売予定だった鹿乃 / MKLNtic のスプリット EP は、両 CD 盤とも 11 月 7 日に発売中止を発表。",
+      en: "MV for the opening theme of Uzaki-chan Wants to Hang Out! ω. Both CD editions of the Kano / MKLNtic split EP, planned for November 30, were cancelled in a November 7 announcement.",
     },
-    source: "https://kano-official.amebaownd.com/posts/37975702/",
+    source: "https://kano-official.amebaownd.com/posts/37992653/",
+    links: [
+      {
+        href: "https://kano-official.amebaownd.com/posts/38571457/",
+        label: "history.sourceName.cancelledRelease",
+      },
+    ],
   },
   {
     id: "stereophonic",

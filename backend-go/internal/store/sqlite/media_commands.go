@@ -56,16 +56,17 @@ func (s *Store) PendingMedia(ctx context.Context, limit int) ([]PendingMedia, er
 		) AS owner_instant
 		FROM media_assets a WHERE a.source IN('x','youtube','bilibili') AND length(a.id)=64 AND a.id NOT GLOB '*[^a-f0-9]*' AND (
 			a.status='pending'
-			OR (a.status='failed' AND a.last_error IN('media_timeout','media_unavailable','media_http_error','media_body_unavailable')
-				AND julianday(COALESCE(a.last_checked_at,a.created_at))<=julianday(?))
-			OR (a.status='ready' AND a.source='youtube' AND julianday(COALESCE(a.last_checked_at,a.fetched_at,a.created_at))<=julianday(?)
+			OR (a.status IN('failed','missing','ready') AND a.last_error IN('media_timeout','media_unavailable','media_http_error','media_body_unavailable','media_rate_limited','media_missing')
+				AND CASE WHEN a.next_retry_at IS NOT NULL THEN julianday(a.next_retry_at)<=julianday(?)
+					ELSE COALESCE(julianday(a.last_checked_at),julianday(a.created_at),0)<=julianday(CASE WHEN a.last_error IN('media_missing','media_http_error') THEN ? ELSE ? END) END)
+			OR (a.status='ready' AND a.last_error IS NULL AND a.source='youtube' AND julianday(COALESCE(a.last_checked_at,a.fetched_at,a.created_at))<=julianday(?)
 				AND EXISTS (SELECT 1 FROM media_links ml JOIN videos v ON v.id=ml.owner_id WHERE ml.media_id=a.id AND ml.owner_type='video' AND ml.role='thumbnail'
 					AND (v.is_upcoming=1 OR julianday(COALESCE(v.scheduled_at,v.published_at))>=julianday(?))))
-			OR (a.status='ready' AND a.source='youtube'
+			OR (a.status='ready' AND a.last_error IS NULL AND a.source='youtube'
 				AND EXISTS (SELECT 1 FROM media_links ml JOIN videos v ON v.id=ml.owner_id WHERE ml.media_id=a.id AND ml.owner_type='video' AND ml.role='thumbnail'
 					AND julianday(v.live_checked_at)>julianday(COALESCE(a.last_checked_at,a.fetched_at,a.created_at))))
 		)
-	) ORDER BY last_checked_at IS NOT NULL,COALESCE(owner_instant,0) DESC,COALESCE(last_checked_at,created_at),id LIMIT ?`, recheck, recheck, live, limit)
+	) ORDER BY last_checked_at IS NOT NULL,COALESCE(owner_instant,0) DESC,COALESCE(last_checked_at,created_at),id LIMIT ?`, workflowTime(now), workflowTime(now.Add(-24*time.Hour)), recheck, recheck, live, limit)
 	if err != nil {
 		return nil, ErrSourceWrite
 	}
@@ -101,9 +102,19 @@ func (s *Store) SaveMediaDownload(ctx context.Context, asset PendingMedia, conte
 	if err = fenceSourceWrite(ctx, tx); err != nil {
 		return err
 	}
-	now := workflowTime(time.Now())
+	instant := time.Now()
+	now := workflowTime(instant)
 	if status != "ready" {
-		_, err = tx.ExecContext(ctx, `UPDATE media_assets SET status=CASE WHEN status='ready' THEN status ELSE ? END,last_error=?,last_checked_at=?,updated_at=? WHERE id=? AND source_url=?`, status, code, now, now, asset.ID, asset.SourceURL)
+		var attempts int
+		if err = tx.QueryRowContext(ctx, `SELECT retry_attempts FROM media_assets WHERE id=? AND source_url=?`, asset.ID, asset.SourceURL).Scan(&attempts); err != nil {
+			return ErrSourceWrite
+		}
+		attempts = min(max(attempts, 0), 11) + 1
+		var retryAt any
+		if delay := mediaRetryDelay(code, attempts); delay > 0 {
+			retryAt = workflowTime(instant.Add(delay))
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE media_assets SET status=CASE WHEN status='ready' THEN status ELSE ? END,last_error=?,last_checked_at=?,updated_at=?,retry_attempts=?,next_retry_at=? WHERE id=? AND source_url=?`, status, code, now, now, attempts, retryAt, asset.ID, asset.SourceURL)
 	} else {
 		if len(content) == 0 || len(content) > maxCachedMediaBytes || mediaformat.Sniff(content) != mime || mediaformat.Extension(mime) == "" {
 			return ErrSourceWrite
@@ -170,7 +181,7 @@ func (s *Store) SaveMediaDownload(ctx context.Context, asset PendingMedia, conte
 				return ErrSourceWrite
 			}
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE media_assets SET status='ready',cache_path=?,mime_type=?,byte_size=?,sha256=?,etag=?,last_modified=?,last_error=NULL,fetched_at=?,last_checked_at=?,updated_at=? WHERE id=? AND source_url=?`, relative, mime, len(content), hash, nullable(etag), nullable(lastModified), now, now, now, asset.ID, asset.SourceURL)
+		_, err = tx.ExecContext(ctx, `UPDATE media_assets SET status='ready',cache_path=?,mime_type=?,byte_size=?,sha256=?,etag=?,last_modified=?,last_error=NULL,retry_attempts=0,next_retry_at=NULL,fetched_at=?,last_checked_at=?,updated_at=? WHERE id=? AND source_url=?`, relative, mime, len(content), hash, nullable(etag), nullable(lastModified), now, now, now, asset.ID, asset.SourceURL)
 		if err == nil && previous != hash {
 			err = bumpRevision(ctx, tx, now)
 		}
@@ -196,8 +207,21 @@ func (s *Store) MarkMediaUnchanged(ctx context.Context, asset PendingMedia) erro
 		return err
 	}
 	now := workflowTime(time.Now())
-	if _, err = tx.ExecContext(ctx, `UPDATE media_assets SET last_error=NULL,last_checked_at=?,updated_at=? WHERE id=? AND source_url=? AND status='ready'`, now, now, asset.ID, asset.SourceURL); err != nil || tx.Commit() != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE media_assets SET last_error=NULL,retry_attempts=0,next_retry_at=NULL,last_checked_at=?,updated_at=? WHERE id=? AND source_url=? AND status='ready'`, now, now, asset.ID, asset.SourceURL); err != nil || tx.Commit() != nil {
 		return ErrSourceWrite
 	}
 	return nil
+}
+
+// Unsafe destinations, invalid images and oversized responses are not retried.
+// Missing or forbidden media is checked daily. Transient failures back off from
+// the existing recheck interval, with both the delay and attempt count bounded.
+func mediaRetryDelay(code string, attempts int) time.Duration {
+	switch code {
+	case "media_missing", "media_http_error":
+		return 24 * time.Hour
+	case "media_timeout", "media_unavailable", "media_body_unavailable", "media_rate_limited":
+		return min(mediaRecheckAfter*time.Duration(1<<min(max(attempts-1, 0), 6)), 24*time.Hour)
+	}
+	return 0
 }

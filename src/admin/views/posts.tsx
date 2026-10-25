@@ -218,6 +218,8 @@ function PostList({ sources }: { sources: Sources | undefined }) {
     llm: "",
     media: "",
     translation: "",
+    from: "",
+    to: "",
   })
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
@@ -300,6 +302,31 @@ function PostList({ sources }: { sources: Sources | undefined }) {
             </option>
           ))}
         </select>
+        <div className="adm-filter-dates">
+          <label className="adm-field">
+            <span className="adm-field-label">
+              {t("admin.schedule.filter.from")}
+            </span>
+            <input
+              type="date"
+              value={filters.from}
+              onChange={(e) => update({ from: e.target.value })}
+              aria-label={t("admin.schedule.filter.from")}
+            />
+          </label>
+          <label className="adm-field">
+            <span className="adm-field-label">
+              {t("admin.schedule.filter.to")}
+            </span>
+            <input
+              type="date"
+              value={filters.to}
+              min={filters.from || undefined}
+              onChange={(e) => update({ to: e.target.value })}
+              aria-label={t("admin.schedule.filter.to")}
+            />
+          </label>
+        </div>
         <TranslationBacklog owner="post" onQueued={() => void posts.reload()} />
       </form>
       {!posts.data ? (

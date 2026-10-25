@@ -63,7 +63,7 @@ func upsertSyncState(ctx context.Context, tx *sql.Tx, source, account, cursorID,
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES(?,?,?,?,?,?) ON CONFLICT(source,account_id) DO UPDATE SET cursor_id=excluded.cursor_id,cursor_time=excluded.cursor_time,last_success_at=excluded.last_success_at,metadata_json=excluded.metadata_json`, source, account, nullable(cursorID), nullable(cursorTime), now, string(encoded))
+	_, err = tx.ExecContext(ctx, `INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES(?,?,?,?,?,?) ON CONFLICT(source,account_id) DO UPDATE SET cursor_id=excluded.cursor_id,cursor_time=excluded.cursor_time,last_success_at=COALESCE(excluded.last_success_at,sync_state.last_success_at),metadata_json=excluded.metadata_json`, source, account, nullable(cursorID), nullable(cursorTime), nullable(now), string(encoded))
 	return err
 }
 
@@ -85,6 +85,9 @@ func (s *Store) WriteHistoryPage(ctx context.Context, page history.Page) (histor
 			return history.Written{}, ErrSourceWrite
 		}
 		checkpoint = page.Checkpoint
+	}
+	if page.CheckpointOnly && (checkpoint != history.TimelineCheckpoint || len(page.Posts) > 0 || len(page.ScheduleCandidates) > 0 || len(page.Videos) > 0 || page.Backfill != nil) {
+		return history.Written{}, ErrSourceWrite
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -154,7 +157,15 @@ func (s *Store) WriteHistoryPage(ctx context.Context, page history.Page) (histor
 			written++
 		}
 	}
-	if err = upsertSyncState(ctx, tx, checkpoint, page.CheckpointKey, page.Next, "", map[string]any{"window": page.Window, "discovered": page.Discovered}, now); err != nil {
+	metadata := map[string]any{"window": page.Window, "discovered": page.Discovered}
+	if page.HeadFetchedAt != "" {
+		metadata["headFetchedAt"] = page.HeadFetchedAt
+	}
+	successAt := now
+	if page.CheckpointOnly {
+		successAt = ""
+	}
+	if err = upsertSyncState(ctx, tx, checkpoint, page.CheckpointKey, page.Next, "", metadata, successAt); err != nil {
 		return history.Written{}, ErrSourceWrite
 	}
 	if page.Backfill != nil {

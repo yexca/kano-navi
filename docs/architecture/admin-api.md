@@ -221,6 +221,11 @@ alias); `none` never needs review and keeps `previewUrl` null.
 `skipped` or `uncertain`; `reprocess=1` keeps only queued posts;
 `translation` is `incomplete`, `complete` or `requested`.
 
+`from` and `to` are inclusive Asia/Tokyo publication dates. Search matches
+text, URL, image alt text and the stored post ID before pagination, so older
+matching posts remain reachable. The console preserves these filters while
+paging and resets to page one when a filter changes.
+
 An X post carries `translation` (see [Translations](#translations)); other
 posts carry `null`. `GET /videos` does the same for YouTube videos.
 

@@ -42,6 +42,8 @@ func TestMediaDestinationsAndResponseBounds(t *testing.T) {
 		{200, strings.Repeat("x", MaxBytes+1), "image/png", "", "media_response_oversized"},
 		{302, "", "", "https://example.invalid/redirect", "media_destination_rejected"},
 		{404, "", "", "", "media_missing"},
+		{429, "", "", "", "media_rate_limited"},
+		{503, "", "", "", "media_unavailable"},
 	} {
 		calls := 0
 		client := NewClient(&http.Client{Transport: transport(func(*http.Request) (*http.Response, error) {

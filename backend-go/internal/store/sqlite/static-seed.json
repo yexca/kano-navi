@@ -47,11 +47,18 @@
       "sort_order": 5
     },
     {
+      "id": 7,
+      "year": "2011",
+      "title": "First album",
+      "detail": "Released the first solo album, “Bambino”, on January 16.",
+      "sort_order": 6
+    },
+    {
       "id": 4,
       "year": "2010",
       "title": "第一首投稿",
       "detail": "从 NicoNico 的歌唱投稿开始。",
-      "sort_order": 6
+      "sort_order": 7
     }
   ],
   "resources": [

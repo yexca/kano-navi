@@ -59,6 +59,7 @@ func (f *Fetcher) FetchTimeline(ctx context.Context, request Request) (Result, e
 		return Result{}, err
 	}
 	window, cursor, previous := fresh, checkpoint.CursorID, 0
+	headFetchedAt, _ := checkpoint.Metadata["headFetchedAt"].(string)
 	if cursor != "" {
 		saved, ok := windowFromMetadata(checkpoint.Metadata["window"])
 		savedEnd, _ := parseTime(saved.EndTime)
@@ -80,6 +81,7 @@ func (f *Fetcher) FetchTimeline(ctx context.Context, request Request) (Result, e
 	commit := func(page Page) (Written, error) {
 		page.Source, page.Account, page.CheckpointKey = SourceX, request.Account, key
 		page.Checkpoint, page.Window, page.KeepStored = TimelineCheckpoint, window, true
+		page.HeadFetchedAt = headFetchedAt
 		return f.Store.WriteHistoryPage(ctx, page)
 	}
 	result := Result{Window: window, Errors: []string{}}
@@ -102,7 +104,7 @@ func (f *Fetcher) FetchTimeline(ctx context.Context, request Request) (Result, e
 				restarted = true
 				window, cursor, previous = fresh, "", 0
 				result.Window = window
-				if _, err := commit(Page{}); err != nil {
+				if _, err := commit(Page{CheckpointOnly: true}); err != nil {
 					return result, err
 				}
 				if result.Requested < maxPages {
@@ -115,6 +117,13 @@ func (f *Fetcher) FetchTimeline(ctx context.Context, request Request) (Result, e
 			result.Errors = append(result.Errors, code)
 			failed = true
 			break
+		}
+		if cursor == "" {
+			headTime := time.Now()
+			if f.Now != nil {
+				headTime = f.Now()
+			}
+			headFetchedAt = formatTime(headTime)
 		}
 		start, _ := parseTime(window.StartTime)
 		posts := []xsource.Post{}

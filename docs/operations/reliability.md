@@ -13,6 +13,17 @@
   `meta.lastSync` and the warning state but retains the previous snapshot time.
   This is synchronization freshness, not the latest message's publication time;
   original platform pages remain authoritative.
+- `meta.sourceFetchedAt` reports X and YouTube separately. Only successful
+  incremental, recent-window or latest-count reads advance those times;
+  historical backfills and media-only runs cannot make old sources look fresh.
+  Recent-window timestamps never exceed the window's end. Timeline windows
+  keep the successful head-page read time across resumed pages; clearing a
+  failed cursor does not count as a successful read. The board warns after
+  24 hours using its local clock and keeps the stored snapshot visible.
+- Media retries persist across restarts: transient failures back off from
+  30 minutes to at most 24 hours, while missing files and other HTTP errors
+  wait 24 hours. A failed revalidation keeps the ready file and respects the
+  same deadline; successful bytes or a 304 clear the retry state.
 - CI never performs live synchronization, so builds do not depend on platform networks, login walls, or rate limits.
 - The board retries even when its first API read fails, and retains a known
   snapshot after subsequent failures. Requests time out after 15 seconds;

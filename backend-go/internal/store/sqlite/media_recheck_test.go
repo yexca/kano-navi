@@ -36,6 +36,8 @@ func TestPendingMediaRetriesTransientFailuresAndRechecksLiveThumbnails(t *testin
 		{"fresh failure", "x", "failed", "media_timeout", ago(time.Minute), "", false},
 		{"permanent failure", "x", "failed", "media_invalid_image", ago(time.Hour), "", false},
 		{"missing", "youtube", "missing", "media_missing", ago(time.Hour), "", false},
+		{"missing retry", "youtube", "missing", "media_missing", ago(25 * time.Hour), "", true},
+		{"bilibili retry", "bilibili", "failed", "media_rate_limited", ago(time.Hour), "", true},
 		{"upcoming stream", "youtube", "ready", "", ago(time.Hour), "upcoming", true},
 		{"recent video", "youtube", "ready", "", ago(time.Hour), "recent", true},
 		{"recently checked", "youtube", "ready", "", ago(time.Minute), "upcoming", false},

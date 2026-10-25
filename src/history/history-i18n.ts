@@ -34,6 +34,7 @@ export const historyMessages = {
     "history.kind.artwork": "视觉公开",
     "history.kind.goods": "周边",
     "history.sourceName.artistSite": "鹿乃官网",
+    "history.sourceName.cancelledRelease": "CD 发售中止公告",
     "history.sourceName.agency": "事务所个人页",
     "history.sourceName.shop": "官方商店",
     "history.sourceName.x": "X 原帖",
@@ -53,6 +54,7 @@ export const historyMessages = {
     "history.dateKind.publication": "已核对公开节点",
     "history.sourceKind.artist": "本人官网 / 原帖",
     "history.sourceKind.label": "唱片公司 / 官方唱片目录",
+    "history.sourceKind.thirdPartyCover": "发行封面 · 第三方文件",
     "history.sourceKind.creator": "制作方 / 受委托创作者原帖",
     "history.sourceKind.shop": "官方商品页",
     "history.sourceKind.organizer": "主办方新闻稿",
@@ -62,6 +64,10 @@ export const historyMessages = {
     "history.sourceKind.streamArchive": "官方配信截帧，取自第三方存档",
     "history.imageNote.cover":
       "日期为作品发行或开始配信日。唱片插画与直播模型分别记录。",
+    "history.imageNote.thirdPartyCover":
+      "封面为发行视觉，文件取自第三方存档。保留采集文件的原始字节与尺寸，未确认其为最大分辨率。发行日期依据时间线所链的商品记录。",
+    "history.imageNote.cancelledEpCover":
+      "日期为官网唱片页面的公开日。两版 CD 原定 2022-11-30 发行，后于 2022-11-07 公告中止发售；保留已公开的封面，不将原定发售日记作实际发行日。",
     "history.imageNote.artwork":
       "这张图记录已公开的宣传视觉或插画；对应可动模型的公开时间需以制作公告或配信记录为准。",
     "history.imageNote.frame":
@@ -116,6 +122,7 @@ export const historyMessages = {
     "history.kind.artwork": "ビジュアル公開",
     "history.kind.goods": "グッズ",
     "history.sourceName.artistSite": "鹿乃公式サイト",
+    "history.sourceName.cancelledRelease": "CD 発売中止のお知らせ",
     "history.sourceName.agency": "事務所プロフィール",
     "history.sourceName.shop": "公式ショップ",
     "history.sourceName.x": "X の元投稿",
@@ -135,6 +142,8 @@ export const historyMessages = {
     "history.dateKind.publication": "確認済みの公開日",
     "history.sourceKind.artist": "本人の公式サイト・投稿",
     "history.sourceKind.label": "レーベル・公式ディスコグラフィ",
+    "history.sourceKind.thirdPartyCover":
+      "リリースのジャケット・第三者保管ファイル",
     "history.sourceKind.creator": "制作者・委託されたクリエイターの投稿",
     "history.sourceKind.shop": "公式商品ページ",
     "history.sourceKind.organizer": "主催者のプレスリリース",
@@ -145,6 +154,10 @@ export const historyMessages = {
       "第三者アーカイブからの公式配信フレーム",
     "history.imageNote.cover":
       "日付は作品の発売・配信日です。ジャケットイラストと配信モデルは別々に記録しています。",
+    "history.imageNote.thirdPartyCover":
+      "作品のジャケットを第三者アーカイブから取得したファイルです。取得時のバイト列と寸法を保持しており、最大解像度とは確認していません。発売日はタイムラインからリンクする商品記録に基づきます。",
+    "history.imageNote.cancelledEpCover":
+      "日付は公式ディスコグラフィページの公開日です。両 CD 盤は 2022-11-30 発売予定でしたが、2022-11-07 に発売中止を発表。公開済みジャケットを保存し、予定日を実際の発売日として扱いません。",
     "history.imageNote.artwork":
       "公開された宣伝ビジュアルやイラストです。対応するモデルの公開日は制作告知や配信記録に基づきます。",
     "history.imageNote.frame":
@@ -201,6 +214,7 @@ export const historyMessages = {
     "history.kind.artwork": "Visual release",
     "history.kind.goods": "Merchandise",
     "history.sourceName.artistSite": "Kano’s official site",
+    "history.sourceName.cancelledRelease": "CD cancellation notice",
     "history.sourceName.agency": "Agency profile",
     "history.sourceName.shop": "Official shop",
     "history.sourceName.x": "Original X post",
@@ -220,6 +234,8 @@ export const historyMessages = {
     "history.dateKind.publication": "Verified public record",
     "history.sourceKind.artist": "Artist’s official site or post",
     "history.sourceKind.label": "Record label or official discography",
+    "history.sourceKind.thirdPartyCover":
+      "Release cover from a third-party archive",
     "history.sourceKind.creator": "Production team or commissioned creator",
     "history.sourceKind.shop": "Official product page",
     "history.sourceKind.organizer": "Organizer’s press release",
@@ -230,6 +246,10 @@ export const historyMessages = {
       "Official stream frame from a third-party archive",
     "history.imageNote.cover":
       "The date belongs to the release or distribution of the work. Cover artwork and streaming models are recorded separately.",
+    "history.imageNote.thirdPartyCover":
+      "Release artwork obtained from a third-party archive. The acquired file’s bytes and dimensions are preserved; maximum resolution is unverified. The release date follows the product record linked from the timeline.",
+    "history.imageNote.cancelledEpCover":
+      "The date is the official discography page’s publication date. Both CDs were planned for November 30, 2022, then cancelled on November 7. The published artwork is preserved without treating the planned date as an actual release.",
     "history.imageNote.artwork":
       "Published promotional artwork. A corresponding model’s reveal date requires a production announcement or stream record.",
     "history.imageNote.frame":

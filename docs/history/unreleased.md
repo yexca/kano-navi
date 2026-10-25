@@ -3,6 +3,8 @@
 <details>
 <summary><strong>Operator console</strong></summary>
 
+- Posts can be filtered by an inclusive Japan-date range, and text search
+  also matches the stored post ID across all pages.
 - Models has a separate Translation queue for the models that translate X
   posts and YouTube titles into English and Simplified Chinese.
 - Each X post on the Posts page shows whether its English and Chinese
@@ -83,9 +85,11 @@
   with a larger output budget or one corrective request. Unchanged song titles
   remain in the returned text, and protected runs record safe per-attempt
   diagnostics for operators.
-- Thumbnail downloads retry transient failures after 30 minutes, fall back to
-  a smaller YouTube size when the larger one was never generated, and pick up
-  a replaced cover for upcoming and recent videos.
+- Thumbnail downloads persist retry backoff from 30 minutes to at most a day,
+  retry missing files daily, fall back to a smaller YouTube size when the
+  larger one was never generated, and pick up a replaced cover for upcoming
+  and recent videos. Failed revalidation retains the ready file and its
+  retry deadline.
 - YouTube sync also checks recent RSS entries, so waiting rooms and premieres
   missing from the streams page get their start time. Premieres become
   releases, and finished streams and premieres keep YouTube's reported end.
@@ -147,6 +151,11 @@
 <details>
 <summary><strong>Public pages</strong></summary>
 
+- The profile card shows separate successful-read times for X and YouTube
+  and warns when a source is at least 24 hours old, without fetching it.
+- Journey adds the first solo album, “ばんび～の”, its original cover and
+  the 2011 milestone. The 2022 split EP entry records the MV and cancelled CD
+  editions instead of treating their planned date as an actual release.
 - English and Chinese readers see X posts and video titles in their
   language when a translation exists. An AI translation is labelled as one,
   and a post's or the featured video's Show original button switches back

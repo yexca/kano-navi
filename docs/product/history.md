@@ -1,7 +1,7 @@
 # History and Visual Archive
 
-`/history` contains a multilingual timeline of 44 milestones from 2010 onward
-and 59 images from the maintainer's `kano_official` reference collection,
+`/history` contains a multilingual timeline of 45 milestones from 2010 onward
+and 60 images from the maintainer's `kano_official` reference collection,
 reviewed in October 2026. Visitors can filter by activity identity, jump to a
 year from the year rail (one dot per milestone, with empty years folded into
 a gap; a sticky side rail on wide screens and a sticky strip on phones), or browse the gallery by image type. Timeline cards show
@@ -18,7 +18,7 @@ recorded credit, and original-source links.
   Original local paths are excluded.
 - `src/history/media.ts` groups images and supplies versioned local
   `/assets/history/<filename>?v=<sha256>` URLs.
-- `public/assets/history/` contains the 59 verified original image files,
+- `public/assets/history/` contains the 60 verified original image files,
   copied by Vite into `dist/` and included in production Docker images.
 - `src/history/history-i18n.ts` supplies image and provenance translations.
 
@@ -33,6 +33,15 @@ third-party archive, with original stream URLs and frame timestamps. Cover
 art, product illustrations, promotional visuals, and model demonstrations
 remain distinct. Illustrations alone do not establish a new streaming model.
 Agency press-release images display their requested publisher credit.
+
+The first solo album, `ばんび～の` (January 16, 2011), appears in both the
+board summary and the full timeline. Its cover is explicitly labelled as a
+third-party file, with the acquired bytes and provenance preserved; the
+product record supplies the release date. The 2022 `いちごいちえ Celebration`
+entry records the October 7 MV publication. Its planned split-EP CD release
+was cancelled in the November 7 official notice. The two published covers
+use the October 6 discography-page publication date, not the cancelled
+November 30 release date.
 
 ## Fixed Image Packaging
 

@@ -109,6 +109,12 @@ func (c *Client) fetch(ctx context.Context, raw, etag, lastModified string) (Dow
 		if resp.StatusCode == 404 || resp.StatusCode == 410 {
 			return out, &Error{"media_missing"}
 		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return out, &Error{"media_rate_limited"}
+		}
+		if resp.StatusCode >= 500 {
+			return out, &Error{"media_unavailable"}
+		}
 		if resp.StatusCode != 200 {
 			return out, &Error{"media_http_error"}
 		}

@@ -71,6 +71,20 @@ only fills missing static IDs by default; it does not recreate deleted providers
 `kano-go sync` (`npm run sync`) reads public sources and upserts updated records. Neither command
 silently deletes existing snapshots or operator-configured providers.
 
+Startup also fills missing static IDs, including the first-album milestone.
+The 2010 seed moves after that milestone only when its original title, detail,
+and sort order still match; operator edits and ordering are preserved.
+
+Media assets add `retry_attempts` and `next_retry_at` through additive startup
+upgrades. Failed downloads preserve cached bytes and retry state on source
+rediscovery. Successful downloads and 304 revalidations clear that state.
+See [Media cache](media-cache.md#lifecycle) for retry eligibility and bounds.
+
+Timeline-window checkpoints keep `headFetchedAt` in `sync_state.metadata_json`
+after a successful newest-page read. Resumed pages retain it, and cursor-only
+cleanup preserves `last_success_at`. Legacy checkpoints without a head time
+cannot establish public source freshness.
+
 Legacy `events` and `focus` tables are migrated in place. Existing X schedule
 rows are treated as manually curated and locked; existing YouTube reservations
 remain automatic. The migration does not clear snapshots.

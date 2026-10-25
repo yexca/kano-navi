@@ -98,6 +98,43 @@ test("every fixed history image ships with its catalog bytes and identity", asyn
   }
 })
 
+test("the first album and cancelled EP keep their distinct release and publication dates", () => {
+  const firstAlbum = milestones.find((item) => item.id === "bambino")
+  const firstCover = historyMedia.find((item) => item.id === "01_bambino_album")
+  assert.ok(firstAlbum)
+  assert.ok(firstAlbum.source)
+  assert.ok(firstCover)
+  assert.equal(firstAlbum.date, "2011-01-16")
+  assert.equal(firstCover.milestoneId, firstAlbum.id)
+  assert.equal(firstCover.date, firstAlbum.date)
+  assert.equal(firstCover.dateKind, "release")
+  assert.equal(firstCover.sourceKind, "thirdPartyCover")
+  assert.equal(firstCover.note, "thirdPartyCover")
+  assert.notEqual(
+    new URL(firstAlbum.source).hostname,
+    new URL(firstCover.sourcePage).hostname,
+  )
+
+  const mv = milestones.find((item) => item.id === "ichigo-ichie")
+  assert.ok(mv)
+  assert.equal(mv.date, "2022-10-07")
+  assert.equal(mv.branch, "singer")
+  assert.ok("links" in mv)
+  assert.ok(
+    mv.links?.some(
+      (link) => link.label === "history.sourceName.cancelledRelease",
+    ),
+  )
+  const covers = historyMedia.filter((item) => item.milestoneId === mv.id)
+  assert.equal(covers.length, 2)
+  for (const cover of covers) {
+    assert.equal(cover.date, "2022-10-06")
+    assert.equal(cover.dateKind, "publication")
+    assert.equal(cover.note, "cancelledEpCover")
+    assert.equal(cover.sourceKind, "artist")
+  }
+})
+
 test("history packaging validates the archive before publishing fixed images", async (t) => {
   const { root, content, image } = await fixture(t)
   const destination = path.join(root, "packaged")

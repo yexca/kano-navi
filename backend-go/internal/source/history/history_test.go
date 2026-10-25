@@ -58,7 +58,7 @@ func (m *memoryStore) WriteHistoryPage(_ context.Context, page Page) (Written, e
 	}
 	// Round-trip the metadata as JSON, which is how a real checkpoint returns.
 	var metadata map[string]any
-	raw, _ := json.Marshal(map[string]any{"window": page.Window, "discovered": page.Discovered})
+	raw, _ := json.Marshal(map[string]any{"window": page.Window, "discovered": page.Discovered, "headFetchedAt": page.HeadFetchedAt})
 	_ = json.Unmarshal(raw, &metadata)
 	checkpoint := page.Checkpoint
 	if checkpoint == "" {

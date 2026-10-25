@@ -252,6 +252,18 @@
     {
       "host": "storage.googleapis.com",
       "reason": "Public agency artwork published through the official talent website; a provenance link for a locally imported history image only."
+    },
+    {
+      "host": "www.suruga-ya.jp",
+      "reason": "Public product record verifying the first solo album's release date and track list; opened only through a history source link."
+    },
+    {
+      "host": "utaitelist.blogspot.com",
+      "reason": "Third-party origin of the locally packaged first-album cover, explicitly labelled in its provenance; never fetched by the application."
+    },
+    {
+      "host": "4.bp.blogspot.com",
+      "reason": "Original image-file URL preserved for the third-party first-album cover; the browser displays the packaged local file."
     }
   ]
 }

@@ -29,7 +29,7 @@ func TestGoInitializationStartsEmptyAndPreservesSnapshotsOnReseed(t *testing.T) 
 	_ = db.QueryRow(`SELECT COUNT(*) FROM profiles`).Scan(&profile)
 	_ = db.QueryRow(`SELECT COUNT(*) FROM timeline`).Scan(&timeline)
 	_ = db.QueryRow(`SELECT COUNT(*) FROM resources`).Scan(&resources)
-	if profile != 1 || timeline != 6 || resources != 10 {
+	if profile != 1 || timeline != 7 || resources != 10 {
 		t.Fatalf("static seed=%d %d %d", profile, timeline, resources)
 	}
 	if _, err = db.Exec(`UPDATE profiles SET display_name='operator'; INSERT INTO app_settings(key,value,updated_at) VALUES('operator_setting','retained','2026-01-01T00:00:00Z'); INSERT INTO posts(id,source,text,published_at,url) VALUES('fixture','x','retained','2026-01-01T00:00:00Z','https://example.invalid/post')`); err != nil {
@@ -72,5 +72,44 @@ func TestInitializationRejectsUnknownSchemaWithoutChangingRows(t *testing.T) {
 	_ = db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table'`).Scan(&tables)
 	if value != "retained" || tables != 1 {
 		t.Fatal("failed initialization changed unknown schema")
+	}
+}
+
+func TestStandaloneAddsMissingTimelineSeedWithoutReplacingOperatorOrder(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		edit      string
+		wantOrder string
+	}{
+		{"original", `UPDATE timeline SET sort_order=6 WHERE id=4`, "3,7,4"},
+		{"edited wording", `UPDATE timeline SET title='Operator title',sort_order=6 WHERE id=4`, "3,4,7"},
+		{"edited ordering", `UPDATE timeline SET sort_order=2 WHERE id=4`, "4,3,7"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "snapshot.sqlite")
+			s, err := OpenInitialized(p, true, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.db.Exec(`DELETE FROM timeline WHERE id=7`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.db.Exec(tc.edit); err != nil {
+				t.Fatal(err)
+			}
+			s.Close()
+			for range 2 {
+				s, err = OpenStandalone(p)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var order string
+				err = s.db.QueryRow(`SELECT group_concat(id,',') FROM (SELECT id FROM timeline WHERE id IN (3,4,7) ORDER BY sort_order,id)`).Scan(&order)
+				s.Close()
+				if err != nil || order != tc.wantOrder {
+					t.Fatalf("timeline order=%q, want %q; err=%v", order, tc.wantOrder, err)
+				}
+			}
+		})
 	}
 }

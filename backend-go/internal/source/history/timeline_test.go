@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 )
@@ -142,6 +143,45 @@ func TestTimelineCountStopsAfterTheNewestStatuses(t *testing.T) {
 	}
 	if last := store.pages[1]; last.Next != "" || len(last.Posts) != 1 || last.Posts[0].ID != "1900000000000000007" || last.Window.Count != 3 {
 		t.Fatalf("last page=%+v", last)
+	}
+}
+
+func TestTimelineFreshnessKeepsOriginalHeadAcrossResumeAndFailedCursorReset(t *testing.T) {
+	store := &memoryStore{}
+	timeline := &fakeTimeline{pages: map[string]xsource.TimelineStatuses{
+		"":      timelinePage("older", timelineStatus("1900000000000000003", "2026-03-09T03:00:00Z", "newest")),
+		"older": timelinePage("stale", timelineStatus("1900000000000000002", "2026-03-08T03:00:00Z", "older")),
+	}, fail: map[string]error{"stale": &xsource.Error{Code: xsource.ErrHTTP, Status: 400}}}
+	fetcher := timelineFetcher(store, timeline, 1)
+	request := Request{Source: SourceX, Account: testAccount, Window: Window{Mode: ModeCount, Count: 3}}
+	if result, err := fetcher.FetchTimeline(context.Background(), request); err != nil || !result.HasMore {
+		t.Fatalf("head: %+v %v", result, err)
+	}
+	want := formatTime(fixedNow())
+	if store.pages[0].HeadFetchedAt != want || store.pages[0].CheckpointOnly {
+		t.Fatalf("head freshness=%+v", store.pages[0])
+	}
+	// A count window has no expiry. Reading its older continuation days later
+	// must not claim the newest source content was read again.
+	fetcher.Now = func() time.Time { return fixedNow().Add(72 * time.Hour) }
+	if result, err := fetcher.FetchTimeline(context.Background(), request); err != nil || !result.HasMore {
+		t.Fatalf("resume: %+v %v", result, err)
+	}
+	if resumed := store.pages[1]; resumed.HeadFetchedAt != want || resumed.CheckpointOnly {
+		t.Fatalf("resumed freshness=%+v", resumed)
+	}
+	if _, err := fetcher.FetchTimeline(context.Background(), request); err == nil {
+		t.Fatal("stale cursor was not reported")
+	}
+	if reset := store.pages[2]; !reset.CheckpointOnly || reset.Next != "" || reset.HeadFetchedAt != want {
+		t.Fatalf("failed reset claimed success=%+v", reset)
+	}
+	// After clearing the stale cursor, a real successful head read advances it.
+	if _, err := fetcher.FetchTimeline(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	if head := store.pages[3]; head.CheckpointOnly || head.HeadFetchedAt != formatTime(fetcher.Now()) {
+		t.Fatalf("fresh head did not advance=%+v", head)
 	}
 }
 

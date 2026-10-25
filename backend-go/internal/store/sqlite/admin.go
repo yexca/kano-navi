@@ -359,8 +359,8 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	}
 	if search := strings.TrimSpace(f.Search); search != "" {
 		pattern := likePattern(search)
-		clauses = append(clauses, "(p.text LIKE ? ESCAPE '\\' OR p.url LIKE ? ESCAPE '\\' OR p.media_alt LIKE ? ESCAPE '\\')")
-		args = append(args, pattern, pattern, pattern)
+		clauses = append(clauses, "(p.text LIKE ? ESCAPE '\\' OR p.url LIKE ? ESCAPE '\\' OR p.media_alt LIKE ? ESCAPE '\\' OR p.id LIKE ? ESCAPE '\\')")
+		args = append(args, pattern, pattern, pattern, pattern)
 	}
 	switch f.Media {
 	case "present":

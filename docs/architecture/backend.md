@@ -63,6 +63,15 @@ The summary contains nextEvent, nextStream, latestVideo, latestPost, and counts;
 latestPost survives an empty requested window. Metadata includes configured
 X accounts and the Featured video ID.
 
+`meta.sourceFetchedAt` contains only `x` and `youtube` ISO timestamps or null,
+derived from successful incremental or recent source reads. Historical range
+backfills do not refresh it; recent-window pages are capped at the window's
+end time. Timeline recent/count windows also retain their successful head-page
+read time, so resuming old pages does not refresh the source. Older timeline
+checkpoints without that time remain unknown. Media-only runs, cursor cleanup
+and API reads do not advance these source timestamps. Internal account
+IDs, checkpoints and fetch errors remain protected.
+
 backend-go/internal/publicview owns shared public event, synchronization, and
 selected profile-media projections for HTTP and MCP. A public sync summary contains only
 id, source, start/finish times, status, and a fixed status message. Public profile

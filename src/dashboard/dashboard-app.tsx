@@ -1,6 +1,5 @@
 import type {
   ArchiveSnapshot,
-  Dashboard,
   Post,
   ScheduleAsset,
   ScheduleEvent,
@@ -15,6 +14,7 @@ import { MediaDialog, stepIndex } from "@/site/media-dialog"
 import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
 import { XLogo, YouTubeLogo } from "@/site/links"
 import { POST_WINDOW_DAYS } from "./content"
+import { syncStateFor } from "./freshness"
 import {
   addDays,
   formatStamp,
@@ -31,7 +31,7 @@ import {
 } from "./use-dashboard"
 import { ArchiveDialog } from "./components/archive-dialog"
 import { LinkDirectory } from "./components/link-directory"
-import { NowStage, type SyncState } from "./components/now-stage"
+import { NowStage } from "./components/now-stage"
 import {
   PostArchive,
   PostArchiveFilter,
@@ -48,19 +48,6 @@ interface ViewerImage {
 
 /** Images offered to the viewer; entries whose media is not cached are skipped. */
 type ViewerCandidate = Omit<ViewerImage, "url"> & { url: string | null }
-
-function syncStateFor(
-  meta: Dashboard["meta"],
-  error: Error | null,
-  t: Translator,
-): SyncState {
-  if (error) return { tone: "danger", label: t("sync.apiUnavailable") }
-  const status = meta?.lastSync?.status
-  if (!status) return { tone: "muted", label: t("sync.waiting") }
-  if (status === "success") return { tone: "leaf", label: t("sync.snapshot") }
-  if (status === "partial") return { tone: "honey", label: t("sync.partial") }
-  return { tone: "danger", label: t("sync.needsReview") }
-}
 
 /** Heading copy of each month dialog, with the loaded month's total. */
 function archiveCopy(
@@ -229,7 +216,7 @@ export function DashboardApp() {
 
   const { profile, summary, meta } = dashboard
   const windowDays = meta.postWindowDays || POST_WINDOW_DAYS
-  const syncState = syncStateFor(meta, error, t)
+  const syncState = syncStateFor(meta, error, now, t)
   const syncIso = meta.fetchedAt
   const syncTime = syncIso ? formatStamp(syncIso) : t("sync.waiting")
   const counts = summary.counts || {

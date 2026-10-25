@@ -194,6 +194,8 @@ export interface Dashboard {
   scheduleImages: ScheduleAsset[]
   meta: {
     fetchedAt: string | null
+    /** Successful current-source reads; historical backfills do not refresh these. */
+    sourceFetchedAt?: Record<"x" | "youtube", string | null>
     lastSync: { status: string; startedAt?: string; finishedAt?: string } | null
     postWindowDays: number
     xAccounts: string[]

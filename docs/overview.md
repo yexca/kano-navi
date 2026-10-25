@@ -71,7 +71,7 @@ covers to joining Milpro SONA in 2026. It is static, curated content in
 Joshiryo, Kano Mahoro, MKLNtic, Milpro SONA), and links the strongest public
 source. Visitors can filter by identity and jump to a year from a year rail
 (a sticky side rail on wide screens, a sticky strip on phones). A visual archive
-adds 59 bundled local images with image-type filtering, full-image dialogs,
+adds 60 bundled local images with image-type filtering, full-image dialogs,
 dimensions, date basis, recorded credits, and original-site links. Official
 stream frames explicitly identify the third-party archive and frame timestamp.
 Images load from local `/assets/history/` URLs; visits do not fetch external
@@ -119,9 +119,9 @@ automation; confirmation and other human-only actions remain in `/admin`.
   maintainer surface, in-memory sessions, and no multi-user permission model.
   MCP control uses a separate environment token and does not inherit the admin
   session.
-- Media registration and bounded download are implemented. Retry scheduling,
-  image dimension probing, and garbage collection remain follow-up work;
-  unready media is intentionally shown as unavailable.
+- Media registration, bounded download, persistent retry backoff, and YouTube
+  thumbnail revalidation are implemented. Image dimension probing and garbage
+  collection remain follow-up work; unready media is shown as unavailable.
 
 ## Maintainer Decision Rule
 

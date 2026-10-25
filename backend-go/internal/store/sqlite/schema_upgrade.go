@@ -277,6 +277,7 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 		`UPDATE resources SET title='official site',detail=NULL WHERE id=9 AND title='旧 official site' AND detail='更新截至 2022 · 资料存档'`,
 		`UPDATE timeline SET detail='8 月加入ミリプロSONA，以新形象开始配信。' WHERE id=1 AND detail='加入ミリプロSONA，开始 VTuber 活动。'`,
 		`UPDATE timeline SET sort_order=CASE id WHEN 3 THEN 5 ELSE 6 END WHERE (id=3 AND title='Major debut' AND sort_order=3) OR (id=4 AND title='第一首投稿' AND sort_order=4)`,
+		`UPDATE timeline SET sort_order=7 WHERE id=4 AND year='2010' AND title='第一首投稿' AND detail='从 NicoNico 的歌唱投稿开始。' AND sort_order=6`,
 		`UPDATE resources SET url='https://milpr.com/talents/kano-mahoro',detail='事务所个人页 · 资料与公告' WHERE id=7 AND url='https://milpr.com/news/mahoro_debut' AND detail='所属与官方公告'`,
 	} {
 		if err := exec(statement); err != nil {

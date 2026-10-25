@@ -17,17 +17,14 @@ import {
   formatJapanDay,
   formatJapanTime,
   formatRelative,
+  formatStamp,
   formatVisitorTime,
   videoKindLabel,
   visitorIsInJapan,
 } from "../format"
 import { pickCompanion, pickSpotlight, spotlightIsLive } from "../spotlight"
+import type { SyncState } from "../freshness"
 import { TranslatedTitle } from "./translated-title"
-
-export interface SyncState {
-  tone: "leaf" | "honey" | "danger" | "muted"
-  label: string
-}
 
 function japanDateParts(value: string, locale: Locale) {
   const date = new Date(value)
@@ -520,6 +517,29 @@ function ProfileCard({
             <RefreshCw aria-hidden="true" />
           </button>
         </div>
+        {syncState.sources.length ? (
+          <dl className="profile-sources" aria-label={t("sync.sourceTimes")}>
+            {syncState.sources.map(({ source, timestamp, state }) => (
+              <div key={source}>
+                <dt>{source === "x" ? "X" : "YouTube"}</dt>
+                <dd>
+                  {timestamp ? (
+                    <time dateTime={timestamp}>
+                      {formatStamp(timestamp)} {t("common.timezoneShort")}
+                    </time>
+                  ) : (
+                    t("sync.waiting")
+                  )}
+                  {state === "stale" ? (
+                    <span className="profile-source-stale">
+                      {t("sync.stale")}
+                    </span>
+                  ) : null}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
       </div>
     </aside>
   )

@@ -54,6 +54,8 @@ packaging and provenance details.
 - `mime_type`, `extension`, `byte_size`, `sha256`, `width`, and `height`;
 - fetch/check/seen timestamps, validators (`etag`, `last_modified`), and the
   last error for maintainer diagnosis.
+- `retry_attempts` and `next_retry_at`: persisted failure backoff, added to
+  existing snapshots without clearing cached assets or links.
 
 `media_links` associates an asset with a domain record without coupling the
 media table to every content table. Its owner tuple is `(owner_type, owner_id,
@@ -86,10 +88,13 @@ served as active same-origin content.
    `status = ready`.
 4. A failed or unavailable request updates the row to `failed` or `missing`.
    Existing ready files are retained; a failed synchronization never clears a
-   known snapshot. A transient failure (`media_timeout`, `media_unavailable`,
-   `media_http_error` or `media_body_unavailable`) is claimed again once
-   30 minutes have passed since its last check; rejected destinations, invalid
-   images, oversized bodies and `missing` files are not retried.
+   known snapshot. Transient failures (`media_timeout`, `media_unavailable`,
+   `media_body_unavailable` and `media_rate_limited`) back off from 30 minutes,
+   doubling to a maximum of 24 hours. Missing files and other HTTP errors are
+   retried after 24 hours. Rejected destinations, invalid images and oversized
+   bodies are not retried automatically. Rediscovering the same URL preserves
+   its retry deadline, including for ready files whose revalidation failed.
+   A successful download or 304 revalidation clears the failure state.
 5. A YouTube thumbnail that answers 404 for `maxresdefault` or `sddefault`
    (including their `_live` forms) is requested at the next smaller size,
    ending with `hqdefault.jpg`. The bytes are stored under the original URL, so

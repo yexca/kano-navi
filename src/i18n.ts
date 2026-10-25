@@ -61,6 +61,8 @@ const messages = {
     "sync.needsReview": "需要检查",
     "sync.snapshot": "快照正常",
     "sync.waiting": "尚未同步",
+    "sync.stale": "数据较旧",
+    "sync.sourceTimes": "各来源最后同步时间",
     "toast.reloaded": "已重新读取快照",
     "toast.failed": ({ message }: { message: any }) => `读取失败 · ${message}`,
     "error.api": "暂时无法连接本地 API，页面保留当前内容。",
@@ -266,6 +268,8 @@ const messages = {
     "sync.needsReview": "要確認",
     "sync.snapshot": "スナップショット正常",
     "sync.waiting": "未同期",
+    "sync.stale": "更新が古い",
+    "sync.sourceTimes": "ソースごとの最終同期日時",
     "toast.reloaded": "スナップショットを再読み込みしました",
     "toast.failed": ({ message }: { message: any }) =>
       `読み込み失敗 · ${message}`,
@@ -476,6 +480,8 @@ const messages = {
     "sync.needsReview": "Needs review",
     "sync.snapshot": "Healthy",
     "sync.waiting": "Not synced yet",
+    "sync.stale": "Out of date",
+    "sync.sourceTimes": "Last sync by source",
     "toast.reloaded": "Snapshot reloaded",
     "toast.failed": ({ message }: { message: any }) =>
       `Load failed · ${message}`,

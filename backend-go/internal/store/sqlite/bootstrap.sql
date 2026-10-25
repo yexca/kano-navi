@@ -146,6 +146,8 @@ CREATE TABLE media_assets (
     etag TEXT,
     last_modified TEXT,
     last_error TEXT,
+    retry_attempts INTEGER NOT NULL DEFAULT 0,
+    next_retry_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     raw_json TEXT

@@ -71,6 +71,10 @@ Backend coverage, by package under `backend-go/internal/`:
   tombstones, read-only opening, startup upgrades of older snapshots (including
   the legacy events rebuild and selected profile repair), source writes that
   keep cursors on rollback, and history pages that commit with their checkpoint.
+  Retry tests cover restart/rediscovery backoff, missing-file recovery, retained
+  ready files and 304 resets; freshness tests exclude historical and cursor-only
+  writes and retain timeline head-page times across resumed pages. Admin post
+  tests cover ID search before pagination and inclusive Japan-date boundaries.
 - `httpapi`: public reads, media containment and validators, compression and
   static caching, the admin session and origin guard, event mutations, and the
   operator console routes for workflows, jobs and source fetch windows.

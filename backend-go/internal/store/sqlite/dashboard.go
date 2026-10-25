@@ -227,6 +227,7 @@ type EventWindow struct {
 }
 type DashboardMeta struct {
 	FetchedAt       *string
+	SourceFetchedAt map[string]*string
 	LastSync        *SyncRun
 	PostWindowDays  int
 	EventWindow     EventWindow
@@ -458,6 +459,10 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 	if err != nil {
 		return nil, err
 	}
+	sourceFetchedAt, err := s.sourceFetchedAt(ctx)
+	if err != nil {
+		return nil, err
+	}
 	mediaCache, err := s.getMediaCache(ctx)
 	if err != nil {
 		return nil, err
@@ -532,7 +537,7 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 		Profile: profile,
 		Summary: DashboardSummary{NextEvent: nextEvent, NextStream: nextStream, LatestVideo: latestVideo, LatestPost: latest, Counts: DashboardCounts{Posts: postCount, Events: totalEvents, UpcomingEvents: upcomingEvents, Videos: int64(len(videos)), Resources: int64(len(resources))}},
 		Posts:   posts, Events: events, Videos: videos, Focus: focus, Timeline: timeline, Resources: resources, Assets: assets, ScheduleImages: filterReadyAssets(calendarAssets), ProfileMedia: profileMedia,
-		Meta: DashboardMeta{FetchedAt: fetchedAt, LastSync: lastSync, PostWindowDays: days, EventWindow: EventWindow{From: from, To: to, Paginated: true}, GeneratedAt: now.UTC().Format("2006-01-02T15:04:05.000Z"), MediaCache: mediaCache, Revision: revision, FeaturedVideoID: featuredID, XAccounts: xAccounts},
+		Meta: DashboardMeta{FetchedAt: fetchedAt, SourceFetchedAt: sourceFetchedAt, LastSync: lastSync, PostWindowDays: days, EventWindow: EventWindow{From: from, To: to, Paginated: true}, GeneratedAt: now.UTC().Format("2006-01-02T15:04:05.000Z"), MediaCache: mediaCache, Revision: revision, FeaturedVideoID: featuredID, XAccounts: xAccounts},
 	}, nil
 }
 

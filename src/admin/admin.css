@@ -632,6 +632,19 @@
   width: auto !important;
 }
 
+.adm-filter-dates {
+  display: grid;
+  flex: 0 1 300px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.adm-filters .adm-filter-dates input[type="date"] {
+  width: 100% !important;
+  min-width: 0;
+}
+
 .adm-toolbar {
   display: flex;
   flex-wrap: wrap;

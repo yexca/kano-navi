@@ -60,7 +60,12 @@ type Page struct {
 	// Checkpoint names the sync_state source of the continuation; empty means
 	// Source+"-window". Timeline windows keep their own, because a timeline
 	// cursor is not an API next_token.
-	Checkpoint         string
+	Checkpoint string
+	// HeadFetchedAt records a successful read of the newest timeline page.
+	// Resumed pages retain it; checkpoints from older releases leave it unknown.
+	HeadFetchedAt string
+	// CheckpointOnly clears a stale timeline cursor without a successful read.
+	CheckpointOnly     bool
 	Window             Window
 	Next               string
 	Discovered         int

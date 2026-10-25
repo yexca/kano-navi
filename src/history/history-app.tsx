@@ -133,7 +133,7 @@ function groupByYear(items: Milestone[]) {
 const allGroups = groupByYear(allMilestones)
 
 // One stop per year with records; consecutive empty years fold into a gap so
-// the 2011–2014 silence stays visible without taking space.
+// years without recorded milestones stay visible without taking space.
 function railSegments(lastYear: number) {
   const byYear = Object.fromEntries(
     allGroups.map((group) => [group.year, group.items]),

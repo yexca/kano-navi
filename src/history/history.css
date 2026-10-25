@@ -833,9 +833,17 @@
 
 /* ------------------------------------------------------------ dialog panel */
 
+.history .media-dialog-stage,
+.history .media-dialog-details,
+.image-details {
+  min-width: 0;
+}
+
 .image-details {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  overflow-wrap: anywhere;
 }
 
 .image-details h2 {
@@ -891,7 +899,22 @@
   gap: 8px;
 }
 
+.image-details-links .pill-button {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.image-details-links .pill-button svg {
+  flex-shrink: 0;
+}
+
 .media-dialog-stage .history-missing {
   min-height: 300px;
   color: #fff;
+}
+
+@media (max-width: 820px) {
+  .history .media-dialog.has-details .media-dialog-frame {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
