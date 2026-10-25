@@ -10,7 +10,8 @@ synthetic credentials; no check synchronizes live sources. See
 [Go backend](../architecture/go-standalone.md).
 
 `make test-frontend` runs the frontend tests in `tests/`: the dashboard
-request hook, polling, and the history catalog and packaging.
+request hook, the month archive reads, polling, and the history catalog and
+packaging.
 
 The Makefile is the canonical validation entry point. GitHub Actions invokes
 its targets so local and hosted checks protect the same contracts. Use the

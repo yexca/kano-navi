@@ -64,5 +64,13 @@
 - The week guide and month grid show On air whenever the stage does, instead
   of calling a stream that is still within its live window ended, and a late
   waiting room stays upcoming there.
+- Posts on X now come before YouTube on the board.
+- The schedule shows one week; the month grid moved to a Month view dialog
+  with its own month navigation, where picking a date lists that day's
+  entries and can show its week on the board.
+- Past posts and Past videos dialogs browse every stored post and video month
+  by month, with load-more paging, jumps to the nearest month with records,
+  and the account filter for posts. They read the new `/api/posts` and
+  `/api/videos` endpoints.
 
 </details>

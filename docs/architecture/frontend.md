@@ -16,7 +16,9 @@ the dialog). The board lives in `src/dashboard/`: `use-dashboard.ts` owns the
 snapshot request and revision polling, `format.ts` owns Japan-time and
 event-status helpers, `content.ts` holds static public links, and
 `components/` renders the next-up stage and profile card, the week guide,
-the video shelf, the post wall, and the link directory. Its styles are in
+the post wall, the video shelf, and the link directory, plus
+`archive-dialog.tsx`, the native modal sheet that browses one month of the
+schedule, posts or videos. Its styles are in
 `src/dashboard/board.css` on top of `src/site/site.css` and the shared tokens
 in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`
@@ -148,8 +150,8 @@ continue to pause while hidden. A failed initial snapshot retries even before
 any revision has been recorded; manual retry remains available. Admin 401 stops
 polling and requires login. Failed initial admin loads also retry.
 
-The calendar's view (week or month), selected week and selected month live in
-`use-dashboard.ts`; a month reads the Monday-first weeks that cover it. It reads
+The board's calendar shows one week; its selected week lives in
+`use-dashboard.ts`. It reads
 one bounded page, shows the complete range/day counts, and offers more-event
 pagination. Changing the range cancels old work and begins at page one; errors keep a retry control.
 Same-range refreshes with an unchanged revision retain every already loaded page.
@@ -160,6 +162,20 @@ Failed or repeatedly changing reads retain the complete known generation for ret
 they never append pages from different revisions. Automatic snapshot refresh waits
 for active calendar work, and a pending calendar revision is checked on later polls.
 Adjacent-date hints support jumping to stored activity in either direction.
+
+The month dialogs read through `useArchive` in `use-dashboard.ts`, only
+while one is open: the schedule reads the Monday-first weeks covering the month
+from `/api/calendar`, and past posts and videos read the month's own days from
+[`/api/posts` and `/api/videos`](backend.md#bounded-public-archives). They
+follow the same rules as the calendar: pages of one revision are appended, a
+later page from another revision rereads the loaded pages atomically (up to
+three attempts under the 12-second deadline), and a board revision change
+rereads them while the dialog stays open. Changing the month or the post
+account, or closing the dialog, cancels the read and discards late pages.
+Picking a day in the month grid lists its entries beside the grid (below it on
+phones) and can show that week on the board. An image viewer opened from the
+post archive stacks above it; Escape closes the topmost dialog and focus
+returns to its opener.
 Images match their applicable inclusive period, without an updated-at fallback.
 The bounded focus snapshot refreshes at least once per minute while visible to
 advance its shortlist as time passes, even when the durable revision is unchanged.

@@ -121,6 +121,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.calendar(w, r)
+	case "/api/posts":
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w, http.MethodGet)
+			return
+		}
+		h.posts(w, r)
+	case "/api/videos":
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w, http.MethodGet)
+			return
+		}
+		h.videos(w, r)
 	default:
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/media/profile/"):

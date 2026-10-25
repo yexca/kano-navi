@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { fallbackProfile, POST_WINDOW_DAYS } from "./content"
-import type { Dashboard, CalendarSnapshot } from "@/types"
+import type { ArchiveSnapshot, Dashboard, CalendarSnapshot } from "@/types"
 import { createRequestScope, startPolling } from "../lib/polling"
 import { startOfWeek, japanToday, localDateKey, addDays } from "./format"
 import { deriveDashboardAt } from "./derive-dashboard"
@@ -32,32 +32,91 @@ const emptyDashboard: Dashboard = {
   },
 }
 
-export type CalendarView = "week" | "month"
-
-/**
- * Inclusive Japan-date range of the visible calendar: one Monday-first week,
- * or the Monday-first weeks that cover a month (at most six, the API bound).
- */
-export function calendarRange(
-  view: CalendarView,
-  weekStart: Date,
-  monthStart: Date,
-) {
-  if (view === "month") {
-    const first = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1)
-    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0)
-    return {
-      from: localDateKey(startOfWeek(first)),
-      to: localDateKey(addDays(startOfWeek(last), 6)),
-    }
-  }
+/** Inclusive Japan-date range of the board's calendar: one Monday-first week. */
+export function weekRange(weekStart: Date) {
   return {
     from: localDateKey(weekStart),
     to: localDateKey(addDays(weekStart, 6)),
   }
 }
 
+export type ArchiveKind = "schedule" | "posts" | "videos"
+
+export interface ArchiveRequest {
+  kind: ArchiveKind
+  monthStart: Date
+  /** Post archives only: one X handle, or null for every account. */
+  account?: string | null
+}
+
+/**
+ * Inclusive Japan dates a month archive reads: the Monday-first weeks that
+ * cover the month for the schedule grid (at most six, the API bound), or the
+ * month's own days for posts and videos.
+ */
+export function archiveRange(kind: ArchiveKind, monthStart: Date) {
+  const first = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1)
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0)
+  return kind === "schedule"
+    ? {
+        from: localDateKey(startOfWeek(first)),
+        to: localDateKey(addDays(startOfWeek(last), 6)),
+      }
+    : { from: localDateKey(first), to: localDateKey(last) }
+}
+
+function archiveUrl(request: ArchiveRequest, page: number) {
+  const { from, to } = archiveRange(request.kind, request.monthStart)
+  const path = { schedule: "calendar", posts: "posts", videos: "videos" }[
+    request.kind
+  ]
+  const account =
+    request.kind === "posts" && request.account
+      ? `&account=${encodeURIComponent(request.account)}`
+      : ""
+  return `/api/${path}?from=${from}&to=${to}&page=${page}${account}`
+}
+
 const rangeKey = ({ from, to }: { from: string; to: string }) => `${from}/${to}`
+
+async function readScopedJson(url: string, signal: AbortSignal) {
+  const response = await fetch(url, {
+    signal,
+    headers: { accept: "application/json" },
+  })
+  if (!response.ok) throw new Error(`API ${response.status}`)
+  return response.json()
+}
+
+type PagedSnapshot = { page: number; hasNext: boolean; revision: number }
+
+/**
+ * Rereads the pages already loaded for one range and replaces them
+ * atomically. If a write lands between pages, it restarts under the caller's
+ * deadline; it never appends pages from different revisions.
+ */
+async function readLoadedPages<T extends PagedSnapshot>(
+  readPage: (page: number) => Promise<T>,
+  current: T | null,
+  join: (loaded: T, next: T) => T,
+): Promise<T> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let next = await readPage(1)
+    if (current && next.revision === current.revision) return current
+    const revision = next.revision
+    let consistent = true
+    while (next.hasNext && next.page < (current?.page || 1)) {
+      const page = await readPage(next.page + 1)
+      if (page.revision !== revision) {
+        consistent = false
+        break
+      }
+      next = join(next, page)
+    }
+    if (consistent) return next
+  }
+  throw new Error("Snapshot changed during refresh")
+}
 
 const REVISION_POLL_MS = 8000
 const REQUEST_TIMEOUT_MS = 15000
@@ -82,12 +141,7 @@ export function useDashboard(now = Date.now()) {
   })
   const scope = useMemo(() => createRequestScope(), [])
   const [weekStart, setWeekStart] = useState(() => startOfWeek(japanToday()))
-  const [monthStart, setMonthStart] = useState(() => {
-    const today = japanToday()
-    return new Date(today.getFullYear(), today.getMonth(), 1)
-  })
-  const [calendarView, setCalendarView] = useState<CalendarView>("week")
-  const range = calendarRange(calendarView, weekStart, monthStart)
+  const range = weekRange(weekStart)
   const visibleKey = rangeKey(range)
   const [calendar, setCalendar] = useState<CalendarSnapshot>({
     events: [],
@@ -106,14 +160,6 @@ export function useDashboard(now = Date.now()) {
   const calendarRef = useRef(calendar)
   calendarRef.current = calendar
   const calendarKeyRef = useRef<string | null>(null)
-  const readJson = async (url: string, signal: AbortSignal) => {
-    const response = await fetch(url, {
-      signal,
-      headers: { accept: "application/json" },
-    })
-    if (!response.ok) throw new Error(`API ${response.status}`)
-    return response.json()
-  }
   const loadCalendar = useCallback(async () => {
     const { from, to } = rangeRef.current
     const key = rangeKey(rangeRef.current)
@@ -123,7 +169,7 @@ export function useDashboard(now = Date.now()) {
       const payload = await scope.run("calendar", async (signal) => {
         const readPage = async (page: number): Promise<CalendarSnapshot> => {
           signal.throwIfAborted()
-          const result = await readJson(
+          const result = await readScopedJson(
             `/api/calendar?from=${from}&to=${to}&page=${page}`,
             signal,
           )
@@ -138,24 +184,10 @@ export function useDashboard(now = Date.now()) {
             throw new Error("Invalid calendar snapshot")
           return result
         }
-        // Replace the loaded prefix atomically. If a write lands between pages,
-        // restart under this request's deadline; never append mixed revisions.
-        for (let attempt = 0; attempt < 3; attempt++) {
-          let next = await readPage(1)
-          if (current && next.revision === current.revision) return current
-          const revision = next.revision
-          let consistent = true
-          while (next.hasNext && next.page < (current?.page || 1)) {
-            const page = await readPage(next.page + 1)
-            if (page.revision !== revision) {
-              consistent = false
-              break
-            }
-            next = { ...page, events: [...next.events, ...page.events] }
-          }
-          if (consistent) return next
-        }
-        throw new Error("Calendar changed during refresh")
+        return readLoadedPages(readPage, current, (loaded, page) => ({
+          ...page,
+          events: [...loaded.events, ...page.events],
+        }))
       })
       if (key !== rangeKey(rangeRef.current)) return
       calendarKeyRef.current = key
@@ -184,7 +216,7 @@ export function useDashboard(now = Date.now()) {
     if (calendarKeyRef.current !== key) return
     try {
       const next = await scope.run("calendar", (signal) =>
-        readJson(
+        readScopedJson(
           `/api/calendar?from=${from}&to=${to}&page=${current.page + 1}`,
           signal,
         ),
@@ -437,11 +469,159 @@ export function useDashboard(now = Date.now()) {
     loadMoreCalendar,
     weekStart,
     setWeekStart,
-    monthStart,
-    setMonthStart,
-    calendarView,
-    setCalendarView,
     calendarRange: range,
+  }
+}
+
+/**
+ * Reads one month of the stored schedule, posts or videos for a dialog, page
+ * by page. Like the calendar it follows the board's revision: a change rereads
+ * the loaded pages atomically, and a later page from another revision restarts
+ * the read instead of being appended. A null request cancels the read.
+ */
+export function useArchive<T>(
+  request: ArchiveRequest | null,
+  revision?: number | null,
+) {
+  const scope = useMemo(() => createRequestScope(), [])
+  const key = request
+    ? `${request.kind}:${rangeKey(archiveRange(request.kind, request.monthStart))}:${request.account || ""}`
+    : null
+  const [state, setState] = useState<{
+    key: string | null
+    snapshot: ArchiveSnapshot<T> | null
+    isLoading: boolean
+    error: Error | null
+  }>({ key: null, snapshot: null, isLoading: false, error: null })
+  const keyRef = useRef(key)
+  keyRef.current = key
+  const requestRef = useRef(request)
+  requestRef.current = request
+  const stateRef = useRef(state)
+  stateRef.current = state
+
+  const readPage = async (
+    current: ArchiveRequest,
+    page: number,
+    signal: AbortSignal,
+  ): Promise<ArchiveSnapshot<T>> => {
+    signal.throwIfAborted()
+    const result = await readScopedJson(archiveUrl(current, page), signal)
+    signal.throwIfAborted()
+    if (
+      !Array.isArray(result.items) ||
+      !result.adjacent ||
+      !Number.isInteger(result.total) ||
+      !Number.isInteger(result.revision) ||
+      !Number.isInteger(result.page)
+    )
+      throw new Error("Invalid archive page")
+    return result
+  }
+
+  const load = useCallback(async () => {
+    const current = requestRef.current
+    const currentKey = keyRef.current
+    if (!current || !currentKey) return
+    const loaded =
+      stateRef.current.key === currentKey ? stateRef.current.snapshot : null
+    setState((value) =>
+      value.key === currentKey
+        ? { ...value, isLoading: true }
+        : { key: currentKey, snapshot: null, isLoading: true, error: null },
+    )
+    try {
+      const snapshot = await scope.run("archive", (signal) =>
+        readLoadedPages(
+          (page) => readPage(current, page, signal),
+          loaded,
+          (before, page) => ({
+            ...page,
+            items: [...before.items, ...page.items],
+          }),
+        ),
+      )
+      if (keyRef.current !== currentKey) return
+      setState({ key: currentKey, snapshot, isLoading: false, error: null })
+    } catch (error) {
+      if (
+        scope.active &&
+        keyRef.current === currentKey &&
+        error.name !== "AbortError"
+      )
+        setState((value) => ({ ...value, isLoading: false, error }))
+    }
+  }, [scope])
+
+  const loadMore = useCallback(async () => {
+    const current = requestRef.current
+    const { key: currentKey, snapshot } = stateRef.current
+    if (
+      !current ||
+      !snapshot?.hasNext ||
+      currentKey !== keyRef.current ||
+      scope.busy("archive")
+    )
+      return
+    setState((value) => ({ ...value, isLoading: true }))
+    try {
+      const next = await scope.run("archive", (signal) =>
+        readPage(current, snapshot.page + 1, signal),
+      )
+      if (keyRef.current !== currentKey) return
+      // A write moved the pages: reread the loaded ones instead of mixing.
+      if (
+        next.revision !== snapshot.revision ||
+        next.page !== snapshot.page + 1
+      ) {
+        await load()
+        return
+      }
+      setState({
+        key: currentKey,
+        snapshot: { ...next, items: [...snapshot.items, ...next.items] },
+        isLoading: false,
+        error: null,
+      })
+    } catch (error) {
+      if (
+        scope.active &&
+        keyRef.current === currentKey &&
+        error.name !== "AbortError"
+      )
+        setState((value) => ({ ...value, isLoading: false, error }))
+    }
+  }, [scope, load])
+
+  useEffect(() => {
+    scope.activate()
+    return () => scope.dispose()
+  }, [scope])
+
+  useEffect(() => {
+    if (key) void load()
+    return () => scope.cancelKey("archive")
+  }, [key, load, scope])
+
+  useEffect(() => {
+    const { key: currentKey, snapshot } = stateRef.current
+    if (
+      currentKey === keyRef.current &&
+      snapshot &&
+      revision != null &&
+      revision !== snapshot.revision &&
+      !scope.busy("archive")
+    )
+      void load()
+  }, [revision, load, scope])
+
+  const current = state.key === key ? state : null
+  return {
+    archive: current?.snapshot || null,
+    isLoading: Boolean(key) && (!current || current.isLoading),
+    error: current?.error || null,
+    reload: load,
+    loadMore,
   }
 }
 

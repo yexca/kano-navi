@@ -124,6 +124,11 @@ func publicAsset(a sqlite.Asset) map[string]any {
 // PublicAsset is the calendar-facing form of a schedule asset. Keep the
 // projection exported so calendar and dashboard use the same field boundary.
 func PublicAsset(a sqlite.Asset) map[string]any { return publicAsset(a) }
+
+// PublicPost and PublicVideo are the archive-facing forms of a post and a
+// video, sharing the dashboard's field boundary.
+func PublicPost(p sqlite.Post) map[string]any { return publicPost(p) }
+func PublicVideo(v sqlite.Video) map[string]any { return publicVideo(v) }
 func publicProfileMedia(m *sqlite.ProfileMedia) any {
 	if m == nil {
 		return nil

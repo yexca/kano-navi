@@ -88,6 +88,15 @@ export function formatWeekRange(weekStart, locale) {
     : `${format.format(weekStart)} – ${format.format(weekEnd)}`
 }
 
+export function formatMonth(date, locale) {
+  return formatter(locale, { year: "numeric", month: "long" }).format(date)
+}
+
+/** The first day of a calendar date's month, as a local Date. */
+export function monthStartOf(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
 export function formatLongDate(date, locale) {
   return formatter(locale, {
     month: "long",

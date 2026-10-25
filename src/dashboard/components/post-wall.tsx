@@ -1,8 +1,15 @@
-import type { Locale, MediaItem, Post, Translator } from "@/types"
+import type {
+  ArchiveSnapshot,
+  Locale,
+  MediaItem,
+  Post,
+  Translator,
+} from "@/types"
 import { useMemo, useState } from "react"
 import {
   ArrowUpRight,
   Heart,
+  History,
   ImageOff,
   MessageCircle,
   Repeat2,
@@ -10,7 +17,14 @@ import {
 
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
 import { ExternalLink, XLogo } from "@/site/links"
-import { formatCompact, formatRelative, formatStamp } from "../format"
+import {
+  formatCompact,
+  formatJapanDay,
+  formatJapanTime,
+  formatRelative,
+  formatStamp,
+} from "../format"
+import { ArchiveMore, ArchiveState } from "./archive-dialog"
 
 /** Ready local media can open in the viewer; anything else stays labelled. */
 export function postMedia(post: Post): MediaItem[] {
@@ -58,6 +72,7 @@ function Engagement({
 function PostNote({
   post,
   avatarUrl,
+  absoluteTime = false,
   locale,
   now,
   t,
@@ -65,6 +80,8 @@ function PostNote({
 }: {
   post: Post
   avatarUrl: string | null
+  /** Archives show the Japan date and time ("10.24 21:00"), not "3 days ago". */
+  absoluteTime?: boolean
   locale: Locale
   now: number
   t: Translator
@@ -88,9 +105,11 @@ function PostNote({
         )}
         <time
           dateTime={post.publishedAt}
-          title={`${formatStamp(post.publishedAt)} ${t("common.timezoneShort")}`}
+          title={`${formatJapanDay(post.publishedAt, locale)} ${formatJapanTime(post.publishedAt)} ${t("common.timezoneShort")}`}
         >
-          {formatRelative(post.publishedAt, locale, now)}
+          {absoluteTime
+            ? formatStamp(post.publishedAt)
+            : formatRelative(post.publishedAt, locale, now)}
         </time>
         <ExternalLink
           className="post-note-open"
@@ -139,6 +158,7 @@ export function PostWall({
   now,
   t,
   onOpenMedia,
+  onOpenArchive,
 }: {
   posts: Post[]
   latestPost: Post | null
@@ -150,6 +170,7 @@ export function PostWall({
   now: number
   t: Translator
   onOpenMedia: (media: MediaItem[], index: number) => void
+  onOpenArchive: (account: string | null) => void
 }) {
   const [account, setAccount] = useState<string | null>(null)
   const visible = useMemo(
@@ -205,6 +226,15 @@ export function PostWall({
             ))}
           </div>
         ) : null}
+        <button
+          type="button"
+          className="pill-button"
+          onClick={() => onOpenArchive(account)}
+          aria-haspopup="dialog"
+        >
+          <History aria-hidden="true" />
+          {t("feed.archive")}
+        </button>
       </SectionTitle>
 
       {isLoading ? (
@@ -242,5 +272,118 @@ export function PostWall({
         </div>
       )}
     </section>
+  )
+}
+
+/** The post archive's account filter, counting the month's posts per account. */
+export function PostArchiveFilter({
+  accounts,
+  account,
+  setAccount,
+  counts,
+  t,
+}: {
+  accounts: string[]
+  account: string | null
+  setAccount: (account: string | null) => void
+  counts: Record<string, number> | undefined
+  t: Translator
+}) {
+  if (accounts.length < 2) return null
+  const countFor = (handle: string) =>
+    counts ? (counts[handle.toLowerCase()] ?? 0) : null
+  const all = counts
+    ? accounts.reduce((sum, handle) => sum + (countFor(handle) || 0), 0)
+    : null
+  return (
+    <div className="segmented" role="group" aria-label={t("feed.filter")}>
+      <button
+        type="button"
+        aria-pressed={!account}
+        onClick={() => setAccount(null)}
+      >
+        {t("common.all")}
+        {all != null ? <small>{all}</small> : null}
+      </button>
+      {accounts.map((handle) => (
+        <button
+          type="button"
+          key={handle}
+          aria-pressed={account?.toLowerCase() === handle.toLowerCase()}
+          onClick={() => setAccount(handle)}
+        >
+          @{handle}
+          {counts ? <small>{countFor(handle)}</small> : null}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** The post archive dialog's body: one month of stored posts, newest first. */
+export function PostArchive({
+  archive,
+  isLoading,
+  error,
+  onRetry,
+  onLoadMore,
+  onJump,
+  avatarUrl,
+  locale,
+  now,
+  t,
+  onOpenMedia,
+}: {
+  archive: ArchiveSnapshot<Post> | null
+  isLoading: boolean
+  error: Error | null
+  onRetry: () => unknown
+  onLoadMore: () => unknown
+  onJump: (month: Date) => void
+  avatarUrl: string | null
+  locale: Locale
+  now: number
+  t: Translator
+  onOpenMedia: (media: MediaItem[], index: number) => void
+}) {
+  return (
+    <>
+      <ArchiveState
+        error={error}
+        onRetry={onRetry}
+        loading={!archive && isLoading}
+        empty={Boolean(archive) && !archive.items.length}
+        emptyTitle={t("feed.archiveEmpty")}
+        adjacent={archive?.adjacent}
+        onJump={onJump}
+        locale={locale}
+        t={t}
+      />
+      {archive?.items.length ? (
+        <div className="post-wall">
+          {archive.items.map((post) => (
+            <PostNote
+              key={post.id}
+              post={post}
+              avatarUrl={avatarUrl}
+              absoluteTime
+              locale={locale}
+              now={now}
+              t={t}
+              onOpenMedia={onOpenMedia}
+            />
+          ))}
+        </div>
+      ) : null}
+      {archive ? (
+        <ArchiveMore
+          hasNext={archive.hasNext}
+          isLoading={isLoading}
+          label={t("feed.moreInMonth")}
+          onLoadMore={onLoadMore}
+          t={t}
+        />
+      ) : null}
+    </>
   )
 }

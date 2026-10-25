@@ -45,13 +45,17 @@ snapshot health dot.
    time (or "time TBA" for date-only records), type, status, and automatic or
    confirmed provenance. Week navigation, a shortcut to the nearest week with
    events, more-event pagination, and the week's schedule image from X. A
-   Week/Month switch widens it to a month grid (compact entries, dots on
-   phones); picking a date opens that week.
-3. YouTube: the manually selected Featured video with its focus copy, then
-   reservations (soonest first) and recent uploads.
-4. Posts on X: roughly three days of posts from both accounts in a masonry
+   Month view dialog shows a month grid (compact entries, dots on phones) with
+   month navigation; picking a date lists that day's entries and can show its
+   week on the board.
+3. Posts on X: roughly three days of posts from both accounts in a masonry
    wall with an account filter, an image viewer, and engagement counts. When
-   the window is empty the most recent stored post is still shown.
+   the window is empty the most recent stored post is still shown. A Past
+   posts dialog browses every stored post month by month, with the same
+   account filter and per-account counts.
+4. YouTube: the manually selected Featured video with its focus copy, then
+   reservations (soonest first) and recent uploads. A Past videos dialog
+   browses stored videos month by month.
 5. Links: the resource directory, a milestone summary linking to the full
    journey page, and common hashtags.
 

@@ -115,6 +115,22 @@ export interface CalendarSnapshot {
   revision: number
 }
 
+/**
+ * One loaded prefix of a month archive (schedule, posts or videos), newest
+ * page last. Schedule pages also carry dayCounts; post pages carry the month's
+ * per-account counts, keyed by lowercase handle.
+ */
+export interface ArchiveSnapshot<T> {
+  items: T[]
+  adjacent: { previous: string | null; next: string | null }
+  total: number
+  page: number
+  hasNext: boolean
+  revision: number
+  dayCounts?: Record<string, number>
+  accountCounts?: Record<string, number>
+}
+
 export interface Dashboard {
   profile: Profile
   summary: {

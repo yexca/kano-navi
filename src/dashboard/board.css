@@ -1326,6 +1326,15 @@ a.guide-event:hover {
   color: #fff;
 }
 
+.month-day.is-selected {
+  background: var(--sky-wash);
+}
+
+.month-day.is-selected .month-day-number {
+  background: var(--ink);
+  color: hsl(var(--background));
+}
+
 .month-events {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1394,8 +1403,71 @@ a.month-event:hover {
   font-weight: 700;
 }
 
-.guide.is-month .empty-note {
-  margin-bottom: 12px;
+/* The month dialog: the grid, and the picked day's entries beside it. */
+.month-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+  gap: 20px;
+}
+
+.month-detail {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+}
+
+.month-detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.month-detail-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.month-detail-head span {
+  color: var(--soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.month-detail-empty {
+  margin: 0;
+  color: var(--soft);
+  font-size: 13px;
+}
+
+.month-detail .pill-button {
+  justify-self: start;
+}
+
+/* One column whatever width the week guide's day list takes. */
+.month-detail .guide-day-events,
+.month-detail .guide-day-more {
+  grid-row: auto;
+  grid-column: auto;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 900px) {
+  .month-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .month-detail {
+    position: static;
+  }
 }
 
 @media (max-width: 720px) {
@@ -2016,6 +2088,154 @@ a:hover .video-thumb img {
 @media (max-width: 560px) {
   .link-list {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------------------------------------------------- month dialogs */
+
+.archive-dialog {
+  width: min(1100px, calc(100vw - 24px));
+  max-width: none;
+  height: min(880px, calc(100dvh - 24px));
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: hsl(var(--background));
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+}
+
+.archive-dialog::backdrop {
+  background: rgb(20 12 18 / 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.archive-dialog-frame {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.archive-dialog-head {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px 16px;
+  padding: 26px 24px 14px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.archive-dialog-head::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 6px;
+  content: "";
+  background: var(--gingham);
+  opacity: 0.6;
+}
+
+.archive-dialog-heading {
+  min-width: 0;
+}
+
+.archive-dialog-heading h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.archive-dialog-bar {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.archive-month {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive-month-label {
+  min-width: 8.5em;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.archive-summary {
+  color: var(--soft);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.archive-dialog-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px 28px;
+}
+
+.archive-dialog-body > .inline-alert,
+.archive-dialog-body > .empty-note {
+  margin-bottom: 16px;
+}
+
+.archive-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.archive-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.archive-videos {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 20px;
+}
+
+@media (max-width: 900px) {
+  .archive-videos {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Phones: the dialog takes the whole screen. */
+@media (max-width: 640px) {
+  .archive-dialog {
+    width: 100vw;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .archive-dialog-head {
+    padding: 20px 16px 12px;
+  }
+
+  .archive-dialog-body {
+    padding: 16px 16px 24px;
+  }
+
+  .archive-month-label {
+    min-width: 0;
+    flex: 1 1 auto;
   }
 }
 

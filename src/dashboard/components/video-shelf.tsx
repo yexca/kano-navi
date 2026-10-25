@@ -1,5 +1,11 @@
-import type { Dashboard, Locale, Translator, Video } from "@/types"
-import { ArrowUpRight, Clock3, ImageOff, Play } from "lucide-react"
+import type {
+  ArchiveSnapshot,
+  Dashboard,
+  Locale,
+  Translator,
+  Video,
+} from "@/types"
+import { ArrowUpRight, Clock3, History, ImageOff, Play } from "lucide-react"
 
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
 import { ExternalLink, YouTubeLogo } from "@/site/links"
@@ -12,6 +18,7 @@ import {
   videoKindLabel,
   videoTime,
 } from "../format"
+import { ArchiveMore, ArchiveState } from "./archive-dialog"
 
 function Thumb({
   url,
@@ -41,11 +48,13 @@ function Thumb({
 
 function VideoWhen({
   video,
+  absoluteTime = false,
   locale,
   now,
   t,
 }: {
   video: Video
+  absoluteTime?: boolean
   locale: Locale
   now: number
   t: Translator
@@ -57,7 +66,7 @@ function VideoWhen({
       dateTime={time}
       title={`${formatStamp(time)} ${t("common.timezoneShort")}`}
     >
-      {video.isUpcoming
+      {video.isUpcoming || absoluteTime
         ? `${formatJapanDay(time, locale)} ${formatJapanTime(time)} ${t("common.timezoneShort")}`
         : formatRelative(time, locale, now)}
     </time>
@@ -66,11 +75,14 @@ function VideoWhen({
 
 function VideoRow({
   video,
+  absoluteTime = false,
   locale,
   now,
   t,
 }: {
   video: Video
+  /** Archives show the Japan date and time instead of "3 days ago". */
+  absoluteTime?: boolean
   locale: Locale
   now: number
   t: Translator
@@ -89,7 +101,13 @@ function VideoRow({
                 ? t("videos.reserved")
                 : videoKindLabel(video, t)}
             </span>
-            <VideoWhen video={video} locale={locale} now={now} t={t} />
+            <VideoWhen
+              video={video}
+              absoluteTime={absoluteTime}
+              locale={locale}
+              now={now}
+              t={t}
+            />
           </span>
           <span className="video-row-title">
             {cleanVideoTitle(video.title)}
@@ -160,6 +178,7 @@ export function VideoShelf({
   focus,
   channelUrl,
   isLoading,
+  onOpenArchive,
   locale,
   now,
   t,
@@ -169,6 +188,7 @@ export function VideoShelf({
   focus: Dashboard["focus"]
   channelUrl: string
   isLoading: boolean
+  onOpenArchive: () => void
   locale: Locale
   now: number
   t: Translator
@@ -203,6 +223,15 @@ export function VideoShelf({
         }
         title={t("videos.subtitle")}
       >
+        <button
+          type="button"
+          className="pill-button"
+          onClick={onOpenArchive}
+          aria-haspopup="dialog"
+        >
+          <History aria-hidden="true" />
+          {t("videos.archive")}
+        </button>
         <ExternalLink className="pill-button" href={`${channelUrl}/videos`}>
           {t("videos.openChannel")}
           <ArrowUpRight aria-hidden="true" />
@@ -238,5 +267,67 @@ export function VideoShelf({
         </div>
       )}
     </section>
+  )
+}
+
+/** The video archive dialog's body: one month of stored videos, newest first. */
+export function VideoArchive({
+  archive,
+  isLoading,
+  error,
+  onRetry,
+  onLoadMore,
+  onJump,
+  locale,
+  now,
+  t,
+}: {
+  archive: ArchiveSnapshot<Video> | null
+  isLoading: boolean
+  error: Error | null
+  onRetry: () => unknown
+  onLoadMore: () => unknown
+  onJump: (month: Date) => void
+  locale: Locale
+  now: number
+  t: Translator
+}) {
+  return (
+    <>
+      <ArchiveState
+        error={error}
+        onRetry={onRetry}
+        loading={!archive && isLoading}
+        empty={Boolean(archive) && !archive.items.length}
+        emptyTitle={t("videos.archiveEmpty")}
+        adjacent={archive?.adjacent}
+        onJump={onJump}
+        locale={locale}
+        t={t}
+      />
+      {archive?.items.length ? (
+        <ol className="video-list archive-videos">
+          {archive.items.map((video) => (
+            <VideoRow
+              key={video.id}
+              video={video}
+              absoluteTime
+              locale={locale}
+              now={now}
+              t={t}
+            />
+          ))}
+        </ol>
+      ) : null}
+      {archive ? (
+        <ArchiveMore
+          hasNext={archive.hasNext}
+          isLoading={isLoading}
+          label={t("videos.moreInMonth")}
+          onLoadMore={onLoadMore}
+          t={t}
+        />
+      ) : null}
+    </>
   )
 }

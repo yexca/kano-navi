@@ -150,3 +150,21 @@ JSON parser failures return `invalid_json` (400), excessive bodies return
 `request_too_large` (413), and unsupported encodings return 415. The global
 handler logs only a fixed event/code/status object, including unexpected errors;
 it never serializes error messages, stacks, raw bodies, headers or keys.
+
+## Bounded Public Archives
+
+`GET /api/posts?from=2026-10-01&to=2026-10-31&page=1&pageSize=30&account=kano_2525`
+and `GET /api/videos?from=2026-10-01&to=2026-10-31&page=1&pageSize=30` read
+the stored posts or videos of an inclusive range of at most 42 Japan dates,
+newest first, with 1–50 items per page (30 by default) and stable ID ties.
+A post's time is its publication; a video's is its scheduled start, or its
+publication without one. Undated videos are not listed. Both return sanitized
+`items` in the dashboard's post and video projections (resolved ready media,
+no raw JSON), `page`, `pageSize`, `total`, `totalPages`, `hasNext`,
+`revision` and `adjacent.previous` / `adjacent.next`, the nearest Japan
+dates outside the range that hold an item. The optional post `account`
+filter is one X handle, compared without case, and also narrows the totals and
+adjacent dates; `accountCounts` always counts the range's posts per lowercase
+handle. An invalid range returns 400 `invalid_range` and an invalid handle
+400 `invalid_account`. Reads are `no-store`, are not compressed and never
+fetch platforms. The board's month dialogs use them with the calendar.

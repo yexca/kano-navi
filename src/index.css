@@ -140,7 +140,8 @@
     background: color-mix(in oklab, var(--berry) 24%, transparent);
   }
 
-  body.has-lightbox {
+  body.has-lightbox,
+  body.has-sheet {
     overflow: hidden;
   }
 
