@@ -371,6 +371,9 @@ function RunDetail({ run, onChanged }: { run: Run; onChanged: () => void }) {
                 {run.fetchWindows[step].days
                   ? ` · ${t("admin.fetch.daysCount", { count: run.fetchWindows[step].days })}`
                   : ""}
+                {run.fetchWindows[step].count
+                  ? ` · ${t("admin.fetch.postsCount", { count: run.fetchWindows[step].count })}`
+                  : ""}
                 {run.fetchWindows[step].startDate
                   ? ` · ${run.fetchWindows[step].startDate} – ${run.fetchWindows[step].endDate}`
                   : ""}

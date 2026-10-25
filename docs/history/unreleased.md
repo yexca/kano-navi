@@ -25,6 +25,11 @@
   it is on another page or outside the filter, and returns to the automatic
   choice in one click. `GET /api/admin/videos` adds `featuredVideo`.
 - A post queued for extraction no longer shows "Queued" twice.
+- X date-range fetches work without `X_API_BEARER_TOKEN`, and a new "Latest
+  posts" fetch reads each account's newest 1 to 200 posts (20, 50, 100 or 200
+  in one click on the Posts page). `GET /api/admin/sources` adds `windows`,
+  the fetch modes each source can run now, and the badge says when windows
+  go through the timeline.
 
 </details>
 
@@ -57,6 +62,12 @@
   the last stored post, so several posts published between runs are no longer
   missed once they drop off the profile page. Reposts are skipped, and the
   logged-out profile page remains the fallback when the timeline fails.
+- Without `X_API_BEARER_TOKEN`, operator X fetch windows page the FxTwitter
+  timeline 100 posts at a time and store posts straight from it: a recent
+  window reads back to its first day instead of stopping at the last stored
+  post, and range and count windows resume from their own `x-timeline-window`
+  checkpoint. Posts already stored, the incremental cursor and the pending
+  queue are left unchanged, and timed workflows stay incremental.
 
 </details>
 

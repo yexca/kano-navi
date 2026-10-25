@@ -1,14 +1,49 @@
 import { useState } from "react"
-import { ArrowRight, CalendarRange, Download, KeyRound } from "lucide-react"
+import {
+  ArrowRight,
+  CalendarRange,
+  Download,
+  History,
+  KeyRound,
+} from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import { japanToday } from "@/admin/format"
-import type { FetchWindow } from "@/admin/types"
+import type { FetchWindow, Sources } from "@/admin/types"
 import { Badge, Button, Field, Panel } from "@/admin/ui"
-import { useAdmin, useResource } from "@/admin/use-admin-data"
+import { useAdmin } from "@/admin/use-admin-data"
 
 const presets = [1, 3, 7, 30] as const
+/** Newest posts per account; the server accepts 1 to 200. */
+const counts = [20, 50, 100, 200] as const
+
+/**
+ * How past windows are read: the source API with its credential, the public
+ * X timeline without it, or not at all.
+ */
+export function WindowBadge({
+  state,
+}: {
+  state: Sources["x"] | Sources["youtube"]
+}) {
+  const { t } = useAppSettings()
+  if (state.historyAvailable) {
+    return (
+      <Badge tone="leaf" icon={KeyRound}>
+        {t("admin.sources.historyOn")}
+      </Badge>
+    )
+  }
+  if (state.windows.includes("range")) {
+    return (
+      <Badge tone="leaf" icon={History}>
+        {t("admin.sources.historyTimeline")}
+      </Badge>
+    )
+  }
+  return <Badge icon={KeyRound}>{t("admin.sources.historyOff")}</Badge>
+}
 
 /** A Japan date `days` before `date`, both `YYYY-MM-DD`. */
 function shiftDate(date: string, days: number) {
@@ -19,24 +54,28 @@ function shiftDate(date: string, days: number) {
 
 /**
  * One-click fetch windows for one source. It starts the same `fetch` run as
- * the Sources page; the lists reload when the run finishes.
+ * the Sources page; the lists reload when the run finishes. The page loads
+ * `sources` once: reads are keyed by path, so a second load here would cancel
+ * the page's own.
  */
 export function QuickFetch({
   source,
+  sources,
   navigate,
 }: {
   source: "x" | "youtube"
+  sources: Sources | undefined
   navigate: ViewProps["navigate"]
 }) {
   const { t } = useAppSettings()
-  const { api, start, overview } = useAdmin()
-  const sources = useResource(() => api.sources(), [])
+  const { start, overview } = useAdmin()
   const today = japanToday()
   const [startDate, setStartDate] = useState(() => shiftDate(today, 6))
   const [endDate, setEndDate] = useState(today)
   const [busy, setBusy] = useState("")
-  const state = sources.data?.[source]
-  const historyAvailable = Boolean(state?.historyAvailable)
+  const state = sources?.[source]
+  const windows = state?.windows ?? []
+  const rangeAvailable = windows.includes("range")
   const running = Boolean(overview?.activeRun)
   const disabled = !state || state.skipped || running || busy !== ""
   const run = async (key: string, window: FetchWindow) => {
@@ -55,13 +94,7 @@ export function QuickFetch({
             {state.skipped ? (
               <Badge>{t("admin.overview.skipped")}</Badge>
             ) : null}
-            <Badge tone={historyAvailable ? "leaf" : "neutral"} icon={KeyRound}>
-              {t(
-                historyAvailable
-                  ? "admin.sources.historyOn"
-                  : "admin.sources.historyOff",
-              )}
-            </Badge>
+            <WindowBadge state={state} />
           </span>
         ) : null
       }
@@ -84,8 +117,37 @@ export function QuickFetch({
               </Button>
             ))}
           </div>
-          <p className="adm-field-hint">{t("admin.fetch.hint.recent")}</p>
+          <p className="adm-field-hint">
+            {t(
+              rangeAvailable
+                ? "admin.fetch.hint.recentAll"
+                : "admin.fetch.hint.recent",
+            )}
+          </p>
         </div>
+        {windows.includes("count") ? (
+          <div className="adm-quick-group">
+            <span className="adm-field-label">
+              {t("admin.quickFetch.latest")}
+            </span>
+            <div className="adm-actions">
+              {counts.map((count) => (
+                <Button
+                  key={count}
+                  size="sm"
+                  busy={busy === `count-${count}`}
+                  disabled={disabled}
+                  onClick={() =>
+                    run(`count-${count}`, { mode: "count", count })
+                  }
+                >
+                  {t("admin.fetch.postsCount", { count })}
+                </Button>
+              ))}
+            </div>
+            <p className="adm-field-hint">{t("admin.fetch.hint.count")}</p>
+          </div>
+        ) : null}
         <form
           className="adm-quick-group"
           onSubmit={(event) => {
@@ -120,12 +182,12 @@ export function QuickFetch({
               variant="primary"
               icon={CalendarRange}
               busy={busy === "range"}
-              disabled={disabled || !historyAvailable}
+              disabled={disabled || !rangeAvailable}
             >
               {t("admin.quickFetch.range")}
             </Button>
           </div>
-          {state && !historyAvailable ? (
+          {state && !rangeAvailable ? (
             <p className="adm-inline-error">
               <KeyRound aria-hidden />
               {t(`admin.fetch.needsKey.${source}`)}

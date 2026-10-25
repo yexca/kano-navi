@@ -33,6 +33,17 @@ returned as one time-ordered feed. Image-only posts are retained as candidates
 as long as they have a publication time and a media URL. `X_HANDLE` remains a
 single-account compatibility fallback.
 
+Operator fetch windows read the same timeline differently (see
+[Fetch windows](workflows.md#fetch-windows-and-historical-backfill)): without
+`X_API_BEARER_TOKEN`, `recent` and `range` windows, and `count` windows
+always, request pages of 100 and store each own status from the page itself.
+The adapter maps FxTwitter's `created_timestamp`, `text`, counters and
+`media` (a photo's URL, or a video's or GIF's thumbnail, in post order, also
+inside a quoted status) onto the same post fields the detail path fills, and
+keeps only the author's name and handle of the repeated profile in
+`raw_json`. Such windows leave stored posts, the cursor and the pending queue
+unchanged.
+
 Both discovery hosts and the detail host share one client: a fixed timeout and
 User-Agent, a 4 MiB response limit, rejected redirects, typed error codes, and
 no credentials or personal data in URLs. A failed source keeps stored posts and

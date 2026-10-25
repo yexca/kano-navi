@@ -247,13 +247,15 @@ function VideoList() {
 
 export function VideosView({ navigate }: ViewProps) {
   const { t } = useAppSettings()
+  const { api } = useAdmin()
+  const sources = useResource(() => api.sources(), [])
   return (
     <div className="adm-view">
       <PageHeader
         title={t("admin.videos.title")}
         description={t("admin.videos.description")}
       />
-      <QuickFetch source="youtube" navigate={navigate} />
+      <QuickFetch source="youtube" sources={sources.data} navigate={navigate} />
       <Panel>
         <VideoList />
       </Panel>

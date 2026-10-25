@@ -48,9 +48,9 @@ func (m *memoryStore) OldestSourceTimestamp(context.Context, string, string) (*s
 	return &m.oldest, nil
 }
 
-func (m *memoryStore) WriteHistoryPage(_ context.Context, page Page) (int, error) {
+func (m *memoryStore) WriteHistoryPage(_ context.Context, page Page) (Written, error) {
 	if m.fail != nil {
-		return 0, m.fail
+		return Written{}, m.fail
 	}
 	m.pages = append(m.pages, page)
 	if m.states == nil {
@@ -60,8 +60,12 @@ func (m *memoryStore) WriteHistoryPage(_ context.Context, page Page) (int, error
 	var metadata map[string]any
 	raw, _ := json.Marshal(map[string]any{"window": page.Window, "discovered": page.Discovered})
 	_ = json.Unmarshal(raw, &metadata)
-	m.states[page.Source+"-window/"+page.CheckpointKey] = State{Found: true, CursorID: page.Next, Metadata: metadata}
-	return len(page.ScheduleCandidates), nil
+	checkpoint := page.Checkpoint
+	if checkpoint == "" {
+		checkpoint = page.Source + "-window"
+	}
+	m.states[checkpoint+"/"+page.CheckpointKey] = State{Found: true, CursorID: page.Next, Metadata: metadata}
+	return Written{Posts: len(page.Posts), ScheduleAssets: len(page.ScheduleCandidates)}, nil
 }
 
 func fixedNow() time.Time { return time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC) }
@@ -83,6 +87,10 @@ func TestParseAndResolveWindows(t *testing.T) {
 		`{"mode":"range","startDate":"2026-02-30","endDate":"2026-03-01"}`: "date is invalid",
 		`{"mode":"range","startDate":"2026-03-02","endDate":"2026-03-01"}`: "date range must cover 1 to 365 days",
 		`{"mode":"range","startDate":"2025-01-01","endDate":"2026-03-01"}`: "date range must cover 1 to 365 days",
+		`{"mode":"count"}`:              "count must be an integer from 1 to 200",
+		`{"mode":"count","count":201}`:  "count must be an integer from 1 to 200",
+		`{"mode":"count","count":2.5}`:  "count must be an integer from 1 to 200",
+		`{"mode":"count","count":"20"}`: "count must be an integer from 1 to 200",
 	} {
 		if _, err := Parse(json.RawMessage(body)); err == nil || err.Error() != message || !IsValidation(err) {
 			t.Fatalf("%s => %v", body, err)
@@ -108,6 +116,17 @@ func TestParseAndResolveWindows(t *testing.T) {
 	resolved, err = before.Resolve("2026-03-05T00:00:00.000Z", fixedNow())
 	if err != nil || resolved.StartTime != "2026-03-03T00:00:00.000Z" || resolved.EndTime != "2026-03-05T00:00:00.000Z" {
 		t.Fatalf("before=%+v err=%v", resolved, err)
+	}
+	// A count window has no bounds and its own checkpoint key.
+	count, err := Parse(json.RawMessage(`{"mode":"count","count":50,"days":7}`))
+	if err != nil || count != (Window{Mode: ModeCount, Count: 50}) {
+		t.Fatalf("count=%+v err=%v", count, err)
+	}
+	if resolved, err = count.Resolve("", fixedNow()); err != nil || resolved.StartTime != "" || resolved.EndTime != "" {
+		t.Fatalf("count resolved=%+v err=%v", resolved, err)
+	}
+	if count.checkpointKey(testAccount) == (Window{Mode: ModeCount, Count: 20}).checkpointKey(testAccount) {
+		t.Fatal("count windows share a checkpoint")
 	}
 	// Keys match the hashes earlier releases stored, so their checkpoints resume.
 	for want, selection := range map[string]Window{

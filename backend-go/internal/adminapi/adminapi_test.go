@@ -93,7 +93,15 @@ func newConsole(t *testing.T, mode, password string, steps *gatedSteps) *console
 		SkippedSteps:     []string{"media"},
 		XHandles:         []string{"synthetic_one"},
 		HistoryAvailable: func(source string) bool { return source == "youtube" },
-		Now:              func() time.Time { return time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC) },
+		// As in production without X_API_BEARER_TOKEN: X windows other than a
+		// backfill page the public timeline.
+		WindowAvailable: func(source, mode string) bool {
+			if source == "x" {
+				return mode != "before"
+			}
+			return mode != "count"
+		},
+		Now: func() time.Time { return time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC) },
 	})
 	return &console{handler: handler, steps: steps, store: store}
 }
@@ -365,6 +373,9 @@ func TestSourceFetchWindows(t *testing.T) {
 		youtube["push"].(map[string]any)["enabled"] != false {
 		t.Fatalf("status=%d %v", code, payload)
 	}
+	if fmt.Sprint(x["windows"]) != "[recent range count]" || fmt.Sprint(youtube["windows"]) != "[recent before range]" {
+		t.Fatalf("windows x=%v youtube=%v", x["windows"], youtube["windows"])
+	}
 	for body, message := range map[string]string{
 		`{"kind":"fetch","source":"x"}`:                                                                           "fetch window is required",
 		`{"kind":"fetch","source":"x","window":{"mode":"recent","days":0}}`:                                       "days must be an integer from 1 to 365",
@@ -373,6 +384,8 @@ func TestSourceFetchWindows(t *testing.T) {
 		`{"kind":"fetch","source":"x","window":{"mode":"range","startDate":"2026-02-30","endDate":"2026-03-01"}}`: "date is invalid",
 		`{"kind":"fetch","source":"x","window":{"mode":"range","startDate":"2026-03-02","endDate":"2026-03-01"}}`: "date range must cover 1 to 365 days",
 		`{"kind":"fetch","source":"x","window":{"mode":"before","days":7}}`:                                       "X_API_BEARER_TOKEN is required for history search",
+		`{"kind":"fetch","source":"x","window":{"mode":"count","count":0}}`:                                       "count must be an integer from 1 to 200",
+		`{"kind":"fetch","source":"youtube","window":{"mode":"count","count":20}}`:                                "count windows are available for X only",
 	} {
 		if code, payload := c.call(t, "POST", "/api/admin/runs", body); code != 400 || payload["message"] != message {
 			t.Fatalf("%s => %d %v", body, code, payload)
@@ -387,6 +400,15 @@ func TestSourceFetchWindows(t *testing.T) {
 	past := c.waitForRun(t, runID(t, payload), "completed")
 	if window := past["fetchWindows"].(map[string]any)["youtube"].(map[string]any); window["mode"] != "range" || window["startDate"] != "2026-03-01" || window["endDate"] != "2026-03-07" || window["days"] != nil {
 		t.Fatalf("past window=%v", window)
+	}
+	// X range and count windows need no credential: the timeline serves them.
+	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"fetch","source":"x","window":{"mode":"count","count":20}}`)
+	if code != 202 {
+		t.Fatalf("count=%d %v", code, payload)
+	}
+	latest := c.waitForRun(t, runID(t, payload), "completed")
+	if window := latest["fetchWindows"].(map[string]any)["x"].(map[string]any); window["mode"] != "count" || window["count"] != float64(20) || window["days"] != nil {
+		t.Fatalf("count window=%v", window)
 	}
 	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"fetch","source":"youtube","window":{"mode":"recent","days":21}}`)
 	if code != 202 {

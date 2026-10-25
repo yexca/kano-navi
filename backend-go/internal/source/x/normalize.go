@@ -23,7 +23,8 @@ func Normalize(payload map[string]any, fallbackID, account string) *Post {
 	if text == "" {
 		text = stringValue(payload["description"])
 	}
-	published := parseDate(first(payload, "date_epoch", "dateEpoch", "date", "created_at"))
+	// FxTwitter's created_at is the legacy Twitter format; its epoch comes first.
+	published := parseDate(first(payload, "date_epoch", "dateEpoch", "created_timestamp", "date", "created_at"))
 	media := mediaURLs(payload, 0)
 	if id == "" || published == "" || (text == "" && len(media) == 0) {
 		return nil
@@ -122,6 +123,9 @@ func mediaURLs(payload map[string]any, depth int) []string {
 			}
 		}
 	}
+	for _, u := range fxMediaURLs(object(payload["media"])) {
+		add(u)
+	}
 	for _, k := range []string{"qrt", "quotedTweet", "quoted_tweet", "quote"} {
 		if m := object(payload[k]); len(m) > 0 {
 			out = append(out, mediaURLs(m, depth+1)...)
@@ -137,4 +141,26 @@ func mediaURLs(payload map[string]any, depth int) []string {
 		}
 	}
 	return uniq
+}
+
+// fxMediaURLs reads FxTwitter's media object in post order: a photo's image,
+// or a video's or GIF's thumbnail, which is the image the board can show.
+func fxMediaURLs(media map[string]any) []string {
+	items, _ := media["all"].([]any)
+	if items == nil {
+		photos, _ := media["photos"].([]any)
+		videos, _ := media["videos"].([]any)
+		items = append(append([]any{}, photos...), videos...)
+	}
+	out := []string{}
+	for _, item := range items {
+		m := object(item)
+		switch stringValue(m["type"]) {
+		case "photo":
+			out = append(out, stringValue(m["url"]))
+		case "video", "gif":
+			out = append(out, stringValue(m["thumbnail_url"]))
+		}
+	}
+	return out
 }

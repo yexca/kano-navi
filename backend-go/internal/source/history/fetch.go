@@ -57,20 +57,34 @@ type Backfill struct {
 // Page is one API page and the checkpoint that must commit with it.
 type Page struct {
 	Source, Account, CheckpointKey string
-	Window                         Window
-	Next                           string
-	Discovered                     int
-	Posts                          []xsource.Post
-	ScheduleCandidates             []xsource.ScheduleCandidate
-	Videos                         []ytsource.Video
-	Backfill                       *Backfill
+	// Checkpoint names the sync_state source of the continuation; empty means
+	// Source+"-window". Timeline windows keep their own, because a timeline
+	// cursor is not an API next_token.
+	Checkpoint         string
+	Window             Window
+	Next               string
+	Discovered         int
+	Posts              []xsource.Post
+	ScheduleCandidates []xsource.ScheduleCandidate
+	Videos             []ytsource.Video
+	Backfill           *Backfill
+	// KeepStored leaves posts that are already stored untouched, together with
+	// their media links and schedule candidates.
+	KeepStored bool
+}
+
+// Written is what one committed page stored.
+type Written struct {
+	// Posts counts the X posts written; ScheduleAssets the schedule candidates
+	// registered with them.
+	Posts, ScheduleAssets int
 }
 
 // Store persists pages atomically with their continuation.
 type Store interface {
 	SyncState(ctx context.Context, source, account string) (State, error)
 	OldestSourceTimestamp(ctx context.Context, source, account string) (*string, error)
-	WriteHistoryPage(ctx context.Context, page Page) (written int, err error)
+	WriteHistoryPage(ctx context.Context, page Page) (Written, error)
 }
 
 type Options struct {
@@ -109,6 +123,9 @@ type Fetcher struct {
 	Store   Store
 	Options Options
 	Now     func() time.Time
+	// Timeline serves X windows from the public FxTwitter timeline; nil
+	// leaves X windows to the official API alone.
+	Timeline Timeline
 }
 
 func NewFetcher(store Store, options Options, transport http.RoundTripper) *Fetcher {
@@ -194,6 +211,9 @@ func (f *Fetcher) Fetch(ctx context.Context, request Request) (Result, error) {
 	input, err := request.Window.Normalize()
 	if err != nil {
 		return Result{}, err
+	}
+	if input.Mode == ModeCount {
+		return Result{}, invalid("count windows read the public X timeline")
 	}
 	now := time.Now()
 	if f.Now != nil {
@@ -335,7 +355,7 @@ func (f *Fetcher) Fetch(ctx context.Context, request Request) (Result, error) {
 		}
 		if request.Source == SourceX {
 			result.Count += len(page.Posts)
-			result.ScheduleAssets += written
+			result.ScheduleAssets += written.ScheduleAssets
 		} else {
 			result.Count += len(page.Videos)
 		}

@@ -102,6 +102,7 @@ func runStandalone(cfg config.Config) int {
 			SkippedSteps:     run.skipped,
 			XHandles:         run.xOptions.Handles,
 			HistoryAvailable: run.steps.History.Available,
+			WindowAvailable:  run.steps.History.WindowAvailable,
 		}),
 		Static: httpapi.NewStaticSite(cfg.StaticDirectory),
 		MCP:    standaloneMCP(store, manager),
@@ -190,15 +191,19 @@ func newPipeline(store *sqlite.Store, key string) pipeline {
 	skip[jobs.StepLive] = skip["youtube"]
 	xOptions := xsource.OptionsFromEnv()
 	youtubeOptions := ytsource.OptionsFromEnv()
+	xAdapter := xsource.NewAdapter(xsource.NewClient(&http.Client{Timeout: 10 * time.Second}), xOptions)
+	// X windows page the same public timeline when X_API_BEARER_TOKEN is absent.
+	fetcher := history.NewFetcher(store, history.OptionsFromEnv(os.Getenv), nil)
+	fetcher.Timeline = xAdapter
 	steps := &workflow.SourceSteps{
 		Store:    store,
 		Skip:     skip,
-		X:        &workflow.XRecentExecutor{Store: store, Adapter: xsource.NewAdapter(xsource.NewClient(&http.Client{Timeout: 10 * time.Second}), xOptions), Options: xOptions},
+		X:        &workflow.XRecentExecutor{Store: store, Adapter: xAdapter, Options: xOptions},
 		Youtube:  ytsource.NewAdapter(nil, youtubeOptions),
 		Media:    mediadownload.NewClient(nil),
 		Schedule: scheduleStep{schedule.New(store, schedule.Options{SecretsKey: key})},
 		History: &workflow.HistorySource{
-			Fetcher:      history.NewFetcher(store, history.OptionsFromEnv(os.Getenv), nil),
+			Fetcher:      fetcher,
 			Store:        store,
 			XToken:       strings.TrimSpace(os.Getenv("X_API_BEARER_TOKEN")),
 			YoutubeKey:   strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY")),

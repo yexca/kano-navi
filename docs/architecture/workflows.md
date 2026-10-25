@@ -3,19 +3,23 @@
 ## Fetch Windows and Historical Backfill
 
 The console's Sources page offers `recent`, `before`, and `range` fetches for
-X and YouTube. The Posts (X) and Videos (YouTube) pages repeat the common ones
-as shortcuts: one-click `recent` windows of 1, 3, 7 or 30 days and a `range`
-form, which needs the source's official API credential. `POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }`
+X and YouTube, and `count` fetches for X. The Posts (X) and Videos (YouTube)
+pages repeat the common ones as shortcuts: one-click `recent` windows of 1, 3,
+7 or 30 days, a `range` form, and for X one-click `count` windows of 20, 50,
+100 or 200 posts. `POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }`
 plus `"window": { "mode": "recent", "days": 30 }`,
-`"window": { "mode": "before", "days": 30 }`, or
-`"window": { "mode": "range", "startDate": "2026-09-01", "endDate": "2026-09-30" }`
-starts one.
-Days must be integers from 1 to 365; date ranges cover at most 365 days. Both
+`"window": { "mode": "before", "days": 30 }`,
+`"window": { "mode": "range", "startDate": "2026-09-01", "endDate": "2026-09-30" }`,
+or `"window": { "mode": "count", "count": 50 }` starts one.
+Days must be integers from 1 to 365; date ranges cover at most 365 days; a
+count is an integer from 1 to 200 per account and is accepted for X only. Both
 selected dates are inclusive in `Asia/Tokyo`; internal timestamp bounds are
 start-inclusive and end-exclusive. `before` uses the oldest persisted post
 per X account, or oldest published YouTube video, rather than a UI page's
 limited list. With no records, fetch a date range first. X accounts without
 records are skipped and reported while other accounts can backfill.
+`GET /api/admin/sources` lists the modes each source can run now as
+`windows`.
 
 These requests run the chosen source and media stages through the existing
 single-flight queue; opening a page does not fetch platforms. They do not run
@@ -23,14 +27,29 @@ schedule extraction on historical posts or overwrite the regular incremental
 source cursor. `GET /api/admin/sources` reports oldest timestamps and
 credential-availability flags only, never keys.
 
-Without official API credentials, recent X fetches filter IDs discoverable on
-the public timeline (or the profile page fallback), and recent YouTube fetches
-filter the RSS entries. A chosen
-date window cannot enlarge these public sources' finite coverage, so the run
-is marked partial and reports the limitation. Historical controls require
+Without `X_API_BEARER_TOKEN`, X `recent` and `range` windows page the public
+FxTwitter timeline (`api.fxtwitter.com/2/profile/<handle>/statuses`, 100
+statuses per page) newest first, and `count` windows always do, with or
+without the token. Each status is stored from the timeline page itself,
+without vxtwitter detail requests or the incremental pending queue. Paging
+never reads or moves the incremental cursor: a `recent` or `range` window
+continues until a page's oldest own status predates the window, and a `count`
+window stops after the account's newest `count` own statuses, whatever their
+age. Reposts are skipped, replies are not listed, and statuses outside a date
+window are ignored. Posts that are already stored keep the text, media and
+schedule candidate the detail path wrote, so a window only fills gaps and
+does not change extraction fingerprints. A status the timeline lists without
+usable content is reported as `<id>: x_invalid_response`; a timeline that
+ends before the window's start (or before `count` statuses) reports
+`x_timeline_end`. Timeline pages use the X source client's protections: a
+10-second timeout, a 4 MiB response limit, rejected redirects and controlled
+`x_*` error codes. Recent YouTube fetches without `YOUTUBE_API_KEY` filter the
+RSS entries; a chosen date window cannot enlarge that finite coverage, so the
+run is marked partial and reports the limitation. `before` windows require
 environment-only `X_API_BEARER_TOKEN` (with full-archive access) or
-`YOUTUBE_API_KEY`. These credentials are sent in HTTP headers, never URLs or
-SQLite. The adapter in `backend-go/internal/source/history` uses
+`YOUTUBE_API_KEY`, as YouTube `range` windows do. These credentials are sent
+in HTTP headers, never URLs or SQLite. The adapter in
+`backend-go/internal/source/history` uses
 [X full-archive search](https://docs.x.com/x-api/posts/search/quickstart/full-archive-search)
 and [YouTube date-window search](https://developers.google.com/youtube/v3/docs/search/list).
 Source access, quota, and search coverage still depend on the platform. YouTube
@@ -39,10 +58,14 @@ use narrower date ranges for dense archives. This feature does not promise a
 complete export of the platform's archive.
 
 `SOURCE_HISTORY_MAX_PAGES` defaults to four pages per source/account per run
-(1–20). X also shares `X_MAX_STATUS_REQUESTS` across accounts, including failed
+(1–20), for API and timeline pages alike. X also shares
+`X_MAX_STATUS_REQUESTS` across accounts as a page budget, including failed
 requests. Each successful page and its continuation checkpoint are stored
-atomically in `sync_state` (`x-window`/`youtube-window`). Repeating an interrupted
-range resumes its next page; completed ranges can be refreshed. Recent runs
+atomically in `sync_state` (`x-window`/`youtube-window`, and
+`x-timeline-window` for timeline cursors, which are not API next tokens).
+Repeating an interrupted window resumes its next page; completed ranges can be
+refreshed. When a resumed timeline cursor fails, the window starts again from
+the newest page, in the same run if the budget allows. Recent runs
 finish a still-relevant pending interval before opening the next rolling
 interval. `before` runs finish pending pages before moving farther back, using
 `x-backfill`/`youtube-backfill` search boundaries. A completed empty interval
@@ -57,7 +80,10 @@ Saved workflows have `sourceLookbackDays: { x: 7, youtube: 14 }`, persisted in
 the additive `workflows.source_lookback_json` column. Existing workflows receive
 these defaults without clearing settings, snapshots, or timers. Manual and
 scheduled workflow runs both use rolling recent windows; the workflow editor
-saves each source's days independently of the timer interval. CLI/MCP full sync
+saves each source's days independently of the timer interval. A source API
+serves that window only with its credential; without `X_API_BEARER_TOKEN` a
+saved workflow's X step stays incremental and never pages the timeline window
+path, which serves operator fetches only. CLI/MCP full sync
 without fetch windows retains the existing incremental behavior described above.
 
 ## Modular Steps and Timers

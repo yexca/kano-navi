@@ -1,6 +1,8 @@
 // Package history fetches bounded past windows of source records through the
-// official X and YouTube APIs. Windows are inclusive Japan dates, pages are
-// bounded, and every page commits together with its continuation checkpoint.
+// official X and YouTube APIs, or through the public FxTwitter timeline for X
+// windows without the API credential. Windows are inclusive Japan dates (or a
+// per-account count), pages are bounded, and every page commits together with
+// its continuation checkpoint.
 package history
 
 import (
@@ -18,6 +20,11 @@ const (
 	ModeRecent = "recent"
 	ModeBefore = "before"
 	ModeRange  = "range"
+	// ModeCount reads each X account's newest Count statuses from its
+	// timeline; it has no time bounds.
+	ModeCount = "count"
+	// MaxCount bounds a count window per account.
+	MaxCount = 200
 
 	day = 24 * time.Hour
 	// isoLayout matches the timestamps earlier releases stored in checkpoints.
@@ -35,10 +42,12 @@ func invalid(message string) error { return &ValidationError{Message: message} }
 var ErrNoRecords = invalid("no stored records to backfill; select a date range first")
 
 // Window is an operator-selected fetch window. StartTime and EndTime are the
-// resolved half-open bounds and stay empty until Resolve.
+// resolved half-open bounds and stay empty until Resolve, and always for a
+// count window.
 type Window struct {
 	Mode      string `json:"mode"`
 	Days      int    `json:"days,omitempty"`
+	Count     int    `json:"count,omitempty"`
 	StartDate string `json:"startDate,omitempty"`
 	EndDate   string `json:"endDate,omitempty"`
 	StartTime string `json:"startTime,omitempty"`
@@ -63,7 +72,9 @@ func japanMidnight(value string) (time.Time, error) {
 
 func jsonNull(raw json.RawMessage) bool { return len(raw) == 0 || string(raw) == "null" }
 
-// Parse validates {mode, days} or {mode, startDate, endDate}.
+var errCount = invalid("count must be an integer from 1 to " + strconv.Itoa(MaxCount))
+
+// Parse validates {mode, days}, {mode, startDate, endDate} or {mode, count}.
 func Parse(raw json.RawMessage) (Window, error) {
 	var input map[string]json.RawMessage
 	if jsonNull(raw) || json.Unmarshal(raw, &input) != nil || input == nil {
@@ -84,6 +95,12 @@ func Parse(raw json.RawMessage) (Window, error) {
 			return Window{}, invalid("dates must use YYYY-MM-DD")
 		}
 		return (Window{Mode: mode, StartDate: startDate, EndDate: endDate}).Normalize()
+	case ModeCount:
+		var count float64
+		if jsonNull(input["count"]) || json.Unmarshal(input["count"], &count) != nil || math.Trunc(count) != count || count < 1 || count > MaxCount {
+			return Window{}, errCount
+		}
+		return Window{Mode: mode, Count: int(count)}, nil
 	}
 	return Window{}, invalid("unsupported fetch mode")
 }
@@ -110,16 +127,25 @@ func (w Window) Normalize() (Window, error) {
 			return Window{}, invalid("date range must cover 1 to 365 days")
 		}
 		return Window{Mode: w.Mode, StartDate: w.StartDate, EndDate: w.EndDate}, nil
+	case ModeCount:
+		if w.Count < 1 || w.Count > MaxCount {
+			return Window{}, errCount
+		}
+		return Window{Mode: w.Mode, Count: w.Count}, nil
 	}
 	return Window{}, invalid("unsupported fetch mode")
 }
 
 // Resolve computes the half-open bounds. Range dates include both selected
-// Japan days; a backfill ends strictly before the oldest stored record.
+// Japan days; a backfill ends strictly before the oldest stored record. A
+// count window has no bounds to resolve.
 func (w Window) Resolve(oldest string, now time.Time) (Window, error) {
 	window, err := w.Normalize()
 	if err != nil {
 		return Window{}, err
+	}
+	if window.Mode == ModeCount {
+		return window, nil
 	}
 	if window.Mode == ModeRange {
 		start, _ := japanMidnight(window.StartDate)
@@ -159,6 +185,8 @@ func (w Window) checkpointKey(account string) string {
 		start, _ := json.Marshal(w.StartDate)
 		end, _ := json.Marshal(w.EndDate)
 		selection = `{"mode":"range","startDate":` + string(start) + `,"endDate":` + string(end) + `}`
+	case ModeCount:
+		selection = `{"mode":"count","count":` + strconv.Itoa(w.Count) + `}`
 	}
 	sum := sha256.Sum256([]byte(selection))
 	return account + ":" + hex.EncodeToString(sum[:])[:24]
@@ -186,6 +214,9 @@ func windowFromMetadata(value any) (Window, bool) {
 	var window Window
 	if json.Unmarshal(raw, &window) != nil {
 		return Window{}, false
+	}
+	if window.Mode == ModeCount {
+		return window, window.Count > 0
 	}
 	if _, ok := parseTime(window.StartTime); !ok {
 		return Window{}, false

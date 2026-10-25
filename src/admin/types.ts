@@ -24,8 +24,10 @@ export type StepProgress =
   | "cancelled"
 
 export interface FetchWindow {
-  mode: "recent" | "before" | "range"
+  /** "count" reads each X account's newest posts from its timeline. */
+  mode: "recent" | "before" | "range" | "count"
   days?: number
+  count?: number
   startDate?: string
   endDate?: string
 }
@@ -132,12 +134,16 @@ export interface LiveProbeStatus {
 export interface Sources {
   x: {
     skipped: boolean
+    /** The official API credential is configured. */
     historyAvailable: boolean
+    /** The window modes the server can run now. */
+    windows: FetchWindow["mode"][]
     accounts: { account: string; oldest: string | null }[]
   }
   youtube: {
     skipped: boolean
     historyAvailable: boolean
+    windows: FetchWindow["mode"][]
     oldest: string | null
     push: PushStatus
     liveProbe: LiveProbeStatus

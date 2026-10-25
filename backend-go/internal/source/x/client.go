@@ -25,6 +25,9 @@ const (
 	// stored post, so later pages are requested only to close a gap.
 	timelinePageSize = 20
 	maxTimelinePages = 10
+	// MaxTimelinePageSize is FxTwitter's largest page, which operator windows
+	// request so a long window needs few pages.
+	MaxTimelinePageSize = 100
 )
 
 type ErrorCode string
@@ -117,10 +120,10 @@ func (c *Client) Profile(ctx context.Context, account string) ([]byte, error) {
 	return c.request(ctx, profileHost, "/"+url.PathEscape(account), nil)
 }
 
-// Timeline reads one newest-first page of the account's statuses. An empty
-// cursor requests the first page.
-func (c *Client) Timeline(ctx context.Context, account, cursor string) ([]byte, error) {
-	query := url.Values{"count": {strconv.Itoa(timelinePageSize)}}
+// Timeline reads one newest-first page of up to count of the account's
+// statuses. An empty cursor requests the first page.
+func (c *Client) Timeline(ctx context.Context, account, cursor string, count int) ([]byte, error) {
+	query := url.Values{"count": {strconv.Itoa(min(max(count, 1), MaxTimelinePageSize))}}
 	if cursor != "" {
 		query.Set("cursor", cursor)
 	}

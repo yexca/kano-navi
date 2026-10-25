@@ -6,11 +6,14 @@ import (
 	"strings"
 
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
+	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
 // HistorySource runs operator-selected windows through the official source
-// APIs. Credentials come from the environment and never enter a result.
+// APIs, or X windows through the public FxTwitter timeline when the API
+// credential is absent. Credentials come from the environment and never enter
+// a result.
 type HistorySource struct {
 	Fetcher            *history.Fetcher
 	Store              *sqlite.Store
@@ -21,7 +24,8 @@ type HistorySource struct {
 	RequestLimit int
 }
 
-// Available reports whether a source can search past windows.
+// Available reports whether a source's official API can search past windows.
+// Saved workflows turn their lookback into a recent window only then.
 func (h *HistorySource) Available(source string) bool {
 	if h == nil || h.Fetcher == nil || h.Store == nil {
 		return false
@@ -30,6 +34,28 @@ func (h *HistorySource) Available(source string) bool {
 		return strings.TrimSpace(h.XToken) != ""
 	}
 	return source == history.SourceYoutube && strings.TrimSpace(h.YoutubeKey) != ""
+}
+
+// timeline reports whether an X window pages the public timeline: a count
+// window always does, recent and range windows without the API credential.
+// Backfills have no timeline fallback.
+func (h *HistorySource) timeline(mode string) bool {
+	if h == nil || h.Fetcher == nil || h.Fetcher.Timeline == nil || h.Store == nil {
+		return false
+	}
+	return mode == history.ModeCount || (mode != history.ModeBefore && !h.Available(history.SourceX))
+}
+
+// WindowAvailable reports whether a step can serve a window mode now. A recent
+// window always can: without a credential or timeline it stays incremental.
+func (h *HistorySource) WindowAvailable(source, mode string) bool {
+	switch {
+	case mode == history.ModeRecent:
+		return source == history.SourceX || source == history.SourceYoutube
+	case source == history.SourceX:
+		return h.timeline(mode) || (mode != history.ModeCount && h.Available(source))
+	}
+	return source == history.SourceYoutube && mode != history.ModeCount && h.Available(source)
 }
 
 // historyMessage keeps controlled codes and operator-facing validation text;
@@ -56,11 +82,20 @@ func stepStatus(messages []string) string {
 	return "succeeded"
 }
 
-// FetchX searches every configured account. One account's failure keeps the
-// others; the rotation spreads a short request budget across runs.
+// FetchX searches every configured account, through the API or the public
+// timeline. One account's failure keeps the others; the rotation spreads a
+// short request budget across runs.
 func (h *HistorySource) FetchX(ctx context.Context, window history.Window) (AttemptResult, error) {
-	if !h.Available(history.SourceX) {
+	timeline := h.timeline(window.Mode)
+	if !timeline && window.Mode == history.ModeCount {
+		return failedResult("count windows need the public X timeline"), nil
+	}
+	if !timeline && !h.Available(history.SourceX) {
 		return failedResult("X_API_BEARER_TOKEN is required for history search"), nil
+	}
+	fetch, discovery := h.Fetcher.Fetch, "api"
+	if timeline {
+		fetch, discovery = h.Fetcher.FetchTimeline, xsource.DiscoveryTimeline
 	}
 	if len(h.Handles) == 0 {
 		return AttemptResult{}, NewStepError("x_no_accounts", ErrValidation)
@@ -107,7 +142,7 @@ func (h *HistorySource) FetchX(ctx context.Context, window history.Window) (Atte
 		}
 		left := len(ordered) - index
 		limit := (remaining + left - 1) / left
-		result, fetchErr := h.Fetcher.Fetch(ctx, history.Request{
+		result, fetchErr := fetch(ctx, history.Request{
 			Source: history.SourceX, Account: handle, Credential: h.XToken, Window: window,
 			PageLimit: min(limit, h.Fetcher.Options.MaxPages),
 		})
@@ -142,6 +177,7 @@ func (h *HistorySource) FetchX(ctx context.Context, window history.Window) (Atte
 	return AttemptResult{Status: stepStatus(messages), Result: map[string]any{
 		"source": "x", "count": count, "posts": count, "discovered": discovered, "supplemented": 0,
 		"requested": requested, "scheduleAssets": scheduleAssets, "accounts": accounts, "errors": messages,
+		"discovery": discovery,
 	}}, nil
 }
 

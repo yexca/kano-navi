@@ -10,7 +10,7 @@ import {
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import { formatDateTime } from "@/admin/format"
-import type { AdminPost } from "@/admin/types"
+import type { AdminPost, Sources } from "@/admin/types"
 import {
   Empty,
   IconButton,
@@ -198,10 +198,9 @@ function PostTableRow({
   )
 }
 
-function PostList() {
+function PostList({ sources }: { sources: Sources | undefined }) {
   const { t } = useAppSettings()
   const { api } = useAdmin()
-  const sources = useResource(() => api.sources(), [])
   const [filters, setFilters] = useState({
     search: "",
     account: "",
@@ -243,7 +242,7 @@ function PostList() {
           aria-label={t("admin.posts.account")}
         >
           <option value="">{t("admin.posts.anyAccount")}</option>
-          {sources.data?.x.accounts.map(({ account }) => (
+          {sources?.x.accounts.map(({ account }) => (
             <option key={account} value={account}>
               @{account}
             </option>
@@ -319,15 +318,18 @@ function PostList() {
 
 export function PostsView({ navigate }: ViewProps) {
   const { t } = useAppSettings()
+  const { api } = useAdmin()
+  // One read serves both the fetch panel and the account filter.
+  const sources = useResource(() => api.sources(), [])
   return (
     <div className="adm-view">
       <PageHeader
         title={t("admin.posts.title")}
         description={t("admin.posts.description")}
       />
-      <QuickFetch source="x" navigate={navigate} />
+      <QuickFetch source="x" sources={sources.data} navigate={navigate} />
       <Panel>
-        <PostList />
+        <PostList sources={sources.data} />
       </Panel>
     </div>
   )

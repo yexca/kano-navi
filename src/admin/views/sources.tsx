@@ -30,16 +30,17 @@ import {
   Switch,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
+import { WindowBadge } from "@/admin/views/fetch-parts"
 import { stepIcons } from "@/admin/views/run-parts"
 
 function FetchForm({
   source,
-  historyAvailable,
+  windows,
   hasRecords,
   disabled,
 }: {
   source: "x" | "youtube"
-  historyAvailable: boolean
+  windows: FetchWindow["mode"][]
   hasRecords: boolean
   disabled: boolean
 }) {
@@ -47,17 +48,33 @@ function FetchForm({
   const { start } = useAdmin()
   const [mode, setMode] = useState<FetchWindow["mode"]>("recent")
   const [days, setDays] = useState(source === "x" ? 7 : 14)
+  const [count, setCount] = useState(50)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState(japanToday())
   const [busy, setBusy] = useState(false)
-  const past = mode !== "recent"
+  const unavailable = !windows.includes(mode)
+  // Only the X timeline lists posts by count.
+  const modes = (
+    source === "x"
+      ? (["recent", "before", "range", "count"] as const)
+      : (["recent", "before", "range"] as const)
+  ).map((value) => ({ value, label: t(`admin.fetch.mode.${value}`) }))
+  const hint =
+    mode === "recent" && windows.includes("range")
+      ? "admin.fetch.hint.recentAll"
+      : `admin.fetch.hint.${mode}`
   const submit = async (event) => {
     event.preventDefault()
     setBusy(true)
     await start({
       kind: "fetch",
       source,
-      window: mode === "range" ? { mode, startDate, endDate } : { mode, days },
+      window:
+        mode === "range"
+          ? { mode, startDate, endDate }
+          : mode === "count"
+            ? { mode, count }
+            : { mode, days },
     })
     setBusy(false)
   }
@@ -67,13 +84,21 @@ function FetchForm({
         label={t("admin.fetch.mode")}
         value={mode}
         onChange={setMode}
-        options={(["recent", "before", "range"] as const).map((value) => ({
-          value,
-          label: t(`admin.fetch.mode.${value}`),
-        }))}
+        options={modes}
       />
-      <p className="adm-field-hint">{t(`admin.fetch.hint.${mode}`)}</p>
-      {mode === "range" ? (
+      <p className="adm-field-hint">{t(hint)}</p>
+      {mode === "count" ? (
+        <Field label={t("admin.fetch.count")} hint={t("admin.fetch.countHint")}>
+          <input
+            type="number"
+            min={1}
+            max={200}
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+            required
+          />
+        </Field>
+      ) : mode === "range" ? (
         <div className="adm-form-row">
           <Field label={t("admin.fetch.start")}>
             <input
@@ -111,7 +136,7 @@ function FetchForm({
           />
         </Field>
       )}
-      {past && !historyAvailable ? (
+      {unavailable ? (
         <p className="adm-inline-error">
           <KeyRound aria-hidden />
           {t(`admin.fetch.needsKey.${source}`)}
@@ -127,9 +152,7 @@ function FetchForm({
           icon={Download}
           busy={busy}
           disabled={
-            disabled ||
-            (past && !historyAvailable) ||
-            (mode === "before" && !hasRecords)
+            disabled || unavailable || (mode === "before" && !hasRecords)
           }
         >
           {t("admin.fetch.run")}
@@ -165,16 +188,7 @@ function SourcePanel({
       actions={
         <span className="adm-chip-row">
           {state.skipped ? <Badge>{t("admin.overview.skipped")}</Badge> : null}
-          <Badge
-            tone={state.historyAvailable ? "leaf" : "neutral"}
-            icon={KeyRound}
-          >
-            {t(
-              state.historyAvailable
-                ? "admin.sources.historyOn"
-                : "admin.sources.historyOff",
-            )}
-          </Badge>
+          <WindowBadge state={state} />
         </span>
       }
     >
@@ -197,7 +211,7 @@ function SourcePanel({
       />
       <FetchForm
         source={source}
-        historyAvailable={state.historyAvailable}
+        windows={state.windows}
         hasRecords={oldest.some(([, time]) => Boolean(time))}
         disabled={state.skipped || Boolean(overview?.activeRun)}
       />

@@ -103,8 +103,17 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, httpx.Invalid("%s", parseErr.Error()))
 			return
 		}
-		// Past windows exist only behind the official API credential.
-		if window.Mode != history.ModeRecent && !a.historyAvailable(source) {
+		// Past windows need the official API credential, except the X windows
+		// the public timeline serves without it.
+		if !a.windowAvailable(source, window.Mode) {
+			if window.Mode == history.ModeCount {
+				message := "count windows are available for X only"
+				if source == "x" {
+					message = "count windows need the public X timeline"
+				}
+				httpx.WriteError(w, httpx.Invalid("%s", message))
+				return
+			}
 			credential := "YOUTUBE_API_KEY"
 			if source == "x" {
 				credential = "X_API_BEARER_TOKEN"
@@ -362,8 +371,8 @@ func (a *api) sources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"x":       map[string]any{"skipped": a.skipped("x"), "historyAvailable": a.historyAvailable("x"), "accounts": accounts},
-		"youtube": map[string]any{"skipped": a.skipped("youtube"), "historyAvailable": a.historyAvailable("youtube"), "oldest": oldest, "push": a.pushStatus(), "liveProbe": probe},
+		"x":       map[string]any{"skipped": a.skipped("x"), "historyAvailable": a.historyAvailable("x"), "windows": a.windows("x"), "accounts": accounts},
+		"youtube": map[string]any{"skipped": a.skipped("youtube"), "historyAvailable": a.historyAvailable("youtube"), "windows": a.windows("youtube"), "oldest": oldest, "push": a.pushStatus(), "liveProbe": probe},
 	})
 }
 

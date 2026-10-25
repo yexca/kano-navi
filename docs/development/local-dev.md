@@ -80,10 +80,12 @@ developing.
 
 Workflow source lookback settings control recent days separately from the timer
 interval (X defaults to 7 days; YouTube to 14). Post management and Content & media
-also offer older-record backfill and date ranges. For historical searches,
-optionally configure environment-only `X_API_BEARER_TOKEN` with full-archive
-access and/or `YOUTUBE_API_KEY`, then restart the server. Without keys, recent
-fetches retain the finite public timeline/RSS coverage and report that limitation.
+also offer older-record backfill and date ranges. Without keys, X recent,
+date-range and latest-count fetches page the public FxTwitter timeline, and
+YouTube recent fetches keep the finite RSS coverage and report that limitation.
+For backfills and YouTube history, optionally configure environment-only
+`X_API_BEARER_TOKEN` with full-archive access and/or `YOUTUBE_API_KEY`, then
+restart the server.
 See [Fetch windows](../architecture/workflows.md#fetch-windows-and-historical-backfill).
 
 Tailwind CSS 4 runs through `@tailwindcss/vite`; `src/index.css` loads the

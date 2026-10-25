@@ -17,6 +17,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/jobs"
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
@@ -47,9 +48,13 @@ type Options struct {
 	// SkippedSteps lists steps disabled for the process through SKIP_* flags.
 	SkippedSteps []string
 	XHandles     []string
-	// HistoryAvailable reports whether a source can read past windows, which
-	// needs its official API credential.
+	// HistoryAvailable reports whether a source's official API can read past
+	// windows, which needs its credential.
 	HistoryAvailable func(source string) bool
+	// WindowAvailable reports whether a source can run a fetch window mode
+	// now, which X range and count windows can through the public timeline.
+	// Nil falls back to HistoryAvailable for every mode but recent.
+	WindowAvailable func(source, mode string) bool
 	// Now is the clock for Japan-date aggregates; nil uses time.Now.
 	Now func() time.Time
 }
@@ -147,6 +152,24 @@ func (a *api) skipped(step string) bool { return slices.Contains(a.SkippedSteps,
 
 func (a *api) historyAvailable(source string) bool {
 	return a.HistoryAvailable != nil && a.HistoryAvailable(source)
+}
+
+func (a *api) windowAvailable(source, mode string) bool {
+	if a.WindowAvailable != nil {
+		return a.WindowAvailable(source, mode)
+	}
+	return mode == history.ModeRecent || (mode != history.ModeCount && a.historyAvailable(source))
+}
+
+// windows lists the fetch window modes a source can run now.
+func (a *api) windows(source string) []string {
+	out := []string{}
+	for _, mode := range []string{history.ModeRecent, history.ModeBefore, history.ModeRange, history.ModeCount} {
+		if a.windowAvailable(source, mode) {
+			out = append(out, mode)
+		}
+	}
+	return out
 }
 
 // workflowError maps durable queue and definition failures to the wire codes.

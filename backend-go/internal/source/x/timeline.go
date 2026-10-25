@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -51,6 +52,71 @@ func parseTimeline(body []byte, account string) (timelinePage, error) {
 	return page, nil
 }
 
+// TimelineStatus is one of the account's own statuses as a timeline page lists
+// it. Post is nil when the entry has no usable publication time or content;
+// PublishedAt then comes from the Snowflake ID when it is a real one.
+type TimelineStatus struct {
+	ID, PublishedAt string
+	Post            *Post
+}
+
+// TimelineStatuses is one newest-first page of the account's own statuses.
+type TimelineStatuses struct {
+	Statuses []TimelineStatus
+	Next     string
+}
+
+var handlePattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,30}$`)
+
+// TimelineStatuses reads one timeline page of up to count statuses and
+// normalizes each own status from the page itself, so an operator window
+// needs no detail requests. Reposts are left out as in discovery.
+func (a *Adapter) TimelineStatuses(ctx context.Context, account, cursor string, count int) (TimelineStatuses, error) {
+	account = strings.TrimPrefix(strings.TrimSpace(account), "@")
+	if !handlePattern.MatchString(account) {
+		return TimelineStatuses{}, &Error{Code: ErrInvalidResponse, Err: errors.New("invalid account")}
+	}
+	body, err := a.Client.Timeline(ctx, account, cursor, count)
+	if err != nil {
+		return TimelineStatuses{}, err
+	}
+	return parseTimelineStatuses(body, account)
+}
+
+func parseTimelineStatuses(body []byte, account string) (TimelineStatuses, error) {
+	var payload struct {
+		Code    int              `json:"code"`
+		Results []map[string]any `json:"results"`
+		Cursor  struct {
+			Bottom string `json:"bottom"`
+		} `json:"cursor"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return TimelineStatuses{}, &Error{Code: ErrInvalidJSON}
+	}
+	if (payload.Code != 0 && payload.Code != 200) || payload.Results == nil {
+		return TimelineStatuses{}, &Error{Code: ErrInvalidResponse, Err: errors.New("timeline without results")}
+	}
+	page := TimelineStatuses{Statuses: []TimelineStatus{}, Next: payload.Cursor.Bottom}
+	for _, status := range payload.Results {
+		id := stringValue(status["id"])
+		author := object(status["author"])
+		if !statusIDPattern.MatchString(id) || !strings.EqualFold(stringValue(author["screen_name"]), account) {
+			continue
+		}
+		// Every status repeats the whole author profile; the post keeps its name.
+		status["author"] = map[string]any{"screen_name": author["screen_name"], "name": author["name"]}
+		entry := TimelineStatus{ID: id}
+		if post := Normalize(status, id, account); post != nil && post.ID == id {
+			entry.Post, entry.PublishedAt = post, post.PublishedAt
+		} else if len(id) >= 15 {
+			entry.PublishedAt = snowflakeTime(id).Format(time.RFC3339Nano)
+		}
+		page.Statuses = append(page.Statuses, entry)
+	}
+	return page, nil
+}
+
 // discoverTimeline pages the account's timeline back until a page ends at a
 // stored post, the stored cursor or the bootstrap cutoff, within the
 // DiscoveryLimit. A failed first page is returned so the caller can fall back
@@ -67,7 +133,7 @@ func (a *Adapter) discoverTimeline(ctx context.Context, account string, opts Opt
 	seen := map[string]bool{}
 	cursor := ""
 	for i := 0; i < pages; i++ {
-		body, err := a.Client.Timeline(ctx, account, cursor)
+		body, err := a.Client.Timeline(ctx, account, cursor, timelinePageSize)
 		var page timelinePage
 		if err == nil {
 			page, err = parseTimeline(body, account)

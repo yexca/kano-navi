@@ -42,15 +42,21 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 	}
 	switch in.StepID {
 	case "x":
-		// A selected window uses the API whenever its credential is present;
-		// past windows have no public-page fallback.
-		if in.Window != nil && (in.Window.Mode != history.ModeRecent || s.History.Available(history.SourceX)) {
+		// A selected window uses the API whenever its credential is present.
+		// Without it, recent and range windows page the public timeline back to
+		// their start, as count windows always do; a backfill then fails with
+		// the credential message. Only a recent window without either source
+		// stays incremental.
+		if in.Window != nil && (in.Window.Mode != history.ModeRecent || s.History.Available(history.SourceX) || s.History.timeline(history.ModeRecent)) {
 			return s.History.FetchX(ctx, *in.Window)
 		}
 		if s.X != nil {
 			return s.X.Execute(ctx, in)
 		}
 	case "youtube":
+		if in.Window != nil && in.Window.Mode == history.ModeCount {
+			return failedResult("count windows are available for X only"), nil
+		}
 		if in.Window != nil && in.Window.Mode != history.ModeRecent {
 			return s.History.FetchYoutube(ctx, *in.Window)
 		}

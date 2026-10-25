@@ -99,8 +99,13 @@ step `live`), `status` is `queued`, `running`,
 - `{"kind": "workflow", "workflowId": "..."}`: a saved workflow;
   `404 workflow_not_found`.
 - `{"kind": "fetch", "source": "x" | "youtube", "window": Window}`: one
-  source plus media for a [history window](sources.md). Past windows need the
-  source's official API credential (`400 invalid_input`).
+  source plus media for a [history window](workflows.md#fetch-windows-and-historical-backfill).
+  `Window` is `{mode: "recent" | "before", days}`, `{mode: "range",
+startDate, endDate}` or, for X only, `{mode: "count", count}` (1–200 per
+  account). A mode outside the source's `windows` is rejected with
+  `400 invalid_input`: past YouTube windows and X backfills need the official
+  API credential, while X `range` and `count` windows page the public
+  timeline.
 
 A busy queue answers `409` with the active run.
 
@@ -132,10 +137,14 @@ Each workflow carries `lastRunAt`, `lastStatus` (durable run status) and
 
 ```json
 {
-  "x":       {"skipped", "historyAvailable", "accounts": [{"account", "oldest"}]},
-  "youtube": {"skipped", "historyAvailable", "oldest", "push": PushStatus, "liveProbe": LiveProbeStatus}
+  "x":       {"skipped", "historyAvailable", "windows", "accounts": [{"account", "oldest"}]},
+  "youtube": {"skipped", "historyAvailable", "windows", "oldest", "push": PushStatus, "liveProbe": LiveProbeStatus}
 }
 ```
+
+`historyAvailable` reports the official API credential; `windows` lists the
+fetch window modes the source can run now, such as `["recent", "range",
+"count"]` for X without `X_API_BEARER_TOKEN`.
 
 `PushStatus` is `{available, enabled, callbackUrl, callbackPath,
 secretConfigured, verified, leaseExpiresAt, nextRenewalAt, pending,

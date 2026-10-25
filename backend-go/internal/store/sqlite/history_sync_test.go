@@ -43,9 +43,9 @@ func TestHistoryPageCommitsRecordsWithCheckpointAndKeepsIncrementalCursor(t *tes
 		Backfill:           &history.Backfill{Pending: true},
 	}
 	revision := query(`SELECT value FROM app_settings WHERE key='dashboard_revision'`)
-	candidates, err := s.WriteHistoryPage(ctx, page)
-	if err != nil || candidates != 1 {
-		t.Fatalf("candidates=%d err=%v", candidates, err)
+	written, err := s.WriteHistoryPage(ctx, page)
+	if err != nil || written != (history.Written{Posts: 1, ScheduleAssets: 1}) {
+		t.Fatalf("written=%+v err=%v", written, err)
 	}
 	for statement, want := range map[string]string{
 		`SELECT text||'/'||media_url FROM posts WHERE id='1900000000000000001'`:                                                                          "weekly schedule/https://media.example.test/board.png",
@@ -84,6 +84,59 @@ func TestHistoryPageCommitsRecordsWithCheckpointAndKeepsIncrementalCursor(t *tes
 	}
 	if got := query(`SELECT account_handle||'/'||text FROM posts WHERE id='1900000000000000001'`); got != "synthetic_handle/weekly schedule" {
 		t.Fatalf("post owner=%s", got)
+	}
+}
+
+func TestTimelinePageKeepsStoredPostsAndItsOwnCheckpoint(t *testing.T) {
+	s, query := openHistoryStore(t)
+	ctx := context.Background()
+	if _, err := s.db.Exec(`INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES('x','synthetic_handle','1900000000000000009','2026-03-09T00:00:00.000Z','2026-03-09T00:00:00.000Z','{"pendingStatusIds":["1900000000000000010"]}')`); err != nil {
+		t.Fatal(err)
+	}
+	stored := xsource.Post{ID: "1900000000000000001", AccountHandle: "synthetic_handle", Type: "daily", Label: "DAILY / 近况", Text: "from the detail path", PublishedAt: "2026-03-04T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000001", MediaURLs: []string{"https://media.example.test/detail.png"}, Raw: map[string]any{"tweetID": "1900000000000000001"}}
+	page := history.Page{Source: history.SourceX, Account: "synthetic_handle", CheckpointKey: "synthetic_handle:checkpoint", Posts: []xsource.Post{stored}}
+	if _, err := s.WriteHistoryPage(ctx, page); err != nil {
+		t.Fatal(err)
+	}
+	window := history.Window{Mode: history.ModeRange, StartDate: "2026-03-01", EndDate: "2026-03-07", StartTime: "2026-02-28T15:00:00.000Z", EndTime: "2026-03-07T15:00:00.000Z"}
+	again := stored
+	again.Text, again.MediaURLs = "from the timeline", []string{"https://media.example.test/timeline.png"}
+	fresh := xsource.Post{ID: "1900000000000000002", AccountHandle: "synthetic_handle", Type: "notice", Label: "SCHEDULE / 日程", Text: "weekly schedule", PublishedAt: "2026-03-05T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000002", MediaURLs: []string{"https://media.example.test/board.png"}, Raw: map[string]any{"id": "1900000000000000002"}}
+	timeline := history.Page{
+		Source: history.SourceX, Account: "synthetic_handle", CheckpointKey: "synthetic_handle:checkpoint", Checkpoint: history.TimelineCheckpoint,
+		Window: window, Next: "timeline-cursor", Discovered: 2, KeepStored: true, Posts: []xsource.Post{again, fresh},
+		ScheduleCandidates: []xsource.ScheduleCandidate{
+			{PostID: again.ID, SourceURL: again.URL, MediaURL: again.MediaURLs[0], AccountHandle: "synthetic_handle"},
+			{PostID: fresh.ID, SourceURL: fresh.URL, MediaURL: fresh.MediaURLs[0], AccountHandle: "synthetic_handle"},
+		},
+	}
+	written, err := s.WriteHistoryPage(ctx, timeline)
+	if err != nil || written != (history.Written{Posts: 1, ScheduleAssets: 1}) {
+		t.Fatalf("written=%+v err=%v", written, err)
+	}
+	for statement, want := range map[string]string{
+		// The stored post keeps its text, media and missing candidate.
+		`SELECT text||'/'||media_url FROM posts WHERE id='1900000000000000001'`:                  "from the detail path/https://media.example.test/detail.png",
+		`SELECT COUNT(*) FROM assets WHERE id='schedule-x-1900000000000000001'`:                  "0",
+		`SELECT text FROM posts WHERE id='1900000000000000002'`:                                  "weekly schedule",
+		`SELECT COUNT(*) FROM media_links WHERE owner_id='1900000000000000002'`:                  "1",
+		`SELECT COUNT(*) FROM assets WHERE id='schedule-x-1900000000000000002'`:                  "1",
+		`SELECT cursor_id FROM sync_state WHERE source='x-timeline-window'`:                      "timeline-cursor",
+		`SELECT COUNT(*) FROM sync_state WHERE source='x-window' AND cursor_id='timeline-cursor'`: "0",
+		`SELECT cursor_id||'/'||metadata_json FROM sync_state WHERE source='x' AND account_id='synthetic_handle'`: `1900000000000000009/{"pendingStatusIds":["1900000000000000010"]}`,
+	} {
+		if got := query(statement); got != want {
+			t.Fatalf("%s = %q, want %q", statement, got, want)
+		}
+	}
+	// Only X timeline windows name their own checkpoint source.
+	for _, invalid := range []history.Page{
+		{Source: history.SourceX, Account: "synthetic_handle", CheckpointKey: "k", Checkpoint: "x"},
+		{Source: history.SourceYoutube, Account: "UCAAAAAAAAAAAAAAAAAAAAAA", CheckpointKey: "k", Checkpoint: history.TimelineCheckpoint},
+	} {
+		if _, err := s.WriteHistoryPage(ctx, invalid); err == nil {
+			t.Fatalf("checkpoint %q for %s was accepted", invalid.Checkpoint, invalid.Source)
+		}
 	}
 }
 

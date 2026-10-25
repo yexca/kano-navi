@@ -298,10 +298,11 @@ export const adminMessages = {
     "admin.quickFetch.title.x": "Fetch posts",
     "admin.quickFetch.title.youtube": "Fetch videos",
     "admin.quickFetch.description.x":
-      "Read X posts from a time window, then download their media.",
+      "Read X posts from a time window or the newest few, then download their media.",
     "admin.quickFetch.description.youtube":
       "Read YouTube videos from a time window, then download their thumbnails.",
     "admin.quickFetch.recent": "Recent",
+    "admin.quickFetch.latest": "Latest",
     "admin.quickFetch.preset.1": "24 hours",
     "admin.quickFetch.preset.3": "3 days",
     "admin.quickFetch.preset.7": "7 days",
@@ -386,10 +387,11 @@ export const adminMessages = {
     "admin.sources.description":
       "Read past or recent windows on demand and configure YouTube push notifications.",
     "admin.sources.x.hint":
-      "Public recent posts, or the full archive with X_API_BEARER_TOKEN.",
+      "The public FxTwitter timeline, or the full archive with X_API_BEARER_TOKEN.",
     "admin.sources.youtube.hint":
       "The RSS feed, or older videos with YOUTUBE_API_KEY.",
     "admin.sources.historyOn": "History search available",
+    "admin.sources.historyTimeline": "Windows via the timeline",
     "admin.sources.historyOff": "Recent only",
     "admin.sources.lastSuccess": "Last successful read",
     "admin.sources.oldest": "Oldest stored · {label}",
@@ -399,7 +401,12 @@ export const adminMessages = {
     "admin.fetch.mode.recent": "Recent",
     "admin.fetch.mode.before": "Before oldest",
     "admin.fetch.mode.range": "Date range",
+    "admin.fetch.mode.count": "Latest posts",
     "admin.fetch.hint.recent": "Read the last few days, like a timed sync.",
+    "admin.fetch.hint.recentAll":
+      "Read every post of the last few days, including ones a timed sync missed.",
+    "admin.fetch.hint.count":
+      "Read each account's newest posts from its timeline, whatever their age.",
     "admin.fetch.hint.before":
       "Continue backwards from the oldest stored record. Interrupted pages resume first.",
     "admin.fetch.hint.range":
@@ -408,10 +415,13 @@ export const adminMessages = {
     "admin.fetch.backfillDays": "Days per backfill",
     "admin.fetch.daysHint": "1 to 365",
     "admin.fetch.daysCount": ({ count }) => plural(count, "day", "days"),
+    "admin.fetch.count": "Posts per account",
+    "admin.fetch.countHint": "1 to 200",
+    "admin.fetch.postsCount": ({ count }) => plural(count, "post", "posts"),
     "admin.fetch.start": "First day",
     "admin.fetch.end": "Last day",
     "admin.fetch.needsKey.x":
-      "Past windows need X_API_BEARER_TOKEN on the server.",
+      "This window needs X_API_BEARER_TOKEN on the server.",
     "admin.fetch.needsKey.youtube":
       "Past windows need YOUTUBE_API_KEY on the server.",
     "admin.fetch.noRecords": "Nothing is stored yet; read a date range first.",
@@ -908,10 +918,11 @@ export const adminMessages = {
     "admin.quickFetch.title.x": "抓取贴文",
     "admin.quickFetch.title.youtube": "抓取视频",
     "admin.quickFetch.description.x":
-      "读取一个时间窗口内的 X 贴文，并下载其媒体。",
+      "读取一个时间窗口内或最新若干条 X 贴文，并下载其媒体。",
     "admin.quickFetch.description.youtube":
       "读取一个时间窗口内的 YouTube 视频，并下载其缩略图。",
     "admin.quickFetch.recent": "近期",
+    "admin.quickFetch.latest": "最新",
     "admin.quickFetch.preset.1": "24 小时",
     "admin.quickFetch.preset.3": "3 天",
     "admin.quickFetch.preset.7": "7 天",
@@ -990,10 +1001,11 @@ export const adminMessages = {
     "admin.sources.description":
       "按需读取过去或近期的时间窗口，并配置 YouTube 推送通知。",
     "admin.sources.x.hint":
-      "公开的近期贴文；配置 X_API_BEARER_TOKEN 后可检索完整历史。",
+      "公开的 FxTwitter 时间线；配置 X_API_BEARER_TOKEN 后可检索完整历史。",
     "admin.sources.youtube.hint":
       "RSS 订阅；配置 YOUTUBE_API_KEY 后可读取更早的视频。",
     "admin.sources.historyOn": "可检索历史",
+    "admin.sources.historyTimeline": "经时间线抓取窗口",
     "admin.sources.historyOff": "仅近期",
     "admin.sources.lastSuccess": "最近一次成功读取",
     "admin.sources.oldest": "最早记录 · {label}",
@@ -1003,7 +1015,12 @@ export const adminMessages = {
     "admin.fetch.mode.recent": "近期",
     "admin.fetch.mode.before": "向前回填",
     "admin.fetch.mode.range": "日期范围",
+    "admin.fetch.mode.count": "最新条数",
     "admin.fetch.hint.recent": "读取最近几天，与定时同步相同。",
+    "admin.fetch.hint.recentAll":
+      "读取最近几天的全部贴文，包括定时同步漏掉的。",
+    "admin.fetch.hint.count":
+      "从时间线读取每个账号最新的若干条贴文，不限时间。",
     "admin.fetch.hint.before":
       "从最早的已存记录继续向前读取。中断的分页会优先续读。",
     "admin.fetch.hint.range": "读取包含两端的日本日期范围，最多 365 天。",
@@ -1011,10 +1028,12 @@ export const adminMessages = {
     "admin.fetch.backfillDays": "每次回填天数",
     "admin.fetch.daysHint": "1 到 365",
     "admin.fetch.daysCount": "{count} 天",
+    "admin.fetch.count": "每个账号的条数",
+    "admin.fetch.countHint": "1 到 200",
+    "admin.fetch.postsCount": "{count} 条",
     "admin.fetch.start": "第一天",
     "admin.fetch.end": "最后一天",
-    "admin.fetch.needsKey.x":
-      "过去的时间窗口需要服务器配置 X_API_BEARER_TOKEN。",
+    "admin.fetch.needsKey.x": "这个时间窗口需要服务器配置 X_API_BEARER_TOKEN。",
     "admin.fetch.needsKey.youtube":
       "过去的时间窗口需要服务器配置 YOUTUBE_API_KEY。",
     "admin.fetch.noRecords": "还没有存储任何记录，请先读取一个日期范围。",

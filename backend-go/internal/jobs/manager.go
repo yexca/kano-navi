@@ -71,7 +71,8 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 		windows := map[string]history.Window{}
 		for source, window := range options.FetchWindows {
 			normalized, windowErr := window.Normalize()
-			if windowErr != nil || (source != "x" && source != "youtube") {
+			// Only the X timeline lists a source's newest posts by count.
+			if windowErr != nil || (source != "x" && source != "youtube") || (normalized.Mode == history.ModeCount && source != "x") {
 				return StartResult{}, sqlite.ErrWorkflowValidation
 			}
 			windows[source] = normalized
