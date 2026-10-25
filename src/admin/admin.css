@@ -1922,6 +1922,124 @@ button.adm-run-line:hover,
   font-size: 12px;
 }
 
+.adm-video-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* The correction dialog: thumbnail files as radio tiles, then the history. */
+.adm-thumb-picker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.adm-thumb-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.adm-thumb-choice {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+  cursor: pointer;
+}
+
+.adm-thumb-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.adm-thumb-choice:has(input:focus-visible) {
+  box-shadow: var(--adm-focus);
+}
+
+.adm-thumb-choice.is-selected {
+  border-color: var(--adm-accent);
+  box-shadow: 0 0 0 1px var(--adm-accent);
+}
+
+.adm-thumb-choice .adm-video-thumb {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.adm-thumb-choice small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-video-history h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.adm-video-history h3 svg {
+  width: 15px;
+  height: 15px;
+}
+
+.adm-video-history ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-video-history li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.adm-video-history li .adm-video-thumb {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.adm-video-history-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.adm-video-history-body strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.adm-video-history-body small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-video-editor-actions .adm-spacer {
+  flex: 1;
+}
+
+@media (max-width: 560px) {
+  .adm-video-history li {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .adm-video-history li .adm-button {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 /* The pinned video above the list, or the automatic choice when none is. */
 .adm-featured {
   display: grid;

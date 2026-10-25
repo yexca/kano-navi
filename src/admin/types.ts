@@ -265,6 +265,55 @@ export interface AdminVideo {
   thumbnailStatus: string
   kind: string | null
   isUpcoming: boolean
+  /** title and kind show an operator correction; these keep the platform's. */
+  sourceTitle: string
+  sourceKind: string | null
+  manualTitle: string | null
+  manualKind: string | null
+  manualThumbnail: VideoThumbnailPin | null
+  durationSeconds: number | null
+  /** The last successful watch-page read. */
+  checkedAt: string | null
+  /** A refresh request the next YouTube step has not answered yet. */
+  refreshRequestedAt: string | null
+  revisions: number
+}
+
+export interface VideoThumbnailPin {
+  mediaId: string
+  sha256: string
+}
+
+/** A title or thumbnail the platform replaced, newest first. */
+export interface VideoRevision {
+  id: number
+  origin: "sync" | "media"
+  title: string
+  kind: string | null
+  thumbnailUrl: string | null
+  thumbnailStatus: string
+  replacedAt: string
+}
+
+/** A cached thumbnail file an operator may pin. */
+export interface VideoThumbnail extends VideoThumbnailPin {
+  url: string
+  fetchedAt: string | null
+  current: boolean
+  selected: boolean
+}
+
+export interface VideoHistory {
+  video: AdminVideo
+  revisions: VideoRevision[]
+  thumbnails: VideoThumbnail[]
+}
+
+/** A string or file sets a correction, null clears it, omitted keeps it. */
+export interface VideoCorrection {
+  title?: string | null
+  kind?: string | null
+  thumbnail?: VideoThumbnailPin | null
 }
 
 export interface AdminVideosPage extends Page<AdminVideo> {

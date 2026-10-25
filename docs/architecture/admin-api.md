@@ -224,10 +224,13 @@ image's status, or is `none` for a text-only post.
 
 ## Videos
 
-| Method and path        | Body / query                                              | Result                                       |
-| ---------------------- | --------------------------------------------------------- | -------------------------------------------- |
-| `GET /videos`          | `page`, `pageSize` (≤ 200), `status`, `kind`, `thumbnail` | list plus `featuredVideoId`, `featuredVideo` |
-| `PUT /videos/featured` | `{videoId}` (`null` restores automatic selection)         | `{featuredVideoId}`                          |
+| Method and path             | Body / query                                              | Result                                       |
+| --------------------------- | --------------------------------------------------------- | -------------------------------------------- |
+| `GET /videos`               | `page`, `pageSize` (≤ 200), `status`, `kind`, `thumbnail` | list plus `featuredVideoId`, `featuredVideo` |
+| `PUT /videos/featured`      | `{videoId}` (`null` restores automatic selection)         | `{featuredVideoId}`                          |
+| `GET /videos/{id}/history`  |                                                           | `{video, revisions, thumbnails}`             |
+| `PUT /videos/{id}`          | `{title?, kind?, thumbnail?}`                             | `{video}`                                    |
+| `POST /videos/{id}/refresh` |                                                           | `202 {video, started, run}`                  |
 
 Each video's `thumbnailUrl` is the local `/media/<id>?v=<sha256>` URL of its
 cached thumbnail, or `null` until that file is ready; the remote CDN address is
@@ -237,6 +240,35 @@ never returned. `thumbnailStatus` is `ready`, `pending`, `failed` or `missing`.
 is listed, or `null` while the board chooses automatically.
 
 Changing the featured video advances the dashboard revision.
+
+### Video corrections and history
+
+An operator correction replaces a platform value on the board without
+changing it: `title`, `kind` and `thumbnailUrl` show the correction, while
+`sourceTitle` and `sourceKind` keep what the platform reported and
+`manualTitle`, `manualKind` and `manualThumbnail` (`{mediaId, sha256}`) are
+the corrections themselves. `PUT /videos/{id}` sets a field from a string, or
+for `thumbnail` from one `{mediaId, sha256}` file listed in the history; `null`
+clears it and an omitted field keeps it. A title is 1–300 characters after
+trimming; a kind is one of `VIDEO`, `MUSIC`, `LIVE ARCHIVE`, `GAMEPLAY` or
+`TALK`. Other fields, unknown files and invalid values answer `400`, an
+unknown video `404`. A change advances the dashboard revision, and machine
+translations follow the corrected title.
+
+`GET /videos/{id}/history` lists, newest first, the titles and thumbnails the
+platform replaced (`revisions`, each with `origin` `sync` for a new title or
+thumbnail URL and `media` for new bytes at the same URL) and the cached
+`thumbnails` an operator may pin: the platform's current file (`current`),
+earlier files of the same URL and files of earlier URLs. `selected` marks the
+pinned one. Every URL is a local `/media/<id>?v=<sha256>` address.
+
+`POST /videos/{id}/refresh` records `refreshRequestedAt` on a YouTube video
+and starts the `youtube` and `media` steps; the YouTube step reads requested
+pages before any other detail work. `started` is false while another run
+holds the queue, and the request then waits up to 24 hours for the next run
+that reads YouTube. A successful page read clears it. Each video also reports
+`durationSeconds`, `checkedAt` (its last successful page read) and its number
+of `revisions`.
 
 ## Profile media
 

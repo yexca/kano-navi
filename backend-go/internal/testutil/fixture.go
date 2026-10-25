@@ -51,7 +51,12 @@ func NewSnapshot(t testing.TB) string {
 		CREATE TABLE videos (
 			id TEXT PRIMARY KEY, source TEXT NOT NULL, title TEXT NOT NULL, published_at TEXT, scheduled_at TEXT,
 			url TEXT NOT NULL, thumbnail_url TEXT, kind TEXT, is_upcoming INTEGER DEFAULT 0, raw_json TEXT,
-			live_status TEXT, live_checked_at TEXT
+			live_status TEXT, live_checked_at TEXT, duration_seconds INTEGER, manual_title TEXT, manual_kind TEXT,
+			manual_thumbnail_media_id TEXT, manual_thumbnail_sha256 TEXT, manual_updated_at TEXT, refresh_requested_at TEXT
+		);
+		CREATE TABLE video_revisions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, video_id TEXT NOT NULL, origin TEXT NOT NULL, title TEXT, thumbnail_url TEXT,
+			thumbnail_media_id TEXT, thumbnail_sha256 TEXT, kind TEXT, replaced_at TEXT NOT NULL
 		);
 		CREATE TABLE focus (
 			id INTEGER PRIMARY KEY, video_id TEXT, date_label TEXT, title TEXT NOT NULL, description TEXT, image_url TEXT,
@@ -78,6 +83,10 @@ func NewSnapshot(t testing.TB) string {
 		CREATE TABLE media_links (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, media_id TEXT NOT NULL, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL,
 			role TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, alt TEXT, created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT ''
+		);
+		CREATE TABLE media_versions (
+			media_id TEXT NOT NULL, sha256 TEXT NOT NULL, cache_path TEXT NOT NULL, mime_type TEXT NOT NULL, byte_size INTEGER,
+			fetched_at TEXT, replaced_at TEXT NOT NULL, PRIMARY KEY (media_id, sha256)
 		);
 		CREATE TABLE sync_state (
 			source TEXT NOT NULL, account_id TEXT NOT NULL, cursor_id TEXT, cursor_time TEXT,

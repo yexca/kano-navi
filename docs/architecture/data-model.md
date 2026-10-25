@@ -18,13 +18,15 @@ belong to the TypeScript initializer. See
 | `posts`                  | X posts, account source, publication time, engagement counts, and media                                |
 | `events`                 | Unified schedules, provenance, confidence, manual locks, tombstones, and duplicate merges              |
 | `event_sources`          | Source post/reservation identities attached to each event                                              |
-| `videos`                 | Published YouTube videos and scheduled streams                                                         |
+| `videos`                 | Published YouTube videos and scheduled streams, operator corrections, and refresh requests             |
+| `video_revisions`        | Titles and thumbnails a platform replaced, one row per change                                          |
 | `focus`                  | The page's latest focus item and stable YouTube video ID                                               |
 | `timeline`               | Person and activity timeline                                                                           |
 | `resources`              | X, YouTube, Wikipedia, and other resource links                                                        |
 | `assets`                 | Schedule images and their sources                                                                      |
 | `media_assets`           | Remote media identities, cache metadata, and fetch status                                              |
 | `media_links`            | Links from cached media to posts, videos, profiles, and focus items                                    |
+| `media_versions`         | Earlier cached files of an asset whose bytes a revalidation replaced                                   |
 | `sync_runs`              | Status, counts, error summaries, trigger, and asynchronous job identity                                |
 | `sync_state`             | Durable per-account X and YouTube cursors                                                              |
 | `app_settings`           | Model, schedule-extractor, X-account, Featured, and YouTube push settings (push secret sealed)         |
@@ -231,6 +233,31 @@ pagination, day counts and adjacent dates, and MCP `schedule_list`. The
 operator console lists them with their target and can undo a merge. Startup
 adds the columns and the partial `events_merged_into_idx` index to existing
 snapshots without rewriting events.
+
+## Video Corrections and History
+
+Synchronization owns a video's platform fields (`title`, `kind`,
+`thumbnail_url` and its media link) and keeps rewriting them on every
+successful page read. An operator correction lives beside them in
+`manual_title`, `manual_kind` and `manual_thumbnail_media_id` /
+`manual_thumbnail_sha256` with `manual_updated_at`; synchronization never
+writes these columns, and clearing one shows the platform value again. Every
+public reader (dashboard, video archive, MCP) and the console show
+`COALESCE(manual, platform)`, and a pinned thumbnail is served while its file
+is still cached, otherwise the platform thumbnail. Machine translations
+follow the corrected title. A correction is not an event lock:
+reservation events keep their own provenance and manual edits.
+
+Nothing the platform replaces is discarded. A page read that reports a new
+title or thumbnail URL inserts the previous `title`, `thumbnail_url`, `kind`
+and the then-current thumbnail file (`thumbnail_media_id`,
+`thumbnail_sha256`) into `video_revisions` with `origin = sync` and
+`replaced_at`. A thumbnail revalidation that downloads new bytes for the same
+URL keeps the old file in `media_versions` and records a `media` revision for
+every linked video. `duration_seconds` and `refresh_requested_at` are
+described in [Sources](sources.md#follow-up-checks-and-refresh-requests).
+Startup adds the columns, both tables and `video_revisions_video_idx` to
+existing snapshots without rewriting videos or media rows.
 
 ## Schema Changes
 

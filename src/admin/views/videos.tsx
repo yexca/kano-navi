@@ -1,5 +1,14 @@
 import { useState } from "react"
-import { ExternalLink, ImageOff, Sparkles, Star, StarOff } from "lucide-react"
+import {
+  Clock3,
+  ExternalLink,
+  History,
+  ImageOff,
+  Pencil,
+  Sparkles,
+  Star,
+  StarOff,
+} from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
@@ -17,6 +26,7 @@ import {
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { QuickFetch } from "@/admin/views/fetch-parts"
+import { VideoEditor } from "@/admin/views/video-editor"
 
 /** Only local, already cached media is shown; never a remote CDN URL. */
 function localUrl(value: string | null | undefined) {
@@ -108,14 +118,45 @@ function FeaturedVideo({
   )
 }
 
+/** Corrections, platform history and a pending refresh, when there are any. */
+function VideoMarks({ video }: { video: AdminVideo }) {
+  const { t } = useAppSettings()
+  const corrected =
+    video.manualTitle !== null ||
+    video.manualKind !== null ||
+    video.manualThumbnail !== null
+  if (!corrected && !video.revisions && !video.refreshRequestedAt) return null
+  return (
+    <span className="adm-video-marks">
+      {corrected ? (
+        <Badge tone="sky" icon={Pencil}>
+          {t("admin.videos.corrected")}
+        </Badge>
+      ) : null}
+      {video.revisions ? (
+        <Badge icon={History}>
+          {t("admin.videos.revisionCount", { count: video.revisions })}
+        </Badge>
+      ) : null}
+      {video.refreshRequestedAt ? (
+        <Badge tone="honey" icon={Clock3}>
+          {t("admin.videos.refreshQueued")}
+        </Badge>
+      ) : null}
+    </span>
+  )
+}
+
 function VideoCard({
   video,
   featured,
   onFeature,
+  onEdit,
 }: {
   video: AdminVideo
   featured: boolean
   onFeature: (video: AdminVideo | null) => void
+  onEdit: (video: AdminVideo) => void
 }) {
   const { t } = useAppSettings()
   const thumbnail = localUrl(video.thumbnailUrl)
@@ -136,7 +177,16 @@ function VideoCard({
       <div className="adm-video-body">
         <strong>{video.title}</strong>
         <VideoWhen video={video} />
+        <VideoMarks video={video} />
         <div className="adm-actions">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Pencil}
+            onClick={() => onEdit(video)}
+          >
+            {t("admin.videos.edit")}
+          </Button>
           {featured ? (
             <Button
               size="sm"
@@ -173,11 +223,27 @@ function VideoList() {
     "",
   )
   const [page, setPage] = useState(1)
+  const [editing, setEditing] = useState<string | null>(null)
   const videos = useResource(
     () => api.videos({ status, page, pageSize: 24 }),
     [status, page],
   )
   const data = videos.data
+  // A saved correction replaces its card, and the pinned copy, in place.
+  const replace = (video: AdminVideo) =>
+    videos.setData(
+      (current) =>
+        current && {
+          ...current,
+          items: current.items.map((item) =>
+            item.id === video.id ? video : item,
+          ),
+          featuredVideo:
+            current.featuredVideo?.id === video.id
+              ? video
+              : current.featuredVideo,
+        },
+    )
   const feature = async (video: AdminVideo | null) => {
     const result = await act(
       () => api.setFeatured(video?.id ?? null),
@@ -228,6 +294,7 @@ function VideoList() {
                 video={video}
                 featured={video.id === data.featuredVideoId}
                 onFeature={feature}
+                onEdit={(chosen) => setEditing(chosen.id)}
               />
             ))}
           </div>
@@ -241,6 +308,15 @@ function VideoList() {
       ) : (
         <Empty icon={ImageOff} title={t("admin.videos.empty")} />
       )}
+      {editing ? (
+        <VideoEditor
+          videoId={editing}
+          onClose={(changed) => {
+            setEditing(null)
+            if (changed) replace(changed)
+          }}
+        />
+      ) : null}
     </>
   )
 }

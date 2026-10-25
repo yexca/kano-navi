@@ -53,6 +53,27 @@ type AdminVideo struct {
 	ThumbnailStatus string  `json:"thumbnailStatus"`
 	Kind            *string `json:"kind"`
 	IsUpcoming      bool    `json:"isUpcoming"`
+	// Title, Kind and ThumbnailURL show an operator's correction when one is
+	// set; SourceTitle and SourceKind keep what the platform reported.
+	SourceTitle     string             `json:"sourceTitle"`
+	SourceKind      *string            `json:"sourceKind"`
+	ManualTitle     *string            `json:"manualTitle"`
+	ManualKind      *string            `json:"manualKind"`
+	ManualThumbnail *AdminThumbnailPin `json:"manualThumbnail"`
+	DurationSeconds *int64             `json:"durationSeconds"`
+	// CheckedAt is the last successful watch-page read; RefreshRequestedAt is
+	// an operator request the next YouTube step has not answered yet.
+	CheckedAt          *string `json:"checkedAt"`
+	RefreshRequestedAt *string `json:"refreshRequestedAt"`
+	Revisions          int     `json:"revisions"`
+	// sourceThumbnail is the platform URL the board falls back to.
+	sourceThumbnail *string
+}
+
+// AdminThumbnailPin is the cached thumbnail file an operator chose.
+type AdminThumbnailPin struct {
+	MediaID string `json:"mediaId"`
+	SHA256  string `json:"sha256"`
 }
 
 type AdminEvent struct {
@@ -352,7 +373,7 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 		clauses = append(clauses, "lower(COALESCE(v.kind,'')) = 'live'")
 	}
 	if kind := strings.TrimSpace(f.Kind); kind != "" {
-		clauses = append(clauses, "v.kind = ?")
+		clauses = append(clauses, "COALESCE(v.manual_kind,v.kind) = ?")
 		args = append(args, kind)
 	}
 	switch f.Thumbnail {
@@ -394,11 +415,9 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 	// Release the single connection before resolving each cached thumbnail.
 	rows.Close()
 	for i := range items {
-		ref, err := s.resolveMedia(ctx, items[i].ThumbnailURL)
-		if err != nil {
+		if err := s.resolveAdminThumbnail(ctx, &items[i]); err != nil {
 			return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
 		}
-		items[i].ThumbnailURL, items[i].ThumbnailStatus = ref.PublicURL, ref.Status
 	}
 	featured, err := s.adminFeaturedVideo(ctx, featuredID, items)
 	if err != nil {
@@ -411,20 +430,74 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 	}, nil
 }
 
-const adminVideoColumns = `v.id,v.source,v.title,v.published_at,v.scheduled_at,v.url,v.thumbnail_url,v.kind,COALESCE(v.is_upcoming,0)`
+const adminVideoColumns = `v.id,v.source,v.title,v.published_at,v.scheduled_at,v.url,v.thumbnail_url,v.kind,COALESCE(v.is_upcoming,0),
+ v.manual_title,v.manual_kind,v.manual_thumbnail_media_id,v.manual_thumbnail_sha256,v.duration_seconds,v.live_checked_at,v.refresh_requested_at,
+ (SELECT COUNT(*) FROM video_revisions r WHERE r.video_id=v.id)`
 
 func scanAdminVideo(row scanner) (AdminVideo, error) {
 	var v AdminVideo
-	var published, scheduled, thumbnail, kind sql.NullString
+	var published, scheduled, thumbnail, kind, manualTitle, manualKind, pinMedia, pinHash, checked, requested sql.NullString
+	var duration sql.NullInt64
 	var upcoming int
-	if err := row.Scan(&v.ID, &v.Source, &v.Title, &published, &scheduled, &v.URL, &thumbnail, &kind, &upcoming); err != nil {
+	if err := row.Scan(&v.ID, &v.Source, &v.SourceTitle, &published, &scheduled, &v.URL, &thumbnail, &kind, &upcoming,
+		&manualTitle, &manualKind, &pinMedia, &pinHash, &duration, &checked, &requested, &v.Revisions); err != nil {
 		return AdminVideo{}, err
 	}
 	v.PublishedAt = nullString(published)
 	v.ScheduledAt = nullString(scheduled)
-	v.ThumbnailURL = nullString(thumbnail)
-	v.Kind = nullString(kind)
+	v.sourceThumbnail = nullString(thumbnail)
+	v.ThumbnailURL = v.sourceThumbnail
+	v.SourceKind = nullString(kind)
+	v.ManualTitle = nullString(manualTitle)
+	v.ManualKind = nullString(manualKind)
+	v.Title, v.Kind = v.SourceTitle, v.SourceKind
+	if v.ManualTitle != nil {
+		v.Title = *v.ManualTitle
+	}
+	if v.ManualKind != nil {
+		v.Kind = v.ManualKind
+	}
+	if pinMedia.Valid && pinHash.Valid {
+		v.ManualThumbnail = &AdminThumbnailPin{MediaID: pinMedia.String, SHA256: pinHash.String}
+	}
+	v.DurationSeconds = nullInt(duration)
+	v.CheckedAt = nullString(checked)
+	v.RefreshRequestedAt = nullString(requested)
 	v.IsUpcoming = upcoming != 0
+	return v, nil
+}
+
+// resolveAdminThumbnail replaces the scanned source URL with the local URL of
+// the pinned file, or of the platform's cached file when nothing is pinned or
+// the pinned file is gone.
+func (s *Store) resolveAdminThumbnail(ctx context.Context, v *AdminVideo) error {
+	if v.ManualThumbnail != nil {
+		if url, ok := s.mediaVersionURL(ctx, v.ManualThumbnail.MediaID, v.ManualThumbnail.SHA256); ok {
+			v.ThumbnailURL, v.ThumbnailStatus = &url, "ready"
+			return nil
+		}
+	}
+	ref, err := s.resolveMedia(ctx, v.sourceThumbnail)
+	if err != nil {
+		return err
+	}
+	v.ThumbnailURL, v.ThumbnailStatus = ref.PublicURL, ref.Status
+	return nil
+}
+
+// AdminVideoByID reads one video as the console lists it. It returns
+// ErrVideoNotFound for an unknown ID.
+func (s *Store) AdminVideoByID(ctx context.Context, id string) (AdminVideo, error) {
+	v, err := scanAdminVideo(s.db.QueryRowContext(ctx, `SELECT `+adminVideoColumns+` FROM videos v WHERE v.id=?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return AdminVideo{}, ErrVideoNotFound
+	}
+	if err != nil {
+		return AdminVideo{}, fmt.Errorf("%w: video unavailable", ErrUnavailable)
+	}
+	if err = s.resolveAdminThumbnail(ctx, &v); err != nil {
+		return AdminVideo{}, fmt.Errorf("%w: video unavailable", ErrUnavailable)
+	}
 	return v, nil
 }
 
@@ -440,18 +513,13 @@ func (s *Store) adminFeaturedVideo(ctx context.Context, id *string, listed []Adm
 			return &v, nil
 		}
 	}
-	v, err := scanAdminVideo(s.db.QueryRowContext(ctx, `SELECT `+adminVideoColumns+` FROM videos v WHERE v.id=?`, *id))
-	if errors.Is(err, sql.ErrNoRows) {
+	v, err := s.AdminVideoByID(ctx, *id)
+	if errors.Is(err, ErrVideoNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: featured video unavailable", ErrUnavailable)
 	}
-	ref, err := s.resolveMedia(ctx, v.ThumbnailURL)
-	if err != nil {
-		return nil, fmt.Errorf("%w: featured video unavailable", ErrUnavailable)
-	}
-	v.ThumbnailURL, v.ThumbnailStatus = ref.PublicURL, ref.Status
 	return &v, nil
 }
 

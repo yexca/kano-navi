@@ -207,7 +207,7 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 		return nil, err
 	}
 	liveCutoff := now.Add(-probe.Freshness())
-	rows, err := s.db.QueryContext(ctx, `SELECT id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,live_status,live_checked_at FROM videos`+inRange+` ORDER BY `+instant+` DESC,id ASC LIMIT ? OFFSET ?`, start, end, pageSize, (page-1)*pageSize)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,source,COALESCE(manual_title,title),published_at,scheduled_at,url,thumbnail_url,COALESCE(manual_kind,kind),is_upcoming,live_status,live_checked_at FROM videos`+inRange+` ORDER BY `+instant+` DESC,id ASC LIMIT ? OFFSET ?`, start, end, pageSize, (page-1)*pageSize)
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -254,6 +254,9 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 		}
 	}
 
+	if err = s.pinVideoThumbnails(ctx, items); err != nil {
+		return nil, err
+	}
 	previous, next, err := s.adjacentDates(ctx, "videos", instant, "", nil, start, end)
 	if err != nil {
 		return nil, err

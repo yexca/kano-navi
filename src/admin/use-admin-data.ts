@@ -20,6 +20,7 @@ import {
 import type {
   AdminEvent,
   AdminPost,
+  AdminVideo,
   AdminVideosPage,
   DiscoveredModel,
   EventInput,
@@ -37,6 +38,8 @@ import type {
   ScheduleImage,
   Session,
   Sources,
+  VideoCorrection,
+  VideoHistory,
   Workflow,
   WorkflowCatalog,
 } from "@/admin/types"
@@ -162,6 +165,16 @@ function createClient(run: Runner, slow: Runner) {
       send<{ featuredVideoId: string | null }>("PUT", "/videos/featured", {
         videoId,
       }),
+    videoHistory: (id: string) =>
+      get<VideoHistory>(`/videos/${enc(id)}/history`),
+    correctVideo: (id: string, correction: VideoCorrection) =>
+      send<{ video: AdminVideo }>("PUT", `/videos/${enc(id)}`, correction),
+    refreshVideo: (id: string) =>
+      send<{ video: AdminVideo; started: boolean; run: Run | null }>(
+        "POST",
+        `/videos/${enc(id)}/refresh`,
+        {},
+      ),
 
     profileMedia: () => get<ProfileMediaState>("/profile-media"),
     addProfileMedia: (slot: string, source: string, sourceUrl: string) =>

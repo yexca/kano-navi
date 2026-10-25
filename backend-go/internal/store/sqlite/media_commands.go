@@ -41,7 +41,9 @@ func (s *Store) PendingMedia(ctx context.Context, limit int) ([]PendingMedia, er
 	// created_at. Each owner lookup is a primary-key probe via media_links_media_idx.
 	// Transient download failures are retried, and a ready YouTube thumbnail of
 	// an upcoming or recent video is revalidated because its URL stays the same
-	// when the creator replaces the image.
+	// when the creator replaces the image. So is the thumbnail of any video
+	// whose watch page was read after the file was last checked: a follow-up
+	// check or an operator's refresh request.
 	rows, err := s.db.QueryContext(ctx, `SELECT id,source,source_url,etag,last_modified FROM (
 		SELECT a.id,a.source,a.source_url,a.last_checked_at,a.created_at,
 		CASE WHEN a.status='ready' THEN COALESCE(a.etag,'') ELSE '' END AS etag,
@@ -59,6 +61,9 @@ func (s *Store) PendingMedia(ctx context.Context, limit int) ([]PendingMedia, er
 			OR (a.status='ready' AND a.source='youtube' AND julianday(COALESCE(a.last_checked_at,a.fetched_at,a.created_at))<=julianday(?)
 				AND EXISTS (SELECT 1 FROM media_links ml JOIN videos v ON v.id=ml.owner_id WHERE ml.media_id=a.id AND ml.owner_type='video' AND ml.role='thumbnail'
 					AND (v.is_upcoming=1 OR julianday(COALESCE(v.scheduled_at,v.published_at))>=julianday(?))))
+			OR (a.status='ready' AND a.source='youtube'
+				AND EXISTS (SELECT 1 FROM media_links ml JOIN videos v ON v.id=ml.owner_id WHERE ml.media_id=a.id AND ml.owner_type='video' AND ml.role='thumbnail'
+					AND julianday(v.live_checked_at)>julianday(COALESCE(a.last_checked_at,a.fetched_at,a.created_at))))
 		)
 	) ORDER BY last_checked_at IS NOT NULL,COALESCE(owner_instant,0) DESC,COALESCE(last_checked_at,created_at),id LIMIT ?`, recheck, recheck, live, limit)
 	if err != nil {
@@ -157,6 +162,13 @@ func (s *Store) SaveMediaDownload(ctx context.Context, asset PendingMedia, conte
 		var previous string
 		if err = tx.QueryRowContext(ctx, `SELECT CASE WHEN status='ready' THEN COALESCE(sha256,'') ELSE '' END FROM media_assets WHERE id=? AND source_url=?`, asset.ID, asset.SourceURL).Scan(&previous); err != nil {
 			return ErrSourceWrite
+		}
+		// The replaced file stays in the cache as a version an operator can
+		// pin, and each video that showed it records it as history.
+		if previous != "" && previous != hash {
+			if err = recordMediaVersion(ctx, tx, asset.ID, now); err != nil {
+				return ErrSourceWrite
+			}
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE media_assets SET status='ready',cache_path=?,mime_type=?,byte_size=?,sha256=?,etag=?,last_modified=?,last_error=NULL,fetched_at=?,last_checked_at=?,updated_at=? WHERE id=? AND source_url=?`, relative, mime, len(content), hash, nullable(etag), nullable(lastModified), now, now, now, asset.ID, asset.SourceURL)
 		if err == nil && previous != hash {

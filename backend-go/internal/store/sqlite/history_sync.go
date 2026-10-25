@@ -132,6 +132,17 @@ func (s *Store) WriteHistoryPage(ctx context.Context, page history.Page) (histor
 		for _, video := range page.Videos {
 			// Stored reservation state (kind, upcoming flag, scheduled time) is
 			// owned by the recent synchronization and survives a history page.
+			// The API names thumbnails differently from the watch page, so only
+			// a new title is kept as history here.
+			prior, existed, priorErr := readVideoSource(ctx, tx, video.ID)
+			if priorErr != nil {
+				return history.Written{}, ErrSourceWrite
+			}
+			if existed && prior.Title != video.Title {
+				if err = recordVideoRevision(ctx, tx, video.ID, prior, revisionSync, now); err != nil {
+					return history.Written{}, ErrSourceWrite
+				}
+			}
 			if _, err = tx.ExecContext(ctx, `INSERT INTO videos(id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,raw_json) VALUES(?,'youtube',?,?,NULL,?,?,?,?,'{}') ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=COALESCE(excluded.published_at,videos.published_at),url=excluded.url,thumbnail_url=COALESCE(excluded.thumbnail_url,videos.thumbnail_url)`, video.ID, video.Title, nullable(video.PublishedAt), video.URL, nullable(video.ThumbnailURL), video.Kind, video.IsUpcoming); err != nil {
 				return history.Written{}, ErrSourceWrite
 			}

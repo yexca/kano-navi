@@ -94,11 +94,20 @@ served as active same-origin content.
    the asset identity and links do not change.
 6. A ready YouTube thumbnail linked to an upcoming video, or to one that
    started or was published within the last 24 hours, is revalidated at most
-   every 30 minutes with its stored `ETag` and `Last-Modified`. A 304 only
-   records the check; new bytes become the next content-addressed version,
-   and only a changed hash advances the dashboard revision.
-7. Retention and garbage collection can later use `last_seen_at` and
-   `media_links` to remove unreferenced files deliberately.
+   every 30 minutes with its stored `ETag` and `Last-Modified`. So is the
+   thumbnail of any video whose watch page was read after the file was last
+   checked (a [follow-up check or refresh request](sources.md#follow-up-checks-and-refresh-requests)),
+   whatever its age. A 304 only records the check; new bytes become the next
+   content-addressed version, and only a changed hash advances the dashboard
+   revision.
+7. The file a revalidation replaces stays in the cache. `media_versions`
+   keeps its hash, path, MIME type, size and fetch time under the asset ID,
+   and every video linked to the asset records the replaced thumbnail in
+   `video_revisions`. An operator can pin such a version, or the file of an
+   earlier thumbnail URL, from the video's history.
+8. Retention and garbage collection can later use `last_seen_at`,
+   `media_links`, `media_versions` and the operator pins to remove
+   unreferenced files deliberately.
 
 The downloader accepts only HTTPS URLs on X's `*.twimg.com` media CDN
 subdomains and YouTube's `*.ytimg.com` thumbnail CDN subdomains. It revalidates
@@ -147,7 +156,9 @@ The server exposes `GET /media/<id>` for ready assets only. The ID must match
 the opaque 64-character format, the database row must be `ready`, and the
 resolved file must remain under the cache root. The response never accepts a
 filesystem path or a source URL from the request. Missing, unsafe, or unready
-assets return `404`.
+assets return `404`. A `v` that names a `media_versions` hash of a ready asset
+serves that kept earlier file under the same containment and hash checks; any
+other version answers `404`.
 
 Dashboard media fields include the safe `...Url` (a
 `/media/<id>?v=<content-sha256>` route or a tracked `/assets/...` fallback), the

@@ -26,6 +26,9 @@ type Video struct {
 	// Premiere marks a scheduled upload that is not live content.
 	Premiere bool
 	FeedOnly bool
+	// DurationSeconds is the player's length; zero while unknown, as for a
+	// feed entry, a waiting room or a broadcast still on air.
+	DurationSeconds int
 }
 
 // Broadcast states a watch page can report.
@@ -117,6 +120,8 @@ type playerResponse struct {
 		Upcoming    bool   `json:"isUpcoming"`
 		LiveContent *bool  `json:"isLiveContent"`
 		Live        bool   `json:"isLive"`
+		// Length is a decimal string; "0" while a broadcast is on air.
+		Length string `json:"lengthSeconds"`
 	} `json:"videoDetails"`
 	Playability struct {
 		Status string `json:"status"`
@@ -201,6 +206,9 @@ func ParseWatch(body []byte, id string) (Video, error) {
 	live := player.VideoDetails.LiveContent
 	v.Premiere = found && v.ScheduledAt != "" && live != nil && !*live
 	liveState(&v, player, found)
+	if n, err := strconv.Atoi(player.VideoDetails.Length); err == nil && n > 0 && !v.IsUpcoming && !v.LiveNow {
+		v.DurationSeconds = n
+	}
 	v.ThumbnailURL = meta(text, "og:image")
 	return v, nil
 }

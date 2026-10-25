@@ -163,6 +163,17 @@ CREATE TABLE media_links (
     updated_at TEXT NOT NULL
   );
 
+CREATE TABLE media_versions (
+    media_id TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    cache_path TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    byte_size INTEGER,
+    fetched_at TEXT,
+    replaced_at TEXT NOT NULL,
+    PRIMARY KEY (media_id, sha256)
+  );
+
 CREATE TABLE post_llm_states (
     post_id TEXT PRIMARY KEY,
     status TEXT NOT NULL DEFAULT 'never',
@@ -302,6 +313,18 @@ CREATE TABLE timeline (
     raw_json TEXT
   );
 
+CREATE TABLE video_revisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    video_id TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    title TEXT,
+    thumbnail_url TEXT,
+    thumbnail_media_id TEXT,
+    thumbnail_sha256 TEXT,
+    kind TEXT,
+    replaced_at TEXT NOT NULL
+  );
+
 CREATE TABLE videos (
     id TEXT PRIMARY KEY,
     source TEXT NOT NULL,
@@ -314,7 +337,14 @@ CREATE TABLE videos (
     is_upcoming INTEGER DEFAULT 0,
     raw_json TEXT,
     live_status TEXT,
-    live_checked_at TEXT
+    live_checked_at TEXT,
+    duration_seconds INTEGER,
+    manual_title TEXT,
+    manual_kind TEXT,
+    manual_thumbnail_media_id TEXT,
+    manual_thumbnail_sha256 TEXT,
+    manual_updated_at TEXT,
+    refresh_requested_at TEXT
   );
 
 CREATE TABLE workflows (
@@ -386,6 +416,8 @@ CREATE UNIQUE INDEX schedule_extractions_identity_idx
 CREATE INDEX sync_runs_finished_at_idx ON sync_runs (finished_at DESC);
 
 CREATE INDEX sync_runs_job_idx ON sync_runs (job_id, id DESC);
+
+CREATE INDEX video_revisions_video_idx ON video_revisions (video_id, id DESC);
 
 CREATE INDEX videos_date_idx ON videos (COALESCE(scheduled_at, published_at) DESC);
 

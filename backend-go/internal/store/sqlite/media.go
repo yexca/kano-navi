@@ -69,8 +69,19 @@ func (s *Store) ReadMedia(ctx context.Context, id, version string) (*MediaFile, 
 		return nil, ErrMediaNotReady
 	}
 	if version != "" {
-		if !safeHash(version) || version != contentHash.String {
+		if !safeHash(version) {
 			return nil, ErrMediaVersionNotFound
+		}
+		// An earlier file a revalidation replaced stays servable by its hash,
+		// so an operator can keep showing it.
+		if version != contentHash.String {
+			err = s.db.QueryRowContext(ctx, `SELECT cache_path,mime_type,sha256,fetched_at FROM media_versions WHERE media_id=? AND sha256=?`, id, version).Scan(&cachePath, &mimeType, &contentHash, &fetchedAt)
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrMediaVersionNotFound
+			}
+			if err != nil {
+				return nil, dbErr(err)
+			}
 		}
 	}
 	mime, ok := allowedMediaMIME(mimeType.String)

@@ -30,6 +30,14 @@
   in one click on the Posts page). `GET /api/admin/sources` adds `windows`,
   the fetch modes each source can run now, and the badge says when windows
   go through the timeline.
+- Each video on the Videos page has a Correct dialog: override its title and
+  kind, pin any cached version of its thumbnail, see the titles and
+  thumbnails the platform replaced, and ask for its page to be read again
+  first in the next YouTube step. The board, the video archive and MCP show
+  the corrections, while sync keeps the platform values underneath. Cards
+  mark corrected videos, their history
+  and a pending refresh. New routes: `GET /api/admin/videos/{id}/history`,
+  `PUT /api/admin/videos/{id}` and `POST /api/admin/videos/{id}/refresh`.
 
 </details>
 
@@ -68,6 +76,13 @@
   post, and range and count windows resume from their own `x-timeline-window`
   checkpoint. Posts already stored, the incremental cursor and the pending
   queue are left unchanged, and timed workflows stay incremental.
+- YouTube sync reads a finished video's page again 1 hour and 1, 3 and 7
+  days after it airs (from its end, or else its start or publication), so a
+  premiere's replaced thumbnail or a later title change reaches the board;
+  each read also rechecks the cached thumbnail. Videos store their length.
+- A title or thumbnail the platform replaces is kept as history, and a
+  thumbnail file replaced at the same URL stays in the cache as an earlier
+  version that `/media/<id>?v=<hash>` still serves.
 
 </details>
 

@@ -10,14 +10,47 @@ type State struct {
 	CursorID, CursorTime         string
 	Videos                       map[string]Video
 	Queue, CheckedIDs, ActiveIDs []string
+	// RefreshIDs are operator requests, checked before any other detail work.
+	// FollowUpIDs are videos whose next FollowUpOffsets check is due; they
+	// follow the active reservations.
+	RefreshIDs, FollowUpIDs []string
 }
 type Result struct {
-	Videos                           []Video
-	Queue, CheckedIDs                []string
+	Videos            []Video
+	Queue, CheckedIDs []string
+	// InspectedIDs are the videos whose watch page passed the completeness
+	// checks in this run.
+	InspectedIDs                     []string
 	NextCursor, NextCursorTime       string
 	Errors                           []string
 	Discovered, Requested, Inspected int
 }
+
+// FollowUpOffsets are the times after a video's anchor (its broadcast end,
+// otherwise its start or publication) at which its watch page is read again,
+// because creators replace a premiere's thumbnail or retitle an upload after
+// it goes out. A video is checked once per offset that has passed.
+var FollowUpOffsets = []time.Duration{time.Hour, 24 * time.Hour, 72 * time.Hour, 7 * 24 * time.Hour}
+
+// FollowUpWindow bounds how old an anchor may be for a follow-up, so an
+// upgrade does not reread the whole history.
+const FollowUpWindow = 8 * 24 * time.Hour
+
+// FollowUpDue reports whether the newest passed follow-up offset after anchor
+// has no successful check at or after it. A zero lastChecked was never checked.
+func FollowUpDue(anchor, lastChecked, now time.Time) bool {
+	if anchor.IsZero() || now.Sub(anchor) > FollowUpWindow {
+		return false
+	}
+	var due time.Time
+	for _, offset := range FollowUpOffsets {
+		if at := anchor.Add(offset); !at.After(now) {
+			due = at
+		}
+	}
+	return !due.IsZero() && lastChecked.Before(due)
+}
+
 type Adapter struct {
 	Client  *Client
 	Options Options
@@ -31,7 +64,7 @@ func NewAdapter(c *Client, options Options) *Adapter {
 	return &Adapter{c, options, time.Now}
 }
 func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Result, error) {
-	result := Result{Videos: []Video{}, Errors: []string{}, Queue: []string{}, CheckedIDs: []string{}}
+	result := Result{Videos: []Video{}, Errors: []string{}, Queue: []string{}, CheckedIDs: []string{}, InspectedIDs: []string{}}
 	if days < 1 || days > 365 || a.Options.MaxDetailRequests < 1 || a.Options.MaxDetailRequests > 50 {
 		return result, &Error{"youtube_invalid_options"}
 	}
@@ -80,7 +113,9 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 	for _, id := range state.CheckedIDs {
 		checked[id] = true
 	}
-	eligible := append([]string{}, state.Queue...)
+	// An operator's refresh request goes ahead of the rotating queue; due
+	// follow-ups come last so they never starve new discoveries.
+	eligible := append(append([]string{}, state.RefreshIDs...), state.Queue...)
 	for _, id := range append(append([]string{}, streamIDs...), feedIDs...) {
 		v, exists := state.Videos[id]
 		t, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
@@ -88,7 +123,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 			eligible = append(eligible, id)
 		}
 	}
-	eligible = append(eligible, state.ActiveIDs...)
+	eligible = append(append(eligible, state.ActiveIDs...), state.FollowUpIDs...)
 	result.Queue = uniqueIDs(eligible, 1000)
 	requests := append([]string{}, result.Queue...)
 	if len(requests) > a.Options.MaxDetailRequests {
@@ -115,6 +150,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 		t, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
 		result.Videos = append(result.Videos, v)
 		result.Inspected++
+		result.InspectedIDs = append(result.InspectedIDs, id)
 		checked[id] = true
 		if !v.IsUpcoming && (t.IsZero() || t.Before(now.Add(-24*time.Hour))) {
 			result.Queue = withoutID(result.Queue, id)

@@ -131,6 +131,36 @@ never generated falls back to the next smaller one, and the thumbnail of an
 upcoming or recent video is revalidated because its URL stays the same when the
 creator replaces the image; see [Media cache](media-cache.md).
 
+#### Follow-up checks and refresh requests
+
+Creators often replace a premiere's placeholder thumbnail, or retitle an
+upload, after it goes out. A finished video therefore has its watch page read
+again 1 hour, 1 day, 3 days and 7 days after its anchor
+(`ytsource.FollowUpOffsets`): the broadcast end the linked event records, or
+otherwise its start or publication. A video is due when the newest passed
+offset has no successful check (`live_checked_at`) at or after it; anchors
+older than eight days are left alone, so an upgrade does not reread the
+history. The YouTube step adds at most ten due videos per run behind the
+active reservations, so they never starve new discoveries, and uses the same
+detail budget, completeness checks and rotating queue.
+
+An operator can also ask for one video from `/admin` (see
+[Admin API](admin-api.md#video-corrections-and-history)). The request is
+stored as `videos.refresh_requested_at`; the next YouTube step reads that page
+before any other detail work, and a successful check clears it. A request
+that no successful check answers within 24 hours stops going first.
+
+Every detail check stores the player's `lengthSeconds` as
+`duration_seconds` once a video is neither upcoming nor live. When a check
+reports a new title or thumbnail URL, the replaced platform state is kept as a
+`video_revisions` row (`origin = sync`); a YouTube API history page does the
+same for a new title only, because the API names thumbnails differently from
+the watch page. After any successful page read, the media step revalidates the
+video's thumbnail file whatever its age, and new bytes at the same URL keep
+the replaced file as a version (`origin = media`). Operator corrections of the
+title, kind or thumbnail are separate columns that synchronization never
+writes; see [Video corrections](data-model.md#video-corrections-and-history).
+
 #### Live-status probe
 
 Whether a stream is on air is read from YouTube rather than guessed from its

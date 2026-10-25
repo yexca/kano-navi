@@ -55,6 +55,10 @@ func (s *Store) YoutubeRecentState(ctx context.Context, channel string) (ytsourc
 	if rows.Err() != nil {
 		return out, ErrUnavailable
 	}
+	rows.Close()
+	if out.RefreshIDs, out.FollowUpIDs, err = s.youtubeRefreshWork(ctx, time.Now(), out.Videos); err != nil {
+		return out, err
+	}
 	return out, nil
 }
 func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result ytsource.Result) error {
@@ -131,13 +135,21 @@ func writeYoutubeVideos(ctx context.Context, tx *sql.Tx, videos []ytsource.Video
 		if err := tx.QueryRowContext(ctx, youtubeVideoState, v.ID).Scan(&before); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return false, ErrSourceWrite
 		}
+		prior, existed, err := readVideoSource(ctx, tx, v.ID)
+		if err != nil {
+			return false, ErrSourceWrite
+		}
 		// A detail check records the broadcast state the page reported, or
-		// clears it when the page names none.
-		var checkedAt any
+		// clears it when the page names none, and answers an operator's
+		// refresh request.
+		var checkedAt, duration any
 		if !v.FeedOnly {
 			checkedAt = now
 		}
-		written, err := tx.ExecContext(ctx, `INSERT INTO videos(id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,live_status,live_checked_at,raw_json) VALUES(?,'youtube',?,?,?,?,?,?,?,?,?,'{}') ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=COALESCE(excluded.published_at,videos.published_at),scheduled_at=COALESCE(excluded.scheduled_at,videos.scheduled_at),url=excluded.url,thumbnail_url=excluded.thumbnail_url,kind=excluded.kind,is_upcoming=excluded.is_upcoming,live_status=excluded.live_status,live_checked_at=excluded.live_checked_at WHERE ?=0`, v.ID, v.Title, nullable(v.PublishedAt), nullable(v.ScheduledAt), v.URL, nullable(v.ThumbnailURL), v.Kind, v.IsUpcoming, nullable(v.LiveStatus), checkedAt, v.FeedOnly)
+		if v.DurationSeconds > 0 {
+			duration = v.DurationSeconds
+		}
+		written, err := tx.ExecContext(ctx, `INSERT INTO videos(id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,live_status,live_checked_at,duration_seconds,raw_json) VALUES(?,'youtube',?,?,?,?,?,?,?,?,?,?,'{}') ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=COALESCE(excluded.published_at,videos.published_at),scheduled_at=COALESCE(excluded.scheduled_at,videos.scheduled_at),url=excluded.url,thumbnail_url=excluded.thumbnail_url,kind=excluded.kind,is_upcoming=excluded.is_upcoming,live_status=excluded.live_status,live_checked_at=excluded.live_checked_at,duration_seconds=COALESCE(excluded.duration_seconds,videos.duration_seconds),refresh_requested_at=CASE WHEN excluded.live_checked_at IS NULL THEN videos.refresh_requested_at END WHERE ?=0`, v.ID, v.Title, nullable(v.PublishedAt), nullable(v.ScheduledAt), v.URL, nullable(v.ThumbnailURL), v.Kind, v.IsUpcoming, nullable(v.LiveStatus), checkedAt, duration, v.FeedOnly)
 		if err != nil {
 			return false, ErrSourceWrite
 		}
@@ -153,6 +165,12 @@ func writeYoutubeVideos(ctx context.Context, tx *sql.Tx, videos []ytsource.Video
 		changed = changed || after != before
 		if v.ThumbnailURL != "" {
 			if err = replaceMediaLink(ctx, tx, "youtube", v.ThumbnailURL, "video", v.ID, "thumbnail", 0, now); err != nil {
+				return false, ErrSourceWrite
+			}
+		}
+		// A creator's new title or thumbnail keeps the replaced one as history.
+		if existed && (prior.Title != v.Title || prior.ThumbnailURL != v.ThumbnailURL) {
+			if err = recordVideoRevision(ctx, tx, v.ID, prior, revisionSync, now); err != nil {
 				return false, ErrSourceWrite
 			}
 		}
