@@ -8,6 +8,11 @@ activity calendar, the latest focus item, YouTube updates, a timeline, and publi
 resource links. It is not a publishing platform and does not replace X,
 YouTube, or any other original source.
 
+Pages show the site name for the active locale: What’s Kano Up To? (English),
+鹿乃なにしてる？ (Japanese), and 鹿乃在做什么 (Simplified Chinese), from the
+`site.name` message. Kano Navi remains the project, repository, and release
+name; the about page shows it beside the version.
+
 ## Goals
 
 - Aggregate public updates into a stable, scannable page.

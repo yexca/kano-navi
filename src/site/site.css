@@ -226,13 +226,16 @@
   }
 }
 
+/* The localized site name needs about 650px beside the page links. */
+@media (max-width: 680px) {
+  .site-brand-copy {
+    display: none;
+  }
+}
+
 @media (max-width: 600px) {
   .site-header-inner {
     gap: 8px;
-  }
-
-  .site-brand-copy {
-    display: none;
   }
 
   .site-pages {

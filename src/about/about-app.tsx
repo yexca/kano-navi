@@ -70,12 +70,12 @@ export function AboutApp() {
         <section className="about-hero" aria-labelledby="about-title">
           <p className="kicker">{t("about.label")}</p>
           <h1 id="about-title">
-            Kano Navi
+            {t("site.name")}
             <span aria-hidden="true">🍓🦌</span>
           </h1>
           <p className="about-intro">{t("about.intro")}</p>
           <p className="about-edition">
-            <span className="tag">v{version}</span>
+            <span className="tag">Kano Navi v{version}</span>
             <span className="tag">{t("about.tagline")}</span>
             <span className="tag">{t("about.by", { author: AUTHOR })}</span>
           </p>

@@ -83,7 +83,7 @@ export function SiteHeader({
         >
           <img src={avatarUrl || DEFAULT_AVATAR} alt="" />
           <span className="site-brand-copy">
-            <strong>Kano Navi</strong>
+            <strong>{t("site.name")}</strong>
             <small>{t("header.unofficial")}</small>
           </span>
         </a>

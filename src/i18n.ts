@@ -13,7 +13,8 @@ export const localeOptions = [
 
 const messages = {
   "zh-CN": {
-    "meta.title": "鹿乃まほろ · 近况",
+    "site.name": "鹿乃在做什么",
+    "meta.title": "鹿乃在做什么",
     "meta.description":
       "鹿乃まほろ的非官方近况整理页：X 动态、配信日程、YouTube 与资料入口。",
     "header.backToTop": "回到顶部",
@@ -167,7 +168,7 @@ const messages = {
       "与本人及所属事务所无关 · 内容来自本地快照 · 一切以各平台原页面为准",
     "footer.backToTop": "回到顶部",
     "archive.fullHistory": "完整历程",
-    "history.metaTitle": "鹿乃 · 历程",
+    "history.metaTitle": "历程 · 鹿乃在做什么",
     "history.metaDescription":
       "鹿乃从 2010 年翻唱投稿到 2026 年加入ミリプロSONA 的公开足迹，附官方来源。",
     "history.back": "回到近况",
@@ -206,7 +207,8 @@ const messages = {
     "relative.justNow": "刚刚",
   },
   ja: {
-    "meta.title": "鹿乃まほろ · いまのまほろ",
+    "site.name": "鹿乃なにしてる？",
+    "meta.title": "鹿乃なにしてる？",
     "meta.description":
       "鹿乃まほろの非公式まとめページ。X、配信予定、YouTube、公開リンクをひと目で。",
     "header.backToTop": "ページ上部へ",
@@ -365,7 +367,7 @@ const messages = {
       "ご本人・所属事務所とは無関係です · ローカルスナップショットを表示 · 各プラットフォームの元ページが正です",
     "footer.backToTop": "ページ上部へ",
     "archive.fullHistory": "あゆみを全部見る",
-    "history.metaTitle": "鹿乃 · あゆみ",
+    "history.metaTitle": "あゆみ · 鹿乃なにしてる？",
     "history.metaDescription":
       "2010 年の歌ってみた投稿から 2026 年のミリプロSONA 所属まで、鹿乃の公開されたあゆみを出典つきで。",
     "history.back": "いまのまほろへ",
@@ -404,7 +406,8 @@ const messages = {
     "relative.justNow": "たった今",
   },
   en: {
-    "meta.title": "Kano Mahoro · Now",
+    "site.name": "What’s Kano Up To?",
+    "meta.title": "What’s Kano Up To?",
     "meta.description":
       "An unofficial Kano Mahoro status board: X posts, stream schedule, YouTube, and public links at a glance.",
     "header.backToTop": "Back to top",
@@ -567,7 +570,7 @@ const messages = {
       "Not affiliated with the artist or agency · Shows a local snapshot · Original platform pages are authoritative",
     "footer.backToTop": "Back to top",
     "archive.fullHistory": "Full journey",
-    "history.metaTitle": "Kano · Journey",
+    "history.metaTitle": "Journey · What’s Kano Up To?",
     "history.metaDescription":
       "Kano's public milestones from the first 2010 covers to joining Milpro SONA in 2026, with sources.",
     "history.back": "Back to the board",

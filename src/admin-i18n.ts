@@ -4,9 +4,9 @@ const plural = (count: number, one: string, many: string) =>
 
 export const adminMessages = {
   en: {
-    "admin.meta.title": "Operator console / Kano status board",
+    "admin.meta.title": "Operator console / What’s Kano Up To?",
     "admin.loading": "Loading…",
-    "admin.brand.board": "KANO STATUS BOARD",
+    "admin.brand.board": "WHAT’S KANO UP TO?",
     "admin.brand.console": "Operator console",
     "admin.login.title": "Sign in to the console",
     "admin.login.password": "Access password",
@@ -622,9 +622,9 @@ export const adminMessages = {
     "admin.error.notFound": "That record no longer exists.",
   },
   "zh-CN": {
-    "admin.meta.title": "运营后台 / 鹿乃近况",
+    "admin.meta.title": "运营后台 / 鹿乃在做什么",
     "admin.loading": "加载中…",
-    "admin.brand.board": "KANO STATUS BOARD",
+    "admin.brand.board": "鹿乃在做什么",
     "admin.brand.console": "运营后台",
     "admin.login.title": "登录后台",
     "admin.login.password": "访问密码",

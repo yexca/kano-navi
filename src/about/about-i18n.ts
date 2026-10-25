@@ -1,9 +1,9 @@
 export const aboutMessages = {
   "zh-CN": {
     "about.label": "关于本站",
-    "about.metaTitle": "关于本站 · Kano Navi",
+    "about.metaTitle": "关于本站 · 鹿乃在做什么",
     "about.metaDescription":
-      "Kano Navi 的项目介绍、AI 开发致谢、技术栈与许可说明。",
+      "“鹿乃在做什么”的项目介绍、AI 开发致谢、技术栈与许可说明。",
     "about.skip": "跳转到项目介绍",
     "about.tagline": "鹿乃まほろ · 非官方近况整理页",
     "about.by": "作者 {author}",
@@ -13,7 +13,7 @@ export const aboutMessages = {
     "about.intro": "把鹿乃まほろ的近况，整理成一个随时可以回来的地方。",
     "about.overview": "项目概览",
     "about.overviewOne":
-      "Kano Navi 是为鹿乃まほろ的粉丝制作的非官方近况整理页，汇集公开的 X 动态、配信与活动日程、YouTube 更新，以及相关资料入口。独立的旅程页面记录从 2010 年至今的公开活动节点与图片档案。",
+      "本站是为鹿乃まほろ的粉丝制作的非官方近况整理页，汇集公开的 X 动态、配信与活动日程、YouTube 更新，以及相关资料入口。独立的旅程页面记录从 2010 年至今的公开活动节点与图片档案。",
     "about.overviewTwo":
       "页面读取服务端保存的本地快照，浏览或刷新页面不会直接抓取外部平台。日程时间以日本时间显示，信息的新鲜度取决于同步频率；来源暂时不可用时，保留已有记录。",
     "about.builtWithAi": "使用 AI 构建",
@@ -37,9 +37,9 @@ export const aboutMessages = {
   },
   ja: {
     "about.label": "このサイトについて",
-    "about.metaTitle": "このサイトについて · Kano Navi",
+    "about.metaTitle": "このサイトについて · 鹿乃なにしてる？",
     "about.metaDescription":
-      "Kano Navi の概要、AI 開発への謝辞、技術構成とライセンスについて。",
+      "「鹿乃なにしてる？」の概要、AI 開発への謝辞、技術構成とライセンスについて。",
     "about.skip": "プロジェクト紹介へ",
     "about.tagline": "鹿乃まほろ · 非公式近況まとめ",
     "about.by": "作者 {author}",
@@ -49,7 +49,7 @@ export const aboutMessages = {
     "about.intro": "鹿乃まほろの近況を、いつでも帰ってこられる場所に。",
     "about.overview": "プロジェクト概要",
     "about.overviewOne":
-      "Kano Navi は鹿乃まほろのファンによる非公式の近況まとめサイトです。公開 X 投稿、配信・イベント予定、YouTube 更新、関連リンクをまとめています。別ページの活動記録では、2010 年から現在までの公開活動と画像資料を紹介しています。",
+      "本サイトは鹿乃まほろのファンによる非公式の近況まとめサイトです。公開 X 投稿、配信・イベント予定、YouTube 更新、関連リンクをまとめています。別ページの活動記録では、2010 年から現在までの公開活動と画像資料を紹介しています。",
     "about.overviewTwo":
       "ページはサーバーに保存されたローカルのスナップショットを読み込み、閲覧や更新操作で外部サービスを直接取得することはありません。予定は日本時間で表示し、情報の鮮度は同期頻度によります。取得元が一時的に利用できない場合も既存の記録を保持します。",
     "about.builtWithAi": "AI とともに開発",
@@ -73,9 +73,9 @@ export const aboutMessages = {
   },
   en: {
     "about.label": "About this site",
-    "about.metaTitle": "About · Kano Navi",
+    "about.metaTitle": "About · What’s Kano Up To?",
     "about.metaDescription":
-      "About Kano Navi, its AI development credits, technology stack, and license.",
+      "Project overview, AI development credits, technology stack, and license for What’s Kano Up To?",
     "about.skip": "Skip to project information",
     "about.tagline": "Kano Mahoro · Unofficial status board",
     "about.by": "By {author}",
@@ -86,7 +86,7 @@ export const aboutMessages = {
       "A place to return to, with Kano Mahoro’s latest updates gathered together.",
     "about.overview": "Project overview",
     "about.overviewOne":
-      "Kano Navi is an unofficial status board made for Kano Mahoro fans. It brings together public X posts, stream and event schedules, YouTube updates, and resource links. A separate journey page collects public milestones and visual archives from 2010 to the present.",
+      "This site is an unofficial status board made for Kano Mahoro fans. It brings together public X posts, stream and event schedules, YouTube updates, and resource links. A separate journey page collects public milestones and visual archives from 2010 to the present.",
     "about.overviewTwo":
       "Pages read local snapshots saved by the server. Browsing or refreshing a page does not fetch external platforms directly. Schedules use Japan time, and freshness depends on synchronization frequency. Existing records remain available when a source is temporarily unavailable.",
     "about.builtWithAi": "Built with AI",
