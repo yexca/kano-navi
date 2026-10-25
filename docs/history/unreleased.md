@@ -94,6 +94,9 @@
   the timed stream of that day, and an X notice into the YouTube reservation
   that starts within 30 minutes. Ambiguous days, manual entries and
   cancellations are left alone, and merges survive re-extraction.
+- X notices with an approximate start time also merge into the only compatible
+  YouTube stream starting within 30 minutes on the same date, while keeping
+  their original time precision and the existing operator protections.
 - A lightweight live-status probe rechecks only the watch pages of up to five
   reservations that are starting or started and streams without a known end,
   through the job queue. It follows each stream's start: one check shortly

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -138,6 +139,74 @@ func TestReconcileRuleBMergesXNoticeIntoYoutube(t *testing.T) {
 		"x6": "y6|rule|rule_b:youtube_start",
 		"x7": unmerged, // a members-only notice never merges into a public stream
 	})
+}
+
+func TestReconcileRuleBMergesApproximateXNotices(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		clock     string
+		targets   []string
+		options   string
+		merged    bool
+		ambiguous int
+	}{
+		{name: "same start", clock: "20:00", targets: []string{"20:00"}, merged: true},
+		{name: "thirty minutes before", clock: "19:30", targets: []string{"20:00"}, merged: true},
+		{name: "thirty minutes after", clock: "20:30", targets: []string{"20:00"}, merged: true},
+		{name: "too early", clock: "19:29:59", targets: []string{"20:00"}},
+		{name: "too late", clock: "20:30:01", targets: []string{"20:00"}},
+		{name: "multiple targets", clock: "20:00", targets: []string{"20:00", "20:20"}, ambiguous: 1},
+		{name: "locked", clock: "20:00", targets: []string{"20:00"}, options: "manual_locked=1"},
+		{name: "manual", clock: "20:00", targets: []string{"20:00"}, options: "provenance='manual'"},
+		{name: "manually unmerged", clock: "20:00", targets: []string{"20:00"}, options: "merge_source='manual',merge_reason='unmerged_from:y1'"},
+		{name: "suspected cancellation", clock: "20:00", targets: []string{"20:00"}, options: "cancellation_status='llm_suspected'"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newMergeFixture(t)
+			options := []string{"time_precision='approximate'"}
+			if tt.options != "" {
+				options = append(options, tt.options)
+			}
+			f.add("x1", "x", "Game night", "2026-10-28", tt.clock, "stream", options...)
+			for i, clock := range tt.targets {
+				f.add(fmt.Sprintf("y%d", i+1), "youtube", "Collaboration", "2026-10-28", clock, "stream")
+			}
+			counts := f.reconcile()
+			var target sql.NullString
+			if err := f.s.DB().QueryRow(`SELECT merged_into FROM events WHERE id='x1'`).Scan(&target); err != nil {
+				t.Fatal(err)
+			}
+			if target.Valid != tt.merged || tt.merged && target.String != "y1" || counts.Ambiguous != tt.ambiguous {
+				t.Fatalf("target=%+v counts=%+v", target, counts)
+			}
+			if tt.merged && f.state("x1") != "y1|rule|rule_b:youtube_start" {
+				t.Fatalf("merge=%s", f.state("x1"))
+			}
+		})
+	}
+}
+
+func TestReconcileApproximateNoticeLeavesOnePublicStream(t *testing.T) {
+	f := newMergeFixture(t)
+	ctx := context.Background()
+	f.add("a1", "x", "Weekly plan", "2026-10-28", "", "stream")
+	f.add("x1", "x", "Game night", "2026-10-28", "20:00", "stream", "time_precision='approximate'")
+	f.add("y1", "youtube", "Collaboration", "2026-10-28", "20:00", "stream")
+	if counts := f.reconcile(); counts.Merged != 2 {
+		t.Fatalf("counts=%+v", counts)
+	}
+	f.expect(map[string]string{"a1": "y1|rule|rule_a:only_stream", "x1": "y1|rule|rule_b:youtube_start", "y1": unmerged})
+	page, err := f.s.GetCalendarPage(ctx, "2026-10-28", "2026-10-28", 1, 10)
+	if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != "y1" {
+		t.Fatalf("calendar=%+v %v", page, err)
+	}
+	var precision string
+	if err = f.s.DB().QueryRow(`SELECT time_precision FROM events WHERE id='x1'`).Scan(&precision); err != nil || precision != "approximate" {
+		t.Fatalf("precision=%s %v", precision, err)
+	}
+	if counts := f.reconcile(); counts.Changed() || counts.Kept != 2 {
+		t.Fatalf("repeat=%+v", counts)
+	}
 }
 
 func TestReconcileExclusions(t *testing.T) {

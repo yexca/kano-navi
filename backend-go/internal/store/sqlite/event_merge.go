@@ -55,7 +55,7 @@ type mergeEvent struct {
 	id, source, title, startsOn, eventType, provenance, cancellation string
 	mergedInto, mergeSource                                          string
 	start                                                            time.Time
-	hasStart, exact, locked                                          bool
+	hasStart, locked                                                 bool
 }
 
 func (e mergeEvent) stream() bool { return e.eventType == "stream" || e.eventType == "member" }
@@ -91,8 +91,9 @@ func compatible(source, target mergeEvent) bool {
 // ReconcileEventMerges applies the deterministic merge rules to active
 // stream/member events in a bounded window of Japan dates around now:
 //
-//   - Rule B: an automatic X event with an exact time merges into the only
-//     compatible YouTube event on the same date that starts within 30 minutes.
+//   - Rule B: an automatic X event with an exact or approximate time merges
+//     into the only compatible YouTube event on the same date that starts
+//     within 30 minutes.
 //   - Rule A: a date-only automatic event merges into the timed stream on the
 //     same date whose normalized title overlaps its own, or, when the day has
 //     exactly one date-only and one timed stream, into that stream.
@@ -197,7 +198,7 @@ func loadMergeEvents(ctx context.Context, tx *sql.Tx, from, to string) ([]mergeE
 		}
 		e.locked = locked != 0
 		if start, ok := parseMergeInstant(startsAt); ok && precision != "unknown" {
-			e.start, e.hasStart, e.exact = start, true, precision == "exact"
+			e.start, e.hasStart = start, true
 		}
 		events = append(events, e)
 	}
@@ -234,9 +235,9 @@ func planMerges(events []mergeEvent) (map[string]string, map[string]string, int)
 	slices.Sort(days)
 	for _, day := range days {
 		list := byDay[day]
-		// Rule B: an exact X notice and the YouTube reservation of the stream.
+		// Rule B: a timed X notice and the YouTube reservation of the stream.
 		for _, s := range list {
-			if !source(s) || s.source != "x" || !s.exact {
+			if !source(s) || s.source != "x" || !s.timed() {
 				continue
 			}
 			matches := []string{}

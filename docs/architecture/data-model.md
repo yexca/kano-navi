@@ -266,9 +266,10 @@ reservation refresh, keep the merge. `merge_source` names the owner:
 The rules consider active, non-deleted `stream`/`member` events from 30 days
 before to 60 days after the current Japan date:
 
-- Rule B: an automatic X event with an exact time merges into a YouTube event
-  on the same date that starts within 30 minutes. A generic stream may merge
-  into a members-only stream, not the reverse.
+- Rule B: an automatic X event with an exact or approximate time merges into
+  the only compatible YouTube event on the same date that starts within 30
+  minutes. The stored time precision stays unchanged. A generic stream may
+  merge into a members-only stream, not the reverse.
 - Rule A (after Rule B): a date-only automatic event merges into the timed
   stream on the same date whose normalized title overlaps its own (one
   contains the other or they share a token of at least two characters after
