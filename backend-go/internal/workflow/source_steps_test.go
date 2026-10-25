@@ -33,8 +33,9 @@ func TestGoSourceWorkflowProducesPostsReservationsAndReadableMedia(t *testing.T)
 	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
 		body, mime := "", "text/html"
 		switch r.URL.Host {
-		case "x.com":
-			body = `status/111111111111`
+		case "api.fxtwitter.com":
+			body = `{"code":200,"results":[{"id":"111111111111","author":{"screen_name":"fixture"}}],"cursor":{"bottom":""}}`
+			mime = "application/json"
 		case "api.vxtwitter.com":
 			body = `{"tweetID":"111111111111","text":"fixture post","date":"2026-01-02T00:00:00Z","mediaURLs":["https://pbs.twimg.com/fixture.png"]}`
 			mime = "application/json"

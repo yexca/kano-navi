@@ -17,9 +17,14 @@ import (
 
 const (
 	profileHost            = "x.com"
+	timelineHost           = "api.fxtwitter.com"
 	detailHost             = "api.vxtwitter.com"
 	userAgent              = "kano-navi-go/x-recent"
 	maxResponseBytes int64 = 4 * 1024 * 1024
+	// timelinePageSize is FxTwitter's default page; one page usually reaches a
+	// stored post, so later pages are requested only to close a gap.
+	timelinePageSize = 20
+	maxTimelinePages = 10
 )
 
 type ErrorCode string
@@ -54,7 +59,8 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
-// Client only permits the public profile and vxtwitter detail hosts.
+// Client only permits the public profile, FxTwitter timeline and vxtwitter
+// detail hosts.
 type Client struct{ HTTP *http.Client }
 
 func NewClient(httpClient *http.Client) *Client {
@@ -67,11 +73,11 @@ func NewClient(httpClient *http.Client) *Client {
 	httpClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{HTTP: httpClient}
 }
-func (c *Client) request(ctx context.Context, host, path string) ([]byte, error) {
-	if host != profileHost && host != detailHost {
+func (c *Client) request(ctx context.Context, host, path string, query url.Values) ([]byte, error) {
+	if host != profileHost && host != timelineHost && host != detailHost {
 		return nil, &Error{Code: ErrHTTP, Err: errors.New("host not allowlisted")}
 	}
-	u := url.URL{Scheme: "https", Host: host, Path: path}
+	u := url.URL{Scheme: "https", Host: host, Path: path, RawQuery: query.Encode()}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, &Error{Code: ErrHTTP, Err: err}
@@ -108,10 +114,20 @@ func (c *Client) request(ctx context.Context, host, path string) ([]byte, error)
 	return body, nil
 }
 func (c *Client) Profile(ctx context.Context, account string) ([]byte, error) {
-	return c.request(ctx, profileHost, "/"+url.PathEscape(account))
+	return c.request(ctx, profileHost, "/"+url.PathEscape(account), nil)
+}
+
+// Timeline reads one newest-first page of the account's statuses. An empty
+// cursor requests the first page.
+func (c *Client) Timeline(ctx context.Context, account, cursor string) ([]byte, error) {
+	query := url.Values{"count": {strconv.Itoa(timelinePageSize)}}
+	if cursor != "" {
+		query.Set("cursor", cursor)
+	}
+	return c.request(ctx, timelineHost, "/2/profile/"+url.PathEscape(account)+"/statuses", query)
 }
 func (c *Client) Detail(ctx context.Context, account, id string) ([]byte, error) {
-	return c.request(ctx, detailHost, "/"+url.PathEscape(account)+"/status/"+url.PathEscape(id))
+	return c.request(ctx, detailHost, "/"+url.PathEscape(account)+"/status/"+url.PathEscape(id), nil)
 }
 
 type Options struct {
@@ -123,6 +139,9 @@ type Options struct {
 	ScheduleKeywords  []string
 	PendingIDs        []string
 	KnownIDs          map[string]bool
+	// CursorID is the account's newest stored status; timeline paging stops
+	// once it reaches it.
+	CursorID string
 }
 
 func DefaultOptions() Options {
@@ -170,7 +189,10 @@ func SetEnvReader(fn func(string) string) {
 	}
 }
 
-var statusPattern = regexp.MustCompile(`(?i)(?:status%2F|status/)(\d{10,})`)
+var (
+	statusPattern   = regexp.MustCompile(`(?i)(?:status%2F|status/)(\d{10,})`)
+	statusIDPattern = regexp.MustCompile(`^\d{10,22}$`)
+)
 
 func DiscoverIDs(body []byte, limit int) []string {
 	seen := map[string]bool{}
@@ -205,6 +227,9 @@ type Result struct {
 	NextCursor, NextCursorTime      string
 	PendingIDs                      []string
 	ScheduleCandidates              []ScheduleCandidate
+	// Discovery names where the status IDs came from: DiscoveryTimeline, or
+	// DiscoveryProfile after a timeline fallback.
+	Discovery string
 }
 
 type Adapter struct {
@@ -241,17 +266,27 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 	if !regexp.MustCompile(`^[A-Za-z0-9_]{1,30}$`).MatchString(account) {
 		return result, &Error{Code: ErrInvalidResponse, Err: errors.New("invalid account")}
 	}
-	profile, err := a.Client.Profile(ctx, account)
-	if err != nil {
-		return result, err
-	}
-	ids := DiscoverIDs(profile, opts.DiscoveryLimit)
+	var cutoff time.Time
 	if opts.BootstrapDays > 0 {
 		now := time.Now()
 		if a.Now != nil {
 			now = a.Now()
 		}
-		cutoff := now.Add(-time.Duration(opts.BootstrapDays) * 24 * time.Hour)
+		cutoff = now.Add(-time.Duration(opts.BootstrapDays) * 24 * time.Hour)
+	}
+	// The timeline pages back to stored posts; the logged-out profile page
+	// lists only the newest few statuses and is the fallback.
+	ids, err := a.discoverTimeline(ctx, account, opts, cutoff)
+	result.Discovery = DiscoveryTimeline
+	if err != nil || len(ids) == 0 {
+		result.Discovery = DiscoveryProfile
+		profile, profileErr := a.Client.Profile(ctx, account)
+		if profileErr != nil {
+			return result, profileErr
+		}
+		ids = DiscoverIDs(profile, opts.DiscoveryLimit)
+	}
+	if !cutoff.IsZero() {
 		filtered := make([]string, 0, len(ids))
 		for _, id := range ids {
 			// Synthetic/fake IDs used by local fixtures are intentionally left
@@ -269,7 +304,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 	queue := []string{}
 	seen := map[string]bool{}
 	add := func(id string) {
-		if regexp.MustCompile(`^\d{10,22}$`).MatchString(id) && !seen[id] {
+		if statusIDPattern.MatchString(id) && !seen[id] {
 			queue = append(queue, id)
 			seen[id] = true
 		}

@@ -58,6 +58,10 @@
       "reason": "Public X profile, posts, hashtags, and schedule links used by the board."
     },
     {
+      "host": "api.fxtwitter.com",
+      "reason": "Public FxTwitter status timeline the server-side X synchronizer pages to discover recent status IDs."
+    },
+    {
       "host": "api.vxtwitter.com",
       "reason": "Public status endpoint used by the server-side X synchronizer."
     },

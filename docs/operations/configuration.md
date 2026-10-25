@@ -25,7 +25,7 @@
 | `YOUTUBE_API_KEY`             | Empty                | Optional environment-only credential for YouTube range search      |
 | `SOURCE_HISTORY_MAX_PAGES`    | `4`                  | Official source pages per account/run (1–20), also within X budget |
 | `X_BOOTSTRAP_DAYS`            | `7`                  | First-run X lookback in days                                       |
-| `X_DISCOVERY_LIMIT`           | `50`                 | Maximum discovered status IDs considered                           |
+| `X_DISCOVERY_LIMIT`           | `50`                 | Maximum discovered status IDs; bounds timeline pages of 20 (≤10)   |
 | `X_MAX_STATUS_REQUESTS`       | `12`                 | Maximum X detail requests per run                                  |
 | `X_REFRESH_KNOWN`             | `1`                  | Known X posts refreshed per run                                    |
 | `X_SCHEDULE_REFRESH_LIMIT`    | `1`                  | Missing schedule source posts prioritized per account              |

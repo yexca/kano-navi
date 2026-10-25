@@ -40,6 +40,10 @@
   of Chinese text. Startup converts earlier automatic entries; manual and
   deleted entries keep their text. Extraction asks the model for English
   details and status words.
+- X sync discovers posts from the public FxTwitter timeline and pages back to
+  the last stored post, so several posts published between runs are no longer
+  missed once they drop off the profile page. Reposts are skipped, and the
+  logged-out profile page remains the fallback when the timeline fails.
 
 </details>
 

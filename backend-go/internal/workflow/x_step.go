@@ -42,6 +42,7 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	total := 0
 	discovered := 0
 	requested := 0
+	profileFallbacks := 0
 	partial := false
 	errorsOut := []string{}
 	for i, account := range handles {
@@ -61,7 +62,11 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		}
 		accountOpts.PendingIDs = state.PendingIDs
 		accountOpts.KnownIDs = state.KnownIDs
+		accountOpts.CursorID = state.CursorID
 		result, err := x.Adapter.FetchRecent(ctx, account, accountOpts)
+		if result.Discovery == xsource.DiscoveryProfile {
+			profileFallbacks++
+		}
 		discovered += result.DiscoveredCount
 		requested += result.RequestedCount
 		total += len(result.Posts)
@@ -96,5 +101,5 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	if partial {
 		status = "partial"
 	}
-	return AttemptResult{Status: status, Result: map[string]any{"source": "x", "count": total, "posts": total, "discovered": discovered, "requested": requested, "errors": errorsOut}}, nil
+	return AttemptResult{Status: status, Result: map[string]any{"source": "x", "count": total, "posts": total, "discovered": discovered, "requested": requested, "profileFallbacks": profileFallbacks, "errors": errorsOut}}, nil
 }

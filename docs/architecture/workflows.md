@@ -24,7 +24,8 @@ source cursor. `GET /api/admin/sources` reports oldest timestamps and
 credential-availability flags only, never keys.
 
 Without official API credentials, recent X fetches filter IDs discoverable on
-the public profile, and recent YouTube fetches filter the RSS entries. A chosen
+the public timeline (or the profile page fallback), and recent YouTube fetches
+filter the RSS entries. A chosen
 date window cannot enlarge these public sources' finite coverage, so the run
 is marked partial and reports the limitation. Historical controls require
 environment-only `X_API_BEARER_TOKEN` (with full-archive access) or

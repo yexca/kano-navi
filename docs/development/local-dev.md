@@ -83,7 +83,7 @@ interval (X defaults to 7 days; YouTube to 14). Post management and Content & me
 also offer older-record backfill and date ranges. For historical searches,
 optionally configure environment-only `X_API_BEARER_TOKEN` with full-archive
 access and/or `YOUTUBE_API_KEY`, then restart the server. Without keys, recent
-fetches retain the finite public profile/RSS coverage and report that limitation.
+fetches retain the finite public timeline/RSS coverage and report that limitation.
 See [Fetch windows](../architecture/workflows.md#fetch-windows-and-historical-backfill).
 
 Tailwind CSS 4 runs through `@tailwindcss/vite`; `src/index.css` loads the

@@ -4,17 +4,39 @@
 
 ### X
 
-The script reads each public profile named by `X_HANDLES` (default
-`kano_2525,_Kanotic`), extracts status IDs, and decodes their Snowflake
-timestamps before making detail requests. Each account has its own cursor in
-`sync_state`; with no cursor, IDs older than `X_BOOTSTRAP_DAYS` (seven by
-default) are skipped. Later runs prioritize unknown IDs and may refresh only a
-small `X_REFRESH_KNOWN` budget. Discovery and detail-request limits cap the
-work per run; `X_MAX_STATUS_REQUESTS` is the total detail-request budget shared
-by all configured accounts. Successful posts are stored with `account_handle`
-and returned as one time-ordered feed. Image-only posts are retained as
-candidates as long as they have a publication time and a media URL.
-`X_HANDLE` remains a single-account compatibility fallback.
+The synchronizer discovers status IDs for each account named by `X_HANDLES`
+(default `kano_2525,_Kanotic`) from the public FxTwitter timeline
+`api.fxtwitter.com/2/profile/<handle>/statuses`, which lists the account's
+statuses newest first in pages of 20 with a continuation cursor. Discovery
+pages back until a page's oldest own status is already stored, is not newer
+than the account's stored cursor, or predates the lookback window, so posts
+published between runs are found even when several arrive at once. Reposts
+carry another author and are skipped. `X_DISCOVERY_LIMIT` caps the discovered
+IDs and therefore the pages (at most 10) per account and run; a failed later
+page keeps the newer pages already read.
+
+When the first timeline page fails, is not a timeline, or yields none of the
+account's own statuses, discovery falls back to the logged-out profile page
+`x.com/<handle>`, which lists only the newest few statuses. The run records the
+source used in `sync_state.metadata_json.discovery` (`timeline` or `profile`)
+and counts fallback accounts as `profileFallbacks` in the step result. A
+fallback alone does not fail the account or mark the run partial.
+
+Discovered IDs keep the existing detail path: their Snowflake timestamps are
+decoded and IDs older than `X_BOOTSTRAP_DAYS` (seven by default) or the
+workflow's X lookback are skipped before `api.vxtwitter.com` detail requests.
+Each account has its own cursor in `sync_state`. Later runs prioritize unknown
+IDs and may refresh only a small `X_REFRESH_KNOWN` budget.
+`X_MAX_STATUS_REQUESTS` is the total detail-request budget shared by all
+configured accounts. Successful posts are stored with `account_handle` and
+returned as one time-ordered feed. Image-only posts are retained as candidates
+as long as they have a publication time and a media URL. `X_HANDLE` remains a
+single-account compatibility fallback.
+
+Both discovery hosts and the detail host share one client: a fixed timeout and
+User-Agent, a 4 MiB response limit, rejected redirects, typed error codes, and
+no credentials or personal data in URLs. A failed source keeps stored posts and
+cursors.
 
 Normal incremental runs persist admitted but unfinished status IDs in the
 account's `sync_state.metadata_json.pendingStatusIds` before detail requests.
@@ -39,9 +61,9 @@ When a schedule asset already has a source status URL but no image URL, the
 synchronizer adds up to `X_SCHEDULE_REFRESH_LIMIT` recent source IDs per
 account to the detail-request queue. On a cursorless bootstrap with no asset
 source for an account, a bounded set of keyword-matching snapshot posts can
-serve the same purpose. These requests supplement the profile HTML without
+serve the same purpose. These requests supplement discovery without
 bypassing the shared `X_MAX_STATUS_REQUESTS` budget and can recover a schedule
-post that has fallen out of the profile page's visible status list.
+post that has fallen out of the discovered status list.
 
 ### YouTube
 

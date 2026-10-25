@@ -73,6 +73,9 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 		pending = pending[:1000]
 	}
 	metadata := map[string]any{"handle": account, "discovered": result.DiscoveredCount, "requested": result.RequestedCount, "pendingStatusIds": pending}
+	if result.Discovery != "" {
+		metadata["discovery"] = result.Discovery
+	}
 	metaBytes, _ := json.Marshal(metadata)
 	var oldID, oldTime string
 	_ = tx.QueryRowContext(ctx, "SELECT COALESCE(cursor_id,''),COALESCE(cursor_time,'') FROM sync_state WHERE source='x' AND account_id=?", account).Scan(&oldID, &oldTime)
@@ -163,6 +166,8 @@ func writeScheduleCandidate(ctx context.Context, tx *sql.Tx, c xsource.ScheduleC
 type XRecentState struct {
 	PendingIDs []string
 	KnownIDs   map[string]bool
+	// CursorID is the newest successfully stored status of the account.
+	CursorID string
 }
 
 func (s *Store) XAccountStart(ctx context.Context, handles []string) (int, error) {
@@ -197,7 +202,7 @@ func (s *Store) SetXNextAccount(ctx context.Context, handle string) error {
 func (s *Store) XRecentState(ctx context.Context, account string) (XRecentState, error) {
 	out := XRecentState{KnownIDs: map[string]bool{}}
 	var meta string
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(metadata_json,'{}') FROM sync_state WHERE source='x' AND account_id=?`, account).Scan(&meta)
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(metadata_json,'{}'),COALESCE(cursor_id,'') FROM sync_state WHERE source='x' AND account_id=?`, account).Scan(&meta, &out.CursorID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, ErrSourceWrite
 	}
