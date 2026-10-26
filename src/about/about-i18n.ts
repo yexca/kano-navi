@@ -37,9 +37,9 @@ export const aboutMessages = {
   },
   ja: {
     "about.label": "このサイトについて",
-    "about.metaTitle": "このサイトについて · 鹿乃なにしてる？",
+    "about.metaTitle": "このサイトについて · 鹿乃ちゃん何してるか",
     "about.metaDescription":
-      "「鹿乃なにしてる？」の概要、AI 開発への謝辞、技術構成とライセンスについて。",
+      "「鹿乃ちゃん何してるか」の概要、AI 開発への謝辞、技術構成とライセンスについて。",
     "about.skip": "プロジェクト紹介へ",
     "about.tagline": "鹿乃まほろ · 非公式近況まとめ",
     "about.by": "作者 {author}",

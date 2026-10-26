@@ -205,7 +205,7 @@
   by month, with load-more paging, jumps to the nearest month with records,
   and the account filter for posts. They read the new `/api/posts` and
   `/api/videos` endpoints.
-- The site is named What’s Kano Up To? in English, 鹿乃なにしてる？ in
+- The site is named What’s Kano Up To? in English, 鹿乃ちゃん何してるか in
   Japanese and 鹿乃在做什么 in Simplified Chinese, in the header, the page
   titles and the About page. Kano Navi stays the project name and appears
   beside the version on the About page. Between 601 and 680 px wide the

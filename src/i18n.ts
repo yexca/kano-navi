@@ -240,8 +240,8 @@ const messages = {
     "relative.justNow": "刚刚",
   },
   ja: {
-    "site.name": "鹿乃なにしてる？",
-    "meta.title": "鹿乃なにしてる？",
+    "site.name": "鹿乃ちゃん何してるか",
+    "meta.title": "鹿乃ちゃん何してるか",
     "meta.description":
       "鹿乃まほろの非公式まとめページ。X、配信予定、YouTube、公開リンクをひと目で。",
     "header.backToTop": "ページ上部へ",
@@ -432,7 +432,7 @@ const messages = {
       "ご本人・所属事務所とは無関係です · ローカルスナップショットを表示 · 各プラットフォームの元ページが正です",
     "footer.backToTop": "ページ上部へ",
     "archive.fullHistory": "あゆみを全部見る",
-    "history.metaTitle": "あゆみ · 鹿乃なにしてる？",
+    "history.metaTitle": "あゆみ · 鹿乃ちゃん何してるか",
     "history.metaDescription":
       "2010 年の歌ってみた投稿から 2026 年のミリプロSONA 所属まで、鹿乃の公開されたあゆみを出典つきで。",
     "history.back": "いまのまほろへ",
