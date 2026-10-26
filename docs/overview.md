@@ -55,11 +55,13 @@ snapshot health dot.
    Month view dialog shows a month grid (compact entries, dots on phones) with
    month navigation; picking a date lists that day's entries and can show its
    week on the board.
-3. Posts on X: roughly three days of posts from both accounts in a masonry
-   wall with an account filter, an image viewer, and engagement counts. When
-   the window is empty the most recent stored post is still shown. A Past
-   posts dialog browses every stored post month by month, with the same
-   account filter and per-account counts.
+3. Posts on X: roughly three days of posts from both accounts in an aligned
+   grid (two rows until Show all; a long post shows six lines and Read more
+   opens it whole in a dialog) with an account filter, an image viewer, and
+   engagement counts. When the window is empty the most recent stored post
+   is still shown. A Past posts dialog browses every stored post month by
+   month in a masonry wall, with the same account filter and per-account
+   counts.
 4. Streams and works (YouTube, with bilibili links): a large lead card for
    the manually selected Featured video with its focus copy, or else the
    newest cover, original or premiere, with its Japan date, length and one

@@ -2174,20 +2174,28 @@ a.month-event:hover {
 
 /* ------------------------------------------------------------------- posts */
 
+/*
+ * Up to three columns read left to right; a row's notes share its height,
+ * and each note's images and counts sit at its foot, so rows line up.
+ */
 .post-wall {
-  columns: 3 300px;
-  column-gap: 16px;
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, max(280px, calc((100% - 32px) / 3))), 1fr)
+  );
+  gap: 16px;
 }
 
 .post-note {
-  display: grid;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
   gap: 10px;
-  margin: 0 0 16px;
   padding: 16px;
   border: 1px solid var(--rule);
   border-radius: var(--radius-lg);
   background: var(--paper);
-  break-inside: avoid;
 }
 
 .post-note-head {
@@ -2243,6 +2251,37 @@ a.month-event:hover {
   line-height: 1.7;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+/* A board post shows six lines; Read more opens the rest in a dialog. */
+.post-note-text.is-clamped {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+}
+
+.post-note-expand {
+  align-self: flex-start;
+  margin: -6px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--berry);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.post-note-expand:hover {
+  text-decoration: underline;
+}
+
+.post-note-expand:focus-visible {
+  outline: 2px solid var(--berry);
+  outline-offset: 2px;
 }
 
 /* Where a translation came from, and the way back to the source wording. */
@@ -2338,21 +2377,29 @@ a.month-event:hover {
   vertical-align: middle;
 }
 
+/* One 16:10 frame whatever the image count, so notes in a row match. */
 .post-note-media {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
   gap: 4px;
+  margin-top: auto;
   overflow: hidden;
+  aspect-ratio: 16 / 10;
   border-radius: var(--radius-md);
 }
 
 .post-note-media > * {
-  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
   overflow: hidden;
+  border: 0;
   background: var(--sunken);
 }
 
 .post-note-media img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -2365,15 +2412,15 @@ a.month-event:hover {
 
 .post-note-media.count-1 {
   grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
 }
 
-.post-note-media.count-1 > * {
-  aspect-ratio: 16 / 10;
+.post-note-media.count-2 {
+  grid-template-rows: 1fr;
 }
 
 .post-note-media.count-3 > :first-child {
   grid-row: span 2;
-  aspect-ratio: auto;
 }
 
 .post-note-missing {
@@ -2393,7 +2440,7 @@ a.month-event:hover {
 .post-engagement {
   display: flex;
   gap: 14px;
-  margin: 0;
+  margin: auto 0 0;
   color: var(--soft);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -2405,9 +2452,84 @@ a.month-event:hover {
   gap: 4px;
 }
 
+.post-note-media + .post-engagement {
+  margin-top: 0;
+}
+
 .post-engagement svg {
   width: 14px;
   height: 14px;
+}
+
+.posts-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+/* The Past posts dialog keeps a masonry wall of full posts. */
+.post-wall.is-masonry {
+  display: block;
+  columns: 3 300px;
+  column-gap: 16px;
+}
+
+.post-wall.is-masonry > .post-note {
+  margin: 0 0 16px;
+  break-inside: avoid;
+}
+
+.post-wall.is-masonry .post-note-media {
+  grid-template-rows: none;
+  aspect-ratio: auto;
+}
+
+.post-wall.is-masonry .post-note-media > * {
+  aspect-ratio: 1;
+}
+
+.post-wall.is-masonry .post-note-media.count-1 > * {
+  aspect-ratio: 16 / 10;
+}
+
+.post-wall.is-masonry .post-note-media.count-3 > :first-child {
+  aspect-ratio: auto;
+}
+
+/* A long board post opens whole in this sheet, so the wall keeps its rows. */
+.post-dialog {
+  width: min(600px, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+  overscroll-behavior: contain;
+}
+
+.post-dialog::backdrop {
+  background: rgb(20 12 18 / 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.post-note.is-full {
+  gap: 12px;
+  padding: 20px;
+}
+
+.post-note.is-full .post-note-text {
+  font-size: 15.5px;
+}
+
+.post-dialog-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
 }
 
 .post-empty {

@@ -5,17 +5,24 @@ import type {
   Post,
   Translator,
 } from "@/types"
-import { useMemo, useState } from "react"
+import type { ReactNode } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
   Heart,
   History,
   ImageOff,
   MessageCircle,
   Repeat2,
+  X,
 } from "lucide-react"
 
-import { TranslatedText } from "@/components/translated-text"
+import {
+  TranslationNote,
+  useTranslatedText,
+} from "@/components/translated-text"
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
 import { ExternalLink, XLogo } from "@/site/links"
 import {
@@ -70,10 +77,56 @@ function Engagement({
   )
 }
 
+/**
+ * Native modal sheet with a post's full wording. Escape and the backdrop
+ * close it, focus returns to the opener, and the image viewer stacks above.
+ */
+function PostDialog({
+  label,
+  onClose,
+  children,
+}: {
+  label: string
+  onClose: () => void
+  children: ReactNode
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return undefined
+    const previous = document.activeElement as HTMLElement | null
+    if (!dialog.open) dialog.showModal?.()
+    dialog.querySelector<HTMLElement>(".post-dialog-close")?.focus()
+    document.body.classList.add("has-sheet")
+    return () => {
+      if (dialog.open) dialog.close()
+      document.body.classList.remove("has-sheet")
+      previous?.focus?.()
+    }
+  }, [])
+  return (
+    <dialog
+      ref={dialogRef}
+      className="post-dialog"
+      aria-label={label}
+      onCancel={(event) => {
+        event.preventDefault()
+        onClose()
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      {children}
+    </dialog>
+  )
+}
+
 function PostNote({
   post,
   avatarUrl,
   absoluteTime = false,
+  clamp = true,
   locale,
   now,
   t,
@@ -83,6 +136,8 @@ function PostNote({
   avatarUrl: string | null
   /** Archives show the Japan date and time ("10.24 21:00"), not "3 days ago". */
   absoluteTime?: boolean
+  /** The board shows six lines and opens long posts in a dialog. */
+  clamp?: boolean
   locale: Locale
   now: number
   t: Translator
@@ -90,67 +145,130 @@ function PostNote({
 }) {
   const media = postMedia(post)
   const ready = media.filter((item) => item.url)
+  const wording = useTranslatedText(
+    post.text,
+    post.translations,
+    post.sourceLanguage,
+    locale,
+  )
+  const textRef = useRef<HTMLParagraphElement>(null)
+  const [overflows, setOverflows] = useState(false)
+  const [reading, setReading] = useState(false)
+  // "Read more" appears only while six lines hide some wording.
+  useLayoutEffect(() => {
+    const element = textRef.current
+    if (!element || !clamp) return
+    const check = () =>
+      setOverflows(element.scrollHeight > element.clientHeight + 1)
+    check()
+    const observer = new ResizeObserver(check)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [clamp, wording.text])
+
+  const head = (close?: ReactNode) => (
+    <header className="post-note-head">
+      <img src={avatarUrl || undefined} alt="" />
+      {post.accountHandle ? (
+        <ExternalLink
+          className="post-note-handle"
+          href={post.accountUrl || `https://x.com/${post.accountHandle}`}
+        >
+          @{post.accountHandle}
+        </ExternalLink>
+      ) : (
+        <span className="post-note-handle">X</span>
+      )}
+      <time
+        dateTime={post.publishedAt}
+        title={`${formatJapanDay(post.publishedAt, locale)} ${formatJapanTime(post.publishedAt)} ${t("common.timezoneShort")}`}
+      >
+        {absoluteTime
+          ? formatStamp(post.publishedAt)
+          : formatRelative(post.publishedAt, locale, now)}
+      </time>
+      <ExternalLink
+        className="post-note-open"
+        href={post.url}
+        aria-label={t("feed.originalPost")}
+        title={t("feed.originalPost")}
+      >
+        <ArrowUpRight aria-hidden="true" />
+      </ExternalLink>
+      {close}
+    </header>
+  )
+  const mediaGrid = media.length ? (
+    <div className={`post-note-media count-${Math.min(4, media.length)}`}>
+      {media.slice(0, 4).map((item, index) =>
+        item.url ? (
+          <button
+            type="button"
+            key={item.id || item.url}
+            onClick={() => onOpenMedia(ready, ready.indexOf(item))}
+            aria-label={`${t("feed.openMedia")} ${index + 1}`}
+          >
+            <img src={item.url} alt={item.alt || ""} loading="lazy" />
+          </button>
+        ) : (
+          <span key={item.id || index} className="post-note-missing">
+            <ImageOff aria-hidden="true" />
+            <span>{t("media.unavailable")}</span>
+          </span>
+        ),
+      )}
+    </div>
+  ) : null
+
   return (
     <article className="post-note">
-      <header className="post-note-head">
-        <img src={avatarUrl || undefined} alt="" />
-        {post.accountHandle ? (
-          <ExternalLink
-            className="post-note-handle"
-            href={post.accountUrl || `https://x.com/${post.accountHandle}`}
-          >
-            @{post.accountHandle}
-          </ExternalLink>
-        ) : (
-          <span className="post-note-handle">X</span>
-        )}
-        <time
-          dateTime={post.publishedAt}
-          title={`${formatJapanDay(post.publishedAt, locale)} ${formatJapanTime(post.publishedAt)} ${t("common.timezoneShort")}`}
+      {head()}
+      <p
+        ref={textRef}
+        className={`post-note-text${clamp ? " is-clamped" : ""}`}
+        lang={wording.lang}
+      >
+        {wording.text}
+      </p>
+      {clamp && overflows ? (
+        <button
+          type="button"
+          className="post-note-expand"
+          aria-haspopup="dialog"
+          onClick={() => setReading(true)}
         >
-          {absoluteTime
-            ? formatStamp(post.publishedAt)
-            : formatRelative(post.publishedAt, locale, now)}
-        </time>
-        <ExternalLink
-          className="post-note-open"
-          href={post.url}
-          aria-label={t("feed.originalPost")}
-          title={t("feed.originalPost")}
+          {t("feed.readMore")}
+        </button>
+      ) : null}
+      <TranslationNote state={wording} t={t} />
+      {mediaGrid}
+      <Engagement post={post} locale={locale} t={t} />
+      {reading ? (
+        <PostDialog
+          label={t("feed.fullPost")}
+          onClose={() => setReading(false)}
         >
-          <ArrowUpRight aria-hidden="true" />
-        </ExternalLink>
-      </header>
-      <TranslatedText
-        className="post-note-text"
-        original={post.text}
-        translations={post.translations}
-        sourceLanguage={post.sourceLanguage}
-        locale={locale}
-        t={t}
-      />
-      {media.length ? (
-        <div className={`post-note-media count-${Math.min(4, media.length)}`}>
-          {media.slice(0, 4).map((item, index) =>
-            item.url ? (
+          <article className="post-note is-full">
+            {head(
               <button
                 type="button"
-                key={item.id || item.url}
-                onClick={() => onOpenMedia(ready, ready.indexOf(item))}
-                aria-label={`${t("feed.openMedia")} ${index + 1}`}
+                className="round-button post-dialog-close"
+                onClick={() => setReading(false)}
+                aria-label={t("common.close")}
+                title={t("common.close")}
               >
-                <img src={item.url} alt={item.alt || ""} loading="lazy" />
-              </button>
-            ) : (
-              <span key={item.id || index} className="post-note-missing">
-                <ImageOff aria-hidden="true" />
-                <span>{t("media.unavailable")}</span>
-              </span>
-            ),
-          )}
-        </div>
+                <X aria-hidden="true" />
+              </button>,
+            )}
+            <p className="post-note-text" lang={wording.lang}>
+              {wording.text}
+            </p>
+            <TranslationNote state={wording} t={t} />
+            {mediaGrid}
+            <Engagement post={post} locale={locale} t={t} />
+          </article>
+        </PostDialog>
       ) : null}
-      <Engagement post={post} locale={locale} t={t} />
     </article>
   )
 }
@@ -197,9 +315,44 @@ export function PostWall({
       (post) =>
         String(post.accountHandle || "").toLowerCase() === handle.toLowerCase(),
     ).length
+  // The board shows two rows of the wall's current column count; the rest
+  // waits behind "Show all".
+  const sectionRef = useRef<HTMLElement>(null)
+  const [wall, setWall] = useState<HTMLDivElement | null>(null)
+  const [columns, setColumns] = useState(3)
+  const [showAll, setShowAll] = useState(false)
+  useLayoutEffect(() => {
+    if (!wall) return
+    const measure = () =>
+      setColumns(
+        Math.max(
+          1,
+          getComputedStyle(wall).gridTemplateColumns.split(" ").filter(Boolean)
+            .length,
+        ),
+      )
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(wall)
+    return () => observer.disconnect()
+  }, [wall])
+  const limit = columns * 2
+  const shown = showAll ? visible : visible.slice(0, limit)
+  const toggleAll = () => {
+    if (showAll) {
+      const top = sectionRef.current?.getBoundingClientRect().top ?? 0
+      if (top < 0) sectionRef.current?.scrollIntoView({ block: "start" })
+    }
+    setShowAll((value) => !value)
+  }
 
   return (
-    <section className="section posts" id="feed" aria-labelledby="posts-title">
+    <section
+      ref={sectionRef}
+      className="section posts"
+      id="feed"
+      aria-labelledby="posts-title"
+    >
       <SectionTitle
         id="posts-title"
         kicker={
@@ -248,19 +401,40 @@ export function PostWall({
       {isLoading ? (
         <Placeholder lines={5} />
       ) : visible.length ? (
-        <div className="post-wall">
-          {visible.map((post) => (
-            <PostNote
-              key={post.id}
-              post={post}
-              avatarUrl={avatarUrl}
-              locale={locale}
-              now={now}
-              t={t}
-              onOpenMedia={onOpenMedia}
-            />
-          ))}
-        </div>
+        <>
+          <div className="post-wall" ref={setWall}>
+            {shown.map((post) => (
+              <PostNote
+                key={post.id}
+                post={post}
+                avatarUrl={avatarUrl}
+                locale={locale}
+                now={now}
+                t={t}
+                onOpenMedia={onOpenMedia}
+              />
+            ))}
+          </div>
+          {visible.length > limit ? (
+            <div className="posts-more">
+              <button
+                type="button"
+                className="pill-button"
+                aria-expanded={showAll}
+                onClick={toggleAll}
+              >
+                {showAll ? (
+                  <ChevronUp aria-hidden="true" />
+                ) : (
+                  <ChevronDown aria-hidden="true" />
+                )}
+                {showAll
+                  ? t("feed.showFewer")
+                  : t("feed.showAll", { count: visible.length })}
+              </button>
+            </div>
+          ) : null}
+        </>
       ) : (
         <div className="post-empty">
           <EmptyNote title={t("feed.empty", { days: windowDays })} />
@@ -368,13 +542,14 @@ export function PostArchive({
         t={t}
       />
       {archive?.items.length ? (
-        <div className="post-wall">
+        <div className="post-wall is-masonry">
           {archive.items.map((post) => (
             <PostNote
               key={post.id}
               post={post}
               avatarUrl={avatarUrl}
               absoluteTime
+              clamp={false}
               locale={locale}
               now={now}
               t={t}

@@ -198,6 +198,11 @@
   of calling a stream that is still within its live window ended, and a late
   waiting room stays upcoming there.
 - Posts on X now come before YouTube on the board.
+- Posts on X sit in an aligned grid read left to right: a row of posts
+  shares one height, images use one 16:10 frame, and the board shows two
+  rows with a Show all button. A long post shows six lines, and Read more
+  opens the whole post in a dialog without moving the grid. Past posts
+  keeps its masonry wall of full posts.
 - The schedule shows one week; the month grid moved to a Month view dialog
   with its own month navigation, where picking a date lists that day's
   entries and can show its week on the board.
