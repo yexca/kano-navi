@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
@@ -22,8 +23,12 @@ type LiveProbe struct {
 	Enabled      bool
 	TickInterval time.Duration
 	Now          func() time.Time
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
+	// mu orders Start and Stop; running is what Status reads from request
+	// goroutines without waiting for a Stop.
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	running atomic.Bool
+	wg      sync.WaitGroup
 }
 
 func (p *LiveProbe) tick() time.Duration {
@@ -34,11 +39,14 @@ func (p *LiveProbe) tick() time.Duration {
 }
 
 func (p *LiveProbe) Start() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if !p.Enabled || p.cancel != nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
+	p.running.Store(true)
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -56,16 +64,19 @@ func (p *LiveProbe) Start() {
 }
 
 func (p *LiveProbe) Stop() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.cancel != nil {
 		p.cancel()
 		p.cancel = nil
+		p.running.Store(false)
 		p.wg.Wait()
 	}
 }
 
 // Status reports the process side of the probe for the console.
 func (p *LiveProbe) Status() map[string]any {
-	return map[string]any{"available": p.Enabled, "running": p.cancel != nil, "tickSeconds": int(p.tick() / time.Second)}
+	return map[string]any{"available": p.Enabled, "running": p.running.Load(), "tickSeconds": int(p.tick() / time.Second)}
 }
 
 // Tick queues a probe when it is enabled and an active video is due, at least

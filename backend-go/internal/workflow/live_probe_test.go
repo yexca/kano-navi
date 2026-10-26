@@ -120,3 +120,29 @@ func TestLiveProbeFollowsTheStartThroughTheQueue(t *testing.T) {
 		t.Fatal("probe ran with timers disabled")
 	}
 }
+
+// Status is read by console requests while the process starts and stops the
+// probe; run with -race.
+func TestLiveProbeStatusIsSafeDuringStartAndStop(t *testing.T) {
+	probe := &LiveProbe{Enabled: true, TickInterval: time.Hour}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 200 {
+			_ = probe.Status()
+		}
+	}()
+	for range 50 {
+		probe.Start()
+		probe.Stop()
+	}
+	<-done
+	probe.Start()
+	if probe.Status()["running"] != true {
+		t.Fatal("a started probe reports not running")
+	}
+	probe.Stop()
+	if probe.Status()["running"] != false {
+		t.Fatal("a stopped probe reports running")
+	}
+}
