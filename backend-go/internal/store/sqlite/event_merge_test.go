@@ -277,7 +277,10 @@ func TestReconcileIsIdempotentAndReleasesLostTargets(t *testing.T) {
 	if _, err := f.s.DeleteManualEvent(ctx, "y1"); err != nil {
 		t.Fatal(err)
 	}
-	if counts = f.reconcile(); counts.Released != 1 || f.state("x1") != unmerged {
+	if f.state("x1") != unmerged {
+		t.Fatalf("delete kept the merge: %s", f.state("x1"))
+	}
+	if counts = f.reconcile(); counts.Changed() || f.state("x1") != unmerged {
 		t.Fatalf("release=%+v %s", counts, f.state("x1"))
 	}
 	// Editing a merged event makes it an operator's event: it is shown again
@@ -418,5 +421,25 @@ func youtubeResult(id, title, scheduledAt string) ytsource.Result {
 	return ytsource.Result{
 		Videos:     []ytsource.Video{{ID: id, Title: title, PublishedAt: "2026-10-20T00:00:00Z", ScheduledAt: scheduledAt, URL: "https://www.youtube.com/watch?v=" + id, Kind: "UPCOMING LIVE", IsUpcoming: true}},
 		NextCursor: id, NextCursorTime: "2026-10-20T00:00:00Z",
+	}
+}
+
+func TestDeletingAnOldTargetShowsItsRuleDuplicatesAgain(t *testing.T) {
+	f := newMergeFixture(t)
+	ctx := context.Background()
+	// Both duplicates lie before the reconciler's window, so no later run
+	// revisits them; one belongs to another owner.
+	f.add("y1", "youtube", "雑談", "2026-08-01", "20:00", "stream")
+	f.add("x1", "x", "雑談", "2026-08-01", "20:00", "stream",
+		`merged_into='y1',merge_source='rule',merge_reason='rule_b:youtube_start',merged_at='2026-08-01T12:00:00.000Z'`)
+	f.add("x2", "x", "雑談 notice", "2026-08-01", "", "stream",
+		`merged_into='y1',merge_source='model',merge_reason='model:same',merged_at='2026-08-01T12:00:00.000Z'`)
+	if _, err := f.s.DeleteManualEvent(ctx, "y1"); err != nil {
+		t.Fatal(err)
+	}
+	f.expect(map[string]string{"x1": unmerged, "x2": "y1|model|model:same"})
+	page, err := f.s.GetCalendarPage(ctx, "2026-07-27", "2026-08-02", 1, 10)
+	if err != nil || page.Total != 1 || page.Items[0].ID != "x1" {
+		t.Fatalf("calendar=%+v err=%v", page, err)
 	}
 }

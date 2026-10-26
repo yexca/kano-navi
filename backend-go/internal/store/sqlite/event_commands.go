@@ -236,7 +236,10 @@ func (s *Store) UpdateManualEvent(ctx context.Context, id string, input EventInp
 }
 
 // DeleteManualEvent leaves a locked tombstone so synchronization cannot
-// resurrect the entry. A missing event reports sql.ErrNoRows.
+// resurrect the entry. A missing event reports sql.ErrNoRows. Rule merges
+// into the event are released with it, since the reconciler only revisits
+// its window and an older duplicate would otherwise stay hidden; other
+// owners' decisions stay.
 func (s *Store) DeleteManualEvent(ctx context.Context, id string) (AdminEvent, error) {
 	tx, err := s.eventTx(ctx)
 	if err != nil {
@@ -250,6 +253,9 @@ func (s *Store) DeleteManualEvent(ctx context.Context, id string) (AdminEvent, e
 	}
 	if changed, _ := result.RowsAffected(); changed == 0 {
 		return AdminEvent{}, sql.ErrNoRows
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE events SET merged_into=NULL,merge_source=NULL,merge_reason=NULL,merged_at=NULL WHERE merged_into=? AND merge_source=?`, id, MergeSourceRule); err != nil {
+		return AdminEvent{}, fmt.Errorf("%w: merges", ErrUnavailable)
 	}
 	if err = bumpRevision(ctx, tx, now); err != nil {
 		return AdminEvent{}, fmt.Errorf("%w: revision", ErrUnavailable)

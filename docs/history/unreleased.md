@@ -174,6 +174,8 @@
 - Another size or host of the same YouTube thumbnail, such as the Data API's
   `hqdefault` against the watch page's image, no longer records a video
   revision, and history pages no longer replace a stored thumbnail.
+- Deleting an event at once shows the duplicates the rules had merged into
+  it, including ones older than the reconciler's window.
 - Reading a Bilibili upload from the console no longer clears a captcha
   backoff that the `bilibili` step stored meanwhile.
 
