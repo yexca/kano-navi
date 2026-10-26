@@ -58,9 +58,18 @@ snapshot health dot.
    the window is empty the most recent stored post is still shown. A Past
    posts dialog browses every stored post month by month, with the same
    account filter and per-account counts.
-4. YouTube: the manually selected Featured video with its focus copy, then
-   reservations (soonest first) and recent uploads. A Past videos dialog
-   browses stored videos month by month.
+4. Streams and works (YouTube, with bilibili links): a large lead card for
+   the manually selected Featured video with its focus copy, or else the
+   newest cover, original or premiere, with its Japan date, length and one
+   link per platform (YouTube, plus bilibili when an upload of the same work
+   is merged into it). Beside it, reservations as compact date tickets
+   (soonest first; a started one reads as on air or should-be-live, never as
+   an archive) and the previous work; below, a grid of stream archives with
+   large thumbnails, two-line titles, the date and the length when known (a
+   swipeable rail on phones). An All / Streams / Works filter shows one
+   kind at a time. Shorts are not told apart, because the snapshot stores no
+   reliable signal for them. A Past videos dialog browses stored videos month
+   by month.
 5. Links: the resource directory, a milestone summary linking to the full
    journey page, and common hashtags.
 

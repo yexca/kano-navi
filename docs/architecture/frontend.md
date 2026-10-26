@@ -18,7 +18,16 @@ event-status helpers, `content.ts` holds static public links, and
 `components/` renders the next-up stage and profile card, the week guide,
 the post wall, the video shelf, and the link directory, plus
 `archive-dialog.tsx`, the native modal sheet that browses one month of the
-schedule, posts or videos. Its styles are in
+schedule, posts or videos. `video-groups.ts` sorts the shelf's videos from
+the local snapshot: broadcasts (`LIVE ARCHIVE`, `UPCOMING LIVE`, `GAMEPLAY`,
+`TALK`) are streams and every other kind a work; a video's phase follows the
+stage's live rule (a fresh confirmed state first, then the stream's
+three-hour grace or an explicit end), so a reservation past its start is a
+started ticket rather than an archive and an operator-confirmed cancellation
+leaves the shelf once its start passes. The lead is the featured video, or
+else the newest `MUSIC` work or premiere, or else the newest work; each video
+appears once. The shelf shows a platform link for the video and each of its
+`alternates`, and the length from `durationSeconds` when known. Its styles are in
 `src/dashboard/board.css` on top of `src/site/site.css` and the shared tokens
 in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`
@@ -70,8 +79,10 @@ platform or editor) and offers a Show original button; a title inside a
 link, where a button cannot go, uses `TranslationMark`, whose tooltip holds
 the source. Video and schedule titles go through
 `src/dashboard/components/translated-title.tsx`: `TranslatedTitle` for a
-title inside a link (spotlight tickets, shelf and archive rows, week-guide
-entries) and `TranslatedHeading`, with the button, for the featured video.
+title inside a link (spotlight tickets, shelf tickets, cards and rows,
+archive rows, week-guide entries) and `TranslatedHeading`, with the button,
+for the shelf's lead card. A clamped shelf title clamps only its wording, so
+the mark stays visible.
 Month-grid chips are too small for a mark and show the reader's wording
 unmarked; the week guide marks it and holds the source. An operator's
 Featured title from the focus record shows as written. The wording shown

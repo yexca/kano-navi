@@ -198,8 +198,23 @@
 - YouTube videos on the board and in the video archive list their merged
   Bilibili uploads in `alternates` (`source` and `url`), and Chinese readers
   see a merged video's Bilibili title in place of an AI translation (a
-  manual or YouTube translation still comes first). The board does not show
-  the links yet.
+  manual or YouTube translation still comes first).
+- The board's video section is redesigned as Recent streams and works. A
+  large lead card shows the featured video, or else the newest cover,
+  original or premiere, with its Japan date, length and a link per platform
+  (YouTube, plus bilibili for a merged upload). Reservations sit beside it
+  as compact date tickets with the previous work, and stream archives follow
+  in a grid of large thumbnails (a swipeable rail on phones). An All /
+  Streams / Works filter shows one kind at a time, and a shortened grid ends
+  with a Past videos button. Shorts are not separated yet: the snapshot has
+  no reliable signal for them.
+- A reservation past its start reads as on air or should be live in the
+  video section, and as a stream rather than a stream archive on the stage
+  and in the video archive, until a watch page confirms it ended. A
+  cancelled reservation shows as cancelled until its start, then leaves the
+  section. Plain uploads read as Video instead of `VIDEO`.
+- The board, the video archive and MCP add each video's `durationSeconds`
+  (null while unknown), shown as its length.
 
 </details>
 

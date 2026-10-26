@@ -17,6 +17,25 @@ export function XLogo(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+/** A plain television mark for bilibili links, drawn in currentColor. */
+export function BilibiliLogo(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="m7.5 2.8 2.4 2.6M16.5 2.8l-2.4 2.6" />
+      <rect x="2.6" y="5.6" width="18.8" height="14.2" rx="3.6" />
+      <path d="m7.6 11.2 2.4-.9M16.4 11.2l-2.4-.9M9.2 15.4c.9.7 1.9.7 2.8 0 .9.7 1.9.7 2.8 0" />
+    </svg>
+  )
+}
+
 export function YouTubeLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" {...props}>

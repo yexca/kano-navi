@@ -331,6 +331,8 @@ and the then-current thumbnail file (`thumbnail_media_id`,
 URL keeps the old file in `media_versions` and records a `media` revision for
 every linked video. `duration_seconds` and `refresh_requested_at` are
 described in [Sources](sources.md#follow-up-checks-and-refresh-requests).
+Public readers (dashboard, video archive, MCP) add the length as
+`durationSeconds`, null while it is unknown.
 Startup adds the columns, both tables and `video_revisions_video_idx` to
 existing snapshots without rewriting videos or media rows.
 

@@ -214,7 +214,7 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 		return nil, err
 	}
 	liveCutoff := now.Add(-probe.Freshness())
-	rows, err := s.db.QueryContext(ctx, `SELECT id,source,COALESCE(manual_title,title),published_at,scheduled_at,url,thumbnail_url,COALESCE(manual_kind,kind),is_upcoming,live_status,live_checked_at FROM videos`+inRange+` ORDER BY `+instant+` DESC,id ASC LIMIT ? OFFSET ?`, start, end, pageSize, (page-1)*pageSize)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,source,COALESCE(manual_title,title),published_at,scheduled_at,url,thumbnail_url,COALESCE(manual_kind,kind),is_upcoming,live_status,live_checked_at,duration_seconds FROM videos`+inRange+` ORDER BY `+instant+` DESC,id ASC LIMIT ? OFFSET ?`, start, end, pageSize, (page-1)*pageSize)
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -223,10 +223,12 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 		var v Video
 		var pub, sch, thumb, kind, liveStatus, liveChecked sql.NullString
 		var upcoming int64
-		if err := rows.Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &upcoming, &liveStatus, &liveChecked); err != nil {
+		var duration sql.NullInt64
+		if err := rows.Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &upcoming, &liveStatus, &liveChecked, &duration); err != nil {
 			_ = rows.Close()
 			return nil, dbErr(err)
 		}
+		v.DurationSeconds = nullInt(duration)
 		if pub.Valid {
 			v.PublishedAt = &pub.String
 		}

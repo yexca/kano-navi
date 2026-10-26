@@ -1551,15 +1551,56 @@ a.month-event:hover {
 
 /* ------------------------------------------------------------------ videos */
 
-.videos-layout {
-  display: grid;
-  gap: 20px;
+/*
+ * The shelf leads with one large work (or the featured video) beside the
+ * coming reservations, then a grid of stream archives. Artwork carries the
+ * section, so thumbnails stay large and titles stay to two lines.
+ */
+
+.videos-subhead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-.videos-layout.has-feature {
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  align-items: start;
+.videos-subhead small {
+  font-size: 11px;
+  letter-spacing: 0;
 }
+
+.videos-block + .videos-block,
+.videos-lead + .videos-block {
+  margin-top: 40px;
+}
+
+.video-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+  color: var(--soft);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-meta-length {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.tag.is-live svg {
+  animation: onair-pulse 1.6s ease-in-out infinite;
+}
+
+/* Thumbnails */
 
 .video-thumb {
   position: relative;
@@ -1614,55 +1655,254 @@ a:hover .video-thumb img {
   height: 13px;
 }
 
-.video-feature {
-  display: grid;
-  gap: 16px;
+.video-length {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.74);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
 }
 
-.video-feature-art .video-thumb {
+/* Platform links */
+
+.platform-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.platform-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.6;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.platform-chip:hover {
+  border-color: color-mix(in oklab, var(--berry) 50%, transparent);
+  color: var(--berry);
+}
+
+.platform-chip svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Lead row */
+
+.videos-lead {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  align-items: start;
+  gap: 28px;
+}
+
+/* Without a lead, the reservations line up across the row. */
+.videos-lead.is-tickets {
+  grid-template-columns: 1fr;
+}
+
+.videos-lead.is-tickets .video-tickets,
+.videos-tickets-wide .video-tickets {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+/* A lead alone sets its copy beside the artwork instead of under it. */
+.videos-lead.is-solo {
+  grid-template-columns: 1fr;
+}
+
+.videos-lead.is-solo .video-lead {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 28px;
+}
+
+.video-lead {
+  display: grid;
+  gap: 18px;
+}
+
+.video-lead-art {
+  display: block;
+}
+
+.video-lead-art .video-thumb {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
 }
 
-.video-feature-art .video-thumb-badge {
-  width: 48px;
-  height: 48px;
-  right: 16px;
-  bottom: 16px;
+.video-lead-art .video-thumb-badge {
+  right: 18px;
+  bottom: 18px;
+  width: 56px;
+  height: 56px;
   background: var(--berry);
+  box-shadow: 0 10px 24px -8px color-mix(in oklab, var(--berry) 80%, black);
 }
 
-.video-feature-art .video-thumb-badge svg {
-  width: 20px;
-  height: 20px;
+.video-lead-art .video-thumb-badge svg {
+  width: 22px;
+  height: 22px;
 }
 
-.video-feature-copy {
+.video-lead-art .video-thumb-badge .lucide-play {
+  margin-left: 3px;
+}
+
+.video-lead-copy {
   display: grid;
   gap: 10px;
 }
 
-.video-feature-copy h3 {
+.video-lead-copy h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(20px, 2vw, 24px);
+  font-size: clamp(21px, 2.2vw, 28px);
   font-weight: 800;
-  line-height: 1.3;
+  line-height: 1.28;
+  text-wrap: balance;
 }
 
-.video-feature-copy > p:not(.video-row-meta) {
+.video-lead-copy > p:not(.video-meta) {
   margin: 0;
   color: var(--soft);
   font-size: 14px;
   line-height: 1.7;
 }
 
-.video-feature-actions {
+.video-lead-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 16px;
+  margin-top: 4px;
 }
+
+.videos-side {
+  display: grid;
+  align-content: start;
+  gap: 24px;
+}
+
+/* Reservation tickets */
+
+.video-tickets {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.video-ticket {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px 10px 10px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.video-ticket:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--berry) 45%, transparent);
+  box-shadow: var(--shadow-md);
+}
+
+.video-ticket-date {
+  display: grid;
+  min-height: 58px;
+  align-content: center;
+  justify-items: center;
+  padding: 6px 4px;
+  border-radius: var(--radius-sm);
+  background: var(--berry-wash);
+  color: var(--berry);
+  line-height: 1.05;
+}
+
+.video-ticket-date strong {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-ticket-date small {
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.video-ticket-date svg {
+  width: 20px;
+  height: 20px;
+}
+
+.video-ticket.is-live {
+  border-color: var(--berry);
+}
+
+.video-ticket.is-live .video-ticket-date {
+  background: var(--berry);
+  color: #fff;
+}
+
+.video-ticket.is-started .video-ticket-date {
+  background: var(--honey-wash);
+  color: var(--honey);
+}
+
+.video-ticket.is-cancelled .video-ticket-date {
+  background: var(--sunken);
+  color: var(--soft);
+}
+
+.video-ticket.is-cancelled .video-ticket-title {
+  color: var(--soft);
+  text-decoration: line-through;
+}
+
+.video-ticket-copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.video-ticket-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Rows: earlier works beside the lead, and the archive dialog */
 
 .video-list {
   display: grid;
@@ -1670,11 +1910,6 @@ a:hover .video-thumb img {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.videos-layout:not(.has-feature) .video-list {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 20px;
 }
 
 .video-row {
@@ -1687,6 +1922,10 @@ a:hover .video-thumb img {
   transition: background 160ms ease;
 }
 
+.videos-side .video-row {
+  margin-inline: -8px;
+}
+
 .video-row:hover {
   background: var(--sunken);
 }
@@ -1695,21 +1934,18 @@ a:hover .video-thumb img {
   border-radius: var(--radius-sm);
 }
 
+/* The play mark keeps the right corner, so the length takes the left. */
+.video-row .video-length {
+  right: auto;
+  bottom: 6px;
+  left: 6px;
+  font-size: 10.5px;
+}
+
 .video-row-copy {
   display: grid;
   min-width: 0;
   gap: 6px;
-}
-
-.video-row-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  margin: 0;
-  color: var(--soft);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
 }
 
 .video-row-title {
@@ -1726,10 +1962,129 @@ a:hover .video-thumb img {
   color: var(--berry);
 }
 
+/* Archive grid */
+
+/*
+ * Positioned so the screen-reader-only text inside stays within the phone
+ * rail; otherwise it escapes the rail's clip and widens the page.
+ */
+.video-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 26px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.video-card {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 8px;
+}
+
+.video-card-link {
+  display: grid;
+  gap: 10px;
+}
+
+.video-card .video-thumb {
+  box-shadow: var(--shadow-sm);
+}
+
+.video-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  transition: color 160ms ease;
+}
+
+.video-card-link:hover .video-card-title {
+  color: var(--berry);
+}
+
+/* A translated title clamps its wording so the AI or platform mark stays in view. */
+:is(.video-card-title, .video-ticket-title, .video-row-title):has(
+  > .translation-mark
+) {
+  display: flex;
+  align-items: flex-end;
+}
+
+:is(.video-card-title, .video-ticket-title, .video-row-title) > [lang] {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+:is(.video-card-title, .video-ticket-title, .video-row-title)
+  > .translation-mark {
+  flex: none;
+  margin-bottom: 3px;
+}
+
+.videos-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+@media (max-width: 1080px) {
+  .video-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
-  .videos-layout.has-feature,
-  .videos-layout:not(.has-feature) .video-list {
+  .videos-lead,
+  .videos-lead.is-solo .video-lead {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .video-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phones: the grid becomes a rail that scrolls inside the section. */
+@media (max-width: 560px) {
+  .video-grid {
+    grid-template-columns: none;
+    grid-auto-columns: min(74%, 280px);
+    grid-auto-flow: column;
+    margin-inline: calc(var(--gutter) * -1);
+    padding: 2px var(--gutter) 10px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: var(--gutter);
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+  }
+
+  .video-card {
+    scroll-snap-align: start;
+  }
+
+  .video-lead-art .video-thumb-badge {
+    right: 12px;
+    bottom: 12px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .video-lead-art .video-thumb-badge svg {
+    width: 18px;
+    height: 18px;
   }
 }
 
@@ -1738,6 +2093,10 @@ a:hover .video-thumb img {
     grid-template-columns: 116px minmax(0, 1fr);
     gap: 10px;
     padding: 6px 0;
+  }
+
+  .videos-side .video-row {
+    margin-inline: 0;
   }
 
   .video-row-title {

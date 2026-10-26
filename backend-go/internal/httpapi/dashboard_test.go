@@ -69,7 +69,7 @@ func TestDashboardPublicProjectionAndBoundedSemantics(t *testing.T) {
 		testutil.Exec(t, path, `
 		INSERT INTO profiles (id,display_name,romanized_name,bio,x_url,youtube_url,updated_at) VALUES ('p','鹿乃まほろ','Kano Mahoro','bio','https://x.com/kano_2525','https://youtube.com/@kano','2026-10-11T00:00:00.000Z');
 		INSERT INTO posts (id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt) VALUES ('post-1','x',NULL,'daily','label','hello','2026-10-10T12:00:00.000Z','https://x.com/kano_2525/status/1',1,2,3,'https://example.com/post.png','alt');
-		INSERT INTO videos (id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming) VALUES ('video-1','youtube','Video','2026-10-09T00:00:00.000Z',NULL,'https://youtu.be/video-1','https://example.com/thumb.png','video',0);
+		INSERT INTO videos (id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,duration_seconds) VALUES ('video-1','youtube','Video','2026-10-09T00:00:00.000Z',NULL,'https://youtu.be/video-1','https://example.com/thumb.png','video',0,289);
 		INSERT INTO events (id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_evidence,created_at,updated_at) VALUES
 		 ('automatic','x','Automatic',NULL,'2026-10-11','2026-10-11T10:00:00+09:00',NULL,'Asia/Tokyo','exact','scheduled','event','https://x.com/e','automatic',0,'none',NULL,'',''),
 		 ('locked','x','Locked',NULL,'2026-10-11','2026-10-11T09:00:00+09:00',NULL,'Asia/Tokyo','exact','scheduled','event','https://x.com/l','manual',1,'none',NULL,'',''),
@@ -113,6 +113,9 @@ func TestDashboardPublicProjectionAndBoundedSemantics(t *testing.T) {
 	video := videos[0].(map[string]any)
 	if video["thumbnailUrl"] != nil || video["thumbnailStatus"] != "pending" {
 		t.Fatalf("unready thumbnail leaked=%v", video)
+	}
+	if video["durationSeconds"] != float64(289) {
+		t.Fatalf("video length=%v", video["durationSeconds"])
 	}
 	profileMedia := payload["profileMedia"].(map[string]any)["avatar"].(map[string]any)
 	if profileMedia["publicUrl"] != nil || profileMedia["status"] != "pending" {

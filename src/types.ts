@@ -109,6 +109,8 @@ export interface Video {
   isUpcoming: boolean
   isCancelled?: boolean
   liveStatus?: LiveStatus | null
+  /** The length a watch page reported; null while unknown or on air. */
+  durationSeconds?: number | null
   /** Translations of the title and its detected language (ja, en, zh, ...). */
   translations?: Translations
   sourceLanguage?: string | null

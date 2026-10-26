@@ -20,26 +20,13 @@ import {
   formatRelative,
   formatStamp,
   formatVisitorTime,
+  japanDateParts,
   videoKindLabel,
   visitorIsInJapan,
 } from "../format"
 import { pickCompanion, pickSpotlight, spotlightIsLive } from "../spotlight"
 import type { SyncState } from "../freshness"
 import { TranslatedTitle } from "./translated-title"
-
-function japanDateParts(value: string, locale: Locale) {
-  const date = new Date(value)
-  const pick = (options: Intl.DateTimeFormatOptions) =>
-    new Intl.DateTimeFormat(locale === "ja" ? "ja-JP" : locale, {
-      timeZone: "Asia/Tokyo",
-      ...options,
-    }).format(date)
-  return {
-    day: pick({ day: "numeric" }).replace(/\D/gu, ""),
-    month: pick({ month: "short" }),
-    weekday: pick({ weekday: "short" }),
-  }
-}
 
 function dateOnlyParts(key: string, locale: Locale) {
   const [year, month, day] = key.split("-").map(Number)
