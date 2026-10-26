@@ -28,61 +28,71 @@ func main() {
 		fmt.Fprintln(os.Stderr, "database path is required")
 		os.Exit(2)
 	}
-	if err := os.MkdirAll(filepath.Dir(*databasePath), 0o755); err != nil {
-		panic(err)
-	}
-	db, err := sql.Open("sqlite", *databasePath)
+	info, err := createFixture(*databasePath)
 	if err != nil {
 		panic(err)
 	}
+	encoded, _ := json.Marshal(info)
+	fmt.Println(string(encoded))
+}
+
+// createFixture writes the snapshot at databasePath and its media files under
+// the data root two directories above it, as the container mounts them.
+func createFixture(databasePath string) (fixtureInfo, error) {
+	if err := os.MkdirAll(filepath.Dir(databasePath), 0o755); err != nil {
+		return fixtureInfo{}, err
+	}
+	db, err := sql.Open("sqlite", databasePath)
+	if err != nil {
+		return fixtureInfo{}, err
+	}
 	defer db.Close()
 	if _, err := db.Exec(schema); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
 	body := append([]byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}, []byte("go-docker-fixture")...)
 	digest := sha256.Sum256(body)
 	mediaHash := hex.EncodeToString(digest[:])
 	mediaID := strings.Repeat("a", 64)
 	relative := filepath.ToSlash(filepath.Join("x", "sha256", mediaHash[:2], mediaHash+".png"))
-	dataRoot := filepath.Dir(filepath.Dir(*databasePath))
+	dataRoot := filepath.Dir(filepath.Dir(databasePath))
 	mediaPath := filepath.Join(dataRoot, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(mediaPath), 0o755); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
 	if err := os.WriteFile(mediaPath, body, 0o644); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
 	profileRelative := filepath.ToSlash(filepath.Join("avatar", "avatar.png"))
 	profilePath := filepath.Join(dataRoot, filepath.FromSlash(profileRelative))
 	if err := os.MkdirAll(filepath.Dir(profilePath), 0o755); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
 	if err := os.WriteFile(profilePath, body, 0o644); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
 	if _, err := db.Exec(`INSERT INTO profiles (id,display_name,updated_at) VALUES ('profile','Synthetic','')`); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
 	if _, err := db.Exec(`
 		INSERT INTO events (id,source,title,starts_on,starts_at,timezone,time_precision,status,event_type,provenance,manual_locked,cancellation_status,created_at,updated_at)
 		VALUES ('fixture-event','x','Synthetic event','2026-10-11','2026-10-11T00:00:00Z','Asia/Tokyo','exact','scheduled','event','automatic',0,'none','','')`); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
 	if _, err := db.Exec(`
 		INSERT INTO media_assets (id,source,source_url,cache_path,mime_type,byte_size,sha256,status,fetched_at,updated_at)
 		VALUES (?, 'x','https://cdn.example.invalid/go-fixture.png',?,?,?,?, 'ready','2026-10-11T00:00:00Z','')`, mediaID, relative, "image/png", len(body), mediaHash); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
 	if _, err := db.Exec(`
 		INSERT INTO profile_media (id,slot,source,source_url,active_cache_path,active_sha256,active_mime_type,status,is_active)
 		VALUES ('fixture-profile','avatar','upload','https://example.invalid/profile.png',?,?,?,'ready',1)`, profileRelative, mediaHash, "image/png"); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
 	if _, err := db.Exec(`INSERT INTO app_settings (key,value,updated_at) VALUES ('dashboard_revision','1','')`); err != nil {
-		panic(err)
+		return fixtureInfo{}, err
 	}
-	encoded, _ := json.Marshal(fixtureInfo{MediaID: mediaID, MediaHash: mediaHash})
-	fmt.Println(string(encoded))
+	return fixtureInfo{MediaID: mediaID, MediaHash: mediaHash}, nil
 }
 
 const schema = `
