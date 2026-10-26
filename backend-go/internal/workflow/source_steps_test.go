@@ -157,3 +157,49 @@ func TestYoutubeRecentFeedFailureFallsBackToTheUploadsTab(t *testing.T) {
 		t.Fatalf("video=%#v err=%v", v, err)
 	}
 }
+
+func TestYoutubeRecentFailureKeepsTheRotatedQueueOnly(t *testing.T) {
+	s, err := sqlite.OpenInitialized(filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite"), true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	const channel = "UCAAAAAAAAAAAAAAAAAAAAAA"
+	for _, statement := range []string{
+		`INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES('youtube','` + channel + `','CCCCCCCCCCC','2026-01-01T00:00:00Z','2026-01-01T00:00:00.000Z','{"inspected":4}')`,
+		`INSERT INTO sync_state(source,account_id,metadata_json) VALUES('youtube-details','` + channel + `','{"queue":["AAAAAAAAAAA","BBBBBBBBBBB"]}')`,
+	} {
+		if _, err = s.DB().Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Every page is down and the queue's head keeps failing.
+	watched := []string{}
+	c := ytsource.NewClient(&http.Client{Transport: xTestRT(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/watch" {
+			watched = append(watched, r.URL.Query().Get("v"))
+		}
+		return &http.Response{StatusCode: 500, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
+	})})
+	c.FeedRetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
+	steps := &SourceSteps{Store: s, Youtube: ytsource.NewAdapter(c, ytsource.Options{ChannelID: channel, MaxDetailRequests: 1})}
+	for range 2 {
+		_, err = steps.youtubeRecent(context.Background(), StepInput{})
+		var se *StepError
+		if !errors.As(err, &se) || se.Category != ErrDependency {
+			t.Fatalf("err=%#v", err)
+		}
+	}
+	// Each run asked for the next ID, and the cursor and its metadata stayed.
+	if strings.Join(watched, ",") != "AAAAAAAAAAA,BBBBBBBBBBB" {
+		t.Fatalf("watched=%v", watched)
+	}
+	var cursor string
+	if err = s.DB().QueryRow(`SELECT cursor_id||'/'||last_success_at||'/'||metadata_json FROM sync_state WHERE source='youtube'`).Scan(&cursor); err != nil || cursor != `CCCCCCCCCCC/2026-01-01T00:00:00.000Z/{"inspected":4}` {
+		t.Fatalf("cursor=%s err=%v", cursor, err)
+	}
+	var videos int
+	if err = s.DB().QueryRow(`SELECT COUNT(*) FROM videos`).Scan(&videos); err != nil || videos != 0 {
+		t.Fatalf("videos=%d err=%v", videos, err)
+	}
+}

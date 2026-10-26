@@ -185,6 +185,12 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 				category = ErrDependency
 			}
 		}
+		// The failed run still rotated the detail queue past the IDs it tried.
+		// Saving only the queue leaves cursors and snapshots alone; a failed
+		// save does not change the step's failure.
+		if len(result.Queue) > 0 {
+			_ = s.Store.SaveYoutubeQueue(ctx, s.Youtube.Options.ChannelID, result.Queue)
+		}
 		return AttemptResult{}, NewStepError(string(category), category)
 	}
 	if s.Store.WriteYoutubeRecent(ctx, s.Youtube.Options.ChannelID, result) != nil {

@@ -297,3 +297,25 @@ func TestDataAPIParsing(t *testing.T) {
 		}
 	}
 }
+
+func TestRecentListedByTheUploadsTabSucceedsWithoutADetailCheck(t *testing.T) {
+	c := feedClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/feeds/videos.xml":
+			return response(404, ""), nil
+		case "/channel/" + syntheticChannel + "/videos":
+			return response(200, `{"videoId":"AAAAAAAAAAA"}`), nil
+		}
+		return response(500, ""), nil
+	})
+	a := NewAdapter(c, Options{ChannelID: syntheticChannel, MaxDetailRequests: 5})
+	a.Now = syntheticNow
+	result, err := a.FetchRecent(context.Background(), State{Queue: []string{"QQQQQQQQQQQ"}}, 7)
+	if err != nil || result.Listing != ListingVideosPage || result.Inspected != 0 {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+	// Both failed checks stay queued, rotated behind each other.
+	if strings.Join(result.Queue, ",") != "QQQQQQQQQQQ,AAAAAAAAAAA" {
+		t.Fatalf("queue=%v", result.Queue)
+	}
+}

@@ -164,6 +164,9 @@
   what the API cannot describe; the feed is then read only for its Shorts
   links. The step result adds `listing`
   (`api`, `rss`, `videos_page` or empty) and `apiRequests`.
+- A YouTube run that fails still keeps its rotated detail queue, without
+  touching cursors or snapshots, so a video whose check keeps failing no
+  longer blocks the rest; a run listed by the uploads tab alone succeeds.
 - Reading a Bilibili upload from the console no longer clears a captcha
   backoff that the `bilibili` step stored meanwhile.
 

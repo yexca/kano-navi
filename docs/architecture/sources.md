@@ -132,9 +132,11 @@ those IDs add no unchecked rows and leave the cursor alone; a watch page
 supplies a new video's time from `publishDate` (a stored time always wins).
 The step result reports where the uploads came from as `listing`: `api`,
 `rss`, `videos_page`, or empty when nothing answered. Only a run with no
-listing and no successful detail check fails, as retryable
-`dependency_unavailable` (or `timeout`/`rate_limited`) after the feed's code,
-without writing, so existing video and event snapshots remain.
+listing (the uploads tab counts as one) and no successful detail check
+fails, as retryable `dependency_unavailable` (or `timeout`/`rate_limited`)
+after the feed's code. It writes no video, event, cursor or incremental
+metadata, so existing snapshots remain; it stores only the rotated detail
+queue, so IDs whose checks keep failing do not starve the rest.
 
 #### Data API
 

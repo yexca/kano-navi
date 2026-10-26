@@ -86,10 +86,8 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 	if err != nil {
 		return ErrSourceWrite
 	}
-	queue, _ := json.Marshal(map[string]any{"queue": result.Queue})
-	_, err = tx.ExecContext(ctx, `INSERT INTO sync_state(source,account_id,metadata_json) VALUES('youtube-details',?,?) ON CONFLICT(source,account_id) DO UPDATE SET metadata_json=excluded.metadata_json`, channel, string(queue))
-	if err != nil {
-		return ErrSourceWrite
+	if err = writeYoutubeQueue(ctx, tx, channel, result.Queue); err != nil {
+		return err
 	}
 	if len(result.Videos) > 0 || shorts {
 		if err = bumpRevision(ctx, tx, now); err != nil {
@@ -97,6 +95,37 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 		}
 	}
 	if tx.Commit() != nil {
+		return ErrSourceWrite
+	}
+	return nil
+}
+
+// SaveYoutubeQueue stores only the rotated detail queue of a run that failed,
+// so its cursor, metadata and snapshots stay as they were.
+func (s *Store) SaveYoutubeQueue(ctx context.Context, channel string, queue []string) error {
+	if s == nil || !s.workflowWritable {
+		return ErrSourceWrite
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ErrSourceWrite
+	}
+	defer tx.Rollback()
+	if err = fenceSourceWrite(ctx, tx); err != nil {
+		return err
+	}
+	if err = writeYoutubeQueue(ctx, tx, channel, queue); err != nil {
+		return err
+	}
+	if tx.Commit() != nil {
+		return ErrSourceWrite
+	}
+	return nil
+}
+
+func writeYoutubeQueue(ctx context.Context, tx *sql.Tx, channel string, queue []string) error {
+	encoded, _ := json.Marshal(map[string]any{"queue": queue})
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sync_state(source,account_id,metadata_json) VALUES('youtube-details',?,?) ON CONFLICT(source,account_id) DO UPDATE SET metadata_json=excluded.metadata_json`, channel, string(encoded)); err != nil {
 		return ErrSourceWrite
 	}
 	return nil

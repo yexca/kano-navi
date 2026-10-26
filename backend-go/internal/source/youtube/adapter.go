@@ -200,9 +200,11 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 			result.CheckedIDs = append(result.CheckedIDs, id)
 		}
 	}
-	// Only a run that learned nothing fails: no listing and no detail check.
-	// It then writes nothing, so the snapshots stay and the step is retried.
-	if listErr != nil && result.Inspected == 0 {
+	// Only a run that learned nothing fails: no listing, not even the uploads
+	// tab, and no detail check. Its snapshots stay and the step is retried;
+	// the caller keeps only the rotated Queue, so IDs that keep failing do not
+	// starve the rest.
+	if listErr != nil && result.Listing == "" && result.Inspected == 0 {
 		return result, listErr
 	}
 	return result, nil
