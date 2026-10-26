@@ -160,7 +160,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 	result.Queue = uniqueIDs(eligible, 1000)
 	// The Data API answers the first batch of the queue in one call; the watch
 	// page budget then goes to the rest, newest work first as before.
-	fromAPI := a.apiDetails(ctx, result.Queue, state.Videos, &result)
+	fromAPI, unclassified := a.apiDetails(ctx, result.Queue, state.Videos, &result)
 	budget := a.Options.MaxDetailRequests
 	for _, id := range append([]string{}, result.Queue...) {
 		if err = ctx.Err(); err != nil {
@@ -176,13 +176,15 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 			budget--
 			result.Requested++
 			body, err = a.Client.Watch(ctx, id)
+			if err == nil {
+				v, err = ParseWatch(body, id)
+			}
 			if err != nil {
 				result.Errors = append(result.Errors, safeError(err))
-				continue
-			}
-			if v, err = ParseWatch(body, id); err != nil {
-				result.Errors = append(result.Errors, safeError(err))
-				continue
+				// The page could not decide, so what the API said still counts.
+				if v, answered = unclassified[id]; !answered {
+					continue
+				}
 			}
 		}
 		v = completeDetails(v, state.Videos[id], now)
@@ -271,11 +273,13 @@ func (a *Adapter) feedShorts(ctx context.Context, result *Result) {
 // apiDetails reads the first MaxAPIVideos queued IDs in one videos.list call
 // when a key is set. It returns the videos the API could describe; the rest,
 // including any the API left out or could not classify, fall back to their
-// watch pages. A failed call is recorded and answers none.
-func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[string]Video, result *Result) map[string]Video {
-	out := map[string]Video{}
+// watch pages. Ended broadcasts it could not classify are also returned as
+// unclassified, for use only when their page fails. A failed call is
+// recorded and answers none.
+func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[string]Video, result *Result) (out, unclassified map[string]Video) {
+	out, unclassified = map[string]Video{}, map[string]Video{}
 	if a.Options.APIKey == "" || len(queue) == 0 {
-		return out
+		return out, unclassified
 	}
 	ids := queue[:min(len(queue), MaxAPIVideos)]
 	result.APIRequests++
@@ -288,16 +292,20 @@ func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[str
 		if ctx.Err() == nil {
 			result.Errors = append(result.Errors, safeError(err))
 		}
-		return out
+		return out, unclassified
 	}
 	for _, id := range ids {
 		if item, found := items[id]; found {
-			if v, ok := fromAPI(item, stored[id]); ok {
+			v, ok := fromAPI(item, stored[id])
+			switch {
+			case ok:
 				out[id] = v
+			case v.Unclassified:
+				unclassified[id] = v
 			}
 		}
 	}
-	return out
+	return out, unclassified
 }
 
 // completeDetails fills what a watch page or the Data API left out from the
@@ -330,6 +338,14 @@ func completeDetails(v, old Video, now time.Time) Video {
 	}
 	if t.IsZero() || v.Premiere {
 		v.Kind = Classify(v.Title)
+	}
+	// An unclassified answer keeps the stored kind; only the waiting-room kind
+	// of the same judgement turns into its ended form.
+	if v.Unclassified && old.Kind != "" {
+		v.Kind = old.Kind
+		if v.Kind == "UPCOMING LIVE" {
+			v.Kind = "LIVE ARCHIVE"
+		}
 	}
 	return v
 }

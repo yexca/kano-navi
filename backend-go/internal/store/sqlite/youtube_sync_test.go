@@ -244,3 +244,43 @@ func TestYoutubePremiereVerdictSurvivesChecksThatCannotTell(t *testing.T) {
 	stream.Premiere = false
 	check(stream, "stream", "0")
 }
+
+func TestYoutubeUnclassifiedAnswerKeepsTheStoredKindAndEvent(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	const channel = "UCAAAAAAAAAAAAAAAAAAAAAA"
+	// A premiere stored before any check could tell, with the release event
+	// an X notice gave it and an open refresh request.
+	testutil.Exec(t, p, `INSERT INTO videos(id,source,title,published_at,url,thumbnail_url,kind,is_upcoming,refresh_requested_at,raw_json) VALUES('EEEEEEEEEEE','youtube','??? - cover.','2026-01-02T03:20:58Z','https://www.youtube.com/watch?v=EEEEEEEEEEE','https://i2.ytimg.com/vi/EEEEEEEEEEE/hqdefault.jpg','MUSIC',0,'2026-01-03T00:00:00Z','{}')`)
+	testutil.Exec(t, p, `INSERT INTO events(id,source,source_item_id,source_key,title,detail,starts_on,timezone,time_precision,status,event_type,url,is_upcoming,provenance,manual_locked,created_at,updated_at,raw_json) VALUES('youtube-EEEEEEEEEEE','youtube','EEEEEEEEEEE','reservation','??? - cover.','A cover video was posted.','2026-01-02','Asia/Tokyo','unknown','released','release','https://www.youtube.com/watch?v=EEEEEEEEEEE',1,'automatic',0,'2026-01-02T04:00:00Z','2026-01-02T04:00:00Z','{}')`)
+	answer := ytsource.Video{ID: "EEEEEEEEEEE", Title: "Kanade - cover.", PublishedAt: "2026-01-02T03:20:58Z", ScheduledAt: "2026-01-02T09:00:09Z", EndedAt: "2026-01-02T09:06:55Z", URL: "https://www.youtube.com/watch?v=EEEEEEEEEEE", ThumbnailURL: "https://i.ytimg.com/vi/EEEEEEEEEEE/maxresdefault.jpg", Kind: "MUSIC", LiveStatus: ytsource.LiveStatusEnded, DurationSeconds: 289, Unclassified: true}
+	// A stream with no event yet gets none from an unclassified answer.
+	orphan := ytsource.Video{ID: "OOOOOOOOOOO", Title: "finished", ScheduledAt: "2026-01-02T10:00:00Z", EndedAt: "2026-01-02T12:00:00Z", URL: "https://www.youtube.com/watch?v=OOOOOOOOOOO", Kind: "LIVE ARCHIVE", LiveStatus: ytsource.LiveStatusEnded, Unclassified: true}
+	if err = s.WriteYoutubeRecent(ctx, channel, ytsource.Result{Videos: []ytsource.Video{answer, orphan}}); err != nil {
+		t.Fatal(err)
+	}
+	var title, kind, scheduled, premiere, checked, refresh string
+	var duration int
+	if err = s.DB().QueryRow(`SELECT title,kind,scheduled_at,COALESCE(is_premiere,'unknown'),COALESCE(live_checked_at,''),COALESCE(refresh_requested_at,''),duration_seconds FROM videos WHERE id='EEEEEEEEEEE'`).Scan(&title, &kind, &scheduled, &premiere, &checked, &refresh, &duration); err != nil {
+		t.Fatal(err)
+	}
+	if title != "Kanade - cover." || kind != "MUSIC" || scheduled != "2026-01-02T09:00:09Z" || premiere != "unknown" || checked == "" || refresh != "" || duration != 289 {
+		t.Fatalf("video title=%s kind=%s scheduled=%s premiere=%s checked=%q refresh=%q duration=%d", title, kind, scheduled, premiere, checked, refresh, duration)
+	}
+	var eventTitle, detail, eventType, endsAt string
+	if err = s.DB().QueryRow(`SELECT title,detail,event_type,COALESCE(ends_at,'') FROM events WHERE id='youtube-EEEEEEEEEEE'`).Scan(&eventTitle, &detail, &eventType, &endsAt); err != nil {
+		t.Fatal(err)
+	}
+	if eventTitle != "Kanade - cover." || detail != "A cover video was posted." || eventType != "release" || endsAt != "2026-01-02T09:06:55Z" {
+		t.Fatalf("event title=%s detail=%s type=%s ends=%s", eventTitle, detail, eventType, endsAt)
+	}
+	var orphans int
+	if err = s.DB().QueryRow(`SELECT COUNT(*) FROM events WHERE source_item_id='OOOOOOOOOOO'`).Scan(&orphans); err != nil || orphans != 0 {
+		t.Fatalf("orphan events=%d err=%v", orphans, err)
+	}
+}

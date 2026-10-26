@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -149,7 +150,7 @@ func TestYoutubeRecentFeedFailureFallsBackToTheUploadsTab(t *testing.T) {
 	yt.Now = func() time.Time { return time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC) }
 	steps := &SourceSteps{Store: s, Youtube: yt}
 	result, err := steps.youtubeRecent(context.Background(), StepInput{})
-	if err != nil || result.Status != "partial" || result.Result["listing"] != ytsource.ListingVideosPage || result.Result["inspected"] != 1 {
+	if err != nil || result.Status != "partial" || result.Result["listing"] != ytsource.ListingVideosPage || result.Result["inspected"] != 1 || !slices.Equal(result.Result["errors"].([]string), []string{"youtube_http_error"}) {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
 	state, err := s.YoutubeRecentState(context.Background(), yt.Options.ChannelID)
@@ -201,5 +202,12 @@ func TestYoutubeRecentFailureKeepsTheRotatedQueueOnly(t *testing.T) {
 	var videos int
 	if err = s.DB().QueryRow(`SELECT COUNT(*) FROM videos`).Scan(&videos); err != nil || videos != 0 {
 		t.Fatalf("videos=%d err=%v", videos, err)
+	}
+}
+
+func TestTallyCodesListsEachCodeOnceWithItsCount(t *testing.T) {
+	got := tallyCodes([]string{"youtube_http_error", "youtube_watch_details_incomplete", "youtube_http_error", "youtube_http_error"})
+	if !slices.Equal(got, []string{"youtube_http_error ×3", "youtube_watch_details_incomplete"}) {
+		t.Fatalf("tally=%v", got)
 	}
 }

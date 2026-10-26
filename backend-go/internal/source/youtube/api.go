@@ -188,11 +188,14 @@ func fromAPI(item apiVideo, old Video) (Video, bool) {
 	case v.EndedAt != "":
 		v.LiveStatus = LiveStatusEnded
 	}
+	v.DurationSeconds = length
 	if old.ScheduledAt == "" || !old.PremiereKnown {
+		// The watch page decides. Should it fail, an ended broadcast with a
+		// start still updates from this answer, unclassified.
+		v.Unclassified = v.LiveStatus == LiveStatusEnded && v.ScheduledAt != ""
 		return v, false
 	}
 	v.Premiere, v.PremiereKnown = old.Premiere, true
-	v.DurationSeconds = length
 	return v, true
 }
 

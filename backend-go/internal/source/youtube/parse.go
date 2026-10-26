@@ -30,7 +30,12 @@ type Video struct {
 	// The store keeps a known verdict for the API answer of an ended
 	// broadcast, which cannot tell.
 	Premiere, PremiereKnown bool
-	FeedOnly                bool
+	// Unclassified marks a Data API answer for an ended broadcast that no
+	// check could call a premiere or a stream, used only when its watch page
+	// fails. It updates the title, thumbnail, times and length; the stored
+	// kind, event type and premiere verdict stay.
+	Unclassified bool
+	FeedOnly     bool
 	// DurationSeconds is the player's length; zero while unknown, as for a
 	// feed entry, a waiting room or a broadcast still on air.
 	DurationSeconds int

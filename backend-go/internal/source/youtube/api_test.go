@@ -360,3 +360,76 @@ func TestRecentListedByTheUploadsTabSucceedsWithoutADetailCheck(t *testing.T) {
 		t.Fatalf("queue=%v", result.Queue)
 	}
 }
+
+func TestRecentUsesUnclassifiedAPIAnswersOnlyWhenTheWatchPageFails(t *testing.T) {
+	var watched []string
+	c := NewClient(&http.Client{Transport: fakeTransport(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/youtube/v3/playlistItems":
+			return response(200, apiItems(`{"snippet":{"title":"ordinary upload","publishedAt":"2025-12-01T00:00:00Z"},"contentDetails":{"videoId":"ZZZZZZZZZZZ"},"status":{"privacyStatus":"public"}}`)), nil
+		case "/youtube/v3/videos":
+			ended := func(id, title string) string {
+				return `{"id":"` + id + `","snippet":{"title":"` + title + `","liveBroadcastContent":"none","thumbnails":{"maxres":{"url":"https://i.ytimg.com/vi/` + id + `/maxresdefault.jpg"}}},"contentDetails":{"duration":"PT4M49S"},"liveStreamingDetails":{"actualStartTime":"2026-01-02T09:00:09Z","actualEndTime":"2026-01-02T09:06:55Z"}}`
+			}
+			return response(200, apiItems(ended("PPPPPPPPPPP", "Kanade - cover."), ended("SSSSSSSSSSS", "finished stream"), ended("WWWWWWWWWWW", "readable page"),
+				// Ended without a start: nothing to place, so no fallback.
+				`{"id":"NNNNNNNNNNN","snippet":{"title":"no start","liveBroadcastContent":"none"},"liveStreamingDetails":{"actualEndTime":"2026-01-02T12:00:00Z"}}`)), nil
+		case "/feeds/videos.xml", "/channel/" + syntheticChannel + "/streams":
+			return response(404, ""), nil
+		case "/watch":
+			id := r.URL.Query().Get("v")
+			watched = append(watched, id)
+			if id == "WWWWWWWWWWW" {
+				return response(200, watchPage(id, `"isLiveContent":false,"lengthSeconds":"289"`, `{"isLiveNow":false,"startTimestamp":"2026-01-02T09:00:09+00:00","endTimestamp":"2026-01-02T09:06:55+00:00"}`)), nil
+			}
+			if id == "SSSSSSSSSSS" {
+				return response(200, `<html>no player</html>`), nil
+			}
+			return response(404, ""), nil
+		}
+		t.Fatalf("unexpected request %s", r.URL)
+		return nil, nil
+	})})
+	a := NewAdapter(c, Options{ChannelID: syntheticChannel, MaxDetailRequests: 5, APIKey: "synthetic-api-key"})
+	a.Now = syntheticNow
+	state := State{
+		RefreshIDs: []string{"PPPPPPPPPPP", "SSSSSSSSSSS", "WWWWWWWWWWW", "NNNNNNNNNNN"},
+		Videos: map[string]Video{
+			"PPPPPPPPPPP": {ID: "PPPPPPPPPPP", Title: "??? - cover.", PublishedAt: "2026-01-02T03:20:58Z", Kind: "MUSIC", ThumbnailURL: "https://i2.ytimg.com/vi/PPPPPPPPPPP/hqdefault.jpg"},
+			"SSSSSSSSSSS": {ID: "SSSSSSSSSSS", Title: "finished stream", PublishedAt: "2026-01-01T00:00:00Z", ScheduledAt: "2026-01-02T09:00:00Z", Kind: "UPCOMING LIVE"},
+		},
+	}
+	result, err := a.FetchRecent(context.Background(), state, 7)
+	if err != nil || strings.Join(watched, ",") != "PPPPPPPPPPP,SSSSSSSSSSS,WWWWWWWWWWW,NNNNNNNNNNN" {
+		t.Fatalf("watched=%v result=%#v err=%v", watched, result, err)
+	}
+	if strings.Join(result.InspectedIDs, ",") != "PPPPPPPPPPP,SSSSSSSSSSS,WWWWWWWWWWW" {
+		t.Fatalf("inspected=%v errors=%v", result.InspectedIDs, result.Errors)
+	}
+	// Each failed page is still recorded.
+	if !slices.Equal(result.Errors, []string{"youtube_http_error", "youtube_http_error", "youtube_http_error", "youtube_watch_details_incomplete", "youtube_http_error"}) {
+		t.Fatalf("errors=%v", result.Errors)
+	}
+	details := map[string]Video{}
+	for _, v := range result.Videos {
+		if !v.FeedOnly {
+			details[v.ID] = v
+		}
+	}
+	premiere, stream, page := details["PPPPPPPPPPP"], details["SSSSSSSSSSS"], details["WWWWWWWWWWW"]
+	// The API answer updates the title, times and length but keeps the stored
+	// kind and verdict; another size of the same image keeps the stored URL.
+	if !premiere.Unclassified || premiere.PremiereKnown || premiere.Title != "Kanade - cover." || premiere.Kind != "MUSIC" ||
+		premiere.ScheduledAt != "2026-01-02T09:00:09Z" || premiere.EndedAt != "2026-01-02T09:06:55Z" || premiere.DurationSeconds != 289 ||
+		premiere.ThumbnailURL != "https://i2.ytimg.com/vi/PPPPPPPPPPP/hqdefault.jpg" || premiere.PublishedAt != "2026-01-02T03:20:58Z" {
+		t.Fatalf("premiere=%#v", premiere)
+	}
+	// A stored waiting-room kind turns into its ended form.
+	if !stream.Unclassified || stream.Kind != "LIVE ARCHIVE" || stream.LiveStatus != LiveStatusEnded || stream.IsUpcoming {
+		t.Fatalf("stream=%#v", stream)
+	}
+	// A readable page decides as before.
+	if page.Unclassified || !page.PremiereKnown || !page.Premiere {
+		t.Fatalf("page=%#v", page)
+	}
+}

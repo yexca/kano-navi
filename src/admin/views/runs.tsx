@@ -342,9 +342,18 @@ function describe(value: unknown): string {
   if (value == null) return ""
   if (typeof value !== "object") return String(value)
   return Object.entries(value as Record<string, unknown>)
+    .map(([key, item]): [string, unknown] => [key, flat(item)])
     .filter(([, item]) => item != null && typeof item !== "object")
     .map(([key, item]) => `${key}: ${item}`)
     .join(" · ")
+}
+
+/** Lists of plain values, such as error codes, read as one comma list. */
+function flat(item: unknown): unknown {
+  if (!Array.isArray(item) || item.length === 0) return item
+  return item.every((entry) => entry == null || typeof entry !== "object")
+    ? item.join(", ")
+    : item
 }
 
 function RunDetail({ run, onChanged }: { run: Run; onChanged: () => void }) {

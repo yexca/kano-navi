@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/mediadownload"
@@ -208,7 +209,31 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 			shorts++
 		}
 	}
-	return AttemptResult{Status: status, Result: map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested, "shorts": shorts, "listing": result.Listing, "apiRequests": result.APIRequests}}, nil
+	counts := map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested, "shorts": shorts, "listing": result.Listing, "apiRequests": result.APIRequests}
+	if len(result.Errors) > 0 {
+		counts["errors"] = tallyCodes(result.Errors)
+	}
+	return AttemptResult{Status: status, Result: counts}, nil
+}
+
+// tallyCodes lists each controlled error code once, in order of first
+// appearance, with "×n" when it was recorded n > 1 times.
+func tallyCodes(codes []string) []string {
+	order, seen := []string{}, map[string]int{}
+	for _, code := range codes {
+		if seen[code] == 0 {
+			order = append(order, code)
+		}
+		seen[code]++
+	}
+	out := make([]string, 0, len(order))
+	for _, code := range order {
+		if n := seen[code]; n > 1 {
+			code += " ×" + strconv.Itoa(n)
+		}
+		out = append(out, code)
+	}
+	return out
 }
 
 // bilibiliRecent reads the account's newest uploads at most once per

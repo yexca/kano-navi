@@ -134,7 +134,11 @@ candidates, after the streams page's. The tab has no publication times, so
 those IDs add no unchecked rows and leave the cursor alone; a watch page
 supplies a new video's time from `publishDate` (a stored time always wins).
 The step result reports where the uploads came from as `listing`: `api`,
-`rss`, `videos_page`, or empty when nothing answered. Only a run with no
+`rss`, `videos_page`, or empty when nothing answered, and a run that recorded
+failures lists their controlled codes as `errors`, each once in order of
+first appearance with `×n` when it occurred n times (for example
+`youtube_watch_details_incomplete ×12`). The run view in `/admin` shows such
+lists of plain values joined by commas. Only a run with no
 listing (the uploads tab counts as one) and no successful detail check
 fails, as retryable `dependency_unavailable` (or `timeout`/`rate_limited`)
 after the feed's code. It writes no video, event, cursor or incremental
@@ -165,6 +169,16 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   title kind, which may be a live one. Otherwise, as for rows stored before
   the verdict was kept, an untitled video or an upcoming one without a start,
   its watch page decides.
+- When that watch page fails for an ended broadcast the API gave a start
+  (`ytsource.Video.Unclassified`), the API answer is used anyway rather than
+  leaving the video unchecked, since some hosts never get a readable page. It
+  writes the title, thumbnail, actual start and end, length and `ended`
+  status, sets `live_checked_at` and answers a refresh request, while the
+  stored kind (a stored `UPCOMING LIVE` becomes `LIVE ARCHIVE`), the
+  `is_premiere` verdict and the reservation event's type and detail stay. Such
+  an answer updates an existing reservation event but creates none, and the
+  failed page's code is still recorded. A later readable page settles the
+  verdict as usual.
 - A thumbnail that is the same image as the stored one keeps the stored URL,
   so the watch page's `?v=` version does not read as a replacement; the media
   step still revalidates the file. See [Video corrections](data-model.md#video-corrections-and-history)
