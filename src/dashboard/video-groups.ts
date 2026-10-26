@@ -6,8 +6,8 @@ import {
   videoTime,
 } from "./format.ts"
 
-/** The board's video filter; Shorts carry no stored signal, so none here. */
-export type VideoFilter = "all" | "streams" | "works"
+/** The board's video filter. */
+export type VideoFilter = "all" | "streams" | "works" | "shorts"
 
 /**
  * Where a video stands now. `started` is a reservation past its start that no
@@ -31,6 +31,14 @@ export function videoIsStream(video: Video) {
       .trim()
       .toUpperCase(),
   )
+}
+
+/**
+ * A YouTube Short, as the feed's link or an operator names it. An unknown
+ * format, as for older uploads, is never guessed from the length.
+ */
+export function videoIsShort(video: Video) {
+  return video.isShort === true
 }
 
 /**
@@ -67,10 +75,12 @@ function isLeadWork(video: Video) {
 export interface VideoSplit {
   /** Reservations, broadcasts on air and cancelled reservations, soonest first. */
   reservations: Video[]
-  /** Uploads other than broadcasts, newest first. */
+  /** Uploads other than broadcasts and Shorts, newest first. */
   works: Video[]
   /** Broadcast archives, newest first. */
   archives: Video[]
+  /** Shorts, newest first. Not works, so one leads only when featured. */
+  shorts: Video[]
 }
 
 export interface VideoShelfGroups extends VideoSplit {
@@ -88,12 +98,15 @@ export function splitVideos(videos: Video[], now: number): VideoSplit {
   const reservations: Video[] = []
   const works: Video[] = []
   const archives: Video[] = []
+  const shorts: Video[] = []
   for (const video of videos) {
     const phase = videoPhase(video, now)
     // A cancelled reservation stays listed until its start, then drops out.
     if (phase === "cancelled") {
       if (Date.parse(video.scheduledAt || "") > now) reservations.push(video)
     } else if (phase !== "past") reservations.push(video)
+    // A Short's title can read like a stream's, so its format decides first.
+    else if (videoIsShort(video)) shorts.push(video)
     else (videoIsStream(video) ? archives : works).push(video)
   }
   reservations.sort(
@@ -103,7 +116,8 @@ export function splitVideos(videos: Video[], now: number): VideoSplit {
   )
   works.sort(newestFirst)
   archives.sort(newestFirst)
-  return { reservations, works, archives }
+  shorts.sort(newestFirst)
+  return { reservations, works, archives, shorts }
 }
 
 /** The shelf's lead and the rest, each video listed once. */
@@ -127,8 +141,13 @@ export function groupVideos(
   return { ...split, lead, leadIsFeatured: Boolean(featured) }
 }
 
-/** Whether a video belongs to a filter; `all` keeps every video. */
+/**
+ * Whether a video belongs to a filter; `all` keeps every video and a Short
+ * belongs to `shorts` alone.
+ */
 export function videoMatchesFilter(video: Video, filter: VideoFilter) {
   if (filter === "all") return true
+  if (videoIsShort(video)) return filter === "shorts"
+  if (filter === "shorts") return false
   return videoIsStream(video) === (filter === "streams")
 }

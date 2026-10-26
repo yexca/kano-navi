@@ -60,8 +60,10 @@ whitelisted synchronization summary; it does not return a database path or label
 clamps days to 1 through 30 and returns profile, summary, posts, events, videos,
 focus, timeline, resources, schedule assets, media status, and metadata.
 The summary contains nextEvent, nextStream, latestVideo, latestPost, and counts;
-latestPost survives an empty requested window. Metadata includes configured
-X accounts and the Featured video ID.
+latestPost survives an empty requested window. latestVideo is the stage's
+fallback: the newest non-upcoming video that is not a Short, unless the
+operator featured that Short; a video of unknown format stays eligible.
+Metadata includes configured X accounts and the Featured video ID.
 
 `meta.sourceFetchedAt` contains only `x` and `youtube` ISO timestamps or null,
 derived from successful incremental or recent source reads. Historical range

@@ -16,6 +16,17 @@ import { MergeSection } from "@/admin/views/merge-parts"
 /** The kinds the board labels; an empty choice follows the platform. */
 const videoKinds = ["VIDEO", "MUSIC", "LIVE ARCHIVE", "GAMEPLAY", "TALK"]
 
+/** A format choice: empty follows the feed, otherwise Short or not. */
+const formatChoice = (isShort: boolean | null) =>
+  isShort === null ? "" : isShort ? "short" : "regular"
+
+const formatLabel = (isShort: boolean | null) =>
+  isShort === null
+    ? "admin.videos.format.unknown"
+    : isShort
+      ? "admin.videos.format.short"
+      : "admin.videos.format.regular"
+
 const pinKey = (file: { mediaId: string; sha256: string } | null) =>
   file ? `${file.mediaId}/${file.sha256}` : ""
 
@@ -86,6 +97,7 @@ export function VideoEditor({
     title: string
     kind: string
     thumbnail: string
+    format: string
   } | null>(null)
   const [busy, setBusy] = useState<"" | "save" | "refresh">("")
   // A refresh request changes the listed row even when nothing is saved.
@@ -99,6 +111,7 @@ export function VideoEditor({
         title: data.video.manualTitle ?? "",
         kind: data.video.manualKind ?? "",
         thumbnail: pinKey(data.video.manualThumbnail),
+        format: formatChoice(data.video.manualIsShort),
       })
   }, [data, draft])
 
@@ -112,6 +125,7 @@ export function VideoEditor({
       title: draft.title.trim() || null,
       kind: draft.kind || null,
       thumbnail: file ? { mediaId: file.mediaId, sha256: file.sha256 } : null,
+      isShort: draft.format ? draft.format === "short" : null,
     }
     setBusy("save")
     const result = await act(
@@ -212,6 +226,27 @@ export function VideoEditor({
               ))}
             </select>
           </Field>
+          {video.source === "youtube" ? (
+            <Field
+              label={t("admin.videos.field.format")}
+              hint={t("admin.videos.format.hint")}
+            >
+              <select
+                value={draft.format}
+                onChange={(e) => setDraft({ ...draft, format: e.target.value })}
+              >
+                <option value="">
+                  {t("admin.videos.format.platform", {
+                    format: t(formatLabel(video.sourceIsShort)),
+                  })}
+                </option>
+                <option value="short">{t("admin.videos.format.short")}</option>
+                <option value="regular">
+                  {t("admin.videos.format.regular")}
+                </option>
+              </select>
+            </Field>
+          ) : null}
           <fieldset className="adm-field adm-thumb-picker">
             <legend className="adm-field-label">
               {t("admin.videos.field.thumbnail")}

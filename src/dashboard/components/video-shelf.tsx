@@ -494,16 +494,21 @@ function TicketList({
 function VideoGrid({
   videos,
   showKind,
+  variant,
   locale,
   t,
 }: {
   videos: Video[]
   showKind: boolean
+  /** Shorts get 9:16 cards; a Shorts row keeps to one line of them. */
+  variant?: "shorts" | "shorts-row"
   locale: Locale
   t: Translator
 }) {
   return (
-    <ol className="video-grid">
+    <ol
+      className={`video-grid${variant ? " is-shorts" : ""}${variant === "shorts-row" ? " is-row" : ""}`}
+    >
       {videos.map((video) => (
         <VideoCard
           key={video.id}
@@ -519,9 +524,11 @@ function VideoGrid({
 
 /** Archives the All view shows: two rows of four on wide screens. */
 const ALL_ARCHIVES = 8
+/** Shorts the All view shows: one row of six; narrower rows show fewer. */
+const ALL_SHORTS = 6
 /** Reservations beside the lead; the Streams view lists every one. */
 const SIDE_RESERVATIONS = 4
-/** Archives or works a filtered view shows: three rows of four. */
+/** What a filtered view shows: three rows of four, or two rows of Shorts. */
 const FILTERED_ITEMS = 12
 
 export function VideoShelf({
@@ -546,17 +553,26 @@ export function VideoShelf({
   t: Translator
 }) {
   const [filter, setFilter] = useState<VideoFilter>("all")
-  const streamCount = videos.filter((video) =>
-    videoMatchesFilter(video, "streams"),
-  ).length
-  const workCount = videos.length - streamCount
-  // The filter only helps when both kinds are present.
-  const hasFilter = streamCount > 0 && workCount > 0
-  const active: VideoFilter = hasFilter ? filter : "all"
+  // A kind gets a tab only when present; the filter only helps with two.
+  const kinds = (
+    [
+      { value: "streams", label: t("videos.streams") },
+      { value: "works", label: t("videos.works") },
+      { value: "shorts", label: t("videos.shorts") },
+    ] as const
+  )
+    .map((item) => ({
+      ...item,
+      count: videos.filter((video) => videoMatchesFilter(video, item.value))
+        .length,
+    }))
+    .filter((item) => item.count > 0)
+  const hasFilter = kinds.length > 1
+  const active: VideoFilter =
+    hasFilter && kinds.some((item) => item.value === filter) ? filter : "all"
   const filters: { value: VideoFilter; label: string; count: number }[] = [
     { value: "all", label: t("common.all"), count: videos.length },
-    { value: "streams", label: t("videos.streams"), count: streamCount },
-    { value: "works", label: t("videos.works"), count: workCount },
+    ...kinds,
   ]
   // Under a shortened grid, the month archive holds the rest.
   const more = (
@@ -581,6 +597,7 @@ export function VideoShelf({
     const reservations = groups.reservations.slice(0, SIDE_RESERVATIONS)
     const sideWorks = groups.works.slice(0, reservations.length ? 1 : 3)
     const archives = groups.archives.slice(0, ALL_ARCHIVES)
+    const shorts = groups.shorts.slice(0, ALL_SHORTS)
     const hasSide = Boolean(reservations.length || sideWorks.length)
     body = (
       <>
@@ -648,6 +665,18 @@ export function VideoShelf({
             {groups.archives.length > archives.length ? more : null}
           </div>
         ) : null}
+        {shorts.length ? (
+          <div className="videos-block">
+            <Subhead>{t("videos.shorts")}</Subhead>
+            <VideoGrid
+              videos={shorts}
+              showKind={false}
+              variant="shorts-row"
+              locale={locale}
+              t={t}
+            />
+          </div>
+        ) : null}
       </>
     )
   } else {
@@ -655,7 +684,24 @@ export function VideoShelf({
       videos.filter((video) => videoMatchesFilter(video, active)),
       now,
     )
-    const items = active === "streams" ? split.archives : split.works
+    const view = {
+      streams: {
+        items: split.archives,
+        title: t("videos.archives"),
+        empty: t("videos.noStreams"),
+      },
+      works: {
+        items: split.works,
+        title: t("videos.works"),
+        empty: t("videos.noWorks"),
+      },
+      shorts: {
+        items: split.shorts,
+        title: t("videos.shorts"),
+        empty: t("videos.noShorts"),
+      },
+    }[active]
+    const items = view.items
     body =
       split.reservations.length || items.length ? (
         <>
@@ -676,14 +722,11 @@ export function VideoShelf({
           ) : null}
           {items.length ? (
             <div className="videos-block">
-              <Subhead count={items.length}>
-                {active === "streams"
-                  ? t("videos.archives")
-                  : t("videos.works")}
-              </Subhead>
+              <Subhead count={items.length}>{view.title}</Subhead>
               <VideoGrid
                 videos={items.slice(0, FILTERED_ITEMS)}
                 showKind={active === "works"}
+                variant={active === "shorts" ? "shorts" : undefined}
                 locale={locale}
                 t={t}
               />
@@ -692,11 +735,7 @@ export function VideoShelf({
           ) : null}
         </>
       ) : (
-        <EmptyNote
-          title={
-            active === "streams" ? t("videos.noStreams") : t("videos.noWorks")
-          }
-        />
+        <EmptyNote title={view.empty} />
       )
   }
 

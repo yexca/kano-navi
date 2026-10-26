@@ -108,6 +108,13 @@ func valueInt(v *int64) any {
 	return *v
 }
 
+func valueBool(v *bool) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
 func PublicEvent(e sqlite.DashboardEvent, extras bool) map[string]any {
 	out := map[string]any{"id": e.ID, "source": e.Source, "title": e.Title, "detail": value(e.Detail), "startsOn": e.StartsOn, "startsAt": value(e.StartsAt), "endsAt": value(e.EndsAt), "timezone": e.Timezone, "timePrecision": e.TimePrecision, "status": value(e.Status), "eventType": value(e.EventType), "url": value(e.URL), "provenance": e.Provenance, "cancellationStatus": e.CancellationStatus, "cancellationSource": value(e.CancellationSource), "cancellationReason": value(e.CancellationReason), "cancellationEvidence": value(e.CancellationEvidence), "cancellationAt": value(e.CancellationAt), "translations": publicTranslations(e.Translations), "sourceLanguage": value(e.Translations.SourceLanguage)}
 	if extras {
@@ -125,7 +132,7 @@ func publicPost(p sqlite.Post) map[string]any {
 	return map[string]any{"id": p.ID, "source": p.Source, "accountHandle": value(p.AccountHandle), "type": p.Type, "label": value(p.Label), "text": p.Text, "publishedAt": p.PublishedAt, "url": p.URL, "likes": p.Likes, "reposts": p.Reposts, "replies": p.Replies, "mediaUrl": value(p.MediaURL), "mediaAlt": value(p.MediaAlt), "accountUrl": value(p.AccountURL), "media": media, "mediaId": value(p.MediaID), "mediaStatus": p.MediaStatus, "mediaSourceUrl": value(p.MediaSourceURL), "translations": publicTranslations(p.Translations), "sourceLanguage": value(p.Translations.SourceLanguage)}
 }
 func publicVideo(v sqlite.Video) map[string]any {
-	return map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus), "durationSeconds": valueInt(v.DurationSeconds), "translations": publicTranslations(v.Translations), "sourceLanguage": value(v.Translations.SourceLanguage), "alternates": publicAlternates(v.Alternates)}
+	return map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus), "durationSeconds": valueInt(v.DurationSeconds), "isShort": valueBool(v.IsShort), "translations": publicTranslations(v.Translations), "sourceLanguage": value(v.Translations.SourceLanguage), "alternates": publicAlternates(v.Alternates)}
 }
 
 // publicAlternates lists the other platforms' copies of a video by their

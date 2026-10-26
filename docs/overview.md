@@ -39,10 +39,12 @@ snapshot health dot.
 
 1. Now: a ticket for what airs next (artwork, Japan date and time, the
    visitor's local time, and an hours/minutes countdown, or an on-air state
-   while a stream is live), falling back to the latest video. A schedule entry
+   while a stream is live), falling back to the latest video. That fallback
+   skips Shorts unless the operator featured one, and an upload of unknown
+   format still counts. A schedule entry
    without artwork gets a compact date ticket instead, with its automatic or
    confirmed provenance and a link named for what it opens (the stream or its
-   announcement), and the latest video follows it as a small card. Beside it, the
+   announcement), and the same latest video follows it as a small card. Beside it, the
    profile card: banner, avatar, name, catchphrase, main links, counts, and
    the snapshot state with a reload button.
 2. Weekly schedule: a Monday-first program guide with seven day columns on
@@ -66,10 +68,12 @@ snapshot health dot.
    (soonest first; a started one reads as on air or should-be-live, never as
    an archive) and the previous work; below, a grid of stream archives with
    large thumbnails, two-line titles, the date and the length when known (a
-   swipeable rail on phones). An All / Streams / Works filter shows one
-   kind at a time. Shorts are not told apart, because the snapshot stores no
-   reliable signal for them. A Past videos dialog browses stored videos month
-   by month.
+   swipeable rail on phones), then a row of vertical Shorts cards. Shorts are
+   the uploads YouTube's feed links to its Shorts player, or that the
+   operator marks; older uploads the feed no longer lists stay ordinary
+   videos rather than being guessed from their length. An All / Streams /
+   Works / Shorts filter shows one kind at a time, with a tab only for the
+   kinds present. A Past videos dialog browses stored videos month by month.
 5. Links: the resource directory, a milestone summary linking to the full
    journey page, and common hashtags.
 

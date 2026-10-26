@@ -26,9 +26,9 @@ func (a *api) videoHistory(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, history)
 }
 
-// updateVideo accepts { title?, kind?, thumbnail? }. A string or a
-// { mediaId, sha256 } file from the history sets a correction, null clears
-// it, and an omitted field keeps it.
+// updateVideo accepts { title?, kind?, thumbnail?, isShort? }. A string, a
+// { mediaId, sha256 } file from the history or a boolean sets a correction,
+// null clears it, and an omitted field keeps it.
 func (a *api) updateVideo(w http.ResponseWriter, r *http.Request) {
 	body, err := httpx.Body(w, r)
 	if err != nil {
@@ -67,6 +67,17 @@ func (a *api) updateVideo(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			in.ThumbnailMediaID, in.ThumbnailSHA256 = &file.MediaID, &file.SHA256
+		case "isShort":
+			in.SetShort = true
+			if jsonNull(raw) {
+				continue
+			}
+			var short bool
+			if json.Unmarshal(raw, &short) != nil {
+				httpx.WriteError(w, httpx.Invalid("isShort must be a boolean or null"))
+				return
+			}
+			in.Short = &short
 		default:
 			httpx.WriteError(w, httpx.Invalid("%s is not supported", key))
 			return

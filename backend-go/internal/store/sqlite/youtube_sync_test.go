@@ -76,6 +76,60 @@ func TestYoutubeWritesPreserveLocksTombstonesAndCursorOnRollback(t *testing.T) {
 	}
 }
 
+func TestYoutubeFeedFormatSurvivesWatchReadsAndLeavesOthersUnknown(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	channel := "UCAAAAAAAAAAAAAAAAAAAAAA"
+	// BBBBBBBBBBB is stored before the feed names its format; CCCCCCCCCCC is
+	// an older row the feed no longer lists, short enough to look like a Short.
+	testutil.Exec(t, p, `INSERT INTO videos(id,source,title,published_at,url,kind) VALUES('BBBBBBBBBBB','youtube','stored','2026-01-01T00:00:00Z','https://www.youtube.com/watch?v=BBBBBBBBBBB','VIDEO');
+		INSERT INTO videos(id,source,title,published_at,url,kind,duration_seconds) VALUES('CCCCCCCCCCC','youtube','older','2025-12-01T00:00:00Z','https://www.youtube.com/watch?v=CCCCCCCCCCC','VIDEO',30)`)
+	short := ytsource.Video{ID: "AAAAAAAAAAA", Title: "new short", PublishedAt: "2026-01-02T00:00:00Z", URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", ThumbnailURL: "https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg", Kind: "VIDEO", FeedOnly: true}
+	verdicts := map[string]bool{"AAAAAAAAAAA": true, "BBBBBBBBBBB": false, "ZZZZZZZZZZZ": true}
+	result := ytsource.Result{Videos: []ytsource.Video{short}, Shorts: verdicts, NextCursor: "AAAAAAAAAAA", NextCursorTime: "2026-01-02T00:00:00Z"}
+	formats := func() string {
+		t.Helper()
+		var out string
+		if err := s.DB().QueryRow(`SELECT group_concat(id||'='||COALESCE(is_short,'unknown'),',') FROM (SELECT id,is_short FROM videos ORDER BY id)`).Scan(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	revision, _ := s.GetDashboardRevision(ctx)
+	if err = s.WriteYoutubeRecent(ctx, channel, result); err != nil {
+		t.Fatal(err)
+	}
+	// A verdict for a video the snapshot does not hold creates no row.
+	if got := formats(); got != "AAAAAAAAAAA=1,BBBBBBBBBBB=0,CCCCCCCCCCC=unknown" {
+		t.Fatalf("formats=%s", got)
+	}
+	if after, _ := s.GetDashboardRevision(ctx); after == revision {
+		t.Fatal("a new format did not advance the revision")
+	}
+	// A watch-page read names no format and keeps the feed's.
+	checked := short
+	checked.FeedOnly, checked.Title, checked.DurationSeconds = false, "checked short", 31
+	if err = s.WriteYoutubeRecent(ctx, channel, ytsource.Result{Videos: []ytsource.Video{checked}, NextCursor: "AAAAAAAAAAA", NextCursorTime: "2026-01-02T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := formats(); got != "AAAAAAAAAAA=1,BBBBBBBBBBB=0,CCCCCCCCCCC=unknown" {
+		t.Fatalf("formats after watch read=%s", got)
+	}
+	// The same verdicts again change nothing the board shows.
+	revision, _ = s.GetDashboardRevision(ctx)
+	if err = s.WriteYoutubeRecent(ctx, channel, ytsource.Result{Shorts: verdicts, NextCursor: "AAAAAAAAAAA", NextCursorTime: "2026-01-02T00:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := s.GetDashboardRevision(ctx); after != revision {
+		t.Fatal("unchanged formats advanced the revision")
+	}
+}
+
 func TestYoutubePremiereIsAReleaseThatKeepsItsReportedEnd(t *testing.T) {
 	p := testutil.NewSnapshot(t)
 	s, err := OpenWorkflowCore(p, true)

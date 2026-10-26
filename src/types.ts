@@ -111,6 +111,11 @@ export interface Video {
   liveStatus?: LiveStatus | null
   /** The length a watch page reported; null while unknown or on air. */
   durationSeconds?: number | null
+  /**
+   * Whether YouTube's feed (or an operator) names this a Short; null while
+   * unknown, which the board treats as an ordinary upload.
+   */
+  isShort?: boolean | null
   /** Translations of the title and its detected language (ja, en, zh, ...). */
   translations?: Translations
   sourceLanguage?: string | null

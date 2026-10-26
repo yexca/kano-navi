@@ -131,7 +131,8 @@ function VideoMarks({ video }: { video: AdminVideo }) {
   const corrected =
     video.manualTitle !== null ||
     video.manualKind !== null ||
-    video.manualThumbnail !== null
+    video.manualThumbnail !== null ||
+    video.manualIsShort !== null
   if (!corrected && !video.revisions && !video.refreshRequestedAt) return null
   return (
     <span className="adm-video-marks">

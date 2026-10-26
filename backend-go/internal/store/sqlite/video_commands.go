@@ -28,8 +28,11 @@ const maxVideoTitle = 300
 // it. Synchronization keeps writing the platform fields underneath, and the
 // board shows a correction in their place.
 type VideoOverrides struct {
-	SetTitle, SetKind, SetThumbnail bool
-	Title, Kind                     *string
+	SetTitle, SetKind, SetThumbnail, SetShort bool
+	Title, Kind                               *string
+	// Short marks the video a Short (true) or not (false) over the feed's
+	// format link.
+	Short *bool
 	// ThumbnailMediaID and ThumbnailSHA256 name one cached file from the
 	// video's history (VideoHistory.Thumbnails).
 	ThumbnailMediaID, ThumbnailSHA256 *string
@@ -85,14 +88,15 @@ func (s *Store) SetVideoOverrides(ctx context.Context, id string, in VideoOverri
 	}
 	defer tx.Rollback()
 	var title, kind, media, hash sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT manual_title,manual_kind,manual_thumbnail_media_id,manual_thumbnail_sha256 FROM videos WHERE id=?`, id).Scan(&title, &kind, &media, &hash)
+	var short sql.NullBool
+	err = tx.QueryRowContext(ctx, `SELECT manual_title,manual_kind,manual_thumbnail_media_id,manual_thumbnail_sha256,manual_is_short FROM videos WHERE id=?`, id).Scan(&title, &kind, &media, &hash, &short)
 	if errors.Is(err, sql.ErrNoRows) {
 		return AdminVideo{}, ErrVideoNotFound
 	}
 	if err != nil {
 		return AdminVideo{}, ErrUnavailable
 	}
-	before := [4]sql.NullString{title, kind, media, hash}
+	before, shortBefore := [4]sql.NullString{title, kind, media, hash}, short
 	set := func(target *sql.NullString, value *string) {
 		*target = sql.NullString{}
 		if value != nil {
@@ -109,8 +113,14 @@ func (s *Store) SetVideoOverrides(ctx context.Context, id string, in VideoOverri
 		set(&media, in.ThumbnailMediaID)
 		set(&hash, in.ThumbnailSHA256)
 	}
-	if before != [4]sql.NullString{title, kind, media, hash} {
-		if _, err = tx.ExecContext(ctx, `UPDATE videos SET manual_title=?,manual_kind=?,manual_thumbnail_media_id=?,manual_thumbnail_sha256=?,manual_updated_at=? WHERE id=?`, title, kind, media, hash, stamp, id); err != nil {
+	if in.SetShort {
+		short = sql.NullBool{}
+		if in.Short != nil {
+			short = sql.NullBool{Bool: *in.Short, Valid: true}
+		}
+	}
+	if before != [4]sql.NullString{title, kind, media, hash} || shortBefore != short {
+		if _, err = tx.ExecContext(ctx, `UPDATE videos SET manual_title=?,manual_kind=?,manual_thumbnail_media_id=?,manual_thumbnail_sha256=?,manual_is_short=?,manual_updated_at=? WHERE id=?`, title, kind, media, hash, short, stamp, id); err != nil {
 			return AdminVideo{}, ErrUnavailable
 		}
 		// A corrected title of a merged upload is its video's translation.

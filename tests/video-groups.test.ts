@@ -4,6 +4,7 @@ import type { Video } from "../src/types.ts"
 import {
   groupVideos,
   splitVideos,
+  videoIsShort,
   videoIsStream,
   videoMatchesFilter,
   videoPhase,
@@ -217,4 +218,94 @@ test("a reservation past its start is labelled a stream, not an archive", () => 
     videoKindLabel(video("v", { kind: "VIDEO" }), t),
     "media.kind.video",
   )
+})
+
+test("Shorts are their own group, never a work, an archive or the lead", () => {
+  // The title classifier calls this Short a stream; its format decides.
+  const streamShort = video("short-stream", {
+    kind: "LIVE ARCHIVE",
+    isShort: true,
+    publishedAt: at(-2 * hour),
+  })
+  const songShort = video("short-song", {
+    kind: "MUSIC",
+    isShort: true,
+    publishedAt: at(-hour),
+  })
+  // An unknown format is an ordinary upload, however brief.
+  const brief = video("brief", {
+    kind: "VIDEO",
+    isShort: null,
+    publishedAt: at(-3 * hour),
+    durationSeconds: 30,
+  })
+  const regular = video("regular", {
+    kind: "VIDEO",
+    isShort: false,
+    publishedAt: at(-5 * hour),
+  })
+  const archive = video("archive", {
+    isShort: false,
+    scheduledAt: at(-20 * hour),
+  })
+  // A Short that is still coming up stays with the reservations.
+  const reserved = video("short-reserved", {
+    kind: "UPCOMING LIVE",
+    isShort: true,
+    isUpcoming: true,
+    scheduledAt: at(hour),
+  })
+  const videos = [streamShort, regular, songShort, archive, brief, reserved]
+
+  const groups = groupVideos(videos, null, now)
+  // The newest cover is a Short, so the newest ordinary upload leads.
+  assert.equal(groups.lead?.id, "brief")
+  assert.deepEqual(
+    groups.shorts.map((item) => item.id),
+    ["short-song", "short-stream"],
+  )
+  assert.deepEqual(
+    groups.works.map((item) => item.id),
+    ["regular"],
+  )
+  assert.deepEqual(
+    groups.archives.map((item) => item.id),
+    ["archive"],
+  )
+  assert.deepEqual(
+    groups.reservations.map((item) => item.id),
+    ["short-reserved"],
+  )
+  assert.equal(groupVideos([songShort, streamShort], null, now).lead, null)
+
+  // The operator's featured Short still leads.
+  const featured = groupVideos(videos, "short-song", now)
+  assert.equal(featured.lead?.id, "short-song")
+  assert.deepEqual(
+    featured.shorts.map((item) => item.id),
+    ["short-stream"],
+  )
+
+  assert.equal(videoIsShort(streamShort), true)
+  assert.equal(videoIsShort(brief), false)
+  assert.equal(videoIsShort(video("unset")), false)
+  for (const [item, filter, expected] of [
+    [streamShort, "shorts", true],
+    [streamShort, "streams", false],
+    [songShort, "works", false],
+    [streamShort, "all", true],
+    [archive, "shorts", false],
+    [archive, "streams", true],
+    [brief, "works", true],
+    [brief, "shorts", false],
+  ] as const)
+    assert.equal(
+      videoMatchesFilter(item, filter),
+      expected,
+      `${item.id}/${filter}`,
+    )
+
+  const t = (key: string) => key
+  assert.equal(videoKindLabel(streamShort, t), "media.kind.short")
+  assert.equal(videoKindLabel(brief, t), "media.kind.video")
 })

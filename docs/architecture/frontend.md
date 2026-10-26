@@ -24,10 +24,18 @@ the local snapshot: broadcasts (`LIVE ARCHIVE`, `UPCOMING LIVE`, `GAMEPLAY`,
 stage's live rule (a fresh confirmed state first, then the stream's
 three-hour grace or an explicit end), so a reservation past its start is a
 started ticket rather than an archive and an operator-confirmed cancellation
-leaves the shelf once its start passes. The lead is the featured video, or
-else the newest `MUSIC` work or premiere, or else the newest work; each video
-appears once. The shelf shows a platform link for the video and each of its
-`alternates`, and the length from `durationSeconds` when known. Its styles are in
+leaves the shelf once its start passes. A past video whose `isShort` is
+`true` is a Short before its kind is read, so a Short titled like a stream is
+neither an archive nor a work; `null` (unknown) is an ordinary upload. The
+lead is the featured video, or else the newest `MUSIC` work or premiere, or
+else the newest work, so a Short leads only when featured; each video appears
+once. The filter offers All plus Streams, Works and Shorts for each kind
+present, and only when two are. Shorts render as 9:16 cards cropped from the
+centre of the 1280×720 cover (the vertical frame between YouTube's blurred
+pillarbox): one row of up to six in the All view, fewer as columns narrow and
+a swipeable rail on phones, and up to twelve in the Shorts view. The shelf
+shows a platform link for the video and each of its `alternates`, and the
+length from `durationSeconds` when known. Its styles are in
 `src/dashboard/board.css` on top of `src/site/site.css` and the shared tokens
 in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`
@@ -139,7 +147,12 @@ share/query parameters and supported YouTube subdomain differences. Other links
 retain exact URL matching; different videos and lookalike hosts do not match.
 `pickSpotlight` gives a candidate with artwork the full ticket and one without
 it the compact layout; `pickCompanion` then adds the latest video beneath a
-compact ticket unless it is the same link. The play mark appears only on
+compact ticket unless it is the same link. Both read `summary.latestVideo`,
+which `deriveDashboardAt` recomputes as the newest non-upcoming video that is
+not a Short (`isShort === true`), unless it is the featured video
+(`featuredVideoIdOf`: `meta.featuredVideoId`, or the focus video of an older
+snapshot). An unknown format stays eligible, and when every recent upload is a
+Short the stage shows no latest video. The play mark appears only on
 YouTube or Twitch links; X links read as an announcement.
 Matching needs no protected source item IDs or additional public API fields.
 At the end instant the video yields to later focus candidates. This derived video

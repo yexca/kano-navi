@@ -356,6 +356,8 @@ const videoKindKeys: Record<string, string> = {
 }
 
 export function videoKindLabel(video: Video, t: Translator) {
+  // The title classifier can call a Short a stream; its format says more.
+  if (video?.isShort === true) return t("media.kind.short")
   const kind = String(video?.kind || "")
     .trim()
     .toUpperCase()

@@ -104,12 +104,12 @@ func TestPostArchiveReadsAJapanMonthNewestFirst(t *testing.T) {
 
 func TestVideoArchiveUsesTheScheduledOrPublishedTime(t *testing.T) {
 	handler := archiveHandler(t, `
-		INSERT INTO videos (id,source,title,published_at,scheduled_at,url,kind,is_upcoming,raw_json,duration_seconds) VALUES
-		 ('video-old','youtube','September','2026-09-20T12:00:00Z',NULL,'https://www.youtube.com/watch?v=old','video',0,'{"private":"synthetic"}',NULL),
-		 ('video-upload','youtube','Upload','2026-10-05T12:00:00Z',NULL,'https://www.youtube.com/watch?v=upload','video',0,NULL,NULL),
-		 ('video-stream','youtube','Stream','2026-09-28T12:00:00Z','2026-10-10T12:00:00Z','https://www.youtube.com/watch?v=stream','liveArchive',0,NULL,7265),
-		 ('video-reserved','youtube','Reserved','2026-10-18T12:00:00Z','2026-10-25T12:00:00Z','https://www.youtube.com/watch?v=reserved','upcoming',1,NULL,NULL),
-		 ('video-undated','youtube','Undated',NULL,NULL,'https://www.youtube.com/watch?v=undated','video',0,NULL,NULL);`)
+		INSERT INTO videos (id,source,title,published_at,scheduled_at,url,kind,is_upcoming,raw_json,duration_seconds,is_short) VALUES
+		 ('video-old','youtube','September','2026-09-20T12:00:00Z',NULL,'https://www.youtube.com/watch?v=old','video',0,'{"private":"synthetic"}',NULL,NULL),
+		 ('video-upload','youtube','Upload','2026-10-05T12:00:00Z',NULL,'https://www.youtube.com/watch?v=upload','video',0,NULL,NULL,1),
+		 ('video-stream','youtube','Stream','2026-09-28T12:00:00Z','2026-10-10T12:00:00Z','https://www.youtube.com/watch?v=stream','liveArchive',0,NULL,7265,0),
+		 ('video-reserved','youtube','Reserved','2026-10-18T12:00:00Z','2026-10-25T12:00:00Z','https://www.youtube.com/watch?v=reserved','upcoming',1,NULL,NULL,NULL),
+		 ('video-undated','youtube','Undated',NULL,NULL,'https://www.youtube.com/watch?v=undated','video',0,NULL,NULL,NULL);`)
 
 	recorder := request(t, handler, http.MethodGet, "/api/videos?from=2026-10-01&to=2026-10-31")
 	if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != "no-store" {
@@ -129,6 +129,10 @@ func TestVideoArchiveUsesTheScheduledOrPublishedTime(t *testing.T) {
 	// A known length is public; an unknown one stays null.
 	if length, ok := items[2].(map[string]any)["durationSeconds"]; items[1].(map[string]any)["durationSeconds"] != float64(7265) || !ok || length != nil {
 		t.Fatalf("lengths=%#v", items)
+	}
+	// The feed's format is public; a row it never named stays null.
+	if format, ok := items[0].(map[string]any)["isShort"]; !ok || format != nil || items[1].(map[string]any)["isShort"] != false || items[2].(map[string]any)["isShort"] != true {
+		t.Fatalf("formats=%#v", items)
 	}
 	if adjacent := payload["adjacent"].(map[string]any); adjacent["previous"] != "2026-09-20" || adjacent["next"] != nil {
 		t.Fatalf("adjacent=%#v", adjacent)

@@ -77,6 +77,10 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 	if _, err = writeYoutubeVideos(ctx, tx, result.Videos, now); err != nil {
 		return err
 	}
+	shorts, err := writeYoutubeShorts(ctx, tx, result.Shorts)
+	if err != nil {
+		return err
+	}
 	meta, _ := json.Marshal(map[string]any{"streamDetailsCheckedIds": result.CheckedIDs, "feedEntries": result.Discovered, "detailRequested": result.Requested, "inspected": result.Inspected})
 	_, err = tx.ExecContext(ctx, `INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES('youtube',?,?,?,?,?) ON CONFLICT(source,account_id) DO UPDATE SET cursor_id=CASE WHEN julianday(excluded.cursor_time)>COALESCE(julianday(sync_state.cursor_time),0) THEN excluded.cursor_id ELSE sync_state.cursor_id END,cursor_time=CASE WHEN julianday(excluded.cursor_time)>COALESCE(julianday(sync_state.cursor_time),0) THEN excluded.cursor_time ELSE sync_state.cursor_time END,last_success_at=excluded.last_success_at,metadata_json=excluded.metadata_json`, channel, result.NextCursor, result.NextCursorTime, now, string(meta))
 	if err != nil {
@@ -87,7 +91,7 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 	if err != nil {
 		return ErrSourceWrite
 	}
-	if len(result.Videos) > 0 {
+	if len(result.Videos) > 0 || shorts {
 		if err = bumpRevision(ctx, tx, now); err != nil {
 			return ErrSourceWrite
 		}
@@ -96,6 +100,26 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 		return ErrSourceWrite
 	}
 	return nil
+}
+
+// writeYoutubeShorts records the feed's format verdict on stored YouTube
+// rows, after writeYoutubeVideos has added the new ones. Only the feed writes
+// is_short, so a watch-page read never clears it, and a row the feed never
+// listed with a format link stays unknown. It reports whether a row changed.
+func writeYoutubeShorts(ctx context.Context, tx *sql.Tx, shorts map[string]bool) (bool, error) {
+	changed := false
+	for id, short := range shorts {
+		written, err := tx.ExecContext(ctx, `UPDATE videos SET is_short=? WHERE id=? AND source='youtube' AND is_short IS NOT ?`, short, id, short)
+		if err != nil {
+			return false, ErrSourceWrite
+		}
+		count, err := written.RowsAffected()
+		if err != nil {
+			return false, ErrSourceWrite
+		}
+		changed = changed || count > 0
+	}
+	return changed, nil
 }
 
 // youtubeVideoState is the public part of a video row, compared to tell

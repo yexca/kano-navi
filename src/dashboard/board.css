@@ -1553,8 +1553,9 @@ a.month-event:hover {
 
 /*
  * The shelf leads with one large work (or the featured video) beside the
- * coming reservations, then a grid of stream archives. Artwork carries the
- * section, so thumbnails stay large and titles stay to two lines.
+ * coming reservations, then a grid of stream archives and a row of Shorts.
+ * Artwork carries the section, so thumbnails stay large and titles stay to
+ * two lines.
  */
 
 .videos-subhead {
@@ -2037,9 +2038,37 @@ a:hover .video-thumb img {
   margin-top: 24px;
 }
 
+/* Shorts */
+
+/*
+ * A cached Shorts cover is 1280×720 with YouTube's blurred pillarbox; the
+ * vertical frame is its middle 405 px, which a centred 9:16 crop keeps.
+ */
+.video-grid.is-shorts {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 22px 14px;
+}
+
+.video-grid.is-shorts .video-thumb {
+  aspect-ratio: 9 / 16;
+}
+
+.video-grid.is-shorts .video-thumb img {
+  object-position: 50% 50%;
+}
+
 @media (max-width: 1080px) {
   .video-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* A Shorts row stays one line; the Shorts view lists the rest. */
+  .video-grid.is-shorts {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .video-grid.is-row > :nth-child(n + 6) {
+    display: none;
   }
 }
 
@@ -2048,11 +2077,27 @@ a:hover .video-thumb img {
   .videos-lead.is-solo .video-lead {
     grid-template-columns: 1fr;
   }
+
+  .video-grid.is-shorts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .video-grid.is-row > :nth-child(n + 5) {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
   .video-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .video-grid.is-shorts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .video-grid.is-row > :nth-child(n + 4) {
+    display: none;
   }
 }
 
@@ -2073,6 +2118,16 @@ a:hover .video-thumb img {
 
   .video-card {
     scroll-snap-align: start;
+  }
+
+  /* The rail scrolls, so a Shorts row shows every card again. */
+  .video-grid.is-shorts {
+    grid-template-columns: none;
+    grid-auto-columns: min(42%, 180px);
+  }
+
+  .video-grid.is-row > :nth-child(n) {
+    display: grid;
   }
 
   .video-lead-art .video-thumb-badge {

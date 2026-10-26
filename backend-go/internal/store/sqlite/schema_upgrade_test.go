@@ -44,7 +44,10 @@ func olderSnapshot(t *testing.T) (string, string) {
 		`ALTER TABLE events DROP COLUMN merge_reason`, `ALTER TABLE events DROP COLUMN merged_at`,
 		`DROP INDEX videos_merged_into_idx`, `ALTER TABLE videos DROP COLUMN merged_into`, `ALTER TABLE videos DROP COLUMN merge_source`,
 		`ALTER TABLE videos DROP COLUMN merge_reason`, `ALTER TABLE videos DROP COLUMN merged_at`,
+		`ALTER TABLE videos DROP COLUMN is_short`, `ALTER TABLE videos DROP COLUMN manual_is_short`,
 		`INSERT INTO videos(id,source,title,published_at,url) VALUES('BV1synthetic0','bilibili','retained','2026-03-01T00:00:00.000Z','https://www.bilibili.com/video/BV1synthetic0')`,
+		// A brief older upload stays of unknown format, never guessed from its length.
+		`INSERT INTO videos(id,source,title,published_at,url,kind,duration_seconds) VALUES('AAAAAAAAAAA','youtube','brief','2026-03-01T00:00:00.000Z','https://www.youtube.com/watch?v=AAAAAAAAAAA','VIDEO',30)`,
 		`INSERT INTO events(id,source,title,starts_on,created_at,updated_at) VALUES('synthetic-event','x','retained','2026-03-02','2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`,
 		`DROP TABLE llm_route_targets`, `DROP TABLE workflow_step_attempts`, `DROP TABLE workflow_leases`, `DROP TABLE workflow_run_steps`,
 		`DROP TABLE workflow_runs`, `DROP TABLE workflow_migrations`,
@@ -99,6 +102,7 @@ func TestStandaloneUpgradesOlderSnapshotAdditively(t *testing.T) {
 		`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='events_merged_into_idx'`:                                        "1",
 		`SELECT title||'/'||COALESCE(merged_into,merge_source,merge_reason,merged_at,'unmerged') FROM videos WHERE id='BV1synthetic0'`:   "retained/unmerged",
 		`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='videos_merged_into_idx'`:                                        "1",
+		`SELECT title||'/'||COALESCE(is_short,manual_is_short,'unknown') FROM videos WHERE id='AAAAAAAAAAA'`:                             "brief/unknown",
 		`SELECT max_retries FROM llm_providers WHERE id='synthetic'`:                                                                     "2",
 		`SELECT group_concat(route,',') FROM (SELECT route FROM llm_route_targets WHERE provider_id='synthetic' ORDER BY route)`:         "schedule",
 		`SELECT model_id||'/'||origin FROM llm_models WHERE provider_id='synthetic'`:                                                     "synthetic-model/legacy",
