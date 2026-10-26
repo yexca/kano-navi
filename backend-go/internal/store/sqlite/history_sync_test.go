@@ -116,13 +116,13 @@ func TestTimelinePageKeepsStoredPostsAndItsOwnCheckpoint(t *testing.T) {
 	}
 	for statement, want := range map[string]string{
 		// The stored post keeps its text, media and missing candidate.
-		`SELECT text||'/'||media_url FROM posts WHERE id='1900000000000000001'`:                  "from the detail path/https://media.example.test/detail.png",
-		`SELECT COUNT(*) FROM assets WHERE id='schedule-x-1900000000000000001'`:                  "0",
-		`SELECT text FROM posts WHERE id='1900000000000000002'`:                                  "weekly schedule",
-		`SELECT COUNT(*) FROM media_links WHERE owner_id='1900000000000000002'`:                  "1",
-		`SELECT COUNT(*) FROM assets WHERE id='schedule-x-1900000000000000002'`:                  "1",
-		`SELECT cursor_id FROM sync_state WHERE source='x-timeline-window'`:                      "timeline-cursor",
-		`SELECT COUNT(*) FROM sync_state WHERE source='x-window' AND cursor_id='timeline-cursor'`: "0",
+		`SELECT text||'/'||media_url FROM posts WHERE id='1900000000000000001'`:                                   "from the detail path/https://media.example.test/detail.png",
+		`SELECT COUNT(*) FROM assets WHERE id='schedule-x-1900000000000000001'`:                                   "0",
+		`SELECT text FROM posts WHERE id='1900000000000000002'`:                                                   "weekly schedule",
+		`SELECT COUNT(*) FROM media_links WHERE owner_id='1900000000000000002'`:                                   "1",
+		`SELECT COUNT(*) FROM assets WHERE id='schedule-x-1900000000000000002'`:                                   "1",
+		`SELECT cursor_id FROM sync_state WHERE source='x-timeline-window'`:                                       "timeline-cursor",
+		`SELECT COUNT(*) FROM sync_state WHERE source='x-window' AND cursor_id='timeline-cursor'`:                 "0",
 		`SELECT cursor_id||'/'||metadata_json FROM sync_state WHERE source='x' AND account_id='synthetic_handle'`: `1900000000000000009/{"pendingStatusIds":["1900000000000000010"]}`,
 	} {
 		if got := query(statement); got != want {
