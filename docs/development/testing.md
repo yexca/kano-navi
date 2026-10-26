@@ -36,6 +36,9 @@ CI/tooling work, and pre-commit validation.
 | Manual privacy review before handoff or commit          | make sensitive-check  | Node and Git                             |
 | Dependency advisories and npm registry signatures       | make audit            | Locked installation, Go and network      |
 
+make ci-style runs make go-format-check, the gofmt step of make go-check on LF
+copies of the Go sources, so make check catches Go formatting without Docker.
+ci-local runs make go-check after make check, matching the hosted Go gate.
 make install uses npm ci. Narrow targets and ci-local do not reinstall.
 make ci installs first, verifies the registry signatures of the fresh
 installation with make npm-audit-signatures, then runs ci-local. Both full targets enforce image

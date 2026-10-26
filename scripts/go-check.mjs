@@ -34,6 +34,11 @@ try {
 } finally {
   rmSync(formatRoot, { recursive: true, force: true })
 }
+// make go-format-check stops here, so Docker-free checks still catch gofmt.
+if (process.argv.includes("--format-only")) {
+  console.log("go-check: format PASS")
+  process.exit(0)
+}
 run("go test ./...", go, ["test", "./..."], { cwd: moduleRoot })
 run("go vet ./...", go, ["vet", "./..."], { cwd: moduleRoot })
 run("go build ./...", go, ["build", "./..."], { cwd: moduleRoot })

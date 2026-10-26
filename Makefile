@@ -15,7 +15,7 @@ GO_BINARY ?= backend-go/bin/kano-go$(if $(filter Windows_NT,$(OS)),.exe,)
 APP_VERSION = $(shell $(NODE) -p "require('./package.json').version")
 GO_LDFLAGS = -X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version=$(APP_VERSION)
 
-.PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-test
+.PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-format-check go-test
 .PHONY: go-build go-start go-docker-build go-lint go-vet go-race actionlint
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-frontend
 .PHONY: audit npm-audit npm-audit-production npm-audit-signatures go-audit
@@ -55,6 +55,10 @@ sync: go-build
 
 go-check:
 	$(NODE) scripts/go-check.mjs
+
+# gofmt over LF copies, so a CRLF checkout reports only real differences.
+go-format-check:
+	$(NODE) scripts/go-check.mjs --format-only
 
 go-test:
 	$(GO) -C backend-go test ./...
@@ -133,7 +137,7 @@ production-smoke:
 	$(NODE) scripts/production-smoke.ts $(DOCKER_IMAGE)
 
 # Narrow checks use the existing locked installation and never fetch source data.
-ci-style: format-check docs-check actionlint test-sensitive sensitive-check
+ci-style: format-check go-format-check docs-check actionlint test-sensitive sensitive-check
 
 ci-backend: go-lint go-vet go-race
 
@@ -144,6 +148,7 @@ check: ci-style ci-backend ci-frontend smoke
 
 # The recursive calls enforce build-before-smoke even when make uses -j.
 ci-local: check
+	$(MAKE) go-check
 	$(MAKE) docker-build
 	$(MAKE) production-smoke
 

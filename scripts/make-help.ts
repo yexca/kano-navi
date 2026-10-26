@@ -28,6 +28,7 @@ const groups = {
     actionlint: "Check GitHub Actions workflows",
     "go-check":
       "Check Go formatting, contracts, cross-builds, and disposable containers",
+    "go-format-check": "Check Go formatting without Docker",
     smoke: "Check a seeded temporary SQLite snapshot through the Go backend",
     "ci-style":
       "Check formatting, documentation, workflows, and source privacy",
@@ -47,7 +48,8 @@ const groups = {
   "Docker and full CI": {
     "docker-build": "Build the Go image DOCKER_IMAGE (default kano-navi:ci)",
     "production-smoke": "Check the built image in a disposable container",
-    "ci-local": "Run checks, build the image, and check production runtime",
+    "ci-local":
+      "Run checks and the Go gate, build the image, and check production runtime",
     ci: "Install and verify dependencies, then run ci-local (requires Docker)",
   },
 }
