@@ -17,6 +17,9 @@ services:
       PORT: 7657
       LLM_SECRETS_KEY: ${LLM_SECRETS_KEY:?Set LLM_SECRETS_KEY before starting}
       WORKFLOW_SCHEDULER_ENABLED: 0
+      # The bind-mounted checkout sends no file events from a Windows or macOS
+      # host; Vite polls it so frontend edits hot-reload.
+      KANO_WATCH_POLLING: 1
     volumes:
       - .:/app
       - /app/node_modules

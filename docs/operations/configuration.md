@@ -10,6 +10,7 @@
 | `LLM_SECRETS_KEY`               | Empty                | Required non-blank encryption master key at startup in every mode |
 | `PORT`                          | `7657`               | Shared frontend/API port for development, preview, and production |
 | `KANO_API_PORT`                 | `7658`               | Development only: loopback port of the backend behind Vite        |
+| `KANO_WATCH_POLLING`            | `0`                  | Development only: `1` makes Vite poll a mounted checkout          |
 | `SCHEDULE_EXTRACTION_ENABLED`   | `1`                  | Initial legacy default for independent schedule stages            |
 | `SCHEDULE_KEYWORD_ENABLED`      | `1`                  | Enable keyword candidate selection                                |
 | `SCHEDULE_VISION_ENABLED`       | `1`                  | Enable schedule-board LLM extraction                              |

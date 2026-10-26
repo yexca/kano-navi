@@ -12,10 +12,28 @@ export default defineConfig(({ mode }) => {
   const apiPort = Number(environment.KANO_API_PORT || 7658)
   const backend = process.env.KANO_API_ORIGIN || `http://127.0.0.1:${apiPort}`
   const proxy = { "^/(?:api|media|mcp)(?:/|$)": { target: backend } }
+  // A Windows or macOS checkout mounted into the development container sends
+  // no file events, so the container polls the sources instead. Runtime data,
+  // the Go module and local tool state are left out of the polled tree.
+  const watch =
+    environment.KANO_WATCH_POLLING === "1"
+      ? {
+          usePolling: true,
+          interval: 500,
+          binaryInterval: 1000,
+          ignored: [
+            "**/data/**",
+            "**/backend-go/**",
+            "**/dist/**",
+            "**/.claude/**",
+            "**/.codegraph/**",
+          ],
+        }
+      : undefined
   return {
     build: { manifest: true },
     plugins: [react(), tailwindcss()],
-    server: { port, strictPort: true, proxy },
+    server: { port, strictPort: true, proxy, watch },
     preview: { port, strictPort: true, proxy },
     resolve: {
       alias: {

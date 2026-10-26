@@ -90,8 +90,11 @@ Open `http://localhost:7657` for the dashboard or
 The development image carries the Go toolchain and Node. It builds and starts
 the Go backend and runs Vite, which proxies `/api`, `/media`, and `/mcp` to it;
 everything shares container port `7657`, published on loopback.
-Set `KANO_PORT` to change the host port. The repository is mounted for frontend hot reload,
-while anonymous volumes keep Linux dependencies and the Linux backend binary
+Set `KANO_PORT` to change the host port. The repository is mounted for
+frontend hot reload; a Windows or macOS host sends no file events into the
+container, so the Compose file sets `KANO_WATCH_POLLING=1` and Vite polls the
+sources (not `data/`, `backend-go/`, `dist/`, `.claude/` or `.codegraph/`).
+Anonymous volumes keep Linux dependencies and the Linux backend binary
 separate from any host `node_modules` and `backend-go/bin`. Rebuild after
 dependency changes; `--renew-anon-volumes` refreshes those volumes. Backend
 source changes require `docker compose -f docker-compose.dev.yml restart`,
