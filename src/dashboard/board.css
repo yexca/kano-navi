@@ -2461,12 +2461,6 @@ a.month-event:hover {
   height: 14px;
 }
 
-.posts-more {
-  display: flex;
-  justify-content: center;
-  margin-top: 20px;
-}
-
 /* The Past posts dialog keeps a masonry wall of full posts. */
 .post-wall.is-masonry {
   display: block;

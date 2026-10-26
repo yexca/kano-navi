@@ -9,8 +9,6 @@ import type { ReactNode } from "react"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowUpRight,
-  ChevronDown,
-  ChevronUp,
   Heart,
   History,
   ImageOff,
@@ -315,12 +313,10 @@ export function PostWall({
       (post) =>
         String(post.accountHandle || "").toLowerCase() === handle.toLowerCase(),
     ).length
-  // The board shows two rows of the wall's current column count; the rest
-  // waits behind "Show all".
-  const sectionRef = useRef<HTMLElement>(null)
+  // The board shows two rows of the wall's current column count; older posts
+  // stay in the Past posts dialog.
   const [wall, setWall] = useState<HTMLDivElement | null>(null)
   const [columns, setColumns] = useState(3)
-  const [showAll, setShowAll] = useState(false)
   useLayoutEffect(() => {
     if (!wall) return
     const measure = () =>
@@ -336,23 +332,10 @@ export function PostWall({
     observer.observe(wall)
     return () => observer.disconnect()
   }, [wall])
-  const limit = columns * 2
-  const shown = showAll ? visible : visible.slice(0, limit)
-  const toggleAll = () => {
-    if (showAll) {
-      const top = sectionRef.current?.getBoundingClientRect().top ?? 0
-      if (top < 0) sectionRef.current?.scrollIntoView({ block: "start" })
-    }
-    setShowAll((value) => !value)
-  }
+  const shown = visible.slice(0, columns * 2)
 
   return (
-    <section
-      ref={sectionRef}
-      className="section posts"
-      id="feed"
-      aria-labelledby="posts-title"
-    >
+    <section className="section posts" id="feed" aria-labelledby="posts-title">
       <SectionTitle
         id="posts-title"
         kicker={
@@ -401,40 +384,19 @@ export function PostWall({
       {isLoading ? (
         <Placeholder lines={5} />
       ) : visible.length ? (
-        <>
-          <div className="post-wall" ref={setWall}>
-            {shown.map((post) => (
-              <PostNote
-                key={post.id}
-                post={post}
-                avatarUrl={avatarUrl}
-                locale={locale}
-                now={now}
-                t={t}
-                onOpenMedia={onOpenMedia}
-              />
-            ))}
-          </div>
-          {visible.length > limit ? (
-            <div className="posts-more">
-              <button
-                type="button"
-                className="pill-button"
-                aria-expanded={showAll}
-                onClick={toggleAll}
-              >
-                {showAll ? (
-                  <ChevronUp aria-hidden="true" />
-                ) : (
-                  <ChevronDown aria-hidden="true" />
-                )}
-                {showAll
-                  ? t("feed.showFewer")
-                  : t("feed.showAll", { count: visible.length })}
-              </button>
-            </div>
-          ) : null}
-        </>
+        <div className="post-wall" ref={setWall}>
+          {shown.map((post) => (
+            <PostNote
+              key={post.id}
+              post={post}
+              avatarUrl={avatarUrl}
+              locale={locale}
+              now={now}
+              t={t}
+              onOpenMedia={onOpenMedia}
+            />
+          ))}
+        </div>
       ) : (
         <div className="post-empty">
           <EmptyNote title={t("feed.empty", { days: windowDays })} />

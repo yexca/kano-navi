@@ -1,6 +1,14 @@
 # Unreleased
 
 <details>
+<summary><strong>Public pages</strong></summary>
+
+- Posts on X shows only two rows of the grid and no longer has a Show all
+  button; older posts stay in the Past posts dialog.
+
+</details>
+
+<details>
 <summary><strong>Synchronization and extraction</strong></summary>
 
 - With `YOUTUBE_API_KEY` set, an ended stream or premiere that no check has

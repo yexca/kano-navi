@@ -94,8 +94,6 @@ const messages = {
     "feed.replies": "回复",
     "feed.readMore": "展开全文",
     "feed.fullPost": "动态全文",
-    "feed.showAll": ({ count }: { count: any }) => `显示全部 ${count} 条`,
-    "feed.showFewer": "收起",
     "translation.machine": "AI 翻译",
     "translation.machineHint": "由 AI 模型自动翻译，可能有误。",
     "translation.manual": "人工翻译",
@@ -327,8 +325,6 @@ const messages = {
     "feed.replies": "返信",
     "feed.readMore": "全文を表示",
     "feed.fullPost": "ポストの全文",
-    "feed.showAll": ({ count }: { count: any }) => `すべて表示（${count} 件）`,
-    "feed.showFewer": "折りたたむ",
     "translation.machine": "AI 翻訳",
     "translation.machineHint":
       "AI モデルによる自動翻訳です。誤りを含む場合があります。",
@@ -562,8 +558,6 @@ const messages = {
     "feed.replies": "Replies",
     "feed.readMore": "Read more",
     "feed.fullPost": "Full post",
-    "feed.showAll": ({ count }: { count: any }) => `Show all ${count}`,
-    "feed.showFewer": "Show fewer",
     "translation.machine": "AI translation",
     "translation.machineHint":
       "Translated automatically by an AI model; it may contain mistakes.",

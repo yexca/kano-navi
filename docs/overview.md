@@ -56,7 +56,7 @@ snapshot health dot.
    month navigation; picking a date lists that day's entries and can show its
    week on the board.
 3. Posts on X: roughly three days of posts from both accounts in an aligned
-   grid (two rows until Show all; a long post shows six lines and Read more
+   grid (two rows only; a long post shows six lines and Read more
    opens it whole in a dialog) with an account filter, an image viewer, and
    engagement counts. When the window is empty the most recent stored post
    is still shown. A Past posts dialog browses every stored post month by
