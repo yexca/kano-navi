@@ -21,7 +21,7 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
     )
     // Keep Vite's real watcher/optimizer timers outside the mocked clock.
     await vite.close()
-    const setup = async (context: TestContext) => {
+    const setup = async (context: TestContext, controlCalendar = false) => {
       context.mock.timers.enable({
         apis: ["Date", "setTimeout"],
         now: new Date("2025-01-01T00:00:00Z"),
@@ -46,11 +46,21 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
         resolve: (response: Response) => void
         reject: (error: Error) => void
       }[] = []
+      const calendarRequests: typeof requests = []
       let calendarRevision = 0
       context.mock.method(
         globalThis,
         "fetch",
         (url: RequestInfo | URL, options: { signal: AbortSignal }) => {
+          if (String(url).startsWith("/api/calendar") && controlCalendar)
+            return new Promise<Response>((resolve, reject) =>
+              calendarRequests.push({
+                url: String(url),
+                signal: options.signal,
+                resolve,
+                reject,
+              }),
+            )
           if (String(url).startsWith("/api/calendar"))
             return Promise.resolve({
               ok: true,
@@ -100,6 +110,14 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
       }
       const reject = async (index: number) =>
         act(async () => requests[index].reject(new Error("Synthetic outage")))
+      const respondCalendar = async (index: number, payload: any) =>
+        act(async () =>
+          calendarRequests[index].resolve({
+            ok: true,
+            status: 200,
+            json: async () => payload,
+          } as Response),
+        )
       const unmount = async () => {
         await act(async () => root.unmount())
         Object.assign(globalThis, {
@@ -110,6 +128,8 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
       }
       return {
         requests,
+        calendarRequests,
+        respondCalendar,
         doc,
         win,
         tick,
@@ -123,6 +143,81 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
       profile: { displayName: `Snapshot ${revision}` },
       meta: { revision },
     })
+    const calendarPage = (
+      page: number,
+      liveStatus: string | null,
+      hasNext = false,
+    ) => ({
+      events: [{ id: `event-${page}`, liveStatus }],
+      scheduleImages: [],
+      adjacent: { previous: null, next: null },
+      total: 2,
+      page,
+      hasNext,
+      revision: 1,
+      dayCounts: {},
+    })
+
+    await t.test(
+      "manual snapshot refresh updates every loaded calendar page at the same revision",
+      async (context) => {
+        const fixture = await setup(context, true)
+        const states = () =>
+          fixture
+            .current()
+            .calendar.events.map((event: any) => event.liveStatus)
+        try {
+          await fixture.respond(0, snapshot(1))
+          await fixture.respondCalendar(0, calendarPage(1, "live", true))
+          assert.equal(fixture.calendarRequests.length, 1)
+          assert.equal(fixture.current().snapshotVersion, 1)
+          await act(async () => void fixture.current().loadMoreCalendar())
+          await fixture.respondCalendar(1, calendarPage(2, "upcoming"))
+          await act(async () => void fixture.current().reload())
+          await fixture.respond(1, snapshot(1))
+          assert.equal(fixture.current().snapshotVersion, 2)
+          await fixture.respondCalendar(2, calendarPage(1, null, true))
+          assert.deepEqual(states(), ["live", "upcoming"])
+          assert.match(fixture.calendarRequests[3].url, /&page=2$/)
+          await fixture.respondCalendar(3, calendarPage(2, null))
+          assert.deepEqual(states(), [null, null])
+          assert.equal(fixture.current().calendar.page, 2)
+          assert.equal(fixture.current().calendar.revision, 1)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a snapshot during calendar pagination keeps a pending time refresh for the next poll",
+      async (context) => {
+        const fixture = await setup(context, true)
+        try {
+          await fixture.respond(0, snapshot(1))
+          await fixture.respondCalendar(0, calendarPage(1, "live", true))
+          await act(async () => void fixture.current().loadMoreCalendar())
+          await act(async () => void fixture.current().reload())
+          await fixture.respond(1, snapshot(1))
+          assert.equal(fixture.calendarRequests.length, 2)
+          assert.equal(fixture.calendarRequests[1].signal.aborted, false)
+          await fixture.respondCalendar(1, calendarPage(2, "live"))
+          await fixture.tick(8000)
+          await fixture.respond(2, { revision: 1 })
+          assert.equal(fixture.calendarRequests.length, 3)
+          await fixture.respondCalendar(2, calendarPage(1, null, true))
+          await fixture.respondCalendar(3, calendarPage(2, null))
+          assert.deepEqual(
+            fixture
+              .current()
+              .calendar.events.map((event: any) => event.liveStatus),
+            [null, null],
+          )
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
 
     await t.test(
       "first failure retries with bounded backoff, and later failures retain the known snapshot",
@@ -270,11 +365,12 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
     )
 
     await t.test(
-      "unchanged revisions still refresh the focus snapshot after one minute",
+      "unchanged revisions refresh the snapshot and calendar after one visible minute",
       async (context) => {
-        const fixture = await setup(context)
+        const fixture = await setup(context, true)
         try {
           await fixture.respond(0, snapshot(1))
+          await fixture.respondCalendar(0, calendarPage(1, "live"))
           for (let index = 1; index <= 7; index++) {
             await fixture.tick(8000)
             assert.match(fixture.requests[index].url, /revision\?since=1$/)
@@ -285,6 +381,10 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
           await fixture.tick(1)
           assert.equal(fixture.requests[8].url, "/api/dashboard?days=3")
           await fixture.respond(8, snapshot(1))
+          assert.equal(fixture.current().snapshotVersion, 2)
+          assert.equal(fixture.calendarRequests.length, 2)
+          await fixture.respondCalendar(1, calendarPage(1, null))
+          assert.equal(fixture.current().calendar.events[0].liveStatus, null)
           assert.equal(fixture.current().error, null)
         } finally {
           await fixture.unmount()

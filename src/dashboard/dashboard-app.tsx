@@ -94,6 +94,7 @@ export function DashboardApp() {
   const now = useNow()
   const {
     dashboard,
+    snapshotVersion,
     isLoading,
     isRefreshing,
     error,
@@ -109,7 +110,11 @@ export function DashboardApp() {
   } = useDashboard(now)
   // One month dialog at a time: the schedule grid, past posts or past videos.
   const [archiveView, setArchiveView] = useState<ArchiveRequest | null>(null)
-  const archive = useArchive(archiveView, dashboard.meta.revision)
+  const archive = useArchive(
+    archiveView,
+    dashboard.meta.revision,
+    snapshotVersion,
+  )
   const [toast, setToast] = useState<{
     key: string
     values?: Record<string, string>

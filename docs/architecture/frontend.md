@@ -203,13 +203,16 @@ The board's calendar shows one week; its selected week lives in
 `use-dashboard.ts`. It reads
 one bounded page, shows the complete range/day counts, and offers more-event
 pagination. Changing the range cancels old work and begins at page one; errors keep a retry control.
-Same-range refreshes with an unchanged revision retain every already loaded page.
-A revision change rereads the loaded page range and replaces it atomically, stopping
+Every same-range refresh rereads the loaded page range and replaces it atomically,
+even at the same revision: time-based public fields such as a probe's trusted
+`liveStatus` can expire without a stored write. A refresh stops
 at the new last page if the range shrank. A change while reading that range restarts
 from page one, with at most three attempts under the shared request deadline.
 Failed or repeatedly changing reads retain the complete known generation for retry;
-they never append pages from different revisions. Automatic snapshot refresh waits
-for active calendar work, and a pending calendar revision is checked on later polls.
+they never append pages from different revisions. Every successful full board
+snapshot, including its visible minute refresh and manual reload, refreshes the
+calendar. Active calendar work finishes first, and later revision polls consume
+any pending time refresh or calendar revision.
 Adjacent-date hints support jumping to stored activity in either direction.
 
 The month dialogs read through `useArchive` in `use-dashboard.ts`, only
@@ -219,7 +222,14 @@ from `/api/calendar`, and past posts and videos read the month's own days from
 follow the same rules as the calendar: pages of one revision are appended, a
 later page from another revision rereads the loaded pages atomically (up to
 three attempts under the 12-second deadline), and a board revision change
-rereads them while the dialog stays open. Changing the month or the post
+rereads them while the dialog stays open. Schedule and video archives also reread
+their loaded pages after each successful full board snapshot, even at the same
+revision, so expired live states disappear there too. A snapshot arriving during
+an archive read or pagination waits for that work to settle before refreshing;
+a failed refresh keeps the complete known prefix and retries on the next board
+snapshot. Post archives continue to follow stored revisions. These refreshes
+share the board's visibility pause and snapshot backoff rather than starting a
+separate archive timer. Changing the month or the post
 account, or closing the dialog, cancels the read and discards late pages.
 Picking a day in the month grid lists its entries beside the grid (below it on
 phones) and can show that week on the board. An image viewer opened from the

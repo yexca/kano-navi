@@ -102,7 +102,8 @@ async function readLoadedPages<T extends PagedSnapshot>(
 ): Promise<T> {
   for (let attempt = 0; attempt < 3; attempt++) {
     let next = await readPage(1)
-    if (current && next.revision === current.revision) return current
+    // Public projections such as liveStatus can expire without a stored
+    // write, so even an unchanged revision must replace the loaded pages.
     const revision = next.revision
     let consistent = true
     while (next.hasNext && next.page < (current?.page || 1)) {
@@ -130,6 +131,7 @@ type LoadResult = { ok: true } | { ok: false; error: Error }
  */
 export function useDashboard(now = Date.now()) {
   const [dashboard, setDashboard] = useState(emptyDashboard)
+  const [snapshotVersion, setSnapshotVersion] = useState(0)
   const [status, setStatus] = useState<{
     isLoading: boolean
     isRefreshing: boolean
@@ -160,10 +162,12 @@ export function useDashboard(now = Date.now()) {
   const calendarRef = useRef(calendar)
   calendarRef.current = calendar
   const calendarKeyRef = useRef<string | null>(null)
+  const calendarRefreshRef = useRef(false)
   const loadCalendar = useCallback(async () => {
     const { from, to } = rangeRef.current
     const key = rangeKey(rangeRef.current)
     const current = calendarKeyRef.current === key ? calendarRef.current : null
+    calendarRefreshRef.current = false
     setCalendarLoading(true)
     try {
       const payload = await scope.run("calendar", async (signal) => {
@@ -354,7 +358,11 @@ export function useDashboard(now = Date.now()) {
               },
               meta: { ...emptyDashboard.meta, ...(payload.meta || {}) },
             })
+            setSnapshotVersion((version) => version + 1)
             revision = payload.meta?.revision ?? null
+            // A later full snapshot also refreshes time-based calendar fields.
+            // If a page is in flight, the next revision poll consumes this flag.
+            calendarRefreshRef.current ||= hasLoaded
             hasLoaded = true
             loadedAt = Date.now()
             needsSnapshot = false
@@ -362,7 +370,8 @@ export function useDashboard(now = Date.now()) {
             if (
               !scope.busy("calendar") &&
               !calendarRetryRef.current &&
-              (calendarKeyRef.current !== rangeKey(rangeRef.current) ||
+              (calendarRefreshRef.current ||
+                calendarKeyRef.current !== rangeKey(rangeRef.current) ||
                 revision !== calendarRef.current.revision)
             )
               void loadCalendar()
@@ -370,7 +379,8 @@ export function useDashboard(now = Date.now()) {
             changed = revision == null || Number(payload.revision) !== revision
             if (
               !changed &&
-              Number(payload.revision) !== calendarRef.current.revision &&
+              (calendarRefreshRef.current ||
+                Number(payload.revision) !== calendarRef.current.revision) &&
               !scope.busy("calendar") &&
               !calendarRetryRef.current
             )
@@ -462,6 +472,7 @@ export function useDashboard(now = Date.now()) {
   )
   return {
     dashboard: currentDashboard,
+    snapshotVersion,
     ...status,
     reload: load,
     calendar,
@@ -479,11 +490,14 @@ export function useDashboard(now = Date.now()) {
  * Reads one month of the stored schedule, posts or videos for a dialog, page
  * by page. Like the calendar it follows the board's revision: a change rereads
  * the loaded pages atomically, and a later page from another revision restarts
- * the read instead of being appended. A null request cancels the read.
+ * the read instead of being appended. Schedule and video archives also follow
+ * successful board snapshots, whose minute/manual refresh expires time-based
+ * projections without a revision change. A null request cancels the read.
  */
 export function useArchive<T>(
   request: ArchiveRequest | null,
   revision?: number | null,
+  snapshotVersion?: number,
 ) {
   const scope = useMemo(() => createRequestScope(), [])
   const key = request
@@ -501,6 +515,12 @@ export function useArchive<T>(
   requestRef.current = request
   const stateRef = useRef(state)
   stateRef.current = state
+  const refreshTarget = `${revision ?? ""}/${request?.kind === "posts" ? "" : (snapshotVersion ?? "")}`
+  const refreshTargetRef = useRef(refreshTarget)
+  refreshTargetRef.current = refreshTarget
+  // Consume a target when its read starts. A newer target waits for active
+  // work to settle; a failed target retries on the next snapshot, not in a loop.
+  const requestedTargetRef = useRef(refreshTarget)
 
   const readPage = async (
     current: ArchiveRequest,
@@ -525,6 +545,7 @@ export function useArchive<T>(
     const current = requestRef.current
     const currentKey = keyRef.current
     if (!current || !currentKey) return
+    requestedTargetRef.current = refreshTargetRef.current
     const loaded =
       stateRef.current.key === currentKey ? stateRef.current.snapshot : null
     setState((value) =>
@@ -612,12 +633,12 @@ export function useArchive<T>(
     if (
       currentKey === keyRef.current &&
       snapshot &&
-      revision != null &&
-      revision !== snapshot.revision &&
+      requestedTargetRef.current !== refreshTarget &&
+      !stateRef.current.isLoading &&
       !scope.busy("archive")
     )
       void load()
-  }, [revision, load, scope])
+  }, [refreshTarget, state.isLoading, load, scope])
 
   const current = state.key === key ? state : null
   return {

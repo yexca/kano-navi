@@ -111,7 +111,10 @@ the standard empty cache directories; it does not download media.
 environment files and uses fake time and controlled responses to exercise
 recovery, stalled JSON deadlines, deduplication, races, visibility and
 unmount. Its lightweight React renderer is test-only; browser review covers
-the production React DOM bundle. `tests/polling.test.ts` uses controlled
+the production React DOM bundle. Together with `tests/archive-requests.test.ts`,
+it checks that same-revision live-state expiry refreshes the loaded calendar
+and archive pages atomically, queues a refresh behind pagination, and retains
+known pages on failure or cancellation. `tests/polling.test.ts` uses controlled
 timers to check retry cadence, its cap, deadlines, overlapping-work
 prevention, stale responses and disposal. `tests/history-media.test.ts` checks
 the history catalog, the shipped image bytes and packaging validation. No

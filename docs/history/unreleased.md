@@ -161,6 +161,9 @@
 <details>
 <summary><strong>Public pages</strong></summary>
 
+- The week guide, month schedule and open video archive refresh expired live
+  states alongside the board's minute or manual snapshot refresh, even when
+  no stored record changed, while keeping all loaded pages together.
 - The profile card shows separate successful-read times for X and YouTube
   and warns when a source is at least 24 hours old, without fetching it.
 - Journey adds the first solo album, “ばんび～の”, its original cover and
