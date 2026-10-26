@@ -343,6 +343,13 @@ export interface AdminVideo {
   manualKind: string | null
   manualThumbnail: VideoThumbnailPin | null
   durationSeconds: number | null
+  /**
+   * isShort shows an operator's format correction; sourceIsShort keeps what
+   * the YouTube feed linked. Null is unknown.
+   */
+  isShort: boolean | null
+  sourceIsShort: boolean | null
+  manualIsShort: boolean | null
   /** The last successful watch-page read. */
   checkedAt: string | null
   /** A refresh request the next YouTube step has not answered yet. */
@@ -418,11 +425,15 @@ export interface VideoHistory {
   thumbnails: VideoThumbnail[]
 }
 
-/** A string or file sets a correction, null clears it, omitted keeps it. */
+/**
+ * A string, file or boolean sets a correction, null clears it, omitted
+ * keeps it.
+ */
 export interface VideoCorrection {
   title?: string | null
   kind?: string | null
   thumbnail?: VideoThumbnailPin | null
+  isShort?: boolean | null
 }
 
 export interface AdminVideosPage extends Page<AdminVideo> {

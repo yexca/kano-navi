@@ -20,9 +20,22 @@ func TestVideoCorrectionsHistoryAndRefresh(t *testing.T) {
 	if code != 200 || video["title"] != "Song cover" || video["kind"] != "MUSIC" {
 		t.Fatalf("clear kind=%d %v", code, payload)
 	}
+	// A format correction lies over the feed's, which sync keeps writing.
+	c.exec(t, `UPDATE videos SET is_short=0 WHERE id='AAAAAAAAAAA'`)
+	code, payload = c.call(t, "PUT", "/api/admin/videos/AAAAAAAAAAA", `{"isShort":true}`)
+	video, _ = payload["video"].(map[string]any)
+	if code != 200 || video["isShort"] != true || video["sourceIsShort"] != false || video["manualIsShort"] != true || video["title"] != "Song cover" {
+		t.Fatalf("mark short=%d %v", code, payload)
+	}
+	code, payload = c.call(t, "PUT", "/api/admin/videos/AAAAAAAAAAA", `{"isShort":null}`)
+	video, _ = payload["video"].(map[string]any)
+	if code != 200 || video["isShort"] != false || video["manualIsShort"] != nil {
+		t.Fatalf("clear short=%d %v", code, payload)
+	}
 	for body, want := range map[string]int{
 		`{"title":""}`:                       400,
 		`{"kind":"SHORTS"}`:                  400,
+		`{"isShort":"yes"}`:                  400,
 		`{"thumbnail":{"mediaId":"x"}}`:      400,
 		`{"description":"not a correction"}`: 400,
 		`{"title":7}`:                        400,

@@ -14,6 +14,7 @@ import { MediaDialog, stepIndex } from "@/site/media-dialog"
 import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
 import { XLogo, YouTubeLogo } from "@/site/links"
 import { POST_WINDOW_DAYS } from "./content"
+import { featuredVideoIdOf } from "./derive-dashboard"
 import { syncStateFor } from "./freshness"
 import {
   addDays,
@@ -224,9 +225,7 @@ export function DashboardApp() {
     upcomingEvents: 0,
     videos: dashboard.videos.length,
   }
-  const featuredVideoId = Object.hasOwn(meta, "featuredVideoId")
-    ? meta.featuredVideoId
-    : (dashboard.focus?.videoId ?? null)
+  const featuredVideoId = featuredVideoIdOf(dashboard)
 
   return (
     <div className="site board" id="top">

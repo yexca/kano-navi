@@ -314,8 +314,9 @@ snapshots without rewriting events.
 Synchronization owns a video's platform fields (`title`, `kind`,
 `thumbnail_url` and its media link) and keeps rewriting them on every
 successful page read. An operator correction lives beside them in
-`manual_title`, `manual_kind` and `manual_thumbnail_media_id` /
-`manual_thumbnail_sha256` with `manual_updated_at`; synchronization never
+`manual_title`, `manual_kind`, `manual_is_short` and
+`manual_thumbnail_media_id` / `manual_thumbnail_sha256` with
+`manual_updated_at`; synchronization never
 writes these columns, and clearing one shows the platform value again. Every
 public reader (dashboard, video archive, MCP) and the console show
 `COALESCE(manual, platform)`, and a pinned thumbnail is served while its file
@@ -331,6 +332,16 @@ and the then-current thumbnail file (`thumbnail_media_id`,
 URL keeps the old file in `media_versions` and records a `media` revision for
 every linked video. `duration_seconds` and `refresh_requested_at` are
 described in [Sources](sources.md#follow-up-checks-and-refresh-requests).
+Public readers (dashboard, video archive, MCP) add the length as
+`durationSeconds`, null while it is unknown.
+
+`is_short` is the YouTube feed's format verdict: 1 for a Short, 0 for any
+other upload, `NULL` while unknown (see [Sources](sources.md#shorts)).
+`manual_is_short` is the operator's correction with the same values and
+`NULL` for none; synchronization never writes it. Public readers add
+`isShort = COALESCE(manual_is_short, is_short)` as `true`, `false` or `null`,
+and the board treats only `true` as a Short. Older rows stay unknown rather
+than being guessed from their length.
 Startup adds the columns, both tables and `video_revisions_video_idx` to
 existing snapshots without rewriting videos or media rows.
 

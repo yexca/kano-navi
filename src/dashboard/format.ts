@@ -147,6 +147,19 @@ export function formatJapanDay(value: DateInput, locale: string) {
   }).format(date)
 }
 
+/** The Japan month, day and weekday of an instant, for a date block. */
+export function japanDateParts(value: DateInput, locale: string) {
+  const date = toDate(value)
+  if (!date) return null
+  const pick = (options: Intl.DateTimeFormatOptions) =>
+    formatter(locale, { timeZone: JAPAN_TIME_ZONE, ...options }).format(date)
+  return {
+    day: pick({ day: "numeric" }).replace(/\D/gu, ""),
+    month: pick({ month: "short" }),
+    weekday: pick({ weekday: "short" }),
+  }
+}
+
 export function formatVisitorTime(value: DateInput, locale: string) {
   const date = toDate(value)
   if (!date) return ""
@@ -339,15 +352,19 @@ const videoKindKeys: Record<string, string> = {
   "LIVE ARCHIVE": "media.kind.liveArchive",
   "UPCOMING LIVE": "media.kind.upcoming",
   MUSIC: "media.kind.music",
+  VIDEO: "media.kind.video",
 }
 
 export function videoKindLabel(video: Video, t: Translator) {
+  // The title classifier can call a Short a stream; its format says more.
+  if (video?.isShort === true) return t("media.kind.short")
   const kind = String(video?.kind || "")
     .trim()
     .toUpperCase()
-  // A reservation keeps its "UPCOMING LIVE" kind after it airs.
+  // A reservation keeps its "UPCOMING LIVE" kind past its start until a watch
+  // page is read again; it may be on air, so it is a stream, not an archive.
   if (kind === "UPCOMING LIVE" && !video.isUpcoming)
-    return t("media.kind.liveArchive")
+    return t("event.type.stream")
   if (videoKindKeys[kind]) return t(videoKindKeys[kind])
   if (video?.kind && !/[぀-ヿ㐀-鿿]/u.test(video.kind)) return video.kind
   return t(video?.isUpcoming ? "media.kind.upcoming" : "media.kind.video")
@@ -362,4 +379,22 @@ export function cleanVideoTitle(title: string | null | undefined) {
 
 export function videoTime(video: Video) {
   return video.scheduledAt || video.publishedAt || null
+}
+
+/** A video length as the platforms show it: "4:49" or "2:01:05". */
+export function formatDuration(seconds: number | null | undefined) {
+  const total = Math.floor(Number(seconds))
+  if (!Number.isFinite(total) || total <= 0) return ""
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const rest = pad(total % 60)
+  return hours ? `${hours}:${pad(minutes)}:${rest}` : `${minutes}:${rest}`
+}
+
+/** The same length as an HTML duration string, such as "PT2H1M5S". */
+export function durationAttribute(seconds: number) {
+  const total = Math.floor(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  return `PT${hours ? `${hours}H` : ""}${minutes ? `${minutes}M` : ""}${total % 60}S`
 }

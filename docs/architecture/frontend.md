@@ -18,7 +18,24 @@ event-status helpers, `content.ts` holds static public links, and
 `components/` renders the next-up stage and profile card, the week guide,
 the post wall, the video shelf, and the link directory, plus
 `archive-dialog.tsx`, the native modal sheet that browses one month of the
-schedule, posts or videos. Its styles are in
+schedule, posts or videos. `video-groups.ts` sorts the shelf's videos from
+the local snapshot: broadcasts (`LIVE ARCHIVE`, `UPCOMING LIVE`, `GAMEPLAY`,
+`TALK`) are streams and every other kind a work; a video's phase follows the
+stage's live rule (a fresh confirmed state first, then the stream's
+three-hour grace or an explicit end), so a reservation past its start is a
+started ticket rather than an archive and an operator-confirmed cancellation
+leaves the shelf once its start passes. A past video whose `isShort` is
+`true` is a Short before its kind is read, so a Short titled like a stream is
+neither an archive nor a work; `null` (unknown) is an ordinary upload. The
+lead is the featured video, or else the newest `MUSIC` work or premiere, or
+else the newest work, so a Short leads only when featured; each video appears
+once. The filter offers All plus Streams, Works and Shorts for each kind
+present, and only when two are. Shorts render as 9:16 cards cropped from the
+centre of the 1280×720 cover (the vertical frame between YouTube's blurred
+pillarbox): one row of up to six in the All view, fewer as columns narrow and
+a swipeable rail on phones, and up to twelve in the Shorts view. The shelf
+shows a platform link for the video and each of its `alternates`, and the
+length from `durationSeconds` when known. Its styles are in
 `src/dashboard/board.css` on top of `src/site/site.css` and the shared tokens
 in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`
@@ -70,8 +87,10 @@ platform or editor) and offers a Show original button; a title inside a
 link, where a button cannot go, uses `TranslationMark`, whose tooltip holds
 the source. Video and schedule titles go through
 `src/dashboard/components/translated-title.tsx`: `TranslatedTitle` for a
-title inside a link (spotlight tickets, shelf and archive rows, week-guide
-entries) and `TranslatedHeading`, with the button, for the featured video.
+title inside a link (spotlight tickets, shelf tickets, cards and rows,
+archive rows, week-guide entries) and `TranslatedHeading`, with the button,
+for the shelf's lead card. A clamped shelf title clamps only its wording, so
+the mark stays visible.
 Month-grid chips are too small for a mark and show the reader's wording
 unmarked; the week guide marks it and holds the source. An operator's
 Featured title from the focus record shows as written. The wording shown
@@ -128,7 +147,12 @@ share/query parameters and supported YouTube subdomain differences. Other links
 retain exact URL matching; different videos and lookalike hosts do not match.
 `pickSpotlight` gives a candidate with artwork the full ticket and one without
 it the compact layout; `pickCompanion` then adds the latest video beneath a
-compact ticket unless it is the same link. The play mark appears only on
+compact ticket unless it is the same link. Both read `summary.latestVideo`,
+which `deriveDashboardAt` recomputes as the newest non-upcoming video that is
+not a Short (`isShort === true`), unless it is the featured video
+(`featuredVideoIdOf`: `meta.featuredVideoId`, or the focus video of an older
+snapshot). An unknown format stays eligible, and when every recent upload is a
+Short the stage shows no latest video. The play mark appears only on
 YouTube or Twitch links; X links read as an announcement.
 Matching needs no protected source item IDs or additional public API fields.
 At the end instant the video yields to later focus candidates. This derived video

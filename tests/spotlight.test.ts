@@ -431,3 +431,60 @@ test("the schedule reads On air exactly while the stage does", () => {
     assert.equal(onStage(event, at), status === "live", label)
   }
 })
+
+test("the latest-video fallback skips Shorts unless the operator featured one", () => {
+  const short = (id: string, publishedAt: string): Video => ({
+    ...latestVideo,
+    id,
+    url: `https://www.youtube.com/watch?v=${id}`,
+    kind: "VIDEO",
+    isShort: true,
+    publishedAt,
+  })
+  const newer = short("shortnew001", "2026-10-21T10:00:00Z")
+  const older = short("shortold001", "2026-10-19T10:00:00Z")
+  // An unknown format stays eligible.
+  const archive: Video = { ...latestVideo, isShort: null }
+  const featuring = (videos: Video[], featuredVideoId: string | null) => {
+    const value = snapshot([dateOnlyEvent], videos)
+    value.meta.featuredVideoId = featuredVideoId
+    return value
+  }
+
+  // A newer Short gives way to the next upload, on the full ticket ...
+  const { summary } = deriveDashboardAt(
+    featuring([newer, archive, older], null),
+    now,
+  )
+  assert.equal(summary.latestVideo?.id, "latest")
+  const full = pickSpotlight({ ...summary, nextEvent: null }, now)
+  assert.equal(full?.mode, "latest")
+  assert.equal(full?.video?.id, "latest")
+  // ... and as the companion of a compact ticket.
+  const compact = pickSpotlight(summary, now)
+  assert.equal(compact?.layout, "compact")
+  assert.equal(pickCompanion(summary, compact)?.video.id, "latest")
+
+  // The operator's featured Short still shows.
+  const featured = deriveDashboardAt(
+    featuring([newer, archive], newer.id),
+    now,
+  ).summary
+  assert.equal(
+    pickSpotlight({ ...featured, nextEvent: null }, now)?.video?.id,
+    newer.id,
+  )
+  assert.equal(
+    pickCompanion(featured, pickSpotlight(featured, now))?.video.id,
+    newer.id,
+  )
+
+  // When every recent upload is a Short, there is no latest video to show.
+  const shortsOnly = deriveDashboardAt(
+    featuring([newer, older], null),
+    now,
+  ).summary
+  assert.equal(shortsOnly.latestVideo, null)
+  assert.equal(pickSpotlight({ ...shortsOnly, nextEvent: null }, now), null)
+  assert.equal(pickCompanion(shortsOnly, pickSpotlight(shortsOnly, now)), null)
+})

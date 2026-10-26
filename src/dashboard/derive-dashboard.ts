@@ -9,9 +9,20 @@ import {
   sortEvents,
   scheduleSortTime,
 } from "./format.ts"
+import { videoIsShort } from "./video-groups.ts"
 
 /** How close a later reservation must be to replace a presumed-live item. */
 export const LIVE_YIELD_MS = 30 * 60 * 1000
+
+/**
+ * The operator's featured video. A snapshot from before the setting existed
+ * names it through the focus copy instead.
+ */
+export function featuredVideoIdOf(snapshot: Dashboard): string | null {
+  return Object.hasOwn(snapshot.meta, "featuredVideoId")
+    ? snapshot.meta.featuredVideoId
+    : (snapshot.focus?.videoId ?? null)
+}
 
 /**
  * The first of start-ordered focus candidates. A started candidate without an
@@ -88,8 +99,14 @@ export function deriveDashboardAt(snapshot: Dashboard, now: number): Dashboard {
         scheduleSortTime(a.scheduledAt) - scheduleSortTime(b.scheduledAt) ||
         a.id.localeCompare(b.id),
     )
+  // The stage falls back to the newest upload that is not a Short, unless
+  // the operator featured that Short.
+  const featuredId = featuredVideoIdOf(snapshot)
   const latestVideos = videos
-    .filter((video) => !video.isUpcoming)
+    .filter(
+      (video) =>
+        !video.isUpcoming && (!videoIsShort(video) || video.id === featuredId),
+    )
     .sort(
       (a, b) =>
         scheduleSortTime(b.scheduledAt || b.publishedAt) -

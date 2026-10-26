@@ -39,10 +39,12 @@ snapshot health dot.
 
 1. Now: a ticket for what airs next (artwork, Japan date and time, the
    visitor's local time, and an hours/minutes countdown, or an on-air state
-   while a stream is live), falling back to the latest video. A schedule entry
+   while a stream is live), falling back to the latest video. That fallback
+   skips Shorts unless the operator featured one, and an upload of unknown
+   format still counts. A schedule entry
    without artwork gets a compact date ticket instead, with its automatic or
    confirmed provenance and a link named for what it opens (the stream or its
-   announcement), and the latest video follows it as a small card. Beside it, the
+   announcement), and the same latest video follows it as a small card. Beside it, the
    profile card: banner, avatar, name, catchphrase, main links, counts, and
    the snapshot state with a reload button.
 2. Weekly schedule: a Monday-first program guide with seven day columns on
@@ -58,9 +60,20 @@ snapshot health dot.
    the window is empty the most recent stored post is still shown. A Past
    posts dialog browses every stored post month by month, with the same
    account filter and per-account counts.
-4. YouTube: the manually selected Featured video with its focus copy, then
-   reservations (soonest first) and recent uploads. A Past videos dialog
-   browses stored videos month by month.
+4. Streams and works (YouTube, with bilibili links): a large lead card for
+   the manually selected Featured video with its focus copy, or else the
+   newest cover, original or premiere, with its Japan date, length and one
+   link per platform (YouTube, plus bilibili when an upload of the same work
+   is merged into it). Beside it, reservations as compact date tickets
+   (soonest first; a started one reads as on air or should-be-live, never as
+   an archive) and the previous work; below, a grid of stream archives with
+   large thumbnails, two-line titles, the date and the length when known (a
+   swipeable rail on phones), then a row of vertical Shorts cards. Shorts are
+   the uploads YouTube's feed links to its Shorts player, or that the
+   operator marks; older uploads the feed no longer lists stay ordinary
+   videos rather than being guessed from their length. An All / Streams /
+   Works / Shorts filter shows one kind at a time, with a tab only for the
+   kinds present. A Past videos dialog browses stored videos month by month.
 5. Links: the resource directory, a milestone summary linking to the full
    journey page, and common hashtags.
 

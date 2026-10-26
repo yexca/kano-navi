@@ -24,6 +24,9 @@ type Result struct {
 	NextCursor, NextCursorTime       string
 	Errors                           []string
 	Discovered, Requested, Inspected int
+	// Shorts is the feed's format verdict (Video.Short) for every listed
+	// entry whose alternate link named one, stored or new and of any age.
+	Shorts map[string]bool
 }
 
 // FollowUpOffsets are the times after a video's anchor (its broadcast end,
@@ -64,7 +67,7 @@ func NewAdapter(c *Client, options Options) *Adapter {
 	return &Adapter{c, options, time.Now}
 }
 func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Result, error) {
-	result := Result{Videos: []Video{}, Errors: []string{}, Queue: []string{}, CheckedIDs: []string{}, InspectedIDs: []string{}}
+	result := Result{Videos: []Video{}, Errors: []string{}, Queue: []string{}, CheckedIDs: []string{}, InspectedIDs: []string{}, Shorts: map[string]bool{}}
 	if days < 1 || days > 365 || a.Options.MaxDetailRequests < 1 || a.Options.MaxDetailRequests > 50 {
 		return result, &Error{"youtube_invalid_options"}
 	}
@@ -86,6 +89,9 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 	// entries also become detail candidates for their schedule.
 	feedIDs := []string{}
 	for _, v := range feed {
+		if v.Short != nil {
+			result.Shorts[v.ID] = *v.Short
+		}
 		t, _ := time.Parse(time.RFC3339Nano, v.PublishedAt)
 		if !t.Before(cutoff) {
 			feedIDs = append(feedIDs, v.ID)

@@ -134,6 +134,13 @@ type Video struct {
 	// LiveStatus is the broadcast state a watch page reported: an end is
 	// final, while live and upcoming count only while fresh. Nil is unknown.
 	LiveStatus *string
+	// DurationSeconds is the length a watch page reported; nil while unknown,
+	// as for a feed entry, a waiting room or a broadcast still on air.
+	DurationSeconds *int64
+	// IsShort is an operator's format correction, else the feed's: true for
+	// a Short, false for any other upload, nil while unknown, as for a row
+	// the feed never listed with a format link.
+	IsShort *bool
 	// Translations resolves the title's translations by precedence.
 	Translations TranslationSet
 	// Alternates are the other platforms' uploads merged into this video.
@@ -521,9 +528,13 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 		a, b := timeKey(upcomingVideos[i].ScheduledAt), timeKey(upcomingVideos[j].ScheduledAt)
 		return a < b || (a == b && upcomingVideos[i].ID < upcomingVideos[j].ID)
 	})
+	// The stage's fallback: the newest upload that is not a Short, unless the
+	// operator featured that Short. An unknown format stays eligible.
 	var latestVideo *Video
 	for i := range videos {
-		if !videos[i].IsUpcoming {
+		short := videos[i].IsShort != nil && *videos[i].IsShort
+		featured := featuredID != nil && videos[i].ID == *featuredID
+		if !videos[i].IsUpcoming && (!short || featured) {
 			latestVideo = &videos[i]
 			break
 		}
@@ -776,7 +787,7 @@ func (s *Store) queryEventCounts(ctx context.Context, today string, now time.Tim
 func (s *Store) queryVideos(ctx context.Context, now, liveCutoff time.Time) ([]Video, error) {
 	n := now.UTC().Format(time.RFC3339Nano)
 	// A confirmed live broadcast stays listed past the start-time grace.
-	q := `SELECT id,source,COALESCE(manual_title,title),published_at,scheduled_at,url,thumbnail_url,COALESCE(manual_kind,kind),is_upcoming,live_status,live_checked_at FROM videos WHERE id IN (SELECT id FROM (SELECT id FROM videos WHERE ` + publicVideoScope + ` ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT v.id FROM videos v WHERE (julianday(v.scheduled_at)>julianday(?,'-3 hours') OR (v.scheduled_at IS NULL AND v.is_upcoming=1) OR (v.live_status='live' AND julianday(v.live_checked_at)>julianday(?)) OR EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)>julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url))))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)<=julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url)))) ORDER BY julianday(v.scheduled_at) ASC,v.id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM videos WHERE ` + publicVideoScope + ` AND (scheduled_at IS NULL OR julianday(scheduled_at)<julianday(?)) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 1)) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC`
+	q := `SELECT id,source,COALESCE(manual_title,title),published_at,scheduled_at,url,thumbnail_url,COALESCE(manual_kind,kind),is_upcoming,live_status,live_checked_at,duration_seconds,COALESCE(manual_is_short,is_short) FROM videos WHERE id IN (SELECT id FROM (SELECT id FROM videos WHERE ` + publicVideoScope + ` ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT v.id FROM videos v WHERE (julianday(v.scheduled_at)>julianday(?,'-3 hours') OR (v.scheduled_at IS NULL AND v.is_upcoming=1) OR (v.live_status='live' AND julianday(v.live_checked_at)>julianday(?)) OR EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)>julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url))))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id))) AND NOT EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)<=julianday(?) AND (e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url)))) ORDER BY julianday(v.scheduled_at) ASC,v.id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM videos WHERE ` + publicVideoScope + ` AND (scheduled_at IS NULL OR julianday(scheduled_at)<julianday(?)) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC LIMIT 1)) ORDER BY julianday(COALESCE(scheduled_at,published_at)) DESC,id ASC`
 	rows, err := s.db.QueryContext(ctx, q, n, liveCutoff.UTC().Format(time.RFC3339Nano), n, n, n)
 	if err != nil {
 		return nil, dbErr(err)
@@ -787,10 +798,14 @@ func (s *Store) queryVideos(ctx context.Context, now, liveCutoff time.Time) ([]V
 		var v Video
 		var pub, sch, thumb, kind, liveStatus, liveChecked sql.NullString
 		var upcoming int64
-		if err := rows.Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &upcoming, &liveStatus, &liveChecked); err != nil {
+		var duration sql.NullInt64
+		var short sql.NullBool
+		if err := rows.Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &upcoming, &liveStatus, &liveChecked, &duration, &short); err != nil {
 			return nil, dbErr(err)
 		}
 		v.LiveStatus = liveView(liveStatus, liveChecked, liveCutoff)
+		v.DurationSeconds = nullInt(duration)
+		v.IsShort = nullBool(short)
 		if pub.Valid {
 			v.PublishedAt = &pub.String
 		}
@@ -815,7 +830,9 @@ func (s *Store) getVideo(ctx context.Context, id string, liveCutoff time.Time) (
 	var v Video
 	var pub, sch, thumb, kind, liveStatus, liveChecked sql.NullString
 	var up int64
-	err := s.db.QueryRowContext(ctx, `SELECT id,source,COALESCE(manual_title,title),published_at,scheduled_at,url,thumbnail_url,COALESCE(manual_kind,kind),is_upcoming,live_status,live_checked_at FROM videos WHERE id=? AND `+publicVideoScope, id).Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &up, &liveStatus, &liveChecked)
+	var duration sql.NullInt64
+	var short sql.NullBool
+	err := s.db.QueryRowContext(ctx, `SELECT id,source,COALESCE(manual_title,title),published_at,scheduled_at,url,thumbnail_url,COALESCE(manual_kind,kind),is_upcoming,live_status,live_checked_at,duration_seconds,COALESCE(manual_is_short,is_short) FROM videos WHERE id=? AND `+publicVideoScope, id).Scan(&v.ID, &v.Source, &v.Title, &pub, &sch, &v.URL, &thumb, &kind, &up, &liveStatus, &liveChecked, &duration, &short)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -836,6 +853,8 @@ func (s *Store) getVideo(ctx context.Context, id string, liveCutoff time.Time) (
 	}
 	v.IsUpcoming = up != 0
 	v.LiveStatus = liveView(liveStatus, liveChecked, liveCutoff)
+	v.DurationSeconds = nullInt(duration)
+	v.IsShort = nullBool(short)
 	return &v, nil
 }
 func (s *Store) queryLinkedEvent(ctx context.Context, v Video, now time.Time) (*DashboardEvent, error) {

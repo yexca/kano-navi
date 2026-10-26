@@ -64,12 +64,54 @@ func TestDashboardEmptySnapshotAndDaysBounds(t *testing.T) {
 	}
 }
 
+func TestDashboardLatestVideoSkipsShortsUnlessFeatured(t *testing.T) {
+	latest := func(featured string, withCover bool) any {
+		t.Helper()
+		handler := dashboardHandler(t, func(path string) {
+			testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,url,kind,is_upcoming,is_short) VALUES
+			 ('short-new','youtube','Short','2026-10-10T00:00:00.000Z','https://www.youtube.com/watch?v=short-new','VIDEO',0,1),
+			 ('short-old','youtube','Older short','2026-10-08T00:00:00.000Z','https://www.youtube.com/watch?v=short-old','VIDEO',0,1);`)
+			if withCover {
+				// An unknown format stays eligible.
+				testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,url,kind,is_upcoming,is_short) VALUES ('cover','youtube','Cover','2026-10-09T00:00:00.000Z','https://www.youtube.com/watch?v=cover','MUSIC',0,NULL)`)
+			}
+			if featured != "" {
+				testutil.Exec(t, path, `INSERT INTO app_settings (key,value,updated_at) VALUES ('featured_video_id',?,'')`, featured)
+			}
+		})
+		status, _, payload, body := dashboardPayload(t, handler, "/api/dashboard")
+		if status != http.StatusOK {
+			t.Fatalf("status=%d body=%s", status, body)
+		}
+		if video, ok := payload["summary"].(map[string]any)["latestVideo"].(map[string]any); ok {
+			return video["id"]
+		}
+		return nil
+	}
+	for _, tc := range []struct {
+		featured  string
+		withCover bool
+		want      any
+	}{
+		{"", true, "cover"},
+		// The operator's featured Short may still lead, but only as the newest.
+		{"short-new", true, "short-new"},
+		{"short-old", true, "cover"},
+		{"", false, nil},
+		{"short-old", false, "short-old"},
+	} {
+		if got := latest(tc.featured, tc.withCover); got != tc.want {
+			t.Fatalf("featured=%q cover=%v latest=%v, want %v", tc.featured, tc.withCover, got, tc.want)
+		}
+	}
+}
+
 func TestDashboardPublicProjectionAndBoundedSemantics(t *testing.T) {
 	handler := dashboardHandler(t, func(path string) {
 		testutil.Exec(t, path, `
 		INSERT INTO profiles (id,display_name,romanized_name,bio,x_url,youtube_url,updated_at) VALUES ('p','鹿乃まほろ','Kano Mahoro','bio','https://x.com/kano_2525','https://youtube.com/@kano','2026-10-11T00:00:00.000Z');
 		INSERT INTO posts (id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt) VALUES ('post-1','x',NULL,'daily','label','hello','2026-10-10T12:00:00.000Z','https://x.com/kano_2525/status/1',1,2,3,'https://example.com/post.png','alt');
-		INSERT INTO videos (id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming) VALUES ('video-1','youtube','Video','2026-10-09T00:00:00.000Z',NULL,'https://youtu.be/video-1','https://example.com/thumb.png','video',0);
+		INSERT INTO videos (id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,duration_seconds,is_short,manual_is_short) VALUES ('video-1','youtube','Video','2026-10-09T00:00:00.000Z',NULL,'https://youtu.be/video-1','https://example.com/thumb.png','video',0,289,0,1);
 		INSERT INTO events (id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_evidence,created_at,updated_at) VALUES
 		 ('automatic','x','Automatic',NULL,'2026-10-11','2026-10-11T10:00:00+09:00',NULL,'Asia/Tokyo','exact','scheduled','event','https://x.com/e','automatic',0,'none',NULL,'',''),
 		 ('locked','x','Locked',NULL,'2026-10-11','2026-10-11T09:00:00+09:00',NULL,'Asia/Tokyo','exact','scheduled','event','https://x.com/l','manual',1,'none',NULL,'',''),
@@ -113,6 +155,13 @@ func TestDashboardPublicProjectionAndBoundedSemantics(t *testing.T) {
 	video := videos[0].(map[string]any)
 	if video["thumbnailUrl"] != nil || video["thumbnailStatus"] != "pending" {
 		t.Fatalf("unready thumbnail leaked=%v", video)
+	}
+	if video["durationSeconds"] != float64(289) {
+		t.Fatalf("video length=%v", video["durationSeconds"])
+	}
+	// An operator's format correction wins over the feed's.
+	if video["isShort"] != true {
+		t.Fatalf("video format=%v", video["isShort"])
 	}
 	profileMedia := payload["profileMedia"].(map[string]any)["avatar"].(map[string]any)
 	if profileMedia["publicUrl"] != nil || profileMedia["status"] != "pending" {

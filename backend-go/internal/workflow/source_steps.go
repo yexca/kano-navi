@@ -192,7 +192,15 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 	if len(result.Errors) > 0 {
 		status = "partial"
 	}
-	return AttemptResult{Status: status, Result: map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested}}, nil
+	// Feed entries YouTube links as Shorts; zero across runs may mean the
+	// feed stopped naming the format.
+	shorts := 0
+	for _, short := range result.Shorts {
+		if short {
+			shorts++
+		}
+	}
+	return AttemptResult{Status: status, Result: map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested, "shorts": shorts}}, nil
 }
 
 // bilibiliRecent reads the account's newest uploads at most once per

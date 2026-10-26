@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"html"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -29,6 +30,10 @@ type Video struct {
 	// DurationSeconds is the player's length; zero while unknown, as for a
 	// feed entry, a waiting room or a broadcast still on air.
 	DurationSeconds int
+	// Short is the feed's format signal: true for an entry YouTube links to
+	// its /shorts/ page, false for one it links to a watch page, and nil while
+	// unknown, as for a watch-page read or an entry naming neither.
+	Short *bool
 }
 
 // Broadcast states a watch page can report.
@@ -49,13 +54,41 @@ func Classify(title string) string {
 	}
 	return "VIDEO"
 }
+
+type feedLink struct {
+	Rel  string `xml:"rel,attr"`
+	Href string `xml:"href,attr"`
+}
+
+// feedShort reads an entry's alternate link. YouTube links a Short to its
+// /shorts/ page and every other upload, stream or premiere to its watch page;
+// any other link, or none, leaves the format unknown rather than guessed.
+func feedShort(id string, links []feedLink) *bool {
+	for _, link := range links {
+		// Atom's default relation is alternate.
+		if rel := strings.TrimSpace(link.Rel); rel != "" && rel != "alternate" {
+			continue
+		}
+		u, err := url.Parse(strings.TrimSpace(link.Href))
+		if err != nil || u.Scheme != "https" || u.Host != "www.youtube.com" && u.Host != "youtube.com" {
+			continue
+		}
+		short := u.Path == "/shorts/"+id
+		if short || u.Path == "/watch" && u.Query().Get("v") == id {
+			return &short
+		}
+	}
+	return nil
+}
+
 func ParseFeed(body []byte) ([]Video, error) {
 	var feed struct {
 		XMLName xml.Name `xml:"feed"`
 		Entries []struct {
-			ID        string `xml:"videoId"`
-			Title     string `xml:"title"`
-			Published string `xml:"published"`
+			ID        string     `xml:"videoId"`
+			Title     string     `xml:"title"`
+			Published string     `xml:"published"`
+			Links     []feedLink `xml:"link"`
 			Group     struct {
 				Thumbnail struct {
 					URL string `xml:"url,attr"`
@@ -82,7 +115,7 @@ func ParseFeed(body []byte) ([]Video, error) {
 		if thumbnail == "" {
 			thumbnail = "https://i.ytimg.com/vi/" + entry.ID + "/hqdefault.jpg"
 		}
-		out = append(out, Video{ID: entry.ID, Title: title, PublishedAt: t.UTC().Format(time.RFC3339Nano), URL: "https://www.youtube.com/watch?v=" + entry.ID, ThumbnailURL: thumbnail, Kind: Classify(title)})
+		out = append(out, Video{ID: entry.ID, Title: title, PublishedAt: t.UTC().Format(time.RFC3339Nano), URL: "https://www.youtube.com/watch?v=" + entry.ID, ThumbnailURL: thumbnail, Kind: Classify(title), Short: feedShort(entry.ID, entry.Links)})
 		if len(out) == 50 {
 			break
 		}

@@ -64,6 +64,11 @@ type AdminVideo struct {
 	ManualKind      *string            `json:"manualKind"`
 	ManualThumbnail *AdminThumbnailPin `json:"manualThumbnail"`
 	DurationSeconds *int64             `json:"durationSeconds"`
+	// IsShort shows an operator's format correction when one is set;
+	// SourceIsShort keeps what the feed linked, nil while unknown.
+	IsShort       *bool `json:"isShort"`
+	SourceIsShort *bool `json:"sourceIsShort"`
+	ManualIsShort *bool `json:"manualIsShort"`
 	// CheckedAt is the last successful watch-page read; RefreshRequestedAt is
 	// an operator request the next YouTube step has not answered yet.
 	CheckedAt          *string `json:"checkedAt"`
@@ -329,6 +334,13 @@ func nullInt(v sql.NullInt64) *int64 {
 	n := v.Int64
 	return &n
 }
+func nullBool(v sql.NullBool) *bool {
+	if !v.Valid {
+		return nil
+	}
+	b := v.Bool
+	return &b
+}
 func nullFloat(v sql.NullFloat64) *float64 {
 	if !v.Valid {
 		return nil
@@ -553,17 +565,18 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 const adminVideoColumns = `v.id,v.source,v.title,v.published_at,v.scheduled_at,v.url,v.thumbnail_url,v.kind,COALESCE(v.is_upcoming,0),
  v.manual_title,v.manual_kind,v.manual_thumbnail_media_id,v.manual_thumbnail_sha256,v.duration_seconds,v.live_checked_at,v.refresh_requested_at,
  (SELECT COUNT(*) FROM video_revisions r WHERE r.video_id=v.id),
- v.merged_into,(SELECT COALESCE(t.manual_title,t.title) FROM videos t WHERE t.id=v.merged_into),v.merge_source,v.merge_reason,v.merged_at`
+ v.merged_into,(SELECT COALESCE(t.manual_title,t.title) FROM videos t WHERE t.id=v.merged_into),v.merge_source,v.merge_reason,v.merged_at,v.is_short,v.manual_is_short`
 
 func scanAdminVideo(row scanner) (AdminVideo, error) {
 	var v AdminVideo
 	var published, scheduled, thumbnail, kind, manualTitle, manualKind, pinMedia, pinHash, checked, requested sql.NullString
 	var mergedInto, mergedTitle, mergeSource, mergeReason, mergedAt sql.NullString
 	var duration sql.NullInt64
+	var short, manualShort sql.NullBool
 	var upcoming int
 	if err := row.Scan(&v.ID, &v.Source, &v.SourceTitle, &published, &scheduled, &v.URL, &thumbnail, &kind, &upcoming,
 		&manualTitle, &manualKind, &pinMedia, &pinHash, &duration, &checked, &requested, &v.Revisions,
-		&mergedInto, &mergedTitle, &mergeSource, &mergeReason, &mergedAt); err != nil {
+		&mergedInto, &mergedTitle, &mergeSource, &mergeReason, &mergedAt, &short, &manualShort); err != nil {
 		return AdminVideo{}, err
 	}
 	v.MergedInto, v.MergedIntoTitle, v.MergeSource = nullString(mergedInto), nullString(mergedTitle), nullString(mergeSource)
@@ -587,6 +600,11 @@ func scanAdminVideo(row scanner) (AdminVideo, error) {
 		v.ManualThumbnail = &AdminThumbnailPin{MediaID: pinMedia.String, SHA256: pinHash.String}
 	}
 	v.DurationSeconds = nullInt(duration)
+	v.SourceIsShort, v.ManualIsShort = nullBool(short), nullBool(manualShort)
+	v.IsShort = v.SourceIsShort
+	if v.ManualIsShort != nil {
+		v.IsShort = v.ManualIsShort
+	}
 	v.CheckedAt = nullString(checked)
 	v.RefreshRequestedAt = nullString(requested)
 	v.IsUpcoming = upcoming != 0

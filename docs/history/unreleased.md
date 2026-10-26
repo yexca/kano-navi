@@ -70,6 +70,11 @@
   `GET /api/admin/videos/{id}/merges`, `POST /api/admin/videos/{id}/merge`
   and `POST /api/admin/videos/{id}/unmerge`; videos add their merge state
   and `alternates`.
+- The Correct dialog of a YouTube video has a Format field that marks it a
+  Short or an ordinary upload over what the feed linked, for example an
+  older Short the feed no longer lists. `PUT /api/admin/videos/{id}` accepts
+  `isShort` (a boolean, or `null` to follow the feed), and videos add
+  `isShort`, `sourceIsShort` and `manualIsShort`.
 
 </details>
 
@@ -145,6 +150,11 @@
   upload to the operator, and an operator's merge or undo is never changed.
   It runs after the `bilibili` step too, and the merged upload's title
   becomes the video's Chinese translation.
+- YouTube sync records whether the feed links each listed upload to its
+  Shorts page, in the new `videos.is_short` column. Watch-page reads never
+  clear it, a video the feed no longer lists keeps what it had, and videos
+  stored before the upgrade stay unknown instead of being guessed from their
+  length. The `youtube` step result counts the Shorts it saw as `shorts`.
 
 </details>
 
@@ -198,8 +208,32 @@
 - YouTube videos on the board and in the video archive list their merged
   Bilibili uploads in `alternates` (`source` and `url`), and Chinese readers
   see a merged video's Bilibili title in place of an AI translation (a
-  manual or YouTube translation still comes first). The board does not show
-  the links yet.
+  manual or YouTube translation still comes first).
+- The board's video section is redesigned as Recent streams and works. A
+  large lead card shows the featured video, or else the newest cover,
+  original or premiere, with its Japan date, length and a link per platform
+  (YouTube, plus bilibili for a merged upload). Reservations sit beside it
+  as compact date tickets with the previous work, and stream archives follow
+  in a grid of large thumbnails (a swipeable rail on phones). An All /
+  Streams / Works filter shows one kind at a time, and a shortened grid ends
+  with a Past videos button.
+- Shorts have their own row of vertical cards at the end of the video
+  section, a swipeable rail on phones, and a Shorts filter tab. A Short is
+  never the automatic lead, a work or a stream archive, even when its title
+  reads like a stream, and it is labelled Short in the video archive.
+  Uploads whose format is unknown stay ordinary videos. The board, the video
+  archive and MCP add each video's `isShort` (`true`, `false` or `null`).
+- When nothing is coming up, the Now stage's latest video, and the small
+  latest-video card beside a compact ticket, skip Shorts unless the operator
+  featured one; with only Shorts among recent uploads it shows none. The
+  dashboard summary's `latestVideo` follows the same rule.
+- A reservation past its start reads as on air or should be live in the
+  video section, and as a stream rather than a stream archive on the stage
+  and in the video archive, until a watch page confirms it ended. A
+  cancelled reservation shows as cancelled until its start, then leaves the
+  section. Plain uploads read as Video instead of `VIDEO`.
+- The board, the video archive and MCP add each video's `durationSeconds`
+  (null while unknown), shown as its length.
 
 </details>
 

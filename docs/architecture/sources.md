@@ -131,6 +131,26 @@ never generated falls back to the next smaller one, and the thumbnail of an
 upcoming or recent video is revalidated because its URL stays the same when the
 creator replaces the image; see [Media cache](media-cache.md).
 
+#### Shorts
+
+The feed is the only stored signal that tells a Short apart. Each entry's
+`<link rel="alternate">` points a Short to `https://www.youtube.com/shorts/<id>`
+and every other upload, stream or premiere to its `watch?v=<id>` page
+(`ytsource.Video.Short`). Only an HTTPS link on `www.youtube.com` or
+`youtube.com` naming the entry's own ID counts; no link, another host or a
+link for a different ID leaves the format unknown. Every run records the
+verdict of each listed entry as `videos.is_short` (1 or 0) on the stored row,
+new or old, after the video upsert; a verdict for a video the snapshot does
+not hold adds no row, and a changed value advances the dashboard revision.
+The stored `url` stays the canonical watch page. Watch pages, the live probe,
+historical windows and Bilibili never write `is_short`, so a later detail check
+cannot clear it. Rows the feed never listed with such a link, including every
+video stored before this column existed, stay `NULL` (unknown); the length is
+never used to guess. The step result's `shorts` counts the feed entries
+linked as Shorts in that run, so a feed that stops naming the format shows as
+zero. An operator correction (`manual_is_short`) lies over the feed's verdict;
+see [Video corrections](data-model.md#video-corrections-and-history).
+
 #### Follow-up checks and refresh requests
 
 Creators often replace a premiere's placeholder thumbnail, or retitle an
