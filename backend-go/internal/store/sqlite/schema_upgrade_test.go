@@ -102,7 +102,7 @@ func TestStandaloneUpgradesOlderSnapshotAdditively(t *testing.T) {
 		`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='events_merged_into_idx'`:                                        "1",
 		`SELECT title||'/'||COALESCE(merged_into,merge_source,merge_reason,merged_at,'unmerged') FROM videos WHERE id='BV1synthetic0'`:   "retained/unmerged",
 		`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='videos_merged_into_idx'`:                                        "1",
-		`SELECT title||'/'||COALESCE(is_short,manual_is_short,is_premiere,'unknown') FROM videos WHERE id='AAAAAAAAAAA'`:                             "brief/unknown",
+		`SELECT title||'/'||COALESCE(is_short,manual_is_short,is_premiere,'unknown') FROM videos WHERE id='AAAAAAAAAAA'`:                 "brief/unknown",
 		`SELECT max_retries FROM llm_providers WHERE id='synthetic'`:                                                                     "2",
 		`SELECT group_concat(route,',') FROM (SELECT route FROM llm_route_targets WHERE provider_id='synthetic' ORDER BY route)`:         "schedule",
 		`SELECT model_id||'/'||origin FROM llm_models WHERE provider_id='synthetic'`:                                                     "synthetic-model/legacy",

@@ -30,7 +30,7 @@ type Video struct {
 	// The store keeps a known verdict for the API answer of an ended
 	// broadcast, which cannot tell.
 	Premiere, PremiereKnown bool
-	FeedOnly bool
+	FeedOnly                bool
 	// DurationSeconds is the player's length; zero while unknown, as for a
 	// feed entry, a waiting room or a broadcast still on air.
 	DurationSeconds int
