@@ -104,19 +104,56 @@ func TestYoutubeRecentFeedOutageIsRetryableDependencyFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	requests := 0
+	// Every public page is down and nothing is stored to recheck, so the run
+	// learns nothing: it fails as the feed's retryable outage.
+	requests := map[string]int{}
 	c := ytsource.NewClient(&http.Client{Transport: xTestRT(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Host != "www.youtube.com" || r.URL.Path != "/feeds/videos.xml" {
+		if r.URL.Host != "www.youtube.com" {
 			t.Fatalf("unexpected request %s", r.URL)
 		}
-		requests++
+		requests[r.URL.Path]++
 		return &http.Response{StatusCode: 500, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
 	})})
 	c.FeedRetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
 	steps := &SourceSteps{Store: s, Youtube: ytsource.NewAdapter(c, ytsource.Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 1})}
 	_, err = steps.youtubeRecent(context.Background(), StepInput{})
 	var se *StepError
-	if !errors.As(err, &se) || se.Category != ErrDependency || !se.Retryable || requests != 3 {
-		t.Fatalf("err=%#v requests=%d", err, requests)
+	if !errors.As(err, &se) || se.Category != ErrDependency || !se.Retryable || requests["/feeds/videos.xml"] != 3 || requests["/channel/UCAAAAAAAAAAAAAAAAAAAAAA/videos"] != 1 {
+		t.Fatalf("err=%#v requests=%v", err, requests)
+	}
+}
+
+func TestYoutubeRecentFeedFailureFallsBackToTheUploadsTab(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite")
+	s, err := sqlite.OpenInitialized(p, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	c := ytsource.NewClient(&http.Client{Transport: xTestRT(func(r *http.Request) (*http.Response, error) {
+		status, body := 200, ""
+		switch r.URL.Path {
+		case "/feeds/videos.xml":
+			status = 404
+		case "/channel/UCAAAAAAAAAAAAAAAAAAAAAA/streams":
+		case "/channel/UCAAAAAAAAAAAAAAAAAAAAAA/videos":
+			body = `{"videoId":"AAAAAAAAAAA"}`
+		case "/watch":
+			body = `var ytInitialPlayerResponse={"videoDetails":{"videoId":"AAAAAAAAAAA","title":"fixture upload","isLiveContent":false,"lengthSeconds":"60"},"playabilityStatus":{"status":"OK"},"microformat":{"playerMicroformatRenderer":{"publishDate":"2026-01-02T01:00:00-08:00"}}};`
+		default:
+			t.Fatalf("unexpected request %s", r.URL)
+		}
+		return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})})
+	yt := ytsource.NewAdapter(c, ytsource.Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 1})
+	yt.Now = func() time.Time { return time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC) }
+	steps := &SourceSteps{Store: s, Youtube: yt}
+	result, err := steps.youtubeRecent(context.Background(), StepInput{})
+	if err != nil || result.Status != "partial" || result.Result["listing"] != ytsource.ListingVideosPage || result.Result["inspected"] != 1 {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+	state, err := s.YoutubeRecentState(context.Background(), yt.Options.ChannelID)
+	if v := state.Videos["AAAAAAAAAAA"]; err != nil || v.Title != "fixture upload" || v.PublishedAt != "2026-01-02T09:00:00Z" {
+		t.Fatalf("video=%#v err=%v", v, err)
 	}
 }

@@ -25,7 +25,7 @@
 | `X_HANDLES`                     | `kano_2525,_Kanotic` | Comma-separated public X account names                            |
 | `X_HANDLE`                      | Empty                | Single-account compatibility fallback                             |
 | `X_API_BEARER_TOKEN`            | Empty                | Optional environment-only credential for X archive search         |
-| `YOUTUBE_API_KEY`               | Empty                | Optional environment-only credential for YouTube range search     |
+| `YOUTUBE_API_KEY`               | Empty                | Optional environment-only Data API key: YouTube sync and search   |
 | `SOURCE_HISTORY_MAX_PAGES`      | `4`                  | Fetch window pages per account/run (1–20), also within X budget   |
 | `X_BOOTSTRAP_DAYS`              | `7`                  | First-run X lookback in days                                      |
 | `X_DISCOVERY_LIMIT`             | `50`                 | Maximum discovered status IDs; bounds timeline pages of 20 (≤10)  |

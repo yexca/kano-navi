@@ -79,7 +79,8 @@ post that has fallen out of the discovered status list.
 ### YouTube
 
 The script reads the RSS feed for `YOUTUBE_CHANNEL_ID` (the current main channel
-by default). With no cursor, it stores the latest `YOUTUBE_BOOTSTRAP_VIDEOS`
+by default), or with `YOUTUBE_API_KEY` the Data API's uploads playlist (see
+[Data API](#data-api)). With no cursor, it stores the latest `YOUTUBE_BOOTSTRAP_VIDEOS`
 entries (six by default). Later runs store only entries before the prior cursor,
 or entries newer than its timestamp when that cursor has fallen out of the RSS
 window. It separately inspects the streams page and keeps rechecking active or
@@ -119,10 +120,56 @@ upstream 5xx (`youtube_upstream_5xx`) or a connection failure
 10-second request timeout, and cancellation stops the wait. Rate limiting
 (`youtube_rate_limited`), other 4xx responses (`youtube_http_error`), timeouts,
 redirects, and oversized bodies are never repeated. Streams and watch pages are
-requested once; their 5xx responses record `youtube_upstream_5xx`. When the feed
-still fails, the step ends as retryable `dependency_unavailable` (or
-`timeout`/`rate_limited`) without writing, so existing video and event snapshots
-remain.
+requested once; their 5xx responses record `youtube_upstream_5xx`.
+
+The feed can also answer 404 for long stretches, so a failed listing does not
+stop the step. It records the code and still works through stored detail
+work: refresh requests, the rotating queue, active reservations and due
+follow-ups. In place of the listing it reads the channel's uploads tab
+(`/channel/<id>/videos`) once and takes its newest 15 IDs as detail
+candidates, after the streams page's. The tab has no publication times, so
+those IDs add no unchecked rows and leave the cursor alone; a watch page
+supplies a new video's time from `publishDate` (a stored time always wins).
+The step result reports where the uploads came from as `listing`: `api`,
+`rss`, `videos_page`, or empty when nothing answered. Only a run with no
+listing and no successful detail check fails, as retryable
+`dependency_unavailable` (or `timeout`/`rate_limited`) after the feed's code,
+without writing, so existing video and event snapshots remain.
+
+#### Data API
+
+With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
+
+- `playlistItems.list` on the channel's uploads playlist (`UU` and the channel
+  ID after `UC`, 50 entries) is the listing, read like feed entries: the
+  video's publication time (or the entry's), the title and the largest
+  `*.ytimg.com` thumbnail. Private entries are skipped. When it fails, the
+  feed and then the uploads tab are tried as above.
+- One `videos.list` call (`snippet`, `contentDetails`, `liveStreamingDetails`)
+  covers the first 50 IDs of the detail queue. A described video counts as a
+  successful detail check without a watch-page request: its title, length
+  (ISO 8601 `duration`), and for a broadcast the actual start (or the
+  reservation), the actual end and `liveBroadcastContent` as
+  `upcoming`/`live`/`ended`. The watch-page budget
+  (`YOUTUBE_MAX_DETAIL_REQUESTS`) then goes to the queued IDs the API left out.
+- The API has no `isLiveContent`. An upcoming or live premiere already has its
+  file's length while a stream reports `P0D`, so the length tells them apart
+  until the broadcast ends. An ended broadcast is classified from its stored
+  row only when an earlier detail check gave it a start time (a title kind
+  means a premiere, a live kind a stream); otherwise, like an untitled video
+  or an upcoming one without a start, its watch page decides.
+- A thumbnail on the same CDN path as the stored one keeps the stored URL, so
+  the watch page's `?v=` version does not read as a replacement; the media step
+  still revalidates the file.
+
+Each run spends two quota units (of the default 10,000 a day), whatever the
+queue length. The key is sent only in the `X-Goog-Api-Key` header to
+`https://www.googleapis.com/youtube/v3/`, with the client's 10-second timeout,
+4 MiB limit and rejected redirects. Failures record controlled codes
+(`youtube_api_forbidden` for a refused key or quota, `youtube_api_rate_limited`,
+`youtube_api_http_error`, `youtube_api_invalid_response`, and so on) and fall
+back to the public pages; `apiRequests` in the step result counts the calls.
+The live-status probe keeps reading watch pages only.
 
 Video thumbnails are registered and linked to their rows, then the bounded media
 stage downloads pending files from YouTube's `*.ytimg.com` thumbnail CDN
@@ -148,7 +195,9 @@ cannot clear it. Rows the feed never listed with such a link, including every
 video stored before this column existed, stay `NULL` (unknown); the length is
 never used to guess. The step result's `shorts` counts the feed entries
 linked as Shorts in that run, so a feed that stops naming the format shows as
-zero. An operator correction (`manual_is_short`) lies over the feed's verdict;
+zero. When the Data API supplies the listing, the feed is still read for
+these verdicts alone; if it fails, that run records none and reports the
+feed's code. An operator correction (`manual_is_short`) lies over the feed's verdict;
 see [Video corrections](data-model.md#video-corrections-and-history).
 
 #### Follow-up checks and refresh requests

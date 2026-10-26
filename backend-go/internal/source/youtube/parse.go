@@ -162,6 +162,8 @@ type playerResponse struct {
 	Microformat struct {
 		Renderer struct {
 			Broadcast *broadcastDetails `json:"liveBroadcastDetails"`
+			// PublishDate is an RFC 3339 instant, or a bare date on older pages.
+			PublishDate string `json:"publishDate"`
 		} `json:"playerMicroformatRenderer"`
 	} `json:"microformat"`
 }
@@ -243,6 +245,10 @@ func ParseWatch(body []byte, id string) (Video, error) {
 		v.DurationSeconds = n
 	}
 	v.ThumbnailURL = meta(text, "og:image")
+	v.PublishedAt = utcTime(player.Microformat.Renderer.PublishDate)
+	if t, err := time.Parse("2006-01-02", player.Microformat.Renderer.PublishDate); err == nil {
+		v.PublishedAt = t.Format(time.RFC3339Nano)
+	}
 	return v, nil
 }
 

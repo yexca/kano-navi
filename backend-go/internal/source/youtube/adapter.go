@@ -18,16 +18,32 @@ type State struct {
 type Result struct {
 	Videos            []Video
 	Queue, CheckedIDs []string
-	// InspectedIDs are the videos whose watch page passed the completeness
-	// checks in this run.
+	// InspectedIDs are the videos whose Data API details or watch page passed
+	// the completeness checks in this run.
 	InspectedIDs                     []string
 	NextCursor, NextCursorTime       string
 	Errors                           []string
 	Discovered, Requested, Inspected int
+	// Listing names where this run's uploads came from: ListingAPI,
+	// ListingFeed, ListingVideosPage, or "" when nothing answered.
+	Listing string
+	// APIRequests counts Data API calls, one quota unit each.
+	APIRequests int
 	// Shorts is the feed's format verdict (Video.Short) for every listed
 	// entry whose alternate link named one, stored or new and of any age.
 	Shorts map[string]bool
 }
+
+// Upload listings, in the order the recent step tries them.
+const (
+	ListingAPI        = "api"
+	ListingFeed       = "rss"
+	ListingVideosPage = "videos_page"
+)
+
+// videosPageLimit bounds the IDs taken from the uploads tab, the newest ones,
+// to what one feed lists.
+const videosPageLimit = 15
 
 // FollowUpOffsets are the times after a video's anchor (its broadcast end,
 // otherwise its start or publication) at which its watch page is read again,
@@ -73,20 +89,16 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 	}
 	now := a.Now()
 	cutoff := now.Add(-time.Duration(days) * 24 * time.Hour)
-	body, err := a.Client.Feed(ctx, a.Options.ChannelID)
-	if err != nil {
-		return result, err
-	}
-	feed, err := ParseFeed(body)
-	if err != nil {
-		return result, err
+	feed, listErr := a.listUploads(ctx, &result)
+	if ctx.Err() != nil {
+		return result, ctx.Err()
 	}
 	result.Discovered = len(feed)
 	if state.Videos == nil {
 		state.Videos = map[string]Video{}
 	}
-	// RSS lists waiting rooms and premieres like ordinary uploads, so recent
-	// entries also become detail candidates for their schedule.
+	// The listing names waiting rooms and premieres like ordinary uploads, so
+	// recent entries also become detail candidates for their schedule.
 	feedIDs := []string{}
 	for _, v := range feed {
 		if v.Short != nil {
@@ -102,18 +114,33 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 			state.Videos[v.ID] = v
 		}
 	}
-	sort.Slice(feed, func(i, j int) bool {
-		ti, _ := time.Parse(time.RFC3339Nano, feed[i].PublishedAt)
-		tj, _ := time.Parse(time.RFC3339Nano, feed[j].PublishedAt)
-		return ti.After(tj)
-	})
-	result.NextCursor, result.NextCursorTime = feed[0].ID, feed[0].PublishedAt
+	if len(feed) > 0 {
+		sort.Slice(feed, func(i, j int) bool {
+			ti, _ := time.Parse(time.RFC3339Nano, feed[i].PublishedAt)
+			tj, _ := time.Parse(time.RFC3339Nano, feed[j].PublishedAt)
+			return ti.After(tj)
+		})
+		result.NextCursor, result.NextCursorTime = feed[0].ID, feed[0].PublishedAt
+	}
 	streamIDs := []string{}
-	body, err = a.Client.Streams(ctx, a.Options.ChannelID)
+	body, err := a.Client.Streams(ctx, a.Options.ChannelID)
 	if err != nil {
 		result.Errors = append(result.Errors, safeError(err))
 	} else {
 		streamIDs = DiscoverIDs(body)
+	}
+	// Without a listing, the uploads tab still names the newest videos. It has
+	// no publication times, so its IDs are only detail candidates, like the
+	// streams page's, and the watch page supplies the time.
+	pageIDs := []string{}
+	if feed == nil {
+		body, err = a.Client.VideosPage(ctx, a.Options.ChannelID)
+		if err != nil {
+			result.Errors = append(result.Errors, safeError(err))
+		} else if pageIDs = DiscoverIDs(body); len(pageIDs) > 0 {
+			pageIDs = pageIDs[:min(len(pageIDs), videosPageLimit)]
+			result.Listing = ListingVideosPage
+		}
 	}
 	checked := map[string]bool{}
 	for _, id := range state.CheckedIDs {
@@ -122,7 +149,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 	// An operator's refresh request goes ahead of the rotating queue; due
 	// follow-ups come last so they never starve new discoveries.
 	eligible := append(append([]string{}, state.RefreshIDs...), state.Queue...)
-	for _, id := range append(append([]string{}, streamIDs...), feedIDs...) {
+	for _, id := range append(append(append([]string{}, streamIDs...), pageIDs...), feedIDs...) {
 		v, exists := state.Videos[id]
 		t, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
 		if !exists || !checked[id] || v.IsUpcoming || (!t.IsZero() && !t.Before(now.Add(-24*time.Hour))) {
@@ -131,26 +158,32 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 	}
 	eligible = append(append(eligible, state.ActiveIDs...), state.FollowUpIDs...)
 	result.Queue = uniqueIDs(eligible, 1000)
-	requests := append([]string{}, result.Queue...)
-	if len(requests) > a.Options.MaxDetailRequests {
-		requests = requests[:a.Options.MaxDetailRequests]
-	}
-	for _, id := range requests {
+	// The Data API answers the first batch of the queue in one call; the watch
+	// page budget then goes to the rest, newest work first as before.
+	fromAPI := a.apiDetails(ctx, result.Queue, state.Videos, &result)
+	budget := a.Options.MaxDetailRequests
+	for _, id := range append([]string{}, result.Queue...) {
 		if err = ctx.Err(); err != nil {
 			return result, err
 		}
-		// Rotate before fetching so a permanent failure cannot starve later IDs.
-		result.Queue = append(withoutID(result.Queue, id), id)
-		result.Requested++
-		body, err = a.Client.Watch(ctx, id)
-		if err != nil {
-			result.Errors = append(result.Errors, safeError(err))
+		v, answered := fromAPI[id]
+		if !answered && budget == 0 {
 			continue
 		}
-		v, err := ParseWatch(body, id)
-		if err != nil {
-			result.Errors = append(result.Errors, safeError(err))
-			continue
+		// Rotate before fetching so a permanent failure cannot starve later IDs.
+		result.Queue = append(withoutID(result.Queue, id), id)
+		if !answered {
+			budget--
+			result.Requested++
+			body, err = a.Client.Watch(ctx, id)
+			if err != nil {
+				result.Errors = append(result.Errors, safeError(err))
+				continue
+			}
+			if v, err = ParseWatch(body, id); err != nil {
+				result.Errors = append(result.Errors, safeError(err))
+				continue
+			}
 		}
 		v = completeDetails(v, state.Videos[id], now)
 		t, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
@@ -162,18 +195,116 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 			result.Queue = withoutID(result.Queue, id)
 		}
 	}
-	for _, id := range uniqueIDs(append(append(streamIDs, feedIDs...), state.ActiveIDs...), 1000) {
+	for _, id := range uniqueIDs(append(append(append(streamIDs, pageIDs...), feedIDs...), state.ActiveIDs...), 1000) {
 		if checked[id] {
 			result.CheckedIDs = append(result.CheckedIDs, id)
 		}
 	}
+	// Only a run that learned nothing fails: no listing and no detail check.
+	// It then writes nothing, so the snapshots stay and the step is retried.
+	if listErr != nil && result.Inspected == 0 {
+		return result, listErr
+	}
 	return result, nil
 }
 
-// completeDetails fills what a watch page left out from the stored video and
-// derives the reservation state and kind.
+// listUploads reads the channel's newest uploads: the Data API's uploads
+// playlist when a key is set, then the RSS feed. Each failure is recorded in
+// the result; when neither answers it returns nil and the feed's error, so a
+// public outage keeps its retryable category.
+func (a *Adapter) listUploads(ctx context.Context, result *Result) ([]Video, error) {
+	if a.Options.APIKey != "" {
+		result.APIRequests++
+		body, err := a.Client.PlaylistItems(ctx, a.Options.APIKey, a.Options.ChannelID)
+		var uploads []Video
+		if err == nil {
+			uploads, err = ParseUploads(body)
+		}
+		if err == nil {
+			result.Listing = ListingAPI
+			a.feedShorts(ctx, result)
+			return uploads, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		result.Errors = append(result.Errors, safeError(err))
+	}
+	body, err := a.Client.Feed(ctx, a.Options.ChannelID)
+	var feed []Video
+	if err == nil {
+		feed, err = ParseFeed(body)
+	}
+	if err == nil {
+		result.Listing = ListingFeed
+		return feed, nil
+	}
+	if ctx.Err() == nil {
+		result.Errors = append(result.Errors, safeError(err))
+	}
+	return nil, err
+}
+
+// feedShorts reads the feed for its Shorts verdicts alone, the one signal the
+// Data API listing lacks. A failure is recorded and only costs the verdicts.
+func (a *Adapter) feedShorts(ctx context.Context, result *Result) {
+	body, err := a.Client.Feed(ctx, a.Options.ChannelID)
+	var feed []Video
+	if err == nil {
+		feed, err = ParseFeed(body)
+	}
+	if err != nil {
+		if ctx.Err() == nil {
+			result.Errors = append(result.Errors, safeError(err))
+		}
+		return
+	}
+	for _, v := range feed {
+		if v.Short != nil {
+			result.Shorts[v.ID] = *v.Short
+		}
+	}
+}
+
+// apiDetails reads the first MaxAPIVideos queued IDs in one videos.list call
+// when a key is set. It returns the videos the API could describe; the rest,
+// including any the API left out or could not classify, fall back to their
+// watch pages. A failed call is recorded and answers none.
+func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[string]Video, result *Result) map[string]Video {
+	out := map[string]Video{}
+	if a.Options.APIKey == "" || len(queue) == 0 {
+		return out
+	}
+	ids := queue[:min(len(queue), MaxAPIVideos)]
+	result.APIRequests++
+	body, err := a.Client.Videos(ctx, a.Options.APIKey, ids)
+	var items map[string]apiVideo
+	if err == nil {
+		items, err = ParseAPIVideos(body)
+	}
+	if err != nil {
+		if ctx.Err() == nil {
+			result.Errors = append(result.Errors, safeError(err))
+		}
+		return out
+	}
+	for _, id := range ids {
+		if item, found := items[id]; found {
+			if v, ok := fromAPI(item, stored[id]); ok {
+				out[id] = v
+			}
+		}
+	}
+	return out
+}
+
+// completeDetails fills what a watch page or the Data API left out from the
+// stored video and derives the reservation state and kind. A stored
+// publication time wins over the page's.
 func completeDetails(v, old Video, now time.Time) Video {
-	v.PublishedAt = old.PublishedAt
+	if old.PublishedAt != "" {
+		v.PublishedAt = old.PublishedAt
+	}
 	if v.ScheduledAt == "" {
 		v.ScheduledAt = old.ScheduledAt
 	}

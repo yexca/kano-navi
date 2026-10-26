@@ -23,7 +23,7 @@
     },
     {
       "host": "www.googleapis.com",
-      "reason": "Optional server-side YouTube Data API date-window search and pagination; API credentials are sent only in headers."
+      "reason": "Optional server-side YouTube Data API: date-window search and pagination, and the recent step's uploads playlist and videos.list details; API credentials are sent only in headers."
     },
     {
       "host": "pubsubhubbub.appspot.com",

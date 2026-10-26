@@ -42,41 +42,53 @@ func NewClient(client *http.Client) *Client {
 }
 func (c *Client) get(ctx context.Context, path string, query url.Values) ([]byte, error) {
 	u := url.URL{Scheme: "https", Host: "www.youtube.com", Path: path, RawQuery: query.Encode()}
+	return c.do(ctx, u, "text/html,application/atom+xml", "", "youtube")
+}
+
+// do requests one fixed destination. Error codes start with prefix; a 403 is
+// reported only for the Data API, where it means a refused key or quota.
+func (c *Client) do(ctx context.Context, u url.URL, accept, key, prefix string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, &Error{"youtube_invalid_request"}
+		return nil, &Error{prefix + "_invalid_request"}
 	}
 	req.Header.Set("User-Agent", "kano-navi-go/source-sync")
-	req.Header.Set("Accept", "text/html,application/atom+xml")
+	req.Header.Set("Accept", accept)
+	if key != "" {
+		req.Header.Set("X-Goog-Api-Key", key)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, &Error{"youtube_timeout"}
+			return nil, &Error{prefix + "_timeout"}
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, &Error{"youtube_unavailable"}
+		return nil, &Error{prefix + "_unavailable"}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		return nil, &Error{"youtube_redirect_rejected"}
+		return nil, &Error{prefix + "_redirect_rejected"}
 	}
 	if resp.StatusCode == 429 {
-		return nil, &Error{"youtube_rate_limited"}
+		return nil, &Error{prefix + "_rate_limited"}
+	}
+	if resp.StatusCode == 403 && key != "" {
+		return nil, &Error{prefix + "_forbidden"}
 	}
 	if resp.StatusCode >= 500 {
-		return nil, &Error{"youtube_upstream_5xx"}
+		return nil, &Error{prefix + "_upstream_5xx"}
 	}
 	if resp.StatusCode != 200 {
-		return nil, &Error{"youtube_http_error"}
+		return nil, &Error{prefix + "_http_error"}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBytes+1))
 	if err != nil {
-		return nil, &Error{"youtube_body_unavailable"}
+		return nil, &Error{prefix + "_body_unavailable"}
 	}
 	if len(body) > MaxResponseBytes {
-		return nil, &Error{"youtube_response_oversized"}
+		return nil, &Error{prefix + "_response_oversized"}
 	}
 	return body, nil
 }
@@ -116,6 +128,15 @@ func (c *Client) Streams(ctx context.Context, channel string) ([]byte, error) {
 	}
 	return c.get(ctx, "/channel/"+channel+"/streams", nil)
 }
+
+// VideosPage is the channel's uploads tab, newest first. It lists IDs
+// without publication times and stands in for the feed when that fails.
+func (c *Client) VideosPage(ctx context.Context, channel string) ([]byte, error) {
+	if !channelID.MatchString(channel) {
+		return nil, &Error{"youtube_invalid_channel"}
+	}
+	return c.get(ctx, "/channel/"+channel+"/videos", nil)
+}
 func (c *Client) Watch(ctx context.Context, id string) ([]byte, error) {
 	if !videoID.MatchString(id) {
 		return nil, &Error{"youtube_invalid_video"}
@@ -123,9 +144,48 @@ func (c *Client) Watch(ctx context.Context, id string) ([]byte, error) {
 	return c.get(ctx, "/watch", url.Values{"v": {id}})
 }
 
+// MaxAPIVideos is the most IDs one videos.list call accepts.
+const MaxAPIVideos = 50
+
+// PlaylistItems lists the newest entries of the channel's uploads playlist
+// ("UU" and the channel ID after "UC") through the YouTube Data API: one
+// quota unit. The key travels only in the X-Goog-Api-Key header.
+func (c *Client) PlaylistItems(ctx context.Context, key, channel string) ([]byte, error) {
+	if !channelID.MatchString(channel) {
+		return nil, &Error{"youtube_invalid_channel"}
+	}
+	query := url.Values{"part": {"snippet,contentDetails,status"}, "playlistId": {"UU" + channel[2:]}, "maxResults": {"50"}}
+	return c.api(ctx, "playlistItems", query, key)
+}
+
+// Videos reads up to MaxAPIVideos videos through the Data API's videos.list:
+// one quota unit for the whole batch.
+func (c *Client) Videos(ctx context.Context, key string, ids []string) ([]byte, error) {
+	if len(ids) == 0 || len(ids) > MaxAPIVideos {
+		return nil, &Error{"youtube_api_invalid_request"}
+	}
+	for _, id := range ids {
+		if !videoID.MatchString(id) {
+			return nil, &Error{"youtube_invalid_video"}
+		}
+	}
+	query := url.Values{"part": {"snippet,contentDetails,liveStreamingDetails"}, "id": {strings.Join(ids, ",")}, "maxResults": {"50"}}
+	return c.api(ctx, "videos", query, key)
+}
+func (c *Client) api(ctx context.Context, resource string, query url.Values, key string) ([]byte, error) {
+	if strings.TrimSpace(key) == "" {
+		return nil, &Error{"youtube_api_key_missing"}
+	}
+	u := url.URL{Scheme: "https", Host: "www.googleapis.com", Path: "/youtube/v3/" + resource, RawQuery: query.Encode()}
+	return c.do(ctx, u, "application/json", strings.TrimSpace(key), "youtube_api")
+}
+
 type Options struct {
 	ChannelID                          string
 	BootstrapVideos, MaxDetailRequests int
+	// APIKey is the optional YOUTUBE_API_KEY. When set, the recent step lists
+	// uploads and reads details through the Data API before the public pages.
+	APIKey string
 }
 
 func OptionsFromEnv() Options {
@@ -140,5 +200,5 @@ func OptionsFromEnv() Options {
 		}
 		return n
 	}
-	return Options{channel, bounded("YOUTUBE_BOOTSTRAP_VIDEOS", 6, 1, 30), bounded("YOUTUBE_MAX_DETAIL_REQUESTS", 12, 1, 50)}
+	return Options{channel, bounded("YOUTUBE_BOOTSTRAP_VIDEOS", 6, 1, 30), bounded("YOUTUBE_MAX_DETAIL_REQUESTS", 12, 1, 50), strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY"))}
 }

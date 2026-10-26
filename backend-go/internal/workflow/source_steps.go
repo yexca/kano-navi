@@ -156,7 +156,9 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 	return AttemptResult{}, NewStepError("capability_not_migrated", ErrBlocked)
 }
 
-// youtubeRecent reads the public feed and refreshes active reservations.
+// youtubeRecent lists the newest uploads (Data API, RSS feed or uploads tab)
+// and refreshes active reservations. It fails only when no listing answered
+// and no detail check succeeded.
 func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptResult, error) {
 	state, err := s.Store.YoutubeRecentState(ctx, s.Youtube.Options.ChannelID)
 	if err != nil {
@@ -200,7 +202,7 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 			shorts++
 		}
 	}
-	return AttemptResult{Status: status, Result: map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested, "shorts": shorts}}, nil
+	return AttemptResult{Status: status, Result: map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested, "shorts": shorts, "listing": result.Listing, "apiRequests": result.APIRequests}}, nil
 }
 
 // bilibiliRecent reads the account's newest uploads at most once per

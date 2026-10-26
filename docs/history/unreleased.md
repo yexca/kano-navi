@@ -155,6 +155,15 @@
   clear it, a video the feed no longer lists keeps what it had, and videos
   stored before the upgrade stay unknown instead of being guessed from their
   length. The `youtube` step result counts the Shorts it saw as `shorts`.
+- A failed RSS feed no longer stops the YouTube step. It still rechecks
+  stored work (refresh requests, active reservations, follow-ups) and reads
+  the newest IDs from the channel's uploads tab instead; the step fails only
+  when nothing answered. With `YOUTUBE_API_KEY` set, the step lists uploads
+  through the Data API's uploads playlist and reads details with one
+  `videos.list` call per run (two quota units), using watch pages only for
+  what the API cannot describe; the feed is then read only for its Shorts
+  links. The step result adds `listing`
+  (`api`, `rss`, `videos_page` or empty) and `apiRequests`.
 
 </details>
 
