@@ -387,7 +387,10 @@ unmatched uploads on the board belongs to a later redesign. Operators can
 add an upload by BV ID or `bilibili.com` video link and read one again at
 once from `/admin` (see [Admin API](admin-api.md#bilibili-uploads)); those
 reads respect the same backoff and accept only uploads of the configured
-account. A read that changes a merged upload's title rewrites the
+account. They run outside the workflow queue, so the state write keeps a
+block that a concurrent read stored meanwhile (one still active and later
+than the writer's), with its failure count and code: a captcha backoff is
+never lost. A read that changes a merged upload's title rewrites the
 translation in the same transaction.
 
 ### Schedule Extraction Pipeline

@@ -129,10 +129,18 @@ func (s *Store) writeBilibili(ctx context.Context, account string, videos []bili
 			newest, newestAt = v.BVID, v.PublishedAt
 		}
 	}
-	meta, _ := json.Marshal(bilibiliMetadata{
+	// Operator reads run outside the workflow queue, so another read may have
+	// stored a captcha block since this one read the state.
+	var storedMeta string
+	if err = tx.QueryRowContext(ctx, `SELECT COALESCE(metadata_json,'{}') FROM sync_state WHERE source='bilibili' AND account_id=?`, account).Scan(&storedMeta); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, ErrSourceWrite
+	}
+	var stored bilibiliMetadata
+	_ = json.Unmarshal([]byte(storedMeta), &stored)
+	meta, _ := json.Marshal(mergeBilibiliMetadata(stored, bilibiliMetadata{
 		Session: state.Session, SessionAt: formatInstant(state.SessionAt), LastAttemptAt: formatInstant(state.LastAttemptAt),
 		BlockedUntil: formatInstant(state.BlockedUntil), Failures: state.Failures, LastError: state.LastError,
-	})
+	}, time.Now()))
 	// The cursor only names the newest upload seen; reads are not incremental.
 	_, err = tx.ExecContext(ctx, `INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES('bilibili',?,NULLIF(?,''),NULLIF(?,''),NULLIF(?,''),?)
  ON CONFLICT(source,account_id) DO UPDATE SET
@@ -152,6 +160,21 @@ func (s *Store) writeBilibili(ctx context.Context, account string, videos []bili
 		return false, ErrSourceWrite
 	}
 	return changed, nil
+}
+
+// mergeBilibiliMetadata keeps a block that is still active and later than
+// the incoming one, with its failure bookkeeping: no request starts while a
+// block lasts, so such a block was stored by a concurrent read that this
+// write must not erase. The latest attempt is kept as well.
+func mergeBilibiliMetadata(stored, incoming bilibiliMetadata, now time.Time) bilibiliMetadata {
+	storedBlock := parseInstant(stored.BlockedUntil)
+	if storedBlock.After(now) && storedBlock.After(parseInstant(incoming.BlockedUntil)) {
+		incoming.BlockedUntil, incoming.Failures, incoming.LastError = stored.BlockedUntil, stored.Failures, stored.LastError
+	}
+	if parseInstant(stored.LastAttemptAt).After(parseInstant(incoming.LastAttemptAt)) {
+		incoming.LastAttemptAt = stored.LastAttemptAt
+	}
+	return incoming
 }
 
 // writeBilibiliVideos upserts uploads. A list read is a complete description

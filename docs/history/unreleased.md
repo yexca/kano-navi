@@ -164,6 +164,8 @@
   what the API cannot describe; the feed is then read only for its Shorts
   links. The step result adds `listing`
   (`api`, `rss`, `videos_page` or empty) and `apiRequests`.
+- Reading a Bilibili upload from the console no longer clears a captcha
+  backoff that the `bilibili` step stored meanwhile.
 
 </details>
 

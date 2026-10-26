@@ -152,3 +152,53 @@ func TestPublicReadersLeaveBilibiliUploadsInTheConsole(t *testing.T) {
 		t.Fatalf("state=%v err=%v", state, err)
 	}
 }
+
+func TestBilibiliWriteKeepsAConcurrentCaptchaBlock(t *testing.T) {
+	_, path := snapshotUnderRoot(t)
+	s, err := OpenWorkflowCore(path, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	// An operator read starts from the unblocked state; meanwhile the
+	// workflow read is asked for a captcha and stores its block.
+	before, err := s.BilibiliState(ctx, biliAccount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked := before
+	blocked.LastAttemptAt, blocked.Failures, blocked.LastError, blocked.BlockedUntil = now, 2, "bilibili_risk_control", now.Add(2*time.Hour)
+	if err = s.SaveBilibiliState(ctx, biliAccount, blocked); err != nil {
+		t.Fatal(err)
+	}
+	// The operator read then succeeds and writes its own, unblocked state.
+	succeeded := before
+	succeeded.LastSuccessAt = now
+	if _, err = s.WriteBilibiliVideo(ctx, biliAccount, biliVideo("鹿乃 翻唱《奏》", ""), succeeded); err != nil {
+		t.Fatal(err)
+	}
+	read, err := s.BilibiliState(ctx, biliAccount)
+	if err != nil || !read.BlockedUntil.Equal(blocked.BlockedUntil.Truncate(time.Millisecond)) || read.Failures != 2 || read.LastError != "bilibili_risk_control" || read.LastAttemptAt.IsZero() {
+		t.Fatalf("state=%#v err=%v", read, err)
+	}
+	// A later block replaces an earlier one, and an expired block is cleared.
+	later := read
+	later.BlockedUntil, later.Failures = now.Add(4*time.Hour), 3
+	if err = s.SaveBilibiliState(ctx, biliAccount, later); err != nil {
+		t.Fatal(err)
+	}
+	if read, err = s.BilibiliState(ctx, biliAccount); err != nil || !read.BlockedUntil.Equal(later.BlockedUntil.Truncate(time.Millisecond)) || read.Failures != 3 {
+		t.Fatalf("later=%#v err=%v", read, err)
+	}
+	if _, err = s.DB().Exec(`UPDATE sync_state SET metadata_json=json_set(metadata_json,'$.blockedUntil',?) WHERE source='bilibili'`, workflowTime(now.Add(-time.Minute))); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SaveBilibiliState(ctx, biliAccount, succeeded); err != nil {
+		t.Fatal(err)
+	}
+	if read, err = s.BilibiliState(ctx, biliAccount); err != nil || !read.BlockedUntil.IsZero() || read.Failures != 0 || read.LastError != "" {
+		t.Fatalf("cleared=%#v err=%v", read, err)
+	}
+}
