@@ -91,6 +91,9 @@ premieres like ordinary uploads, so RSS entries published within the lookback
 window are detail candidates as well, after stream-page discoveries. A watch
 page whose player reports `isLiveContent: false` with a start time is a
 premiere: its event is a `release` and its video keeps the title-derived kind.
+The verdict is stored as `videos.is_premiere` (1 for a premiere, 0 for live
+content), and a check that cannot tell, such as a page without
+`isLiveContent`, keeps the stored one for the video and its event.
 A finished stream or premiere writes the `endTimestamp` from its
 `liveBroadcastDetails` as the event's `ends_at`; a later check without one keeps
 the stored end. Every successful watch-page check also records the broadcast
@@ -157,12 +160,15 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
 - The API has no `isLiveContent`. An upcoming or live premiere already has its
   file's length while a stream reports `P0D`, so the length tells them apart
   until the broadcast ends. An ended broadcast is classified from its stored
-  row only when an earlier detail check gave it a start time (a title kind
-  means a premiere, a live kind a stream); otherwise, like an untitled video
-  or an upcoming one without a start, its watch page decides.
-- A thumbnail on the same CDN path as the stored one keeps the stored URL, so
-  the watch page's `?v=` version does not read as a replacement; the media step
-  still revalidates the file.
+  row only when an earlier detail check gave it a start time and a stored
+  `is_premiere` verdict; the kind cannot tell, since a premiere keeps its
+  title kind, which may be a live one. Otherwise, as for rows stored before
+  the verdict was kept, an untitled video or an upcoming one without a start,
+  its watch page decides.
+- A thumbnail that is the same image as the stored one keeps the stored URL,
+  so the watch page's `?v=` version does not read as a replacement; the media
+  step still revalidates the file. See [Video corrections](data-model.md#video-corrections-and-history)
+  for what counts as the same image.
 
 Each run spends two quota units (of the default 10,000 a day), whatever the
 queue length. The key is sent only in the `X-Goog-Api-Key` header to

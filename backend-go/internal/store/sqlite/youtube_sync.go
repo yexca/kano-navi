@@ -34,16 +34,18 @@ func (s *Store) YoutubeRecentState(ctx context.Context, channel string) (ytsourc
 	out.Queue = queue.IDs
 	// Feed/streams are bounded, but a large history must not be loaded just to
 	// refresh the small active reservation set.
-	rows, err := s.db.QueryContext(ctx, `SELECT id,title,COALESCE(published_at,''),COALESCE(scheduled_at,''),url,COALESCE(thumbnail_url,''),COALESCE(kind,''),is_upcoming FROM videos WHERE source='youtube' ORDER BY is_upcoming DESC,julianday(COALESCE(scheduled_at,published_at)) DESC,id LIMIT 200`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,title,COALESCE(published_at,''),COALESCE(scheduled_at,''),url,COALESCE(thumbnail_url,''),COALESCE(kind,''),is_upcoming,is_premiere FROM videos WHERE source='youtube' ORDER BY is_upcoming DESC,julianday(COALESCE(scheduled_at,published_at)) DESC,id LIMIT 200`)
 	if err != nil {
 		return out, ErrUnavailable
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var v ytsource.Video
-		if rows.Scan(&v.ID, &v.Title, &v.PublishedAt, &v.ScheduledAt, &v.URL, &v.ThumbnailURL, &v.Kind, &v.IsUpcoming) != nil {
+		var premiere sql.NullBool
+		if rows.Scan(&v.ID, &v.Title, &v.PublishedAt, &v.ScheduledAt, &v.URL, &v.ThumbnailURL, &v.Kind, &v.IsUpcoming, &premiere) != nil {
 			return out, ErrUnavailable
 		}
+		v.Premiere, v.PremiereKnown = premiere.Bool, premiere.Valid
 		out.Videos[v.ID] = v
 		t, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
 		if v.IsUpcoming || !t.IsZero() && t.After(time.Now().Add(-24*time.Hour)) {
@@ -192,6 +194,18 @@ func writeYoutubeVideos(ctx context.Context, tx *sql.Tx, videos []ytsource.Video
 		if err != nil {
 			return false, ErrSourceWrite
 		}
+		// A check that cannot tell a premiere from a stream keeps the stored
+		// verdict, which a later check that can tell replaces.
+		var storedPremiere sql.NullBool
+		if err = tx.QueryRowContext(ctx, `SELECT is_premiere FROM videos WHERE id=?`, v.ID).Scan(&storedPremiere); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return false, ErrSourceWrite
+		}
+		var premiere any
+		if v.PremiereKnown {
+			premiere = v.Premiere
+		} else if storedPremiere.Valid {
+			v.Premiere = storedPremiere.Bool
+		}
 		// A detail check records the broadcast state the page reported, or
 		// clears it when the page names none, and answers an operator's
 		// refresh request.
@@ -202,7 +216,7 @@ func writeYoutubeVideos(ctx context.Context, tx *sql.Tx, videos []ytsource.Video
 		if v.DurationSeconds > 0 {
 			duration = v.DurationSeconds
 		}
-		written, err := tx.ExecContext(ctx, `INSERT INTO videos(id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,live_status,live_checked_at,duration_seconds,raw_json) VALUES(?,'youtube',?,?,?,?,?,?,?,?,?,?,'{}') ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=COALESCE(excluded.published_at,videos.published_at),scheduled_at=COALESCE(excluded.scheduled_at,videos.scheduled_at),url=excluded.url,thumbnail_url=excluded.thumbnail_url,kind=excluded.kind,is_upcoming=excluded.is_upcoming,live_status=excluded.live_status,live_checked_at=excluded.live_checked_at,duration_seconds=COALESCE(excluded.duration_seconds,videos.duration_seconds),refresh_requested_at=CASE WHEN excluded.live_checked_at IS NULL THEN videos.refresh_requested_at END WHERE ?=0`, v.ID, v.Title, nullable(v.PublishedAt), nullable(v.ScheduledAt), v.URL, nullable(v.ThumbnailURL), v.Kind, v.IsUpcoming, nullable(v.LiveStatus), checkedAt, duration, v.FeedOnly)
+		written, err := tx.ExecContext(ctx, `INSERT INTO videos(id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,live_status,live_checked_at,duration_seconds,is_premiere,raw_json) VALUES(?,'youtube',?,?,?,?,?,?,?,?,?,?,?,'{}') ON CONFLICT(id) DO UPDATE SET title=excluded.title,published_at=COALESCE(excluded.published_at,videos.published_at),scheduled_at=COALESCE(excluded.scheduled_at,videos.scheduled_at),url=excluded.url,thumbnail_url=excluded.thumbnail_url,kind=excluded.kind,is_upcoming=excluded.is_upcoming,live_status=excluded.live_status,live_checked_at=excluded.live_checked_at,duration_seconds=COALESCE(excluded.duration_seconds,videos.duration_seconds),is_premiere=COALESCE(excluded.is_premiere,videos.is_premiere),refresh_requested_at=CASE WHEN excluded.live_checked_at IS NULL THEN videos.refresh_requested_at END WHERE ?=0`, v.ID, v.Title, nullable(v.PublishedAt), nullable(v.ScheduledAt), v.URL, nullable(v.ThumbnailURL), v.Kind, v.IsUpcoming, nullable(v.LiveStatus), checkedAt, duration, premiere, v.FeedOnly)
 		if err != nil {
 			return false, ErrSourceWrite
 		}
@@ -222,7 +236,8 @@ func writeYoutubeVideos(ctx context.Context, tx *sql.Tx, videos []ytsource.Video
 			}
 		}
 		// A creator's new title or thumbnail keeps the replaced one as history.
-		if existed && (prior.Title != v.Title || prior.ThumbnailURL != v.ThumbnailURL) {
+		// Another size or host of the same image is not a replacement.
+		if existed && (prior.Title != v.Title || prior.ThumbnailURL != v.ThumbnailURL && !ytsource.SameImage(prior.ThumbnailURL, v.ThumbnailURL)) {
 			if err = recordVideoRevision(ctx, tx, v.ID, prior, revisionSync, now); err != nil {
 				return false, ErrSourceWrite
 			}

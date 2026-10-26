@@ -153,9 +153,8 @@ func utcTime(value string) string {
 //   - The API has no isLiveContent. An upcoming or live premiere already has
 //     its file's length, while a stream reports P0D, so the length tells them
 //     apart until the broadcast ends.
-//   - After that, only a stored detail check (a start time on the old row)
-//     tells: its kind stays a title kind for a premiere and a live kind for a
-//     stream.
+//   - After that, only the stored verdict of an earlier check tells. The
+//     kind cannot: a premiere keeps its title kind, which may be a live one.
 func fromAPI(item apiVideo, old Video) (Video, bool) {
 	v := Video{ID: item.ID, Title: strings.TrimSpace(item.Snippet.Title), URL: "https://www.youtube.com/watch?v=" + item.ID, PublishedAt: utcTime(item.Snippet.PublishedAt)}
 	if v.Title == "" {
@@ -164,7 +163,7 @@ func fromAPI(item apiVideo, old Video) (Video, bool) {
 	v.ThumbnailURL = item.Snippet.Thumbnails.best()
 	// The API names a thumbnail without the watch page's ?v= version, so the
 	// same image keeps its stored URL rather than reading as a replacement.
-	if sameImage(old.ThumbnailURL, v.ThumbnailURL) {
+	if SameImage(old.ThumbnailURL, v.ThumbnailURL) {
 		v.ThumbnailURL = old.ThumbnailURL
 	}
 	length := parseDuration(item.ContentDetails.Duration)
@@ -179,26 +178,43 @@ func fromAPI(item apiVideo, old Video) (Video, bool) {
 	v.EndedAt = utcTime(item.Live.ActualEnd)
 	switch {
 	case item.Snippet.Broadcast == "upcoming":
-		v.IsUpcoming, v.LiveStatus, v.Premiere = true, LiveStatusUpcoming, length > 0
+		v.IsUpcoming, v.LiveStatus = true, LiveStatusUpcoming
+		v.Premiere, v.PremiereKnown = length > 0, true
 		return v, v.ScheduledAt != ""
 	case item.Snippet.Broadcast == "live" && v.EndedAt == "":
-		v.LiveNow, v.LiveStatus, v.Premiere = true, LiveStatusLive, length > 0
+		v.LiveNow, v.LiveStatus = true, LiveStatusLive
+		v.Premiere, v.PremiereKnown = length > 0, true
 		return v, v.ScheduledAt != ""
 	case v.EndedAt != "":
 		v.LiveStatus = LiveStatusEnded
 	}
-	if old.ScheduledAt == "" {
+	if old.ScheduledAt == "" || !old.PremiereKnown {
 		return v, false
 	}
-	v.Premiere = old.Kind != "LIVE ARCHIVE" && old.Kind != "UPCOMING LIVE"
+	v.Premiere, v.PremiereKnown = old.Premiere, true
 	v.DurationSeconds = length
 	return v, true
 }
 
-// sameImage reports whether two thumbnail URLs name the same file on the
-// image CDN, whatever the numbered host or version query.
-func sameImage(a, b string) bool {
+var thumbnailPath = regexp.MustCompile(`^/vi(?:_webp)?/([A-Za-z0-9_-]{11})/(?:default|mqdefault|hqdefault|sddefault|maxresdefault)(_live)?\.(?:jpg|webp)$`)
+
+// SameImage reports whether two thumbnail URLs name the same image on the
+// image CDN, whatever the numbered host. The sizes and formats YouTube renders
+// of one video's thumbnail are one image, so the Data API's hqdefault and
+// the watch page's og:image agree; a live placeholder is another image. A
+// version query only tells images apart when both URLs carry one.
+func SameImage(a, b string) bool {
 	ua, errA := url.Parse(a)
 	ub, errB := url.Parse(b)
-	return errA == nil && errB == nil && a != "" && b != "" && ua.Path == ub.Path
+	if errA != nil || errB != nil || a == "" || b == "" {
+		return false
+	}
+	if va, vb := ua.Query().Get("v"), ub.Query().Get("v"); va != "" && vb != "" && va != vb {
+		return false
+	}
+	ma, mb := thumbnailPath.FindStringSubmatch(ua.Path), thumbnailPath.FindStringSubmatch(ub.Path)
+	if ma == nil || mb == nil {
+		return ua.Path == ub.Path
+	}
+	return ma[1] == mb[1] && ma[2] == mb[2]
 }

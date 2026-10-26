@@ -148,7 +148,7 @@ func TestRecentPrefersTheDataAPIForListingAndDetails(t *testing.T) {
 		Videos: map[string]Video{
 			// A stream a detail check already described, and an upload only the
 			// feed has named so far.
-			"EEEEEEEEEEE": {ID: "EEEEEEEEEEE", PublishedAt: "2026-01-01T00:00:00Z", ScheduledAt: "2026-01-02T09:00:00Z", Kind: "LIVE ARCHIVE", ThumbnailURL: "https://i.ytimg.com/vi/EEEEEEEEEEE/maxresdefault.jpg?v=abc"},
+			"EEEEEEEEEEE": {ID: "EEEEEEEEEEE", PublishedAt: "2026-01-01T00:00:00Z", ScheduledAt: "2026-01-02T09:00:00Z", Kind: "LIVE ARCHIVE", PremiereKnown: true, ThumbnailURL: "https://i.ytimg.com/vi/EEEEEEEEEEE/maxresdefault.jpg?v=abc"},
 			"NNNNNNNNNNN": {ID: "NNNNNNNNNNN", PublishedAt: "2026-01-02T03:20:58Z", Kind: "MUSIC"},
 		},
 		ActiveIDs:   []string{"EEEEEEEEEEE"},
@@ -197,6 +197,47 @@ func TestRecentPrefersTheDataAPIForListingAndDetails(t *testing.T) {
 	// The page decides: a premiere keeps the kind of its title, not a live kind.
 	if !checked.Premiere || checked.Kind != "VIDEO" || checked.EndedAt != "2026-01-02T09:06:55Z" || checked.PublishedAt != "2026-01-02T03:20:58Z" {
 		t.Fatalf("watch-checked premiere=%#v", checked)
+	}
+}
+
+func TestEndedBroadcastTakesItsPremiereVerdictFromTheStoredCheck(t *testing.T) {
+	items, err := ParseAPIVideos([]byte(apiItems(`{"id":"PPPPPPPPPPP","snippet":{"title":"初配信 premiere","liveBroadcastContent":"none"},"contentDetails":{"duration":"PT4M49S"},"liveStreamingDetails":{"scheduledStartTime":"2026-01-02T09:00:00Z","actualStartTime":"2026-01-02T09:00:09Z","actualEndTime":"2026-01-02T09:06:55Z"}}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := items["PPPPPPPPPPP"]
+	start := "2026-01-02T09:00:00Z"
+	// A premiere whose title reads as a stream keeps the stored verdict.
+	v, ok := fromAPI(item, Video{ScheduledAt: start, Kind: "LIVE ARCHIVE", Premiere: true, PremiereKnown: true})
+	if !ok || !v.Premiere || !v.PremiereKnown {
+		t.Fatalf("premiere=%#v ok=%v", v, ok)
+	}
+	if v, ok = fromAPI(item, Video{ScheduledAt: start, Kind: "MUSIC", PremiereKnown: true}); !ok || v.Premiere {
+		t.Fatalf("stream=%#v ok=%v", v, ok)
+	}
+	// A row stored before verdicts were kept, with a start time and a live
+	// kind, is left to its watch page.
+	if _, ok = fromAPI(item, Video{ScheduledAt: start, Kind: "LIVE ARCHIVE"}); ok {
+		t.Fatal("an unknown verdict was guessed from the kind")
+	}
+}
+
+func TestSameImageIgnoresSizesHostsAndMissingVersions(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		same bool
+	}{
+		{"https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg", "https://i.ytimg.com/vi/AAAAAAAAAAA/maxresdefault.jpg?v=abc", true},
+		{"https://i4.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg", "https://i.ytimg.com/vi_webp/AAAAAAAAAAA/sddefault.webp", true},
+		{"https://i.ytimg.com/vi/AAAAAAAAAAA/maxresdefault.jpg?v=abc", "https://i.ytimg.com/vi/AAAAAAAAAAA/maxresdefault.jpg?v=def", false},
+		{"https://i.ytimg.com/vi/AAAAAAAAAAA/maxresdefault_live.jpg", "https://i.ytimg.com/vi/AAAAAAAAAAA/maxresdefault.jpg", false},
+		{"https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg", "https://i.ytimg.com/vi/BBBBBBBBBBB/hqdefault.jpg", false},
+		{"https://i.ytimg.com/case/page.png", "https://i9.ytimg.com/case/page.png", true},
+		{"", "https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg", false},
+	} {
+		if SameImage(c.a, c.b) != c.same || SameImage(c.b, c.a) != c.same {
+			t.Errorf("SameImage(%q, %q) != %v", c.a, c.b, c.same)
+		}
 	}
 }
 

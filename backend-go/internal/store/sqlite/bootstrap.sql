@@ -382,7 +382,8 @@ CREATE TABLE videos (
     merge_reason TEXT,
     merged_at TEXT,
     is_short INTEGER,
-    manual_is_short INTEGER
+    manual_is_short INTEGER,
+    is_premiere INTEGER
   );
 
 CREATE TABLE workflows (

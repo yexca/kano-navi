@@ -325,10 +325,15 @@ follow the corrected title. A correction is not an event lock:
 reservation events keep their own provenance and manual edits.
 
 Nothing the platform replaces is discarded. A page read that reports a new
-title or thumbnail URL inserts the previous `title`, `thumbnail_url`, `kind`
+title or thumbnail image inserts the previous `title`, `thumbnail_url`, `kind`
 and the then-current thumbnail file (`thumbnail_media_id`,
 `thumbnail_sha256`) into `video_revisions` with `origin = sync` and
-`replaced_at`. A thumbnail revalidation that downloads new bytes for the same
+`replaced_at`. For YouTube, the sizes, formats and numbered hosts of one
+video's `*.ytimg.com` thumbnail are the same image (`ytsource.SameImage`),
+so the Data API's `hqdefault` and the watch page's `og:image` record no
+revision; a live placeholder (`*_live`) or a different `?v=` version on both
+URLs is a new image. History pages fill a missing thumbnail but never replace
+a stored one. A thumbnail revalidation that downloads new bytes for the same
 URL keeps the old file in `media_versions` and records a `media` revision for
 every linked video. `duration_seconds` and `refresh_requested_at` are
 described in [Sources](sources.md#follow-up-checks-and-refresh-requests).
@@ -342,6 +347,10 @@ other upload, `NULL` while unknown (see [Sources](sources.md#shorts)).
 `isShort = COALESCE(manual_is_short, is_short)` as `true`, `false` or `null`,
 and the board treats only `true` as a Short. Older rows stay unknown rather
 than being guessed from their length.
+`is_premiere` is the stored premiere verdict of a YouTube reservation: 1 for
+a premiere (a `release` event), 0 for live content, `NULL` while no check
+could tell, which includes every row stored before the column existed (see
+[Sources](sources.md#youtube)). It is never derived from the kind.
 Startup adds the columns, both tables and `video_revisions_video_idx` to
 existing snapshots without rewriting videos or media rows.
 

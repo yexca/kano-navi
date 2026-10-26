@@ -205,3 +205,42 @@ func TestPendingMediaPrefersNewestOwnerOverSameSyncTie(t *testing.T) {
 		}
 	}
 }
+
+func TestYoutubePremiereVerdictSurvivesChecksThatCannotTell(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	const channel = "UCAAAAAAAAAAAAAAAAAAAAAA"
+	// A premiere whose title reads as a stream.
+	premiere := ytsource.Video{ID: "EEEEEEEEEEE", Title: "初配信 premiere", PublishedAt: "2026-01-02T03:00:00Z", ScheduledAt: "2026-01-02T09:00:09Z", URL: "https://www.youtube.com/watch?v=EEEEEEEEEEE", Kind: "LIVE ARCHIVE", Premiere: true, PremiereKnown: true}
+	check := func(v ytsource.Video, wantType, wantFlag string) {
+		t.Helper()
+		if err := s.WriteYoutubeRecent(ctx, channel, ytsource.Result{Videos: []ytsource.Video{v}}); err != nil {
+			t.Fatal(err)
+		}
+		var eventType, flag string
+		if err := s.DB().QueryRow(`SELECT e.event_type,COALESCE(v.is_premiere,'unknown') FROM events e JOIN videos v ON v.id=e.source_item_id WHERE e.id='youtube-EEEEEEEEEEE'`).Scan(&eventType, &flag); err != nil {
+			t.Fatal(err)
+		}
+		if eventType != wantType || flag != wantFlag {
+			t.Fatalf("type=%s premiere=%s, want %s %s", eventType, flag, wantType, wantFlag)
+		}
+	}
+	check(premiere, "release", "1")
+	// A check that cannot tell keeps the event a release.
+	unknown := premiere
+	unknown.Premiere, unknown.PremiereKnown = false, false
+	check(unknown, "release", "1")
+	state, err := s.YoutubeRecentState(ctx, channel)
+	if v := state.Videos["EEEEEEEEEEE"]; err != nil || !v.Premiere || !v.PremiereKnown {
+		t.Fatalf("state=%#v err=%v", v, err)
+	}
+	// A check that can tell replaces the verdict.
+	stream := premiere
+	stream.Premiere = false
+	check(stream, "stream", "0")
+}

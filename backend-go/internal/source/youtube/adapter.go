@@ -313,6 +313,9 @@ func completeDetails(v, old Video, now time.Time) Video {
 	if v.ThumbnailURL == "" {
 		v.ThumbnailURL = old.ThumbnailURL
 	}
+	if !v.PremiereKnown && old.PremiereKnown {
+		v.Premiere = old.Premiere
+	}
 	if v.ThumbnailURL == "" {
 		v.ThumbnailURL = "https://i.ytimg.com/vi/" + v.ID + "/hqdefault.jpg"
 	}

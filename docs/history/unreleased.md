@@ -167,6 +167,13 @@
 - A YouTube run that fails still keeps its rotated detail queue, without
   touching cursors or snapshots, so a video whose check keeps failing no
   longer blocks the rest; a run listed by the uploads tab alone succeeds.
+- YouTube premieres keep their verdict in the new `videos.is_premiere`
+  column, so an ended premiere whose title reads as a stream is no longer
+  turned into a stream event by a Data API answer; rows stored before the
+  upgrade have their watch page read once instead.
+- Another size or host of the same YouTube thumbnail, such as the Data API's
+  `hqdefault` against the watch page's image, no longer records a video
+  revision, and history pages no longer replace a stored thumbnail.
 - Reading a Bilibili upload from the console no longer clears a captcha
   backoff that the `bilibili` step stored meanwhile.
 

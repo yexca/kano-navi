@@ -272,3 +272,45 @@ func TestStandaloneRebuildsLegacyEventsKeepingEveryRow(t *testing.T) {
 		t.Fatalf("second start rows=%s", got)
 	}
 }
+
+func TestTheSameThumbnailInAnotherFormIsNotARevision(t *testing.T) {
+	s, query := openHistoryStore(t)
+	ctx := context.Background()
+	const channel = "UCAAAAAAAAAAAAAAAAAAAAAA"
+	watched := "https://i.ytimg.com/vi/AAAAAAAAAAA/maxresdefault.jpg?v=abc"
+	write := func(thumbnail string) {
+		t.Helper()
+		if err := s.WriteYoutubeRecent(ctx, channel, ytsource.Result{Videos: []ytsource.Video{checkedVideo("AAAAAAAAAAA", "title", thumbnail)}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(watched)
+	// A history page names the Data API's form of the same image; the stored
+	// thumbnail and its media link stay.
+	page := history.Page{
+		Source: history.SourceYoutube, Account: channel, CheckpointKey: "channel:checkpoint",
+		Window: history.Window{Mode: history.ModeBefore, Days: 30, StartTime: "2026-01-01T00:00:00.000Z", EndTime: "2026-01-31T00:00:00.000Z"},
+		Videos: []ytsource.Video{{ID: "AAAAAAAAAAA", Title: "title", PublishedAt: "2026-01-02T09:00:00Z", URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", ThumbnailURL: "https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg", Kind: "MUSIC"}},
+	}
+	if _, err := s.WriteHistoryPage(ctx, page); err != nil {
+		t.Fatal(err)
+	}
+	linked := `SELECT a.source_url FROM media_links ml JOIN media_assets a ON a.id=ml.media_id WHERE ml.owner_type='video' AND ml.owner_id='AAAAAAAAAAA' AND ml.role='thumbnail'`
+	if got := query(`SELECT thumbnail_url FROM videos WHERE id='AAAAAAAAAAA'`); got != watched || query(linked) != watched {
+		t.Fatalf("thumbnail=%s linked=%s", got, query(linked))
+	}
+	// A row an earlier history page left in the API's form is not replaced
+	// by the watch page's form of that image either.
+	if _, err := s.db.Exec(`UPDATE videos SET thumbnail_url='https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg' WHERE id='AAAAAAAAAAA'`); err != nil {
+		t.Fatal(err)
+	}
+	write(watched)
+	if got := query(`SELECT COUNT(*) FROM video_revisions WHERE video_id='AAAAAAAAAAA'`); got != "0" {
+		t.Fatalf("revisions=%s", got)
+	}
+	// A new version of the image is a replacement.
+	write("https://i.ytimg.com/vi/AAAAAAAAAAA/maxresdefault.jpg?v=def")
+	if got := query(`SELECT COUNT(*)||'/'||MAX(thumbnail_url) FROM video_revisions WHERE video_id='AAAAAAAAAAA'`); got != "1/"+watched {
+		t.Fatalf("revisions=%s", got)
+	}
+}
