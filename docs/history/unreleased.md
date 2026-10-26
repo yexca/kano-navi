@@ -184,6 +184,8 @@
 <details>
 <summary><strong>Public pages</strong></summary>
 
+- A visitor whose clock runs up to five minutes behind the server sees the
+  latest X and YouTube read times instead of "waiting".
 - The week guide, month schedule and open video archive refresh expired live
   states alongside the board's minute or manual snapshot refresh, even when
   no stored record changed, while keeping all loaded pages together.

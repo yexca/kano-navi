@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import type { Dashboard } from "../src/types.ts"
 import {
+  CLOCK_SKEW_MS,
   freshnessAt,
   STALE_AFTER_MS,
   syncStateFor,
@@ -95,6 +96,30 @@ test("missing, invalid and future timestamps never look healthy", () => {
   assert.equal(
     syncStateFor(meta({ fetchedAt: null }), null, now, t).label,
     "sync.waiting",
+  )
+})
+
+test("a visitor clock slightly behind the server still shows fresh reads", () => {
+  const ahead = new Date(now + 2 * 60 * 1000).toISOString()
+  assert.equal(freshnessAt(ahead, now), "fresh")
+  assert.equal(
+    freshnessAt(new Date(now + CLOCK_SKEW_MS).toISOString(), now),
+    "fresh",
+  )
+  assert.equal(
+    freshnessAt(new Date(now + CLOCK_SKEW_MS + 1).toISOString(), now),
+    "waiting",
+  )
+  const skewed = syncStateFor(
+    meta({ fetchedAt: ahead, sourceFetchedAt: { x: ahead, youtube: ahead } }),
+    null,
+    now,
+    t,
+  )
+  assert.equal(skewed.label, "sync.snapshot")
+  assert.deepEqual(
+    skewed.sources.map(({ timestamp }) => timestamp),
+    [ahead, ahead],
   )
 })
 

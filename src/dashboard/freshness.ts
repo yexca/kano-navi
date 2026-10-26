@@ -2,6 +2,9 @@ import type { Dashboard, Translator } from "../types.ts"
 
 // A local warning threshold, independent of the server's synchronization timer.
 export const STALE_AFTER_MS = 24 * 60 * 60 * 1000
+// A visitor clock a little behind the server still shows a fresh read; a
+// timestamp further ahead is not trusted.
+export const CLOCK_SKEW_MS = 5 * 60 * 1000
 
 type Freshness = "fresh" | "stale" | "waiting"
 
@@ -20,7 +23,7 @@ export function freshnessAt(
   now: number,
 ): Freshness {
   const at = Date.parse(timestamp || "")
-  if (!Number.isFinite(at) || at > now) return "waiting"
+  if (!Number.isFinite(at) || at > now + CLOCK_SKEW_MS) return "waiting"
   return now - at >= STALE_AFTER_MS ? "stale" : "fresh"
 }
 

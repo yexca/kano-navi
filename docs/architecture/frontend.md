@@ -122,10 +122,12 @@ The separate 30-second local time derivation remains unchanged.
 
 The profile card shows separate X and YouTube successful-read times from
 `meta.sourceFetchedAt`. A source becomes stale after 24 hours; the local clock
-updates that warning without a request. Missing or future timestamps remain
-waiting, one unread source makes a known snapshot partial, and API or failed-run
-warnings take priority. Older payloads without per-source metadata fall back
-to `meta.fetchedAt`. This is a display threshold, not a synchronization timer.
+updates that warning without a request. Missing timestamps, and ones more
+than five minutes ahead of the local clock (a visitor clock slightly behind
+the server still shows a fresh read), remain waiting. One unread source makes
+a known snapshot partial, and API or failed-run warnings take priority. Older
+payloads without per-source metadata fall back to `meta.fetchedAt`. This is a
+display threshold, not a synchronization timer.
 
 The board rederives event/video availability, counts, and focus candidates from
 its local snapshot every 30 seconds and when the page regains visibility/focus,
