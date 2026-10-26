@@ -77,6 +77,23 @@
   scroll-margin-top: 72px;
 }
 
+/*
+ * A card whose title is its link: followCardLink opens it from anywhere on
+ * the card, and the card shows the title link's keyboard focus.
+ */
+.link-card {
+  cursor: pointer;
+}
+
+.link-card:has(.card-link:focus-visible) {
+  outline: 2px solid var(--berry);
+  outline-offset: 2px;
+}
+
+.card-link:focus-visible {
+  outline: none;
+}
+
 .ticket {
   display: grid;
   overflow: hidden;
@@ -89,7 +106,7 @@
     box-shadow 200ms ease;
 }
 
-a.ticket:hover {
+.ticket.link-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
 }
@@ -126,7 +143,7 @@ a.ticket:hover {
   transition: transform 400ms ease;
 }
 
-a.ticket:hover .ticket-art img {
+.ticket.link-card:hover .ticket-art img {
   transform: scale(1.025);
 }
 
@@ -357,7 +374,7 @@ a.ticket:hover .ticket-art img {
   height: 14px;
 }
 
-a.ticket:hover .ticket-open {
+.ticket.link-card:hover .ticket-open {
   color: var(--berry);
 }
 
@@ -461,7 +478,7 @@ a.ticket:hover .ticket-open {
   height: 13px;
 }
 
-a.ticket:hover .ticket-link {
+.ticket.link-card:hover .ticket-link {
   border-color: var(--berry);
   color: var(--berry);
 }
@@ -481,7 +498,7 @@ a.ticket:hover .ticket-link {
     box-shadow 200ms ease;
 }
 
-a.latest-card:hover {
+.latest-card.link-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
 }
@@ -548,7 +565,7 @@ a.latest-card:hover {
   color: var(--soft);
 }
 
-a.latest-card:hover .latest-card-open {
+.latest-card.link-card:hover .latest-card-open {
   color: var(--berry);
 }
 
@@ -942,7 +959,7 @@ a.latest-card:hover .latest-card-open {
   transition: transform 160ms ease;
 }
 
-a.guide-event:hover {
+.guide-event.link-card:hover {
   transform: translateY(-1px);
 }
 
@@ -1619,7 +1636,7 @@ a.month-event:hover {
   transition: transform 300ms ease;
 }
 
-a:hover .video-thumb img {
+:is(a, .link-card):hover .video-thumb img {
   transform: scale(1.04);
 }
 
@@ -2010,26 +2027,22 @@ a:hover .video-thumb img {
   color: var(--berry);
 }
 
-/* A translated title clamps its wording so the AI or platform mark stays in view. */
-:is(.video-card-title, .video-ticket-title, .video-row-title):has(
-  > .translation-mark
-) {
+/*
+ * A translated title clamps its wording to the title's own line count, so
+ * the translation switch after it stays in view.
+ */
+.translated-title {
   display: flex;
   align-items: flex-end;
+  gap: 6px;
 }
 
-:is(.video-card-title, .video-ticket-title, .video-row-title) > [lang] {
+.translated-title > .translated-title-text {
   display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-:is(.video-card-title, .video-ticket-title, .video-row-title)
-  > .translation-mark {
-  flex: none;
-  margin-bottom: 3px;
+  -webkit-line-clamp: inherit;
 }
 
 .videos-more {
@@ -2269,24 +2282,60 @@ a:hover .video-thumb img {
   outline-offset: 2px;
 }
 
+/* The translation switch after a card title: AI translation or Original. */
 .translation-mark {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  margin-left: 6px;
-  padding: 0 5px;
+  gap: 3px;
+  margin-bottom: 2px;
+  padding: 0 7px 0 5px;
   border: 1px solid var(--rule);
   border-radius: 999px;
+  background: var(--paper);
   color: var(--soft);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  line-height: 16px;
-  vertical-align: 2px;
+  font: 700 10.5px / 17px var(--font-body);
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.translation-mark:hover {
+  border-color: color-mix(in oklab, var(--berry) 45%, transparent);
+  color: var(--berry);
+}
+
+.translation-mark:focus-visible {
+  outline: 2px solid var(--berry);
+  outline-offset: 2px;
+}
+
+.translation-mark.is-original {
+  border-color: color-mix(in oklab, var(--berry) 45%, transparent);
+  background: var(--berry-wash);
+  color: var(--berry);
 }
 
 .translation-mark svg {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
+}
+
+/* A spotlight ticket title is not clamped, so the switch follows its last word. */
+.ticket-title.translated-title {
+  display: block;
+}
+
+.ticket-title > .translated-title-text {
+  display: inline;
+}
+
+.ticket-title .translation-mark {
+  margin: 0 0 0 8px;
+  vertical-align: middle;
 }
 
 .post-note-media {

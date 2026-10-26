@@ -172,9 +172,11 @@
 - English and Chinese readers see X posts and video titles in their
   language when a translation exists. An AI translation is labelled as one,
   and a post's or the featured video's Show original button switches back
-  to the source wording; spotlight tickets and video rows mark a translated
-  title and show the original on hover.
-  Japanese readers always see the source.
+  to the source wording. Spotlight tickets, video cards and rows, and
+  week-guide entries end a translated title with an "AI translation" (or
+  "Translated") switch that shows that title's original and previews it on
+  hover; the title is the card's link, and the rest of the card still opens
+  it. Japanese readers always see the source.
 - In English and Japanese, the schedule no longer shows Chinese reservation
   text such as `YouTube Live / 预约`.
 - A YouTube schedule entry that still carries its video's title shows that

@@ -18,7 +18,7 @@ import {
 } from "lucide-react"
 
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
-import { ExternalLink } from "@/site/links"
+import { ExternalLink, followCardLink } from "@/site/links"
 import { eventDetailText } from "@/lib/event-text"
 import { pickTranslation } from "@/components/translated-text"
 import {
@@ -98,7 +98,6 @@ function GuideEvent({
   const tone = typeTones[String(event.eventType || "").toLowerCase()] || "sky"
   const time = event.startsAt ? formatJapanTime(event.startsAt) : null
   const manual = eventIsManual(event)
-  const Wrapper = event.url ? ExternalLink : "div"
   const cancellationNote =
     event.cancellationStatus === "llm_suspected"
       ? [
@@ -115,9 +114,9 @@ function GuideEvent({
 
   return (
     <li>
-      <Wrapper
-        className={`guide-event tone-${tone} is-${status}`}
-        href={event.url || undefined}
+      <div
+        className={`guide-event tone-${tone} is-${status}${event.url ? " link-card" : ""}`}
+        onClick={event.url ? followCardLink : undefined}
       >
         <span className="guide-event-time">
           {time ? (
@@ -134,6 +133,7 @@ function GuideEvent({
           className="guide-event-title"
           title={cleanVideoTitle(event.title)}
           translations={event.translations}
+          href={event.url}
           locale={locale}
           t={t}
         />
@@ -169,7 +169,7 @@ function GuideEvent({
             {cancellationNote.filter(Boolean).join(" · ")}
           </span>
         ) : null}
-      </Wrapper>
+      </div>
     </li>
   )
 }

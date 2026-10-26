@@ -83,16 +83,19 @@ Post text and video titles come with server-resolved `translations` (see
 chooses what a reader sees: English and Chinese readers get their locale's
 translation by default and Japanese readers always get the source. Block
 text such as a post uses `TranslatedText`, which labels the origin (AI,
-platform or editor) and offers a Show original button; a title inside a
-link, where a button cannot go, uses `TranslationMark`, whose tooltip holds
-the source. Video and schedule titles go through
-`src/dashboard/components/translated-title.tsx`: `TranslatedTitle` for a
-title inside a link (spotlight tickets, shelf tickets, cards and rows,
-archive rows, week-guide entries) and `TranslatedHeading`, with the button,
-for the shelf's lead card. A clamped shelf title clamps only its wording, so
-the mark stays visible.
-Month-grid chips are too small for a mark and show the reader's wording
-unmarked; the week guide marks it and holds the source. An operator's
+platform or editor) and offers a Show original button. A card title uses
+`TranslationToggle`, a compact switch that reads "AI translation" (or
+"Translated" for a platform's or editor's wording) and swaps in the source;
+its tooltip names the origin and holds the source. Video and schedule titles
+go through `src/dashboard/components/translated-title.tsx`: `TranslatedTitle`
+for a card title (spotlight tickets, shelf tickets, cards and rows, archive
+rows, week-guide entries) and `TranslatedHeading`, with the full note, for
+the shelf's lead card. A button cannot go inside a link, so these cards are
+not links themselves: the title is the link (`.card-link`), and
+`followCardLink` in `src/site/links.tsx` opens it from anywhere else on the
+card. A clamped title clamps only its wording, so the switch stays visible.
+Month-grid chips are too small for a switch and show the reader's wording
+unmarked. An operator's
 Featured title from the focus record shows as written. The wording shown
 carries its `lang` attribute. The console's
 completeness chips and translation editor are in

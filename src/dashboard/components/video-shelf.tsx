@@ -16,7 +16,12 @@ import {
 import { useState, type ReactNode } from "react"
 
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
-import { BilibiliLogo, ExternalLink, YouTubeLogo } from "@/site/links"
+import {
+  BilibiliLogo,
+  ExternalLink,
+  followCardLink,
+  YouTubeLogo,
+} from "@/site/links"
 import {
   cleanVideoTitle,
   formatDuration,
@@ -305,7 +310,10 @@ function VideoTicket({
   const parts = japanDateParts(time, locale)
   return (
     <li>
-      <ExternalLink className={`video-ticket is-${phase}`} href={video.url}>
+      <div
+        className={`video-ticket link-card is-${phase}`}
+        onClick={followCardLink}
+      >
         <span className="video-ticket-date" aria-hidden="true">
           {parts ? (
             <>
@@ -334,11 +342,12 @@ function VideoTicket({
             className="video-ticket-title"
             title={cleanVideoTitle(video.title)}
             translations={video.translations}
+            href={video.url}
             locale={locale}
             t={t}
           />
         </span>
-      </ExternalLink>
+      </div>
     </li>
   )
 }
@@ -358,16 +367,17 @@ function VideoCard({
   const title = cleanVideoTitle(video.title)
   return (
     <li className="video-card">
-      <ExternalLink className="video-card-link" href={video.url}>
+      <div className="video-card-link link-card" onClick={followCardLink}>
         <Thumb url={video.thumbnailUrl} seconds={video.durationSeconds} t={t} />
         <TranslatedTitle
           className="video-card-title"
           title={title}
           translations={video.translations}
+          href={video.url}
           locale={locale}
           t={t}
         />
-      </ExternalLink>
+      </div>
       <p className="video-meta">
         <JapanDate video={video} locale={locale} t={t} />
         {showKind ? (
@@ -426,9 +436,9 @@ function VideoRow({
 }) {
   return (
     <li>
-      <ExternalLink
-        className={`video-row${video.isUpcoming ? " is-upcoming" : ""}`}
-        href={video.url}
+      <div
+        className={`video-row link-card${video.isUpcoming ? " is-upcoming" : ""}`}
+        onClick={followCardLink}
       >
         <Thumb
           url={video.thumbnailUrl}
@@ -456,11 +466,12 @@ function VideoRow({
             className="video-row-title"
             title={cleanVideoTitle(video.title)}
             translations={video.translations}
+            href={video.url}
             locale={locale}
             t={t}
           />
         </span>
-      </ExternalLink>
+      </div>
     </li>
   )
 }

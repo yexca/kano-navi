@@ -8,7 +8,7 @@ import {
   Sparkles,
 } from "lucide-react"
 
-import { ExternalLink, XLogo, YouTubeLogo } from "@/site/links"
+import { ExternalLink, followCardLink, XLogo, YouTubeLogo } from "@/site/links"
 import { eventDetailText } from "@/lib/event-text"
 import {
   confirmedLiveStatus,
@@ -189,11 +189,10 @@ function FullTicket({
   now: number
   t: Translator
 }) {
-  const Wrapper = item.url ? ExternalLink : "div"
   return (
-    <Wrapper
-      className={`ticket is-${isLive ? "live" : item.mode}${item.thumbnailUrl ? " has-art" : ""}`}
-      href={item.url || undefined}
+    <div
+      className={`ticket is-${isLive ? "live" : item.mode}${item.thumbnailUrl ? " has-art" : ""}${item.url ? " link-card" : ""}`}
+      onClick={item.url ? followCardLink : undefined}
     >
       <span className="ticket-art" aria-hidden="true">
         {item.thumbnailUrl ? (
@@ -218,6 +217,7 @@ function FullTicket({
               className="ticket-title"
               title={item.title}
               translations={(item.video || item.event)?.translations}
+              href={item.url}
               locale={locale}
               t={t}
             />
@@ -237,7 +237,7 @@ function FullTicket({
           </span>
         ) : null}
       </span>
-    </Wrapper>
+    </div>
   )
 }
 
@@ -255,11 +255,10 @@ function CompactTicket({
   now: number
   t: Translator
 }) {
-  const Wrapper = item.url ? ExternalLink : "div"
   return (
-    <Wrapper
-      className={`ticket is-compact is-${isLive ? "live" : item.mode}`}
-      href={item.url || undefined}
+    <div
+      className={`ticket is-compact is-${isLive ? "live" : item.mode}${item.url ? " link-card" : ""}`}
+      onClick={item.url ? followCardLink : undefined}
     >
       <span className="ticket-side">
         <DateBlock item={item} locale={locale} />
@@ -271,6 +270,7 @@ function CompactTicket({
             className="ticket-title"
             title={item.title}
             translations={(item.video || item.event)?.translations}
+            href={item.url}
             locale={locale}
             t={t}
           />
@@ -300,7 +300,7 @@ function CompactTicket({
           </span>
         ) : null}
       </span>
-    </Wrapper>
+    </div>
   )
 }
 
@@ -317,7 +317,7 @@ function LatestCard({
   t: Translator
 }) {
   return (
-    <ExternalLink className="latest-card" href={companion.url}>
+    <div className="latest-card link-card" onClick={followCardLink}>
       <span className="latest-card-art" aria-hidden="true">
         {companion.thumbnailUrl ? (
           <img src={companion.thumbnailUrl} alt="" loading="lazy" />
@@ -337,6 +337,7 @@ function LatestCard({
           className="latest-card-title"
           title={companion.title}
           translations={companion.video.translations}
+          href={companion.url}
           locale={locale}
           t={t}
         />
@@ -345,7 +346,7 @@ function LatestCard({
         ) : null}
       </span>
       <ArrowUpRight className="latest-card-open" aria-hidden="true" />
-    </ExternalLink>
+    </div>
   )
 }
 

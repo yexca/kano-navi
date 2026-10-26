@@ -1,38 +1,55 @@
 import type { Locale, Translations, Translator, Video } from "@/types"
 
 import {
-  pickTranslation,
-  TranslationMark,
   TranslationNote,
+  TranslationToggle,
   useTranslatedText,
 } from "@/components/translated-text"
+import { ExternalLink } from "@/site/links"
+import { cn } from "@/lib/utils"
 import { cleanVideoTitle } from "../format"
 
 /**
- * A video or schedule title inside a link (a ticket, a row): the reader's
- * translation, marked as one. A button cannot go inside a link, so the source
- * wording sits in the mark's tooltip. `title` is the source title as the
- * card shows it; `translations` are its video's or event's.
+ * A video or schedule title on a card (a ticket, a row): the reader's
+ * translation, followed by a switch to the source wording. The title is the
+ * card's link (see `followCardLink`), because the switch cannot go inside
+ * one. `title` is the source title as the card shows it; `translations` are
+ * its video's or event's.
  */
 export function TranslatedTitle({
   className,
   title,
   translations,
+  href,
   locale,
   t,
 }: {
   className: string
   title: string
   translations?: Translations | null
+  href?: string | null
   locale: Locale
   t: Translator
 }) {
-  const translation = pickTranslation(translations, locale)
-  if (!translation) return <span className={className}>{title}</span>
+  const state = useTranslatedText(title, translations, null, locale)
+  const text = state.shown ? cleanVideoTitle(state.text) : title
+  const wording = href ? (
+    <ExternalLink
+      className="card-link translated-title-text"
+      href={href}
+      lang={state.lang}
+    >
+      {text}
+    </ExternalLink>
+  ) : (
+    <span className="translated-title-text" lang={state.lang}>
+      {text}
+    </span>
+  )
   return (
-    <span className={className}>
-      <span lang={locale}>{cleanVideoTitle(translation.text)}</span>
-      <TranslationMark translation={translation} original={title} t={t} />
+    <span className={cn(className, state.available && "translated-title")}>
+      {wording}
+      <TranslationToggle state={state} original={title} t={t} />
     </span>
   )
 }

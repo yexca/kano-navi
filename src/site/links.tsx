@@ -1,4 +1,15 @@
-import type { ComponentProps, SVGProps } from "react"
+import type { ComponentProps, MouseEvent, SVGProps } from "react"
+
+/**
+ * Lets a whole card follow the link on its title (`.card-link`), so the card
+ * can still hold buttons such as a translation switch. Clicks on its own
+ * links and buttons, and text selections, are left alone.
+ */
+export function followCardLink(event: MouseEvent<HTMLElement>) {
+  const target = event.target as Element
+  if (target.closest("a, button") || window.getSelection()?.toString()) return
+  event.currentTarget.querySelector<HTMLAnchorElement>("a.card-link")?.click()
+}
 
 /** Original platform pages always open in a new tab without a referrer. */
 export function ExternalLink({ children, ...props }: ComponentProps<"a">) {

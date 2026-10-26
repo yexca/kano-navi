@@ -137,30 +137,46 @@ export function TranslatedText({
 }
 
 /**
- * A compact marker after translated wording inside a link, where a button
- * cannot go. Its tooltip and accessible name carry the source wording.
+ * A compact switch after a translated title: it names the translation (AI
+ * translation, or Translated for an editor's or a platform's) and swaps in
+ * the source wording. Its tooltip previews the source wording.
  */
-export function TranslationMark({
-  translation,
+export function TranslationToggle({
+  state,
   original,
   t,
 }: {
-  translation: Translation
+  state: TranslatedTextState
   original: string
   t: Translator
 }) {
-  const label = `${translationOriginLabel(translation, t)} · ${t(
-    "translation.originalIs",
-    { text: original },
-  )}`
+  const { available, shown } = state
+  if (!available) return null
+  const label = shown
+    ? t(
+        shown.origin === "machine"
+          ? "translation.machine"
+          : "translation.translated",
+      )
+    : t("translation.original")
+  const action = shown
+    ? t("translation.showOriginal")
+    : t("translation.showTranslation")
+  const hint = shown
+    ? `${translationOriginLabel(shown, t)} · ${t("translation.originalIs", {
+        text: original,
+      })}`
+    : action
   return (
-    <span className="translation-mark" title={label}>
-      {translation.origin === "machine" ? (
-        <span aria-hidden="true">AI</span>
-      ) : (
-        <Languages aria-hidden="true" />
-      )}
-      <span className="sr-only">{label}</span>
-    </span>
+    <button
+      type="button"
+      className={cn("translation-mark", !shown && "is-original")}
+      title={hint}
+      aria-label={`${label}: ${action}`}
+      onClick={state.toggle}
+    >
+      <Languages aria-hidden="true" />
+      {label}
+    </button>
   )
 }
