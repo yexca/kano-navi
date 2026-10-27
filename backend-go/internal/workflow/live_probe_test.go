@@ -121,6 +121,60 @@ func TestLiveProbeFollowsTheStartThroughTheQueue(t *testing.T) {
 	}
 }
 
+func TestLiveProbeAsksTheDataAPIWhenAKeyIsSet(t *testing.T) {
+	s, err := sqlite.OpenInitialized(filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite"), true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	// A reservation only the feed has named, and a stream a detail check
+	// already called a stream while it was on air.
+	reservation := ytsource.Video{ID: "AAAAAAAAAAA", Title: "synthetic stream", PublishedAt: now.Add(-24 * time.Hour).Format(time.RFC3339), ScheduledAt: now.Add(-time.Minute).Format(time.RFC3339), URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", Kind: "UPCOMING LIVE", IsUpcoming: true, FeedOnly: true}
+	stream := ytsource.Video{ID: "EEEEEEEEEEE", Title: "synthetic stream", PublishedAt: now.Add(-24 * time.Hour).Format(time.RFC3339), ScheduledAt: now.Add(-2 * time.Hour).Format(time.RFC3339), URL: "https://www.youtube.com/watch?v=EEEEEEEEEEE", Kind: "LIVE ARCHIVE", LiveNow: true, LiveStatus: ytsource.LiveStatusLive, PremiereKnown: true}
+	if err = s.WriteYoutubeRecent(ctx, "UCAAAAAAAAAAAAAAAAAAAAAA", ytsource.Result{Videos: []ytsource.Video{reservation, stream}, NextCursor: "AAAAAAAAAAA", NextCursorTime: reservation.PublishedAt}); err != nil {
+		t.Fatal(err)
+	}
+	clock := now.Add(16 * time.Minute)
+	end := now.Add(10 * time.Minute).Format(time.RFC3339)
+	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "www.googleapis.com" || r.URL.Path != "/youtube/v3/videos" || r.Header.Get("X-Goog-Api-Key") != "synthetic-api-key" || strings.Contains(r.URL.String(), "synthetic-api-key") {
+			t.Fatalf("probe requested %s%s", r.URL.Host, r.URL.Path)
+		}
+		body := `{"items":[{"id":"AAAAAAAAAAA","snippet":{"title":"synthetic stream","liveBroadcastContent":"live"},"contentDetails":{"duration":"P0D"},"liveStreamingDetails":{"actualStartTime":"` + reservation.ScheduledAt + `"}},` +
+			`{"id":"EEEEEEEEEEE","snippet":{"title":"synthetic stream","liveBroadcastContent":"none"},"contentDetails":{"duration":"PT2H10M"},"liveStreamingDetails":{"actualStartTime":"` + stream.ScheduledAt + `","actualEndTime":"` + end + `"}}]}`
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
+	yt := ytsource.NewAdapter(ytsource.NewClient(&http.Client{Transport: rt}), ytsource.Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 1, APIKey: "synthetic-api-key"})
+	yt.Now = func() time.Time { return clock }
+	steps := &SourceSteps{Store: s, Youtube: yt}
+	got, err := steps.youtubeLive(ctx)
+	if err != nil || got.Status != "succeeded" {
+		t.Fatalf("result=%#v err=%v", got, err)
+	}
+	// The stored stream verdict settles the ended broadcast without its page.
+	if got.Result["apiRequests"] != 1 || got.Result["requested"] != 0 || got.Result["inspected"] != 2 || got.Result["live"] != 1 || got.Result["changed"] != true {
+		t.Fatalf("counts=%v", got.Result)
+	}
+	// The ended stream leaves the plan; the live one stays, in its live phase,
+	// with the API's start and the stream verdict.
+	targets, err := s.LiveProbeTargets(ctx, clock, sqlite.LiveProbeSettings{Enabled: true, IntervalMinutes: 15})
+	if err != nil || len(targets) != 1 || targets[0].Video.ID != "AAAAAAAAAAA" || targets[0].Phase != sqlite.LivePhaseLive || !targets[0].Video.PremiereKnown || targets[0].Video.Premiere {
+		t.Fatalf("targets=%#v err=%v", targets, err)
+	}
+	dashboard, err := s.GetDashboard(ctx, 3, clock)
+	if err != nil || len(dashboard.Events) != 2 {
+		t.Fatalf("events=%#v err=%v", dashboard.Events, err)
+	}
+	// The live event has no end; the ended one has the API's.
+	for _, e := range dashboard.Events {
+		if e.LiveStatus == nil || e.EndsAt == nil != (*e.LiveStatus == ytsource.LiveStatusLive) {
+			t.Fatalf("event=%#v", e)
+		}
+	}
+}
+
 // Status is read by console requests while the process starts and stops the
 // probe; run with -race.
 func TestLiveProbeStatusIsSafeDuringStartAndStop(t *testing.T) {

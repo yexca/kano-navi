@@ -114,7 +114,8 @@ func TestProbeRequestsOnlyBoundedWatchPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(requested, ",") != strings.Join(ids[:MaxLiveProbes], ",") || result.Requested != MaxLiveProbes || result.Inspected != 3 {
+	// Without a key the probe reads only watch pages.
+	if strings.Join(requested, ",") != strings.Join(ids[:MaxLiveProbes], ",") || result.Requested != MaxLiveProbes || result.Inspected != 3 || result.APIRequests != 0 {
 		t.Fatalf("requested=%v result=%#v", requested, result)
 	}
 	if strings.Join(result.Errors, ",") != "youtube_upstream_5xx,youtube_watch_details_incomplete" {

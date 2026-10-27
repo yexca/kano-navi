@@ -256,7 +256,9 @@ page adds one. The key is sent only in the `X-Goog-Api-Key` header to
 (`youtube_api_forbidden` for a refused key or quota, `youtube_api_rate_limited`,
 `youtube_api_http_error`, `youtube_api_invalid_response`, and so on) and fall
 back to the public pages; `apiRequests` in the step result counts the calls.
-The live-status probe keeps reading watch pages only.
+The [live-status probe](#live-status-probe) asks the same `videos.list`
+first, one call and one quota unit per probe run, under the same
+classification rules.
 
 Video thumbnails are registered and linked to their rows, then the bounded media
 stage downloads pending files from YouTube's `*.ytimg.com` thumbnail CDN
@@ -320,9 +322,10 @@ writes; see [Video corrections](data-model.md#video-corrections-and-history).
 #### Live-status probe
 
 Whether a stream is on air is read from YouTube rather than guessed from its
-start time. A separate probe step (`live`) requests **only watch pages**, no
-feed and no streams page, for at most five (`ytsource.MaxLiveProbes`) stored
-videos per run:
+start time. A separate probe step (`live`) asks only about the videos it
+checks, through the Data API when `YOUTUBE_API_KEY` is set and otherwise
+their watch pages, with no feed, playlist or streams page, for at most five
+(`ytsource.MaxLiveProbes`) stored videos per run:
 
 - reservations whose scheduled start is within the next 15 minutes or has
   passed;
@@ -347,16 +350,40 @@ ended) and `LiveStatus`: `upcoming`, `live`, `ended` (an end time, or
 names none. A live or ended broadcast's `startTimestamp` is its actual start
 and replaces the reservation time.
 
+With a key, one `videos.list` call (`snippet`, `contentDetails`,
+`liveStreamingDetails`) asks about all of a run's due videos before any
+watch page, and is read as in the [Data API](#data-api) detail check.
+`liveBroadcastContent` `upcoming` with a `scheduledStartTime` is `upcoming`;
+`live` without an `actualEndTime` is `live` and sets `LiveNow`; an
+`actualEndTime` is `ended` and writes the event's `ends_at`. The
+`actualStartTime`, when present, is the actual start and replaces the
+reservation time, as `startTimestamp` does. The length tells an upcoming or
+live premiere from a stream, and an ended broadcast takes the stored
+`is_premiere` verdict, which the probe loads with its targets. A video's
+watch page is still read when the call fails (its code is recorded and
+every video falls back), when the answer leaves the video out, when it
+names no broadcast state, or when it cannot classify the video, such as an
+ended broadcast without a stored verdict or an upcoming one without a
+start. If that page fails too, an ended broadcast with an API start is
+written unclassified, as in the recent step. `apiRequests` in the run
+result counts the call; `requested` counts watch pages. Each run costs one
+quota unit whatever the number of due videos, and nothing while nothing is
+due; the probe's worst case of 30 runs an hour is 720 units a day, and
+together with a regular YouTube step every 15 minutes (two units per run)
+stays under a tenth of the default 10,000. Without a key the probe reads
+watch pages only, as before.
+
 The store writes `videos.live_status` and `live_checked_at`, the actual start,
 `is_upcoming`, `ends_at` once reported and the status text through the same
 upsert as the regular step. It never adds a video, never moves the feed cursor
 or detail queue, keeps manual locks and tombstones, and increments
-`dashboard_revision` only when a public video or event field changed. In the
-same transaction it records when each page was requested in the
-`youtube-live` `sync_state` row. A failed or incomplete page keeps its
+`dashboard_revision` only when a public video or event field changed. A Data
+API answer goes through the same upsert. In the same transaction it records
+when each video was asked about, by the API or its page, in the
+`youtube-live` `sync_state` row. A video neither answered keeps its
 snapshot and is asked again when its phase next makes it due. Each request
 uses the client's existing 10-second timeout, 4 MiB body limit and redirect
-rejection.
+rejection; the key travels only in the `X-Goog-Api-Key` header.
 
 The public dashboard projects `liveStatus` (`live`, `upcoming`, `ended` or
 null) on videos and on the events linked to them. `ended` is final; `live` and

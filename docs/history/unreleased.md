@@ -51,6 +51,11 @@
   `x_retry_limit`. Failure counts live in
   `sync_state.metadata_json.pendingRetries`; the step result reports
   `pendingHeld` and `pendingDropped`.
+- With `YOUTUBE_API_KEY`, the live-status probe asks one `videos.list` call
+  about all of a run's due videos before reading any watch page, and reads a
+  video's page only when the API fails, leaves it out or cannot classify it.
+  Each probe run costs one quota unit; the run result counts `apiRequests`.
+  Without a key the probe reads watch pages as before.
 
 </details>
 

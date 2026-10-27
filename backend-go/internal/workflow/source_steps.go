@@ -276,9 +276,10 @@ func (s *SourceSteps) bilibiliRecent(ctx context.Context) (AttemptResult, error)
 	return AttemptResult{Status: "succeeded", Result: counts}, nil
 }
 
-// youtubeLive requests only the watch pages of the few active videos that are
-// due by their phase and stores the broadcast state they report. Nothing due
-// means no request.
+// youtubeLive asks about only the few active videos that are due by their
+// phase, through one Data API call when a key is set and otherwise their
+// watch pages, and stores the broadcast state they report. Nothing due means
+// no request.
 func (s *SourceSteps) youtubeLive(ctx context.Context) (AttemptResult, error) {
 	now := time.Now()
 	if s.Youtube.Now != nil {
@@ -298,7 +299,7 @@ func (s *SourceSteps) youtubeLive(ctx context.Context) (AttemptResult, error) {
 			candidates = append(candidates, target.Video)
 		}
 	}
-	counts := map[string]any{"active": len(targets), "candidates": len(candidates), "requested": 0, "inspected": 0, "live": 0, "changed": false}
+	counts := map[string]any{"active": len(targets), "candidates": len(candidates), "requested": 0, "inspected": 0, "live": 0, "changed": false, "apiRequests": 0}
 	if len(candidates) == 0 {
 		return AttemptResult{Status: "succeeded", Result: counts}, nil
 	}
@@ -316,12 +317,12 @@ func (s *SourceSteps) youtubeLive(ctx context.Context) (AttemptResult, error) {
 			live++
 		}
 	}
-	counts["requested"], counts["inspected"], counts["live"], counts["changed"] = result.Requested, result.Inspected, live, changed
+	counts["requested"], counts["inspected"], counts["live"], counts["changed"], counts["apiRequests"] = result.Requested, result.Inspected, live, changed, result.APIRequests
 	if len(result.Errors) == 0 {
 		return AttemptResult{Status: "succeeded", Result: counts}, nil
 	}
 	counts["errors"] = result.Errors
-	// Failed pages keep their snapshots; the next probe asks again.
+	// Unanswered videos keep their snapshots; the next probe asks again.
 	if result.Inspected == 0 {
 		return AttemptResult{Status: "failed", Result: counts}, nil
 	}

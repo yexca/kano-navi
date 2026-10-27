@@ -205,7 +205,7 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 	result.Queue = uniqueIDs(eligible, 1000)
 	// The Data API answers the first batch of the queue in one call; the watch
 	// page budget then goes to the rest, newest work first as before.
-	fromAPI, unclassified := a.apiDetails(ctx, result.Queue, state.Videos, &result)
+	fromAPI, unclassified := a.apiDetails(ctx, result.Queue, state.Videos, &result.APIRequests, &result.Errors)
 	budget := a.Options.MaxDetailRequests
 	for _, id := range append([]string{}, result.Queue...) {
 		if err = ctx.Err(); err != nil {
@@ -358,15 +358,16 @@ func (a *Adapter) feedShorts(ctx context.Context, result *Result) {
 // when a key is set. It returns the videos the API could describe; the rest,
 // including any the API left out or could not classify, fall back to their
 // watch pages. Ended broadcasts it could not classify are also returned as
-// unclassified, for use only when their page fails. A failed call is
-// recorded and answers none.
-func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[string]Video, result *Result) (out, unclassified map[string]Video) {
+// unclassified, for use only when their page fails. The call is counted in
+// requests; a failed one is recorded in errs and answers none. The recent
+// step and the live-status probe share it.
+func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[string]Video, requests *int, errs *[]string) (out, unclassified map[string]Video) {
 	out, unclassified = map[string]Video{}, map[string]Video{}
 	if a.Options.APIKey == "" || len(queue) == 0 {
 		return out, unclassified
 	}
 	ids := queue[:min(len(queue), MaxAPIVideos)]
-	result.APIRequests++
+	*requests++
 	body, err := a.Client.Videos(ctx, a.Options.APIKey, ids)
 	var items map[string]apiVideo
 	if err == nil {
@@ -374,7 +375,7 @@ func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[str
 	}
 	if err != nil {
 		if ctx.Err() == nil {
-			result.Errors = append(result.Errors, safeError(err))
+			*errs = append(*errs, safeError(err))
 		}
 		return out, unclassified
 	}
@@ -437,39 +438,57 @@ func completeDetails(v, old Video, now time.Time) Video {
 // MaxLiveProbes bounds the watch pages one live-status probe requests.
 const MaxLiveProbes = 5
 
-// ProbeResult is what one live-status probe learned. Videos holds only pages
-// that passed the watch-page completeness checks.
+// ProbeResult is what one live-status probe learned. Videos holds only Data
+// API answers and pages that passed the completeness checks.
 type ProbeResult struct {
 	Videos []Video
 	Errors []string
-	// Attempted lists the IDs whose pages were requested, answered or not.
-	Attempted            []string
-	Requested, Inspected int
+	// Attempted lists the IDs the probe asked about, answered or not.
+	Attempted []string
+	// Requested counts watch pages; APIRequests counts Data API calls, one
+	// quota unit each.
+	Requested, Inspected, APIRequests int
 }
 
-// ProbeLive requests only the watch pages of the given stored videos, at most
-// MaxLiveProbes of them: no feed and no streams page. A failed or incomplete
-// page records its code and leaves that video's snapshot to the caller.
+// ProbeLive reads the broadcast state of the given stored videos, at most
+// MaxLiveProbes of them: no feed and no streams page. With a key, one
+// videos.list call asks about all of them first, under the recent step's
+// classification rules; a video it left out, could not classify or gave no
+// broadcast state, or every video when the call failed, has its watch page
+// read instead. A failed or incomplete page records its code and leaves that
+// video's snapshot to the caller, unless the API's unclassified answer for an
+// ended broadcast can stand in for it.
 func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, error) {
 	result := ProbeResult{Videos: []Video{}, Errors: []string{}, Attempted: []string{}}
 	if len(videos) > MaxLiveProbes {
 		videos = videos[:MaxLiveProbes]
 	}
+	ids, stored := []string{}, map[string]Video{}
+	for _, v := range videos {
+		ids = append(ids, v.ID)
+		stored[v.ID] = v
+	}
+	fromAPI, unclassified := a.apiDetails(ctx, ids, stored, &result.APIRequests, &result.Errors)
 	for _, old := range videos {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		result.Requested++
 		result.Attempted = append(result.Attempted, old.ID)
-		body, err := a.Client.Watch(ctx, old.ID)
-		if err != nil {
-			result.Errors = append(result.Errors, safeError(err))
-			continue
-		}
-		v, err := ParseWatch(body, old.ID)
-		if err != nil {
-			result.Errors = append(result.Errors, safeError(err))
-			continue
+		// The probe is there to learn the broadcast state, so an answer
+		// that names none still needs the page.
+		v, answered := fromAPI[old.ID]
+		if !answered || v.LiveStatus == "" {
+			result.Requested++
+			body, err := a.Client.Watch(ctx, old.ID)
+			if err == nil {
+				v, err = ParseWatch(body, old.ID)
+			}
+			if err != nil {
+				result.Errors = append(result.Errors, safeError(err))
+				if v, answered = unclassified[old.ID]; !answered {
+					continue
+				}
+			}
 		}
 		result.Videos = append(result.Videos, completeDetails(v, old, a.Now()))
 		result.Inspected++

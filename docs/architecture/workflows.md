@@ -205,14 +205,14 @@ timer and its own operator interval, stored in `app_settings`
 (`youtube_live_probe_enabled`, default on; `youtube_live_probe_interval_minutes`,
 default 15, 5–360). It is edited in `/admin` (Sources → Live-status probe).
 Each active video is due by its phase against its reserved start (its actual
-start once on air), counted from its last successful watch-page check or
-probe request, whichever is newer:
+start once on air), counted from its last successful check (a watch page or
+a Data API answer) or probe request, whichever is newer:
 
 | Phase      | When                                          | Next check                           |
 | ---------- | --------------------------------------------- | ------------------------------------ |
 | `prestart` | within 15 minutes before the start            | once in that lead, then at the start |
 | `starting` | from the start for 45 minutes, not yet live   | every 3 minutes                      |
-| `live`     | the page reported the broadcast live          | every operator interval              |
+| `live`     | the check reported the broadcast live         | every operator interval              |
 | `overdue`  | 45 minutes after the start and still not live | every operator interval              |
 
 A check by the regular YouTube step counts as well, so a reservation it just
@@ -220,17 +220,23 @@ read is not asked again. The same server process checks every 30 seconds;
 when a video is due and at least two minutes have passed since the previous
 probe run was queued, it queues a run of the single `live` step
 (`kind: "live"`, ad hoc workflow `@live`, labelled `live-probe`) through the
-same single-flight queue. The run requests only the due videos, earliest
-first. A busy queue or nothing due waits for the next tick. Requests are
-recorded per video in `sync_state` (source `youtube-live`), answered or not,
-so a page that keeps failing is asked again on its phase's schedule rather
-than on every tick; entries older than two days are dropped. Runs are recorded
-in `sync_runs` and `/api/admin/runs` with `active`, `candidates` (the due
-videos), `requested`, `inspected`, `live`, `changed` and fixed error codes; a
-run whose pages all fail is `failed`, a mixed one `partial`.
+same single-flight queue. The run asks only about the due videos, earliest
+first: with `YOUTUBE_API_KEY`, in one Data API call, then the watch pages of
+those the API could not settle (see
+[Live-status probe](sources.md#live-status-probe)). A busy queue or nothing
+due waits for the next tick. Requests are recorded per video in `sync_state`
+(source `youtube-live`), answered or not, so a video that keeps failing is
+asked again on its phase's schedule rather than on every tick; entries older
+than two days are dropped. Runs are recorded in `sync_runs` and
+`/api/admin/runs` with `active`, `candidates` (the due videos), `requested`
+(watch pages), `apiRequests` (Data API calls), `inspected`, `live`,
+`changed` and fixed error codes; a run that answered none of its videos is
+`failed`, one with any recorded failure (an API call that failed but whose
+pages answered, for example) `partial`.
 
 The probe may run more often than a source schedule (15 minutes) because one
-run requests at most five watch pages and runs only while something is due.
+run asks about at most five videos and runs only while something is due.
+With a key it spends one quota unit per run, at most 720 a day.
 One stream that starts on time costs a check before the start, a few in the
 starting window and four an hour on air at the default interval; a waiting
 room that never opens costs at most 15 in its starting window and then one

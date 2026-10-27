@@ -214,7 +214,7 @@ func (s *Store) LiveProbeTargets(ctx context.Context, now time.Time, settings Li
 		return nil, err
 	}
 	n := now.UTC().Format(time.RFC3339Nano)
-	rows, err := s.db.QueryContext(ctx, `SELECT v.id,v.title,COALESCE(v.published_at,''),COALESCE(v.scheduled_at,''),v.url,COALESCE(v.thumbnail_url,''),COALESCE(v.kind,''),v.is_upcoming,COALESCE(v.live_status,''),COALESCE(v.live_checked_at,'') FROM videos v
+	rows, err := s.db.QueryContext(ctx, `SELECT v.id,v.title,COALESCE(v.published_at,''),COALESCE(v.scheduled_at,''),v.url,COALESCE(v.thumbnail_url,''),COALESCE(v.kind,''),v.is_upcoming,COALESCE(v.live_status,''),COALESCE(v.live_checked_at,''),v.is_premiere FROM videos v
  WHERE v.source='youtube' AND v.scheduled_at IS NOT NULL
  AND julianday(v.scheduled_at)<=julianday(?1,?2) AND julianday(v.scheduled_at)>=julianday(?1,?3)
  AND COALESCE(v.live_status,'')<>'ended'
@@ -230,9 +230,13 @@ func (s *Store) LiveProbeTargets(ctx context.Context, now time.Time, settings Li
 	for rows.Next() {
 		var v ytsource.Video
 		var status, checked string
-		if err = rows.Scan(&v.ID, &v.Title, &v.PublishedAt, &v.ScheduledAt, &v.URL, &v.ThumbnailURL, &v.Kind, &v.IsUpcoming, &status, &checked); err != nil {
+		var premiere sql.NullBool
+		if err = rows.Scan(&v.ID, &v.Title, &v.PublishedAt, &v.ScheduledAt, &v.URL, &v.ThumbnailURL, &v.Kind, &v.IsUpcoming, &status, &checked, &premiere); err != nil {
 			return nil, dbErr(err)
 		}
+		// The stored verdict lets a Data API answer classify an ended
+		// broadcast, as in the recent step.
+		v.Premiere, v.PremiereKnown = premiere.Bool, premiere.Valid
 		start, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
 		last, _ := time.Parse(time.RFC3339Nano, checked)
 		if attempted := attempts[v.ID]; attempted.After(last) {

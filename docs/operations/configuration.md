@@ -123,7 +123,8 @@ variable: `/admin` → Sources → Live-status probe turns it on or off and sets
 its interval (default 15 minutes, 5–360), stored in `app_settings` as
 `youtube_live_probe_enabled` and `youtube_live_probe_interval_minutes`. The
 interval paces streams on air and waiting rooms that stay closed past their
-start; around the start itself the probe checks every 3 minutes. It
+start; around the start itself the probe checks every 3 minutes. With
+`YOUTUBE_API_KEY` it asks the Data API first, one quota unit per run. It
 uses the same timer process, so `WORKFLOW_SCHEDULER_ENABLED=0` or
 `SKIP_YOUTUBE=1` stops it. See
 [Workflows](../architecture/workflows.md#live-status-probe).
