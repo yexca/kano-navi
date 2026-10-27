@@ -61,7 +61,11 @@ type AttemptResult struct {
 type StepInput struct {
 	RunID, WorkflowID, StepID string
 	Attempt                   int
-	LookbackDays              int
+	// LookbackDays are the days of an operator recent window.
+	LookbackDays int
+	// Sync is a saved workflow's setting for this source; the zero value is
+	// the step's incremental default.
+	Sync sqlite.SourceSync
 	// Window is the operator-selected source window frozen on the run, or nil
 	// for the incremental synchronization.
 	Window *history.Window
@@ -177,7 +181,7 @@ func (e *Executor) PrepareDefinition(ctx context.Context, definition sqlite.Work
 		def.Steps = withReconcile(def.Steps)
 	}
 	if def.SourceLookbackDays == nil {
-		def.SourceLookbackDays = map[string]int{"x": 7, "youtube": 14}
+		def.SourceLookbackDays = map[string]int{}
 	}
 	synthetic := e.SyntheticSteps
 	if synthetic == nil {
@@ -301,7 +305,7 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 			if step.Capability == "capability_not_migrated" {
 				execErr = NewStepError("capability_not_migrated", ErrBlocked)
 			} else {
-				input := StepInput{RunID: run.ID, WorkflowID: run.WorkflowID, StepID: step.StepID, Attempt: num, LookbackDays: run.SourceLookbackDays[step.StepID]}
+				input := StepInput{RunID: run.ID, WorkflowID: run.WorkflowID, StepID: step.StepID, Attempt: num, LookbackDays: run.SourceLookbackDays[step.StepID], Sync: run.SourceSync[step.StepID]}
 				if window, selected := run.FetchWindows[step.StepID]; selected {
 					input.Window = &window
 				}

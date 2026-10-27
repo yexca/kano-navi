@@ -242,14 +242,19 @@ func TestWorkflowLifecycle(t *testing.T) {
 		`{"name":"Flow","steps":[]}`:                                  "steps must not be empty",
 		`{"name":"Flow","steps":["x"],"intervalMinutes":5}`:           "intervalMinutes must be an integer from 15 to 10080",
 		`{"name":"Flow","steps":["x"],"scheduleEnabled":"sometimes"}`: "scheduleEnabled must be a boolean",
-		`{"name":"Flow","steps":["x"],"sourceLookbackDays":{"x":0}}`:  "days must be an integer from 1 to 365",
-		`{"name":"Flow","steps":["x"],"arbitrary":"data"}`:            "arbitrary is not a workflow field",
+		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"incremental","max":0}}}`: "max must be an integer from 1 to 200",
+		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"count"}}}`:               "count must be an integer from 1 to 200",
+		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"days","days":7}}}`:       "days is not a sourceSync field",
+		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"recent"}}}`:              "sourceSync mode must be incremental or count",
+		`{"name":"Flow","steps":["x"],"sourceSync":{"bilibili":{"mode":"count"}}}`:        "sourceSync must contain x and/or youtube",
+		`{"name":"Flow","steps":["x"],"sourceLookbackDays":{"x":7}}`:                      "sourceLookbackDays is not a workflow field",
+		`{"name":"Flow","steps":["x"],"arbitrary":"data"}`:                                "arbitrary is not a workflow field",
 	} {
 		if code, payload := c.call(t, "POST", "/api/admin/workflows", body); code != 400 || payload["error"] != "invalid_input" || payload["message"] != message {
 			t.Fatalf("%s => %d %v", body, code, payload)
 		}
 	}
-	code, payload = c.call(t, "POST", "/api/admin/workflows", `{"name":" Evening ","steps":["media","x","x"],"scheduleEnabled":true,"intervalMinutes":30,"sourceLookbackDays":{"x":3}}`)
+	code, payload = c.call(t, "POST", "/api/admin/workflows", `{"name":" Evening ","steps":["media","x","x"],"scheduleEnabled":true,"intervalMinutes":30,"sourceSync":{"x":{"mode":"count","count":30}}}`)
 	if code != 201 {
 		t.Fatalf("create=%d %v", code, payload)
 	}
@@ -259,12 +264,16 @@ func TestWorkflowLifecycle(t *testing.T) {
 	if created["name"] != "Evening" || len(steps) != 2 || steps[0] != "x" || steps[1] != "media" || created["scheduleEnabled"] != true || created["nextRunAt"] == nil {
 		t.Fatalf("created=%v", created)
 	}
-	if lookback := created["sourceLookbackDays"].(map[string]any); lookback["x"] != float64(3) || lookback["youtube"] != float64(14) {
-		t.Fatalf("lookback=%v", lookback)
+	syncOf := func(workflow map[string]any, source string) string {
+		raw, _ := json.Marshal(workflow["sourceSync"].(map[string]any)[source])
+		return string(raw)
 	}
-	code, payload = c.call(t, "PUT", "/api/admin/workflows/"+id, `{"scheduleEnabled":false,"sourceLookbackDays":{"youtube":5}}`)
+	if syncOf(created, "x") != `{"count":30,"mode":"count"}` || syncOf(created, "youtube") != `{"max":50,"mode":"incremental"}` {
+		t.Fatalf("sourceSync=%v", created["sourceSync"])
+	}
+	code, payload = c.call(t, "PUT", "/api/admin/workflows/"+id, `{"scheduleEnabled":false,"sourceSync":{"youtube":{"mode":"incremental","max":5}}}`)
 	if updated := payload["workflow"].(map[string]any); code != 200 || updated["scheduleEnabled"] != false || updated["nextRunAt"] != nil || updated["name"] != "Evening" ||
-		updated["sourceLookbackDays"].(map[string]any)["x"] != float64(3) || updated["sourceLookbackDays"].(map[string]any)["youtube"] != float64(5) {
+		syncOf(updated, "x") != `{"count":30,"mode":"count"}` || syncOf(updated, "youtube") != `{"max":5,"mode":"incremental"}` {
 		t.Fatalf("update=%d %v", code, payload)
 	}
 	if code, payload = c.call(t, "PUT", "/api/admin/workflows/missing", `{"name":"x"}`); code != 404 || payload["error"] != "workflow_not_found" {
@@ -278,7 +287,8 @@ func TestWorkflowLifecycle(t *testing.T) {
 	if run["kind"] != "workflow" || run["workflowId"] != id || run["workflowName"] != "Evening" || run["triggeredBy"] != "admin" {
 		t.Fatalf("run=%v", run)
 	}
-	if windows := run["fetchWindows"].(map[string]any); windows["x"].(map[string]any)["days"] != float64(3) || windows["youtube"] != nil {
+	// The run shows the frozen sync setting of its source steps.
+	if windows := run["fetchWindows"].(map[string]any); windows["x"].(map[string]any)["count"] != float64(30) || windows["youtube"] != nil {
 		t.Fatalf("windows=%v", windows)
 	}
 	_, payload = c.call(t, "GET", "/api/admin/workflows", "")
@@ -385,7 +395,7 @@ func TestSourceFetchWindows(t *testing.T) {
 		`{"kind":"fetch","source":"x","window":{"mode":"range","startDate":"2026-03-02","endDate":"2026-03-01"}}`: "date range must cover 1 to 365 days",
 		`{"kind":"fetch","source":"x","window":{"mode":"before","days":7}}`:                                       "X_API_BEARER_TOKEN is required for history search",
 		`{"kind":"fetch","source":"x","window":{"mode":"count","count":0}}`:                                       "count must be an integer from 1 to 200",
-		`{"kind":"fetch","source":"youtube","window":{"mode":"count","count":20}}`:                                "count windows are available for X only",
+		`{"kind":"fetch","source":"youtube","window":{"mode":"count","count":201}}`:                               "count must be an integer from 1 to 200",
 	} {
 		if code, payload := c.call(t, "POST", "/api/admin/runs", body); code != 400 || payload["message"] != message {
 			t.Fatalf("%s => %d %v", body, code, payload)

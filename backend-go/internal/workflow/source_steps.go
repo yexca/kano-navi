@@ -44,12 +44,9 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 	if s.Skip[in.StepID] {
 		return AttemptResult{Status: "succeeded", Result: map[string]any{"skipped": true, "reason": "environment"}}, nil
 	}
-	// A saved workflow runs its rolling recent window, which the source API
-	// serves when its credential is configured. A full sync or scan without a
-	// window stays incremental.
-	if in.Window == nil && in.LookbackDays > 0 && !sqlite.IsAdhocWorkflow(in.WorkflowID) && s.History.Available(in.StepID) {
-		in.Window = &history.Window{Mode: history.ModeRecent, Days: in.LookbackDays}
-	}
+	// Saved workflows, full syncs and scans carry no window and read each
+	// source by its sync setting (ADR-0002), whatever credentials are set;
+	// only operator windows search dates.
 	switch in.StepID {
 	case "x":
 		// A selected window uses the API whenever its credential is present.
@@ -60,20 +57,22 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 		if in.Window != nil && (in.Window.Mode != history.ModeRecent || s.History.Available(history.SourceX) || s.History.timeline(history.ModeRecent)) {
 			return s.History.FetchX(ctx, *in.Window)
 		}
+		// A count setting reads the newest posts from the timeline every run;
+		// the incremental cursor and pending queue stay as they are.
+		if in.Window == nil && in.Sync.Mode == sqlite.SyncCount {
+			return s.History.FetchX(ctx, history.Window{Mode: history.ModeCount, Count: in.Sync.Count})
+		}
 		if s.X != nil {
 			return s.X.Execute(ctx, in)
 		}
 	case "youtube":
-		if in.Window != nil && in.Window.Mode == history.ModeCount {
-			return failedResult("count windows are available for X only"), nil
-		}
-		if in.Window != nil && in.Window.Mode != history.ModeRecent {
+		if in.Window != nil && in.Window.Mode != history.ModeRecent && in.Window.Mode != history.ModeCount {
 			return s.History.FetchYoutube(ctx, *in.Window)
 		}
 		if s.Youtube == nil {
 			break
 		}
-		if in.Window != nil && s.History.Available(history.SourceYoutube) {
+		if in.Window != nil && in.Window.Mode == history.ModeRecent && s.History.Available(history.SourceYoutube) {
 			return s.youtubeWindowAndFeed(ctx, in)
 		}
 		return s.youtubeRecent(ctx, in)
@@ -157,6 +156,22 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 	return AttemptResult{}, NewStepError("capability_not_migrated", ErrBlocked)
 }
 
+// youtubeList selects the uploads a recent run considers: an operator window's
+// days or count, otherwise the sync setting, incremental by default.
+func youtubeList(in StepInput, now time.Time) ytsource.List {
+	switch {
+	case in.Window != nil && in.Window.Mode == history.ModeRecent:
+		return ytsource.List{Limit: ytsource.MaxListLimit, Since: now.Add(-time.Duration(in.Window.Days) * 24 * time.Hour)}
+	case in.Window != nil && in.Window.Mode == history.ModeCount:
+		return ytsource.List{Limit: in.Window.Count, Count: true}
+	case in.Sync.Mode == sqlite.SyncCount:
+		return ytsource.List{Limit: in.Sync.Count, Count: true}
+	case in.Sync.Mode == sqlite.SyncIncremental && in.Sync.Max > 0:
+		return ytsource.List{Limit: in.Sync.Max}
+	}
+	return ytsource.List{Limit: sqlite.DefaultSyncMax}
+}
+
 // youtubeRecent lists the newest uploads (Data API, RSS feed or uploads tab)
 // and refreshes active reservations. It fails only when no listing answered
 // and no detail check succeeded.
@@ -165,11 +180,7 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 	if err != nil {
 		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 	}
-	days := in.LookbackDays
-	if days == 0 {
-		days = 14
-	}
-	result, err := s.Youtube.FetchRecent(ctx, state, days)
+	result, err := s.Youtube.FetchUploads(ctx, state, youtubeList(in, s.Youtube.Now()))
 	if err != nil {
 		if ctx.Err() != nil {
 			return AttemptResult{}, NewStepError("cancelled", ErrCancelled)

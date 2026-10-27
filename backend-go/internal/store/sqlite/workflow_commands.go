@@ -89,6 +89,15 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, definition WorkflowDefini
 	if _, e = tx.ExecContext(ctx, `UPDATE workflow_runs SET source_lookback_json=? WHERE id=?`, string(lookback), id); e != nil {
 		return nil, ErrWorkflowStorage
 	}
+	if len(definition.SourceSync) > 0 {
+		sync, syncErr := json.Marshal(definition.SourceSync)
+		if syncErr != nil || !s.sourceSync {
+			return nil, ErrWorkflowValidation
+		}
+		if _, e = tx.ExecContext(ctx, `UPDATE workflow_runs SET source_sync_json=? WHERE id=?`, string(sync), id); e != nil {
+			return nil, ErrWorkflowStorage
+		}
+	}
 	if len(definition.FetchWindows) > 0 {
 		windows, windowErr := json.Marshal(definition.FetchWindows)
 		if windowErr != nil || s.workflowVersion < 3 {

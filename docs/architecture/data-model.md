@@ -37,7 +37,7 @@ belong to the TypeScript initializer. See
 | `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)  |
 | `llm_route_targets`      | The ordered provider + model failover queue (`route = 'schedule'`) shared by every extraction stage    |
 | `llm_route_providers`    | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                |
-| `workflows`              | Saved step selections, rolling source windows, timer settings, and last/next run metadata              |
+| `workflows`              | Saved step selections, per-source sync settings, timer settings, and last/next run metadata            |
 | `translations`           | Manual, platform, and machine translations of post text and video titles per target locale             |
 | `translation_states`     | Per-post/video machine translation state: source hash and language, last attempt, operator request     |
 
@@ -49,7 +49,12 @@ The development Go executor adds `workflow_migrations`, `workflow_runs`,
 `workflow_run_steps`, `workflow_step_attempts` and `workflow_leases` through
 atomic additive upgrades. Schema version 2 freezes a run's source windows in
 `source_lookback_json` and records real adapters in `adapter_capability` while
-preserving the v1 capability column and all prior attempts. These tables are
+preserving the v1 capability column and all prior attempts. The
+`source_sync_json` columns of `workflows` and `workflow_runs` hold a saved
+workflow's per-source sync and its frozen copy
+([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)). They are added
+without a version bump, so earlier Go releases still open the database; `{}`
+reads as the incremental default. These tables are
 optional for ordinary TypeScript snapshots and Go public reads. See
 [Go source workflows and media downloads](go-source-workflows.md) for ownership,
 lease fencing, compatibility, identity repair and verification.

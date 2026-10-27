@@ -53,16 +53,15 @@ function FetchForm({
   const [endDate, setEndDate] = useState(japanToday())
   const [busy, setBusy] = useState(false)
   const unavailable = !windows.includes(mode)
-  // Only the X timeline lists posts by count.
-  const modes = (
-    source === "x"
-      ? (["recent", "before", "range", "count"] as const)
-      : (["recent", "before", "range"] as const)
-  ).map((value) => ({ value, label: t(`admin.fetch.mode.${value}`) }))
+  const modes = (["recent", "before", "range", "count"] as const).map(
+    (value) => ({ value, label: t(`admin.fetch.mode.${value}`) }),
+  )
   const hint =
     mode === "recent" && windows.includes("range")
       ? "admin.fetch.hint.recentAll"
-      : `admin.fetch.hint.${mode}`
+      : mode === "count" && source === "youtube"
+        ? "admin.fetch.hint.count.youtube"
+        : `admin.fetch.hint.${mode}`
   const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
@@ -88,7 +87,14 @@ function FetchForm({
       />
       <p className="adm-field-hint">{t(hint)}</p>
       {mode === "count" ? (
-        <Field label={t("admin.fetch.count")} hint={t("admin.fetch.countHint")}>
+        <Field
+          label={t(
+            source === "youtube"
+              ? "admin.fetch.count.youtube"
+              : "admin.fetch.count",
+          )}
+          hint={t("admin.fetch.countHint")}
+        >
           <input
             type="number"
             min={1}

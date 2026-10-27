@@ -32,8 +32,16 @@ func (t apiThumbnails) best() string {
 // Private entries are skipped; each video keeps its publication time (the
 // item's own time when the video's is missing) like a feed entry.
 func ParseUploads(body []byte) ([]Video, error) {
+	videos, _, err := ParseUploadsPage(body)
+	return videos, err
+}
+
+// ParseUploadsPage is ParseUploads with the token of the next, older page,
+// empty on the last one.
+func ParseUploadsPage(body []byte) ([]Video, string, error) {
 	var page struct {
-		Items *[]struct {
+		NextPageToken string `json:"nextPageToken"`
+		Items         *[]struct {
 			Snippet struct {
 				Title       string        `json:"title"`
 				PublishedAt string        `json:"publishedAt"`
@@ -49,7 +57,7 @@ func ParseUploads(body []byte) ([]Video, error) {
 		} `json:"items"`
 	}
 	if json.Unmarshal(body, &page) != nil || page.Items == nil {
-		return nil, &Error{"youtube_api_invalid_response"}
+		return nil, "", &Error{"youtube_api_invalid_response"}
 	}
 	out := []Video{}
 	seen := map[string]bool{}
@@ -72,9 +80,9 @@ func ParseUploads(body []byte) ([]Video, error) {
 		out = append(out, Video{ID: id, Title: title, PublishedAt: t.UTC().Format(time.RFC3339Nano), URL: "https://www.youtube.com/watch?v=" + id, ThumbnailURL: thumbnail, Kind: Classify(title)})
 	}
 	if len(out) == 0 {
-		return nil, &Error{"youtube_api_invalid_response"}
+		return nil, "", &Error{"youtube_api_invalid_response"}
 	}
-	return out, nil
+	return out, page.NextPageToken, nil
 }
 
 // apiVideo is one videos.list item.

@@ -71,8 +71,7 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 		windows := map[string]history.Window{}
 		for source, window := range options.FetchWindows {
 			normalized, windowErr := window.Normalize()
-			// Only the X timeline lists a source's newest posts by count.
-			if windowErr != nil || (source != "x" && source != "youtube") || (normalized.Mode == history.ModeCount && source != "x") {
+			if windowErr != nil || (source != "x" && source != "youtube") {
 				return StartResult{}, sqlite.ErrWorkflowValidation
 			}
 			windows[source] = normalized
@@ -291,7 +290,10 @@ func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun, names m
 			}
 			if window, selected := run.FetchWindows[step]; selected {
 				windows[step] = window
+			} else if sync, ok := run.SourceSync[step]; ok {
+				windows[step] = sync
 			} else if days, ok := run.SourceLookbackDays[step]; ok {
+				// A saved workflow's run from before sourceSync replaced its days.
 				windows[step] = map[string]any{"mode": "recent", "days": days}
 			}
 		}

@@ -24,6 +24,10 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	if in.LookbackDays > 0 {
 		opts.BootstrapDays = in.LookbackDays
 	}
+	// A saved workflow's incremental cap replaces X_DISCOVERY_LIMIT.
+	if in.Sync.Mode == sqlite.SyncIncremental && in.Sync.Max > 0 {
+		opts.DiscoveryLimit = in.Sync.Max
+	}
 	if opts.MaxDetailRequests < 0 {
 		opts.MaxDetailRequests = 0
 	}
@@ -45,6 +49,9 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	profileFallbacks := 0
 	partial := false
 	errorsOut := []string{}
+	// Gap notes do not count as fetch failures: they never fail the step.
+	notes := []string{}
+	gaps := 0
 	for i, account := range handles {
 		alloc := remaining
 		if alloc > 0 {
@@ -63,7 +70,14 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		accountOpts.PendingIDs = state.PendingIDs
 		accountOpts.KnownIDs = state.KnownIDs
 		accountOpts.CursorID = state.CursorID
+		accountOpts.Gap = state.Gap
 		result, err := x.Adapter.FetchRecent(ctx, account, accountOpts)
+		for _, note := range result.Notes {
+			notes = append(notes, account+": "+note)
+		}
+		if result.Gap != nil {
+			gaps++
+		}
 		if result.Discovery == xsource.DiscoveryProfile {
 			profileFallbacks++
 		}
@@ -98,8 +112,12 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	if total == 0 && len(errorsOut) > 0 {
 		return AttemptResult{}, NewStepError("x_source_failed", ErrDependency)
 	}
+	if len(notes) > 0 {
+		partial = true
+		errorsOut = append(errorsOut, notes...)
+	}
 	if partial {
 		status = "partial"
 	}
-	return AttemptResult{Status: status, Result: map[string]any{"source": "x", "count": total, "posts": total, "discovered": discovered, "requested": requested, "profileFallbacks": profileFallbacks, "errors": errorsOut}}, nil
+	return AttemptResult{Status: status, Result: map[string]any{"source": "x", "count": total, "posts": total, "discovered": discovered, "requested": requested, "profileFallbacks": profileFallbacks, "timelineGaps": gaps, "errors": errorsOut}}, nil
 }

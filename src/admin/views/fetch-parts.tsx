@@ -141,11 +141,22 @@ export function QuickFetch({
                     run(`count-${count}`, { mode: "count", count })
                   }
                 >
-                  {t("admin.fetch.postsCount", { count })}
+                  {t(
+                    source === "youtube"
+                      ? "admin.fetch.videosCount"
+                      : "admin.fetch.postsCount",
+                    { count },
+                  )}
                 </Button>
               ))}
             </div>
-            <p className="adm-field-hint">{t("admin.fetch.hint.count")}</p>
+            <p className="adm-field-hint">
+              {t(
+                source === "youtube"
+                  ? "admin.fetch.hint.count.youtube"
+                  : "admin.fetch.hint.count",
+              )}
+            </p>
           </div>
         ) : null}
         <form

@@ -2,17 +2,19 @@
 
 ## Fetch Windows and Historical Backfill
 
-The console's Sources page offers `recent`, `before`, and `range` fetches for
-X and YouTube, and `count` fetches for X. The Posts (X) and Videos (YouTube)
+The console's Sources page offers `recent`, `before`, `range` and `count`
+fetches for X and YouTube. The Posts (X) and Videos (YouTube)
 pages repeat the common ones as shortcuts: one-click `recent` windows of 1, 3,
-7 or 30 days, a `range` form, and for X one-click `count` windows of 20, 50,
-100 or 200 posts. `POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }`
+7 or 30 days, a `range` form, and one-click `count` windows of 20, 50,
+100 or 200 posts or videos. `POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }`
 plus `"window": { "mode": "recent", "days": 30 }`,
 `"window": { "mode": "before", "days": 30 }`,
 `"window": { "mode": "range", "startDate": "2026-09-01", "endDate": "2026-09-30" }`,
 or `"window": { "mode": "count", "count": 50 }` starts one.
 Days must be integers from 1 to 365; date ranges cover at most 365 days; a
-count is an integer from 1 to 200 per account and is accepted for X only. Both
+count is an integer from 1 to 200 per X account or for the YouTube channel.
+A YouTube `count` window reads the uploads listing like the recent step (see
+[YouTube](sources.md#youtube)); without `YOUTUBE_API_KEY` the feed lists 15. Both
 selected dates are inclusive in `Asia/Tokyo`; internal timestamp bounds are
 start-inclusive and end-exclusive. `before` uses the oldest persisted post
 per X account, or oldest published YouTube video, rather than a UI page's
@@ -76,15 +78,32 @@ Each official API response has a fixed 4 MiB byte limit. The adapter checks
 `Content-Length` and counts streamed bytes, cancelling an oversized body before
 parsing or writing its page. Timeouts and redirect blocking apply throughout.
 
-Saved workflows have `sourceLookbackDays: { x: 7, youtube: 14 }`, persisted in
-the additive `workflows.source_lookback_json` column. Existing workflows receive
-these defaults without clearing settings, snapshots, or timers. Manual and
-scheduled workflow runs both use rolling recent windows; the workflow editor
-saves each source's days independently of the timer interval. A source API
-serves that window only with its credential; without `X_API_BEARER_TOKEN` a
-saved workflow's X step stays incremental and never pages the timeline window
-path, which serves operator fetches only. CLI/MCP full sync
-without fetch windows retains the existing incremental behavior described above.
+### Saved workflow source sync
+
+Saved workflows read each source by count, not by days
+([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)). `sourceSync`
+holds one setting per source in the additive `workflows.source_sync_json`
+column, and each run freezes it in `workflow_runs.source_sync_json`:
+
+- `{ "mode": "incremental", "max": 50 }`, the default: read newest first until
+  a stored record, at most `max` (1–200) records that are not stored yet, per
+  X account or for the YouTube channel. An X run that stops short leaves a
+  [timeline gap](sources.md#x) that later runs read.
+- `{ "mode": "count", "count": N }`: read the newest `N` (1–200) every run,
+  stored or not. X reads them as a `count` window from the timeline, which
+  leaves the incremental cursor and pending queue alone. YouTube reads the
+  uploads listing.
+
+Workflows saved before the column existed read as incremental with the
+default cap, with no change to their steps, timers or snapshots. The retired
+`sourceLookbackDays` stays in `source_lookback_json` and is no longer read for
+saved workflows. Manual and scheduled runs behave alike, and the editor saves
+the setting independently of the timer interval. Credentials never turn a
+saved workflow into a date search: X always reads the public timeline (the
+token serves operator `before` and `range` windows), and YouTube with a key
+pages the uploads playlist at one quota unit per 50 uploads. Full syncs
+(console, MCP, `kano-go sync`) carry no setting and run incrementally with
+`X_DISCOVERY_LIMIT` for X and 50 uploads for YouTube.
 
 ## Modular Steps and Timers
 

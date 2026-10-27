@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -117,51 +118,164 @@ func parseTimelineStatuses(body []byte, account string) (TimelineStatuses, error
 	return page, nil
 }
 
+// Gap is a stretch of an account's timeline that an incremental run could not
+// read within its cap: statuses newer than Floor that older pages still hold.
+// Cursor is the FxTwitter continuation where reading resumes; empty restarts
+// at the newest page. See docs/decisions/ADR-0002-count-based-source-sync.md.
+type Gap struct {
+	Cursor string `json:"cursor,omitempty"`
+	Floor  string `json:"floor"`
+}
+
+// ErrTimelineGap reports a gap the timeline ended before closing, which only
+// a date window through the API can still fill.
+const ErrTimelineGap ErrorCode = "x_timeline_gap"
+
+// withGap merges a newly opened gap into an earlier one: reading on from the
+// newer gap down to the older floor covers both.
+func withGap(earlier *Gap, opened Gap) *Gap {
+	if earlier != nil && idAfter(opened.Floor, earlier.Floor) {
+		opened.Floor = earlier.Floor
+	}
+	return &opened
+}
+
+// discovery is what one run read from the timeline. gap is the account's gap
+// after the run; notes are controlled codes about it.
+type discovery struct {
+	ids   []string
+	gap   *Gap
+	notes []string
+}
+
 // discoverTimeline pages the account's timeline back until a page ends at a
-// stored post, the stored cursor or the bootstrap cutoff, within the
-// DiscoveryLimit. A failed first page is returned so the caller can fall back
-// to the profile page; a later failure keeps the newer pages already read.
-func (a *Adapter) discoverTimeline(ctx context.Context, account string, opts Options, cutoff time.Time) ([]string, error) {
+// stored post, the stored cursor or the bootstrap cutoff. It takes at most
+// DiscoveryLimit statuses that are not stored, in as many pages of 20 (at most
+// 10). A head that stops short of the stored cursor opens a gap, so the cap
+// never skips statuses; a head that reaches it continues an earlier gap with
+// a page budget of its own. A failed first page is returned so the caller can
+// fall back to the profile page; a later failure keeps the newer pages
+// already read.
+func (a *Adapter) discoverTimeline(ctx context.Context, account string, opts Options, cutoff time.Time) (discovery, error) {
 	pages := (opts.DiscoveryLimit + timelinePageSize - 1) / timelinePageSize
-	if pages < 1 {
-		pages = 1
-	}
-	if pages > maxTimelinePages {
-		pages = maxTimelinePages
-	}
-	ids := []string{}
+	pages = min(max(pages, 1), maxTimelinePages)
+	found := discovery{ids: []string{}, gap: opts.Gap}
 	seen := map[string]bool{}
-	cursor := ""
-	for i := 0; i < pages; i++ {
+	taken := 0
+	full := func() bool { return opts.DiscoveryLimit > 0 && taken >= opts.DiscoveryLimit }
+	// take adds a page's statuses while keep holds and the cap allows, and
+	// returns the rest. Stored statuses are listed for refreshes but do not
+	// count against the cap.
+	take := func(ids []string, keep func(string) bool) []string {
+		for i, id := range ids {
+			if !keep(id) {
+				return ids[i:]
+			}
+			if seen[id] {
+				continue
+			}
+			if !opts.KnownIDs[id] {
+				if full() {
+					return ids[i:]
+				}
+				taken++
+			}
+			seen[id] = true
+			found.ids = append(found.ids, id)
+		}
+		return nil
+	}
+	read := 0
+	timeline := func(cursor string) (timelinePage, error) {
+		read++
 		body, err := a.Client.Timeline(ctx, account, cursor, timelinePageSize)
-		var page timelinePage
-		if err == nil {
-			page, err = parseTimeline(body, account)
-		}
 		if err != nil {
-			if i == 0 {
-				return nil, err
+			return timelinePage{}, err
+		}
+		return parseTimeline(body, account)
+	}
+	all := func(string) bool { return true }
+	fresh := func(id string) bool { return !reachesStored(id, opts, cutoff) }
+	cursor, resume, short := "", "", false
+	for {
+		page, err := timeline(cursor)
+		if err != nil {
+			if read == 1 {
+				return found, err
+			}
+			resume, short = cursor, true
+			break
+		}
+		rest := take(page.IDs, all)
+		end := page.Next == "" || page.Next == cursor
+		stored := len(page.IDs) > 0 && reachesStored(page.IDs[len(page.IDs)-1], opts, cutoff)
+		if full() {
+			switch {
+			case slices.ContainsFunc(rest, fresh):
+				resume, short = cursor, true
+			case !stored && !end:
+				resume, short = page.Next, true
 			}
 			break
 		}
-		for _, id := range page.IDs {
-			if !seen[id] {
-				seen[id] = true
-				ids = append(ids, id)
-			}
-		}
-		if opts.DiscoveryLimit > 0 && len(ids) >= opts.DiscoveryLimit {
-			return ids[:opts.DiscoveryLimit], nil
-		}
-		if len(page.IDs) > 0 && reachesStored(page.IDs[len(page.IDs)-1], opts, cutoff) {
-			break
-		}
-		if page.Next == "" || page.Next == cursor {
+		if stored || end {
 			break
 		}
 		cursor = page.Next
+		if read >= pages {
+			resume, short = cursor, true
+			break
+		}
 	}
-	return ids, nil
+	// Without a cursor the bootstrap is bounded on purpose and opens no gap.
+	if short {
+		if opts.CursorID != "" {
+			found.gap = withGap(found.gap, Gap{Cursor: resume, Floor: opts.CursorID})
+		}
+		return found, nil
+	}
+	gap := found.gap
+	if gap == nil {
+		return found, nil
+	}
+	above := func(id string) bool { return idAfter(id, gap.Floor) }
+	cursor, read = gap.Cursor, 0
+	restarted := false
+	for read < pages && !full() {
+		page, err := timeline(cursor)
+		if err != nil {
+			if ctx.Err() != nil {
+				return found, nil
+			}
+			// A stale continuation must not pin the gap: read it again from
+			// the newest page, now or in the next run.
+			if cursor != "" && !restarted {
+				restarted, cursor = true, ""
+				found.gap = &Gap{Floor: gap.Floor}
+				continue
+			}
+			found.notes = append(found.notes, "timeline gap: "+safeCode(err))
+			return found, nil
+		}
+		rest := take(page.IDs, above)
+		switch {
+		case len(rest) > 0 && !above(rest[0]):
+			// The floor is reached: the gap is read.
+			found.gap = nil
+			return found, nil
+		case len(rest) > 0:
+			// The cap ends the run inside this page, so the next one reads it again.
+			found.gap = &Gap{Cursor: cursor, Floor: gap.Floor}
+			return found, nil
+		case page.Next == "" || page.Next == cursor:
+			found.gap = nil
+			found.notes = append(found.notes, string(ErrTimelineGap)+"; the timeline ends before the stored cursor")
+			return found, nil
+		}
+		cursor = page.Next
+		found.gap = &Gap{Cursor: cursor, Floor: gap.Floor}
+	}
+	return found, nil
 }
 
 // reachesStored reports whether a page's oldest own status shows that older

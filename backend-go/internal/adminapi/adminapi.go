@@ -175,7 +175,7 @@ func (a *api) windowAvailable(source, mode string) bool {
 	if a.WindowAvailable != nil {
 		return a.WindowAvailable(source, mode)
 	}
-	return mode == history.ModeRecent || (mode != history.ModeCount && a.historyAvailable(source))
+	return mode == history.ModeRecent || (source == history.SourceYoutube && mode == history.ModeCount) || (mode != history.ModeCount && a.historyAvailable(source))
 }
 
 // windows lists the fetch window modes a source can run now.

@@ -33,6 +33,9 @@ type Store struct {
 	writable         bool
 	workflowWritable bool
 	workflowVersion  int
+	// sourceSync reports the source_sync_json columns, which a read-only
+	// snapshot migrated by an older release lacks.
+	sourceSync bool
 }
 
 // OpenReadOnly opens an existing snapshot without creating directories,
@@ -82,10 +85,14 @@ func OpenReadOnly(filename string) (*Store, error) {
 		}
 	}
 	var version int
+	sync := false
 	if workflowTable == 1 {
 		_ = db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM workflow_migrations`).Scan(&version)
+		var columns int
+		_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('workflow_runs') WHERE name='source_sync_json'`).Scan(&columns)
+		sync = columns == 1
 	}
-	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), workflowVersion: version}, nil
+	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), workflowVersion: version, sourceSync: sync}, nil
 }
 
 // OpenAdminWrites opens an existing fixture in SQLite rw mode. It never creates
@@ -125,6 +132,7 @@ func OpenAdminWrites(filename string) (*Store, error) {
 	}
 	store.workflowWritable = true
 	store.workflowVersion = WorkflowSchemaVersion
+	store.sourceSync = true
 	return store, nil
 }
 

@@ -76,6 +76,9 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 	if result.Discovery != "" {
 		metadata["discovery"] = result.Discovery
 	}
+	if result.Gap != nil {
+		metadata["timelineGap"] = result.Gap
+	}
 	metaBytes, _ := json.Marshal(metadata)
 	var oldID, oldTime string
 	_ = tx.QueryRowContext(ctx, "SELECT COALESCE(cursor_id,''),COALESCE(cursor_time,'') FROM sync_state WHERE source='x' AND account_id=?", account).Scan(&oldID, &oldTime)
@@ -168,6 +171,8 @@ type XRecentState struct {
 	KnownIDs   map[string]bool
 	// CursorID is the newest successfully stored status of the account.
 	CursorID string
+	// Gap is the timeline stretch a capped run left unread, or nil.
+	Gap *xsource.Gap
 }
 
 func (s *Store) XAccountStart(ctx context.Context, handles []string) (int, error) {
@@ -207,10 +212,14 @@ func (s *Store) XRecentState(ctx context.Context, account string) (XRecentState,
 		return out, ErrSourceWrite
 	}
 	var data struct {
-		Pending []string `json:"pendingStatusIds"`
+		Pending []string     `json:"pendingStatusIds"`
+		Gap     *xsource.Gap `json:"timelineGap"`
 	}
 	_ = json.Unmarshal([]byte(meta), &data)
 	out.PendingIDs = data.Pending
+	if data.Gap != nil && data.Gap.Floor != "" {
+		out.Gap = data.Gap
+	}
 	if len(out.PendingIDs) > 1000 {
 		out.PendingIDs = out.PendingIDs[:1000]
 	}

@@ -177,8 +177,9 @@ func TestXWindowsPageTheTimelineWithoutCredential(t *testing.T) {
 	if out, err = (&SourceSteps{History: withCredential}).Execute(ctx, StepInput{StepID: "x", Window: &count}); err != nil || out.Result["discovery"] != xsource.DiscoveryTimeline || len(transport.accounts) != 0 {
 		t.Fatalf("count=%+v err=%v api=%v", out, err, transport.accounts)
 	}
-	if out, err = steps.Execute(ctx, StepInput{StepID: "youtube", Window: &count}); err != nil || out.Status != "failed" {
-		t.Fatalf("youtube count=%+v err=%v", out, err)
+	// A YouTube count window reads the uploads listing, never the search API.
+	if _, err = steps.Execute(ctx, StepInput{StepID: "youtube", Window: &count}); err == nil || len(transport.accounts) != 0 {
+		t.Fatalf("youtube count must reach the (absent) recent adapter: err=%v api=%v", err, transport.accounts)
 	}
 }
 
@@ -195,11 +196,11 @@ func TestWindowAvailabilityFollowsCredentialAndTimeline(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if x, youtube := modes("x"), modes("youtube"); x != "recent,before,range,count" || youtube != "recent,before,range" {
+	if x, youtube := modes("x"), modes("youtube"); x != "recent,before,range,count" || youtube != "recent,before,range,count" {
 		t.Fatalf("with credentials x=%s youtube=%s", x, youtube)
 	}
 	source.XToken, source.YoutubeKey = "", ""
-	if x, youtube := modes("x"), modes("youtube"); x != "recent,range,count" || youtube != "recent" {
+	if x, youtube := modes("x"), modes("youtube"); x != "recent,range,count" || youtube != "recent,count" {
 		t.Fatalf("without credentials x=%s youtube=%s", x, youtube)
 	}
 	source.Fetcher.Timeline = nil
@@ -208,41 +209,36 @@ func TestWindowAvailabilityFollowsCredentialAndTimeline(t *testing.T) {
 	}
 }
 
-func TestSavedWorkflowUsesSourceAPIForItsRecentWindowOnlyWithCredential(t *testing.T) {
+func TestSavedWorkflowsReadBySyncSettingWhateverTheCredentials(t *testing.T) {
 	transport := &historyTransport{respond: func(*http.Request) (int, string) { return 200, `{"meta":{}}` }}
 	source, _ := newHistorySource(t, transport)
-	// The timeline serves operator windows only; timers stay incremental.
 	timeline := &stubTimeline{}
 	source.Fetcher.Timeline = timeline
-	defer func() {
-		if len(timeline.accounts) != 0 {
-			t.Errorf("a saved workflow paged the timeline: %v", timeline.accounts)
-		}
-	}()
 	steps := &SourceSteps{History: source}
 	ctx := context.Background()
-	out, err := steps.Execute(ctx, StepInput{StepID: "x", WorkflowID: "full-refresh", LookbackDays: 7})
-	if err != nil || out.Status != "succeeded" || len(transport.accounts) != 2 {
-		t.Fatalf("saved workflow out=%+v err=%v requests=%v", out, err, transport.accounts)
-	}
-	if window := out.Result["accounts"].([]map[string]any)[0]["window"].(history.Window); window.Mode != history.ModeRecent || window.Days != 7 {
-		t.Fatalf("window=%+v", window)
-	}
-	// A full sync has no window and stays on the incremental adapter, as does
-	// a saved workflow when the credential is absent.
+	// Incremental settings, full syncs and old runs with lookback days reach
+	// the incremental adapters (absent here), never a date search.
 	for _, input := range []StepInput{
-		{StepID: "x", WorkflowID: sqlite.AdhocSyncWorkflow, LookbackDays: 7},
+		{StepID: "x", WorkflowID: "full-refresh", Sync: sqlite.SourceSync{Mode: sqlite.SyncIncremental, Max: 20}},
 		{StepID: "x", WorkflowID: "full-refresh", LookbackDays: 7},
+		{StepID: "x", WorkflowID: sqlite.AdhocSyncWorkflow},
+		{StepID: "youtube", WorkflowID: "full-refresh", Sync: sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 30}},
 		{StepID: "youtube", WorkflowID: "full-refresh", LookbackDays: 14},
 	} {
-		if input.WorkflowID == "full-refresh" {
-			source.XToken, source.YoutubeKey = "", ""
-		}
-		if _, err = steps.Execute(ctx, input); err == nil {
+		if _, err := steps.Execute(ctx, input); err == nil {
 			t.Fatalf("%+v must reach the (absent) incremental adapter", input)
 		}
 	}
-	if len(transport.accounts) != 2 {
-		t.Fatalf("incremental runs called the source API: %v", transport.accounts)
+	if len(transport.accounts) != 0 || len(timeline.accounts) != 0 {
+		t.Fatalf("incremental runs searched: api=%v timeline=%v", transport.accounts, timeline.accounts)
+	}
+	// A count setting reads each account's newest posts from the timeline,
+	// with the credential too.
+	out, err := steps.Execute(ctx, StepInput{StepID: "x", WorkflowID: "full-refresh", Sync: sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 30}})
+	if err != nil || out.Result["discovery"] != xsource.DiscoveryTimeline || len(timeline.accounts) != 2 || len(transport.accounts) != 0 {
+		t.Fatalf("count out=%+v err=%v api=%v", out, err, transport.accounts)
+	}
+	if window := out.Result["accounts"].([]map[string]any)[0]["window"].(history.Window); window.Mode != history.ModeCount || window.Count != 30 {
+		t.Fatalf("window=%+v", window)
 	}
 }

@@ -8,12 +8,28 @@ The synchronizer discovers status IDs for each account named by `X_HANDLES`
 (default `kano_2525,_Kanotic`) from the public FxTwitter timeline
 `api.fxtwitter.com/2/profile/<handle>/statuses`, which lists the account's
 statuses newest first in pages of 20 with a continuation cursor. Discovery
-pages back until a page's oldest own status is already stored, is not newer
-than the account's stored cursor, or predates the lookback window, so posts
-published between runs are found even when several arrive at once. Reposts
-carry another author and are skipped. `X_DISCOVERY_LIMIT` caps the discovered
-IDs and therefore the pages (at most 10) per account and run; a failed later
-page keeps the newer pages already read.
+pages back until a page's oldest own status is already stored or is not newer
+than the account's stored cursor, so posts published between runs are found
+even when several arrive at once. Before an account has a cursor, statuses
+older than `X_BOOTSTRAP_DAYS` (seven by default) also end the first run.
+Reposts carry another author and are skipped. The cap, `X_DISCOVERY_LIMIT` or
+a saved workflow's incremental `max` (see
+[saved workflows](workflows.md#saved-workflow-source-sync)), counts the
+statuses that are not stored yet and sets the pages of 20 (at most 10) per
+account and run. A failed later page keeps the newer pages already read.
+
+A run that stops short of the stored cursor, because of the cap, the page
+budget, a failed later page or a profile fallback, records the unread stretch
+in `sync_state.metadata_json.timelineGap` as `{cursor, floor}`: the FxTwitter
+continuation (empty for the newest page) and the cursor the run started from.
+Later runs read the newest pages first and, when those reach a stored post,
+continue the gap with a page budget of their own until a status at or below
+`floor` appears. A second gap merges into the first by keeping the older
+floor; a failed continuation restarts at the newest page. A timeline that ends
+before the floor closes the gap and reports `x_timeline_gap`, so an operator
+can fill it with a date window through the API. The step result counts
+accounts with an open gap as `timelineGaps`
+([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)).
 
 When the first timeline page fails, is not a timeline, or yields none of the
 account's own statuses, discovery falls back to the logged-out profile page
@@ -22,9 +38,9 @@ source used in `sync_state.metadata_json.discovery` (`timeline` or `profile`)
 and counts fallback accounts as `profileFallbacks` in the step result. A
 fallback alone does not fail the account or mark the run partial.
 
-Discovered IDs keep the existing detail path: their Snowflake timestamps are
-decoded and IDs older than `X_BOOTSTRAP_DAYS` (seven by default) or the
-workflow's X lookback are skipped before `api.vxtwitter.com` detail requests.
+Discovered IDs keep the existing detail path: before an account has a cursor,
+their Snowflake timestamps are decoded and IDs older than `X_BOOTSTRAP_DAYS`
+are skipped before `api.vxtwitter.com` detail requests.
 Each account has its own cursor in `sync_state`. Later runs prioritize unknown
 IDs and may refresh only a small `X_REFRESH_KNOWN` budget.
 `X_MAX_STATUS_REQUESTS` is the total detail-request budget shared by all
@@ -80,15 +96,19 @@ post that has fallen out of the discovered status list.
 
 The script reads the RSS feed for `YOUTUBE_CHANNEL_ID` (the current main channel
 by default), or with `YOUTUBE_API_KEY` the Data API's uploads playlist (see
-[Data API](#data-api)). With no cursor, it stores the latest `YOUTUBE_BOOTSTRAP_VIDEOS`
-entries (six by default). Later runs store only entries before the prior cursor,
-or entries newer than its timestamp when that cursor has fallen out of the RSS
-window. It separately inspects the streams page and keeps rechecking active or
+[Data API](#data-api)). It takes the newest listed uploads, at most the
+saved workflow's `max` or `count` (50 by default and for full syncs; the
+feed lists 15), and stores the ones not stored yet; see
+[saved workflows](workflows.md#saved-workflow-source-sync). An operator
+`recent` window takes the listed uploads of its days instead, and a `count`
+window the newest `count`. Without a key, a `count` above the feed's 15 is
+partial and reports `youtube_count_limited`. The cursor is the newest listed
+upload. It separately inspects the streams page and keeps rechecking active or
 recent reservations for `scheduledStartTime`, writing them to both `videos` and
 `events`. When no schedule time is available, the script does not invent one. RSS insertion
 does not count as a reservation detail check, but RSS lists waiting rooms and
-premieres like ordinary uploads, so RSS entries published within the lookback
-window are detail candidates as well, after stream-page discoveries. A watch
+premieres like ordinary uploads, so the uploads a run takes are detail
+candidates as well, after stream-page discoveries. A watch
 page whose player reports `isLiveContent: false` with a start time is a
 premiere: its event is a `release` and its video keeps the title-derived kind.
 The verdict is stored as `videos.is_premiere` (1 for a premiere, 0 for live
@@ -150,10 +170,13 @@ queue, so IDs whose checks keep failing do not starve the rest.
 With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
 
 - `playlistItems.list` on the channel's uploads playlist (`UU` and the channel
-  ID after `UC`, 50 entries) is the listing, read like feed entries: the
-  video's publication time (or the entry's), the title and the largest
-  `*.ytimg.com` thumbnail. Private entries are skipped. When it fails, the
-  feed and then the uploads tab are tried as above.
+  ID after `UC`) is the listing, read like feed entries: the video's
+  publication time (or the entry's), the title and the largest `*.ytimg.com`
+  thumbnail. Private entries are skipped. Pages of 50 (one quota unit each,
+  at most four) follow `nextPageToken` until the run has its uploads; an
+  incremental run also stops at a page that holds a stored video. A failed
+  later page keeps the earlier ones. When the first page fails, the feed and
+  then the uploads tab are tried as above.
 - One `videos.list` call (`snippet`, `contentDetails`, `liveStreamingDetails`)
   covers the first 50 IDs of the detail queue. A described video counts as a
   successful detail check without a watch-page request: its title, length
@@ -184,8 +207,9 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   step still revalidates the file. See [Video corrections](data-model.md#video-corrections-and-history)
   for what counts as the same image.
 
-Each run spends two quota units (of the default 10,000 a day), whatever the
-queue length. The key is sent only in the `X-Goog-Api-Key` header to
+A run that finds a stored video on its first playlist page spends two quota
+units (of the default 10,000 a day), whatever the queue length; each further
+page adds one. The key is sent only in the `X-Goog-Api-Key` header to
 `https://www.googleapis.com/youtube/v3/`, with the client's 10-second timeout,
 4 MiB limit and rejected redirects. Failures record controlled codes
 (`youtube_api_forbidden` for a refused key or quota, `youtube_api_rate_limited`,

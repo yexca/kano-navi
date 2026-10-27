@@ -27,8 +27,8 @@
 | `X_API_BEARER_TOKEN`            | Empty                | Optional environment-only credential for X archive search         |
 | `YOUTUBE_API_KEY`               | Empty                | Optional environment-only Data API key: YouTube sync and search   |
 | `SOURCE_HISTORY_MAX_PAGES`      | `4`                  | Fetch window pages per account/run (1–20), also within X budget   |
-| `X_BOOTSTRAP_DAYS`              | `7`                  | First-run X lookback in days                                      |
-| `X_DISCOVERY_LIMIT`             | `50`                 | Maximum discovered status IDs; bounds timeline pages of 20 (≤10)  |
+| `X_BOOTSTRAP_DAYS`              | `7`                  | Age limit in days while an X account has no cursor yet            |
+| `X_DISCOVERY_LIMIT`             | `50`                 | Full-sync cap of unstored X statuses per account; pages of 20     |
 | `X_MAX_STATUS_REQUESTS`         | `12`                 | Maximum X detail requests per run; X fetch window page budget     |
 | `X_REFRESH_KNOWN`               | `1`                  | Known X posts refreshed per run                                   |
 | `X_SCHEDULE_REFRESH_LIMIT`      | `1`                  | Missing schedule source posts prioritized per account             |
@@ -71,9 +71,14 @@ or logs. `OPENAI_API_KEY` is accepted only by the one-time migration command.
 
 Configure local values in the ignored .env or deployment environment. Changes
 to environment-only credentials require a server restart. Provider hosts,
-models, encrypted keys, routes, source accounts, and workflow windows are
-operator settings managed through /admin. Source windows and timer intervals
-are independent.
+models, encrypted keys, routes, source accounts, and workflow source sync
+settings are operator settings managed through /admin. How much a run reads
+and the timer interval are independent. A saved workflow's incremental cap
+replaces `X_DISCOVERY_LIMIT` for its runs; full syncs (`kano-go sync`, the
+console's Sync everything, MCP) keep the variable for X and read 50 YouTube
+uploads at most. Saved workflows no longer turn `X_API_BEARER_TOKEN` or
+`YOUTUBE_API_KEY` into date searches
+([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)).
 
 The backend (`kano-go`) reads `.env` from its working directory; variables
 already present in the environment win. The database path is a command-line

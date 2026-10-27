@@ -9,31 +9,37 @@ import (
 	"time"
 )
 
-const definitionColumns = "id,name,steps_json,source_lookback_json,schedule_enabled,interval_minutes,last_run_at,last_job_id,last_status,next_run_at,created_at,updated_at"
+const definitionColumns = "id,name,steps_json,schedule_enabled,interval_minutes,last_run_at,last_job_id,last_status,next_run_at,created_at,updated_at"
+
+// syncColumn selects source_sync_json, or its default for a read-only
+// snapshot whose workflow tables predate the column.
+func (s *Store) syncColumn() string {
+	if s.sourceSync {
+		return "source_sync_json"
+	}
+	return "'{}'"
+}
+
+// definitionQuery selects a definition's columns in scanDefinition's order.
+func (s *Store) definitionQuery() string {
+	return "SELECT " + definitionColumns + "," + s.syncColumn() + " FROM workflows"
+}
 
 type workflowScanner interface{ Scan(...any) error }
 
 func scanDefinition(row workflowScanner) (WorkflowDefinition, error) {
 	var x WorkflowDefinition
-	var steps, lookback string
+	var steps, sync string
 	var enabled int
 	var lr, lj, ls, nr sql.NullString
-	err := row.Scan(&x.ID, &x.Name, &steps, &lookback, &enabled, &x.IntervalMinutes, &lr, &lj, &ls, &nr, &x.CreatedAt, &x.UpdatedAt)
+	err := row.Scan(&x.ID, &x.Name, &steps, &enabled, &x.IntervalMinutes, &lr, &lj, &ls, &nr, &x.CreatedAt, &x.UpdatedAt, &sync)
 	if err != nil {
 		return x, err
 	}
 	if json.Unmarshal([]byte(steps), &x.Steps) != nil {
 		return x, ErrWorkflowValidation
 	}
-	x.SourceLookbackDays = map[string]int{"x": 7, "youtube": 14}
-	var days map[string]int
-	if json.Unmarshal([]byte(lookback), &days) == nil {
-		for _, k := range []string{"x", "youtube"} {
-			if n, ok := days[k]; ok && n >= 1 && n <= 365 {
-				x.SourceLookbackDays[k] = n
-			}
-		}
-	}
+	x.SourceSync = readSourceSync(sync)
 	x.ScheduleEnabled = enabled != 0
 	x.IntervalMinutes = clampInterval(x.IntervalMinutes)
 	x.LastRunAt = nullableWorkflowString(lr)
@@ -62,7 +68,7 @@ func (s *Store) GetWorkflow(ctx context.Context, id string) (*WorkflowDefinition
 	if n == 0 {
 		return nil, ErrWorkflowUnavailable
 	}
-	x, err := scanDefinition(s.db.QueryRowContext(ctx, "SELECT "+definitionColumns+" FROM workflows WHERE id=?", id))
+	x, err := scanDefinition(s.db.QueryRowContext(ctx, s.definitionQuery()+" WHERE id=?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrWorkflowNotFound
 	}
@@ -81,7 +87,7 @@ func (s *Store) ListWorkflows(ctx context.Context, page, size int) (WorkflowPage
 	}
 	page, size = boundPage(page, size, 100, 25)
 	page = safePage(page, pageCount(total, size))
-	rows, err := s.db.QueryContext(ctx, "SELECT "+definitionColumns+" FROM workflows ORDER BY created_at,id LIMIT ? OFFSET ?", size, (page-1)*size)
+	rows, err := s.db.QueryContext(ctx, s.definitionQuery()+" ORDER BY created_at,id LIMIT ? OFFSET ?", size, (page-1)*size)
 	if err != nil {
 		return WorkflowPage{}, ErrWorkflowStorage
 	}
@@ -103,7 +109,7 @@ func (s *Store) ListDueWorkflows(ctx context.Context, now time.Time) ([]Workflow
 	if err := s.requireWorkflow(); err != nil {
 		return nil, err
 	}
-	rows, e := s.db.QueryContext(ctx, "SELECT "+definitionColumns+" FROM workflows WHERE schedule_enabled=1 AND next_run_at IS NOT NULL AND julianday(next_run_at)<=julianday(?) ORDER BY julianday(next_run_at),id LIMIT 1", workflowTime(now))
+	rows, e := s.db.QueryContext(ctx, s.definitionQuery()+" WHERE schedule_enabled=1 AND next_run_at IS NOT NULL AND julianday(next_run_at)<=julianday(?) ORDER BY julianday(next_run_at),id LIMIT 1", workflowTime(now))
 	if e != nil {
 		return nil, ErrWorkflowStorage
 	}
@@ -211,6 +217,26 @@ func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, er
 		}
 		if windows.Valid && windows.String != "" && json.Unmarshal([]byte(windows.String), &x.FetchWindows) != nil {
 			return nil, ErrWorkflowStorage
+		}
+	}
+	if s.sourceSync {
+		// A run keeps only what its definition froze; ad hoc runs and runs
+		// made before the column carry none and use each step's defaults.
+		var sync string
+		if s.db.QueryRowContext(ctx, `SELECT source_sync_json FROM workflow_runs WHERE id=?`, id).Scan(&sync) != nil {
+			return nil, ErrWorkflowStorage
+		}
+		var stored map[string]SourceSync
+		if json.Unmarshal([]byte(sync), &stored) != nil {
+			return nil, ErrWorkflowStorage
+		}
+		for source, setting := range stored {
+			if setting.Valid() {
+				if x.SourceSync == nil {
+					x.SourceSync = map[string]SourceSync{}
+				}
+				x.SourceSync[source] = setting
+			}
 		}
 	}
 	rows, e := s.db.QueryContext(ctx, `SELECT id,step_id,step_order,status,`+capabilityColumn+`,started_at,finished_at,error_code,retryable FROM workflow_run_steps WHERE run_id=? ORDER BY step_order LIMIT 16`, id)

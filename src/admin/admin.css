@@ -400,6 +400,11 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* Fields whose hints differ in length keep their controls level. */
+.adm-form-row.is-top {
+  align-items: start;
+}
+
 .adm-field {
   display: grid;
   gap: 6px;

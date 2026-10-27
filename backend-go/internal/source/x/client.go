@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -145,6 +146,9 @@ type Options struct {
 	// CursorID is the account's newest stored status; timeline paging stops
 	// once it reaches it.
 	CursorID string
+	// Gap is the unread stretch an earlier capped run left, read after the
+	// newest pages.
+	Gap *Gap
 }
 
 func DefaultOptions() Options {
@@ -233,6 +237,10 @@ type Result struct {
 	// Discovery names where the status IDs came from: DiscoveryTimeline, or
 	// DiscoveryProfile after a timeline fallback.
 	Discovery string
+	// Gap is the account's unread timeline stretch after the run, nil when
+	// there is none; Notes are controlled codes about it.
+	Gap   *Gap
+	Notes []string
 }
 
 type Adapter struct {
@@ -269,8 +277,10 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 	if !regexp.MustCompile(`^[A-Za-z0-9_]{1,30}$`).MatchString(account) {
 		return result, &Error{Code: ErrInvalidResponse, Err: errors.New("invalid account")}
 	}
+	// The bootstrap age limit bounds only an account without a cursor; once
+	// one is stored, reading goes back to it, through a gap when need be.
 	var cutoff time.Time
-	if opts.BootstrapDays > 0 {
+	if opts.BootstrapDays > 0 && opts.CursorID == "" {
 		now := time.Now()
 		if a.Now != nil {
 			now = a.Now()
@@ -279,15 +289,21 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 	}
 	// The timeline pages back to stored posts; the logged-out profile page
 	// lists only the newest few statuses and is the fallback.
-	ids, err := a.discoverTimeline(ctx, account, opts, cutoff)
-	result.Discovery = DiscoveryTimeline
+	found, err := a.discoverTimeline(ctx, account, opts, cutoff)
+	ids := found.ids
+	result.Discovery, result.Gap, result.Notes = DiscoveryTimeline, found.gap, found.notes
 	if err != nil || len(ids) == 0 {
-		result.Discovery = DiscoveryProfile
+		result.Discovery, result.Gap, result.Notes = DiscoveryProfile, opts.Gap, nil
 		profile, profileErr := a.Client.Profile(ctx, account)
 		if profileErr != nil {
 			return result, profileErr
 		}
 		ids = DiscoverIDs(profile, opts.DiscoveryLimit)
+		// The profile lists only the newest few statuses; when none of them is
+		// stored, the timeline reads the rest later.
+		if opts.CursorID != "" && !slices.ContainsFunc(ids, func(id string) bool { return reachesStored(id, opts, cutoff) }) {
+			result.Gap = withGap(opts.Gap, Gap{Floor: opts.CursorID})
+		}
 	}
 	if !cutoff.IsZero() {
 		filtered := make([]string, 0, len(ids))

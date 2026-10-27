@@ -480,12 +480,21 @@ export const adminMessages = {
     "admin.runs.skippedStep": "Disabled in this process",
     "admin.runs.field.name": "Name",
     "admin.runs.field.steps": "Steps",
-    "admin.runs.field.lookback": "{source} lookback (days)",
-    "admin.runs.field.lookbackHint":
-      "Without API credentials only recent public records are visible.",
+    "admin.runs.field.sync": "{source} sync",
+    "admin.runs.field.syncHint.incremental":
+      "Read newest first until a stored record. A run that reaches the limit continues where it stopped next time.",
+    "admin.runs.field.syncHint.count":
+      "Read the newest records every run, stored or not.",
+    "admin.runs.field.syncLimit.incremental.x": "Most new posts per account",
+    "admin.runs.field.syncLimit.count.x": "Newest posts per account",
+    "admin.runs.field.syncLimit.incremental.youtube": "Most new videos per run",
+    "admin.runs.field.syncLimit.count.youtube": "Newest videos per run",
+    "admin.runs.field.syncLimitHint.x": "1 to 200",
+    "admin.runs.field.syncLimitHint.youtube":
+      "1 to 200. Without YOUTUBE_API_KEY the RSS feed lists 15.",
     "admin.runs.field.scheduled": "Run on a timer",
     "admin.runs.field.scheduledHint":
-      "The interval is independent of the lookback.",
+      "The interval is independent of how much each run reads.",
     "admin.runs.field.interval": "Interval",
     "admin.runs.history": "Run history",
     "admin.runs.historyHint": "Select a run for its steps and counts.",
@@ -513,12 +522,15 @@ export const adminMessages = {
     "admin.fetch.mode.recent": "Recent",
     "admin.fetch.mode.before": "Before oldest",
     "admin.fetch.mode.range": "Date range",
-    "admin.fetch.mode.count": "Latest posts",
+    "admin.fetch.mode.count": "Latest",
+    "admin.fetch.mode.incremental": "Incremental",
     "admin.fetch.hint.recent": "Read the last few days, like a timed sync.",
     "admin.fetch.hint.recentAll":
       "Read every post of the last few days, including ones a timed sync missed.",
     "admin.fetch.hint.count":
       "Read each account's newest posts from its timeline, whatever their age.",
+    "admin.fetch.hint.count.youtube":
+      "Read the channel's newest uploads, stored or not. Without YOUTUBE_API_KEY the RSS feed lists only 15.",
     "admin.fetch.hint.before":
       "Continue backwards from the oldest stored record. Interrupted pages resume first.",
     "admin.fetch.hint.range":
@@ -529,9 +541,14 @@ export const adminMessages = {
     "admin.fetch.daysCount": ({ count }: { count: number }) =>
       plural(count, "day", "days"),
     "admin.fetch.count": "Posts per account",
+    "admin.fetch.count.youtube": "Videos",
     "admin.fetch.countHint": "1 to 200",
     "admin.fetch.postsCount": ({ count }: { count: number }) =>
       plural(count, "post", "posts"),
+    "admin.fetch.videosCount": ({ count }: { count: number }) =>
+      plural(count, "video", "videos"),
+    "admin.fetch.maxCount": ({ count }: { count: number }) =>
+      `at most ${count}`,
     "admin.fetch.start": "First day",
     "admin.fetch.end": "Last day",
     "admin.fetch.needsKey.x":
@@ -1267,10 +1284,19 @@ export const adminMessages = {
     "admin.runs.skippedStep": "本进程已停用",
     "admin.runs.field.name": "名称",
     "admin.runs.field.steps": "步骤",
-    "admin.runs.field.lookback": "{source} 回看天数",
-    "admin.runs.field.lookbackHint": "没有 API 凭据时只能读取公开的近期记录。",
+    "admin.runs.field.sync": "{source} 同步方式",
+    "admin.runs.field.syncHint.incremental":
+      "从最新开始读到已存的记录为止。达到上限的运行会在下次从中断处继续。",
+    "admin.runs.field.syncHint.count": "每次读取最新的若干条，无论是否已存。",
+    "admin.runs.field.syncLimit.incremental.x": "每个账号最多新贴文数",
+    "admin.runs.field.syncLimit.count.x": "每个账号最新贴文数",
+    "admin.runs.field.syncLimit.incremental.youtube": "每次最多新视频数",
+    "admin.runs.field.syncLimit.count.youtube": "每次最新视频数",
+    "admin.runs.field.syncLimitHint.x": "1 到 200",
+    "admin.runs.field.syncLimitHint.youtube":
+      "1 到 200。没有 YOUTUBE_API_KEY 时 RSS 只列出 15 个。",
     "admin.runs.field.scheduled": "定时运行",
-    "admin.runs.field.scheduledHint": "运行间隔与回看天数相互独立。",
+    "admin.runs.field.scheduledHint": "运行间隔与每次读取的数量相互独立。",
     "admin.runs.field.interval": "间隔",
     "admin.runs.history": "运行记录",
     "admin.runs.historyHint": "选择一次运行查看步骤和数量。",
@@ -1299,11 +1325,14 @@ export const adminMessages = {
     "admin.fetch.mode.before": "向前回填",
     "admin.fetch.mode.range": "日期范围",
     "admin.fetch.mode.count": "最新条数",
+    "admin.fetch.mode.incremental": "增量",
     "admin.fetch.hint.recent": "读取最近几天，与定时同步相同。",
     "admin.fetch.hint.recentAll":
       "读取最近几天的全部贴文，包括定时同步漏掉的。",
     "admin.fetch.hint.count":
       "从时间线读取每个账号最新的若干条贴文，不限时间。",
+    "admin.fetch.hint.count.youtube":
+      "读取频道最新的若干个投稿，无论是否已存。没有 YOUTUBE_API_KEY 时 RSS 只列出 15 个。",
     "admin.fetch.hint.before":
       "从最早的已存记录继续向前读取。中断的分页会优先续读。",
     "admin.fetch.hint.range": "读取包含两端的日本日期范围，最多 365 天。",
@@ -1312,8 +1341,11 @@ export const adminMessages = {
     "admin.fetch.daysHint": "1 到 365",
     "admin.fetch.daysCount": "{count} 天",
     "admin.fetch.count": "每个账号的条数",
+    "admin.fetch.count.youtube": "视频数",
     "admin.fetch.countHint": "1 到 200",
     "admin.fetch.postsCount": "{count} 条",
+    "admin.fetch.videosCount": "{count} 个视频",
+    "admin.fetch.maxCount": "最多 {count} 条",
     "admin.fetch.start": "第一天",
     "admin.fetch.end": "最后一天",
     "admin.fetch.needsKey.x": "这个时间窗口需要服务器配置 X_API_BEARER_TOKEN。",

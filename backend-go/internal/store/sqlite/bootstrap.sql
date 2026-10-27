@@ -391,6 +391,7 @@ CREATE TABLE workflows (
     name TEXT NOT NULL,
     steps_json TEXT NOT NULL,
     source_lookback_json TEXT NOT NULL DEFAULT '{}',
+    source_sync_json TEXT NOT NULL DEFAULT '{}',
     schedule_enabled INTEGER NOT NULL DEFAULT 0,
     interval_minutes INTEGER NOT NULL DEFAULT 60,
     last_run_at TEXT,

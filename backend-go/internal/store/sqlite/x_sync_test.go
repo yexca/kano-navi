@@ -42,3 +42,28 @@ func TestWriteXRecentAtomicSnapshotAndCursor(t *testing.T) {
 		t.Fatalf("counts %d %d %d %d %d", posts, cursor, media, assets, timeline)
 	}
 }
+
+func TestWriteXRecentKeepsTheTimelineGapUntilARunClosesIt(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	gap := &xsource.Gap{Cursor: "page-3", Floor: "1"}
+	opened := xsource.Result{Account: "kano", DiscoveredCount: 2, PendingIDs: []string{"3", "2"}, Gap: gap}
+	if err = s.WriteXRecent(ctx, "kano", opened, false); err != nil {
+		t.Fatal(err)
+	}
+	state, err := s.XRecentState(ctx, "kano")
+	if err != nil || state.Gap == nil || *state.Gap != *gap || len(state.PendingIDs) != 2 {
+		t.Fatalf("state=%#v err=%v", state, err)
+	}
+	if err = s.WriteXRecent(ctx, "kano", xsource.Result{Account: "kano", DiscoveredCount: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	if state, err = s.XRecentState(ctx, "kano"); err != nil || state.Gap != nil {
+		t.Fatalf("closed gap=%#v err=%v", state.Gap, err)
+	}
+}

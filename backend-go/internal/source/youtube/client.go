@@ -151,10 +151,24 @@ const MaxAPIVideos = 50
 // ("UU" and the channel ID after "UC") through the YouTube Data API: one
 // quota unit. The key travels only in the X-Goog-Api-Key header.
 func (c *Client) PlaylistItems(ctx context.Context, key, channel string) ([]byte, error) {
+	return c.PlaylistPage(ctx, key, channel, "")
+}
+
+var pageToken = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// PlaylistPage lists the uploads playlist page that an earlier answer's
+// nextPageToken names, or the newest page for an empty token: one quota unit.
+func (c *Client) PlaylistPage(ctx context.Context, key, channel, token string) ([]byte, error) {
 	if !channelID.MatchString(channel) {
 		return nil, &Error{"youtube_invalid_channel"}
 	}
 	query := url.Values{"part": {"snippet,contentDetails,status"}, "playlistId": {"UU" + channel[2:]}, "maxResults": {"50"}}
+	if token != "" {
+		if !pageToken.MatchString(token) {
+			return nil, &Error{"youtube_api_invalid_response"}
+		}
+		query.Set("pageToken", token)
+	}
 	return c.api(ctx, "playlistItems", query, key)
 }
 

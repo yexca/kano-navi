@@ -19,18 +19,22 @@ var (
 )
 
 type WorkflowDefinition struct {
-	ID                 string         `json:"id"`
-	Name               string         `json:"name"`
-	Steps              []string       `json:"steps"`
-	SourceLookbackDays map[string]int `json:"sourceLookbackDays"`
-	ScheduleEnabled    bool           `json:"scheduleEnabled"`
-	IntervalMinutes    int            `json:"intervalMinutes"`
-	LastRunAt          *string        `json:"lastRunAt"`
-	LastJobID          *string        `json:"lastJobId"`
-	LastStatus         *string        `json:"lastStatus"`
-	NextRunAt          *string        `json:"nextRunAt"`
-	CreatedAt          string         `json:"createdAt"`
-	UpdatedAt          string         `json:"updatedAt"`
+	ID    string   `json:"id"`
+	Name  string   `json:"name"`
+	Steps []string `json:"steps"`
+	// SourceSync is how each source step reads; see ADR-0002.
+	SourceSync      map[string]SourceSync `json:"sourceSync"`
+	ScheduleEnabled bool                  `json:"scheduleEnabled"`
+	IntervalMinutes int                   `json:"intervalMinutes"`
+	LastRunAt       *string               `json:"lastRunAt"`
+	LastJobID       *string               `json:"lastJobId"`
+	LastStatus      *string               `json:"lastStatus"`
+	NextRunAt       *string               `json:"nextRunAt"`
+	CreatedAt       string                `json:"createdAt"`
+	UpdatedAt       string                `json:"updatedAt"`
+	// SourceLookbackDays are the days of an operator's recent fetch windows.
+	// Saved definitions no longer use them.
+	SourceLookbackDays map[string]int `json:"-"`
 	// FetchWindows are operator-selected source windows of an unsaved fetch.
 	// They are frozen on the run and never stored with a saved definition.
 	FetchWindows map[string]history.Window `json:"-"`
@@ -69,6 +73,7 @@ type WorkflowRun struct {
 	CancellationRequestedAt *string                   `json:"cancellationRequestedAt"`
 	RecoveryCount           int                       `json:"recoveryCount"`
 	SourceLookbackDays      map[string]int            `json:"sourceLookbackDays,omitempty"`
+	SourceSync              map[string]SourceSync     `json:"sourceSync,omitempty"`
 	FetchWindows            map[string]history.Window `json:"fetchWindows,omitempty"`
 	Steps                   []WorkflowStep            `json:"steps,omitempty"`
 }

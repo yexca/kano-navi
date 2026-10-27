@@ -102,28 +102,38 @@ live-status probe, started only by its timer with `triggeredBy:
 - `{"kind": "fetch", "source": "x" | "youtube", "window": Window}`: one
   source plus media for a [history window](workflows.md#fetch-windows-and-historical-backfill).
   `Window` is `{mode: "recent" | "before", days}`, `{mode: "range",
-startDate, endDate}` or, for X only, `{mode: "count", count}` (1–200 per
-  account). A mode outside the source's `windows` is rejected with
-  `400 invalid_input`: past YouTube windows and X backfills need the official
-  API credential, while X `range` and `count` windows page the public
-  timeline.
+startDate, endDate}` or `{mode: "count", count}` (1–200 per X account or
+  for the YouTube channel). A mode outside the source's `windows` is
+  rejected with `400 invalid_input`: past YouTube windows and X backfills
+  need the official API credential, while X `range` and `count` windows
+  page the public timeline and a YouTube `count` window reads the uploads
+  listing.
 
 A busy queue answers `409` with the active run.
 
 ## Workflows
 
-| Method and path          | Body                                                                  | Result                                 |
-| ------------------------ | --------------------------------------------------------------------- | -------------------------------------- |
-| `GET /workflows`         |                                                                       | `{items, steps, limits, skippedSteps}` |
-| `POST /workflows`        | `{name, steps, scheduleEnabled, intervalMinutes, sourceLookbackDays}` | `201 {workflow}`                       |
-| `PUT /workflows/{id}`    | any subset of the above                                               | `{workflow}`                           |
-| `DELETE /workflows/{id}` |                                                                       | `204`; `409 busy` while it runs        |
+| Method and path          | Body                                                          | Result                                 |
+| ------------------------ | ------------------------------------------------------------- | -------------------------------------- |
+| `GET /workflows`         |                                                               | `{items, steps, limits, skippedSteps}` |
+| `POST /workflows`        | `{name, steps, scheduleEnabled, intervalMinutes, sourceSync}` | `201 {workflow}`                       |
+| `PUT /workflows/{id}`    | any subset of the above                                       | `{workflow}`                           |
+| `DELETE /workflows/{id}` |                                                               | `204`; `409 busy` while it runs        |
 
 `steps` is the catalog `[{id, group}]` (`x`, `youtube` are `source`; `media`,
 `schedule` are `process`), `limits` is `{minIntervalMinutes,
 maxIntervalMinutes}` and `skippedSteps` lists steps disabled through `SKIP_*`.
 Each workflow carries `lastRunAt`, `lastStatus` (durable run status) and
 `nextRunAt`.
+
+`sourceSync` sets how the `x` and `youtube` steps read, per source:
+`{mode: "incremental", max}` (default, `max` 50) or `{mode: "count",
+count}`, each 1–200 (see
+[saved workflows](workflows.md#saved-workflow-source-sync)). A request names
+one or both sources; the other keeps its stored or default setting. Other
+fields, including the retired `sourceLookbackDays`, are rejected with
+`400 invalid_input`. A workflow run's `fetchWindows` shows the setting its
+source steps froze.
 
 ## Sources
 

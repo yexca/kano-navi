@@ -97,7 +97,7 @@ func openInitialized(filename string, adminWrites, workflowWrites, upgrade bool)
 		return nil, err
 	}
 	failed = false
-	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), writable: adminWrites, workflowWritable: workflowWrites, workflowVersion: WorkflowSchemaVersion}, nil
+	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), writable: adminWrites, workflowWritable: workflowWrites, workflowVersion: WorkflowSchemaVersion, sourceSync: true}, nil
 }
 
 // verifySchema only requires QueryContext; both fresh creation and inspection

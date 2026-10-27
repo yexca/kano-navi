@@ -111,11 +111,7 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 		// the public timeline serves without it.
 		if !a.windowAvailable(source, window.Mode) {
 			if window.Mode == history.ModeCount {
-				message := "count windows are available for X only"
-				if source == "x" {
-					message = "count windows need the public X timeline"
-				}
-				httpx.WriteError(w, httpx.Invalid("%s", message))
+				httpx.WriteError(w, httpx.Invalid("count windows need the public X timeline"))
 				return
 			}
 			credential := "YOUTUBE_API_KEY"
@@ -255,7 +251,7 @@ func (a *api) deleteWorkflow(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-var workflowFields = []string{"name", "steps", "scheduleEnabled", "intervalMinutes", "sourceLookbackDays"}
+var workflowFields = []string{"name", "steps", "scheduleEnabled", "intervalMinutes", "sourceSync"}
 
 func workflowInput(body map[string]json.RawMessage, existing *sqlite.WorkflowDefinition, input *sqlite.WorkflowDefinition) error {
 	for key := range body {
@@ -312,31 +308,72 @@ func workflowInput(body map[string]json.RawMessage, existing *sqlite.WorkflowDef
 		}
 		input.IntervalMinutes = minutes
 	}
-	lookback := map[string]int{"x": 7, "youtube": 14}
-	for source, days := range input.SourceLookbackDays {
-		lookback[source] = days
+	sync := sqlite.DefaultSourceSync()
+	for source, setting := range input.SourceSync {
+		sync[source] = setting
 	}
-	if raw, ok := body["sourceLookbackDays"]; ok && !jsonNull(raw) {
-		var days map[string]json.RawMessage
-		if json.Unmarshal(raw, &days) != nil {
-			return httpx.Invalid("sourceLookbackDays must contain x and/or youtube")
+	if raw, ok := body["sourceSync"]; ok && !jsonNull(raw) {
+		var settings map[string]json.RawMessage
+		if json.Unmarshal(raw, &settings) != nil {
+			return httpx.Invalid("sourceSync must contain x and/or youtube")
 		}
-		for source, value := range days {
-			if source != "x" && source != "youtube" {
-				return httpx.Invalid("sourceLookbackDays must contain x and/or youtube")
+		for source, value := range settings {
+			if !slices.Contains(sqlite.SyncSources, source) {
+				return httpx.Invalid("sourceSync must contain x and/or youtube")
 			}
 			if jsonNull(value) {
 				continue
 			}
-			number, err := integer(value, "days", 1, 365)
+			setting, err := sourceSync(value)
 			if err != nil {
 				return err
 			}
-			lookback[source] = number
+			sync[source] = setting
 		}
 	}
-	input.SourceLookbackDays = lookback
+	input.SourceSync = sync
 	return nil
+}
+
+// sourceSync validates {mode: "incremental", max} or {mode: "count", count};
+// an incremental setting without max takes the default cap.
+func sourceSync(raw json.RawMessage) (sqlite.SourceSync, error) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || fields == nil {
+		return sqlite.SourceSync{}, httpx.Invalid("sourceSync entries must be objects")
+	}
+	var mode string
+	_ = json.Unmarshal(fields["mode"], &mode)
+	for key := range fields {
+		if key != "mode" && key != "max" && key != "count" {
+			return sqlite.SourceSync{}, httpx.Invalid("%s is not a sourceSync field", key)
+		}
+	}
+	switch mode {
+	case sqlite.SyncIncremental:
+		if _, ok := fields["count"]; ok {
+			return sqlite.SourceSync{}, httpx.Invalid("incremental sync takes max, not count")
+		}
+		setting := sqlite.SourceSync{Mode: mode, Max: sqlite.DefaultSyncMax}
+		if raw, ok := fields["max"]; ok && !jsonNull(raw) {
+			number, err := integer(raw, "max", 1, sqlite.MaxSyncLimit)
+			if err != nil {
+				return sqlite.SourceSync{}, err
+			}
+			setting.Max = number
+		}
+		return setting, nil
+	case sqlite.SyncCount:
+		if _, ok := fields["max"]; ok {
+			return sqlite.SourceSync{}, httpx.Invalid("count sync takes count, not max")
+		}
+		number, err := integer(fields["count"], "count", 1, sqlite.MaxSyncLimit)
+		if err != nil {
+			return sqlite.SourceSync{}, err
+		}
+		return sqlite.SourceSync{Mode: mode, Count: number}, nil
+	}
+	return sqlite.SourceSync{}, httpx.Invalid("sourceSync mode must be incremental or count")
 }
 
 func jsonNull(raw json.RawMessage) bool {

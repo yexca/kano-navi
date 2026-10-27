@@ -29,7 +29,9 @@ func timelineBody(next string, statuses ...string) string {
 }
 
 type timelineServer struct {
-	pages    map[string]*http.Response
+	pages map[string]*http.Response
+	// bodies answer every read of a cursor, for runs that read a page again.
+	bodies   map[string]string
 	cursors  []string
 	profiles int
 }
@@ -45,6 +47,9 @@ func (s *timelineServer) adapter(opts Options) *Adapter {
 			s.cursors = append(s.cursors, cursor)
 			if page, ok := s.pages[cursor]; ok {
 				return page, nil
+			}
+			if body, ok := s.bodies[cursor]; ok {
+				return response(200, body), nil
 			}
 			return response(404, `{"code":404}`), nil
 		case profileHost:

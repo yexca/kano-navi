@@ -27,7 +27,7 @@ func TestGoSourceWorkflowProducesPostsReservationsAndReadableMedia(t *testing.T)
 	defer s.Close()
 	testutil.Exec(t, p, `CREATE UNIQUE INDEX IF NOT EXISTS media_assets_source_url_idx ON media_assets(source_url)`)
 	testutil.Exec(t, p, `CREATE UNIQUE INDEX IF NOT EXISTS media_links_owner_position_idx ON media_links(owner_type,owner_id,role,position)`)
-	def, err := s.SaveWorkflow(context.Background(), sqlite.WorkflowDefinition{Name: "Sources", Steps: []string{"x", "youtube", "media"}, SourceLookbackDays: map[string]int{"x": 7, "youtube": 7}, IntervalMinutes: 60}, true)
+	def, err := s.SaveWorkflow(context.Background(), sqlite.WorkflowDefinition{Name: "Sources", Steps: []string{"x", "youtube", "media"}, IntervalMinutes: 60}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

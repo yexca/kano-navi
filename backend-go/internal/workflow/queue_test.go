@@ -89,8 +89,8 @@ func TestQueueReturnsBeforeWorkSurvivesRequestAndAllowsNextRefresh(t *testing.T)
 	cancel()
 	select {
 	case in := <-step.entered:
-		if in.LookbackDays != 3 {
-			t.Fatalf("window=%d", in.LookbackDays)
+		if in.LookbackDays != 3 || in.Sync != (sqlite.SourceSync{Mode: sqlite.SyncIncremental, Max: sqlite.DefaultSyncMax}) {
+			t.Fatalf("window=%d sync=%+v", in.LookbackDays, in.Sync)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("work did not start")

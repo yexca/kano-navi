@@ -125,21 +125,23 @@ Each step's counters are merged into the job's `sync_runs.counts_json` row.
 ## Historical source windows
 
 `POST /api/admin/runs` with `{"kind": "fetch", "source", "window"}` accepts
-`recent`, `before` and `range` windows, and `count` windows for X. The selected window is frozen on the run (`workflow_runs.
+`recent`, `before`, `range` and `count` windows. The selected window is frozen on the run (`workflow_runs.
 fetch_windows_json`), so a recovered or retried run never changes it.
 
 `before` and `range` use the official APIs and need the environment-only
 `X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY`, except that X `range` windows page
 the public FxTwitter timeline without the token, as X `count` windows always
-do. `GET /api/admin/sources` reports `historyAvailable` (the credential) and
+do; a YouTube `count` window reads the recent step's uploads listing. `GET /api/admin/sources` reports `historyAvailable` (the credential) and
 `windows` (the modes it can run now) per source, and a mode outside `windows`
 is rejected with a validation message. With the credential, a `recent` window
 is also served by the API (YouTube still reads the feed to refresh
 reservations); without it, an X `recent` window pages the timeline back to its
 start and a YouTube one reads the feed.
-Manual and timed runs of a saved workflow use their `sourceLookbackDays` as
-that rolling `recent` window. A full sync or scan (console, MCP or
-`kano-go sync`) carries no window and stays incremental.
+Saved workflows carry no window: their runs read each source by their frozen
+`sourceSync` (incremental with a cap, or the newest `count`), whatever the
+credentials ([Workflows](workflows.md#saved-workflow-source-sync)). A full
+sync or scan (console, MCP or `kano-go sync`) carries neither and stays
+incremental.
 
 `internal/source/history` calls only `api.x.com/2/tweets/search/all` and
 `www.googleapis.com/youtube/v3/search`, plus the FxTwitter timeline through the

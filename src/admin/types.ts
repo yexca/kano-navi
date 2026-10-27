@@ -24,12 +24,25 @@ export type StepProgress =
   | "cancelled"
 
 export interface FetchWindow {
-  /** "count" reads each X account's newest posts from its timeline. */
+  /** "count" reads each X account's or the channel's newest records. */
   mode: "recent" | "before" | "range" | "count"
   days?: number
   count?: number
   startDate?: string
   endDate?: string
+}
+
+/**
+ * How a saved workflow reads a source: until a stored record, at most `max`,
+ * or the newest `count` every run.
+ */
+export type SourceSync =
+  { mode: "incremental"; max: number } | { mode: "count"; count: number }
+
+/** A run's source window: an operator's, or a saved workflow's frozen sync. */
+export interface RunWindow extends Omit<FetchWindow, "mode"> {
+  mode: FetchWindow["mode"] | SourceSync["mode"]
+  max?: number
 }
 
 export interface Run {
@@ -44,7 +57,7 @@ export interface Run {
   workflowName: string | null
   steps: string[]
   progress: Record<string, StepProgress>
-  fetchWindows: Record<string, FetchWindow> | null
+  fetchWindows: Record<string, RunWindow> | null
   result: { status: string; results: Record<string, any> } | null
   error: string | null
   run: {
@@ -89,7 +102,7 @@ export interface Workflow {
   id: string
   name: string
   steps: string[]
-  sourceLookbackDays: Record<string, number>
+  sourceSync: Record<"x" | "youtube", SourceSync>
   scheduleEnabled: boolean
   intervalMinutes: number
   lastRunAt: string | null

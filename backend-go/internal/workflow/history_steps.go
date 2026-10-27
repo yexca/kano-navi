@@ -48,10 +48,13 @@ func (h *HistorySource) timeline(mode string) bool {
 
 // WindowAvailable reports whether a step can serve a window mode now. A recent
 // window always can: without a credential or timeline it stays incremental.
+// A YouTube count window always can as well: it reads the uploads listing.
 func (h *HistorySource) WindowAvailable(source, mode string) bool {
 	switch {
 	case mode == history.ModeRecent:
 		return source == history.SourceX || source == history.SourceYoutube
+	case source == history.SourceYoutube && mode == history.ModeCount:
+		return true
 	case source == history.SourceX:
 		return h.timeline(mode) || (mode != history.ModeCount && h.Available(source))
 	}

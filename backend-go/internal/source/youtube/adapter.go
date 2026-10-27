@@ -2,6 +2,7 @@ package youtube
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"time"
 )
@@ -82,16 +83,65 @@ func NewAdapter(c *Client, options Options) *Adapter {
 	}
 	return &Adapter{c, options, time.Now}
 }
+
+// List selects the listed uploads one recent run considers, newest first.
+type List struct {
+	// Limit is how many listed uploads the run takes, 1 to MaxListLimit.
+	Limit int
+	// Count takes Limit uploads even past stored ones. Otherwise the uploads
+	// playlist is paged only until a page holds a stored video.
+	Count bool
+	// Since leaves out older entries, for an operator's recent window.
+	Since time.Time
+}
+
+// MaxListLimit bounds a list: four uploads-playlist pages of 50.
+const MaxListLimit = 200
+
+// feedLimit is what the public feed lists, the reach of a run without a key.
+const feedLimit = 15
+
+const uploadsPageSize = 50
+
+// FetchRecent considers the newest listed uploads published within days, as
+// one playlist page or the feed lists them.
 func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Result, error) {
+	if days < 1 || days > 365 {
+		return Result{Videos: []Video{}, Errors: []string{}, Queue: []string{}, CheckedIDs: []string{}, InspectedIDs: []string{}, Shorts: map[string]bool{}}, &Error{"youtube_invalid_options"}
+	}
+	return a.FetchUploads(ctx, state, List{Limit: uploadsPageSize, Since: a.Now().Add(-time.Duration(days) * 24 * time.Hour)})
+}
+
+// FetchUploads lists the channel's newest uploads as list selects them, adds
+// the ones not stored yet and refreshes reservations through the detail queue.
+func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Result, error) {
 	result := Result{Videos: []Video{}, Errors: []string{}, Queue: []string{}, CheckedIDs: []string{}, InspectedIDs: []string{}, Shorts: map[string]bool{}}
-	if days < 1 || days > 365 || a.Options.MaxDetailRequests < 1 || a.Options.MaxDetailRequests > 50 {
+	if list.Limit < 1 || list.Limit > MaxListLimit || a.Options.MaxDetailRequests < 1 || a.Options.MaxDetailRequests > 50 {
 		return result, &Error{"youtube_invalid_options"}
 	}
 	now := a.Now()
-	cutoff := now.Add(-time.Duration(days) * 24 * time.Hour)
-	feed, listErr := a.listUploads(ctx, &result)
+	listed := func(t time.Time) bool { return list.Since.IsZero() || !t.Before(list.Since) }
+	feed, listErr := a.listUploads(ctx, &result, state, list)
 	if ctx.Err() != nil {
 		return result, ctx.Err()
+	}
+	newest := append([]Video(nil), feed...)
+	sort.SliceStable(newest, func(i, j int) bool {
+		ti, _ := time.Parse(time.RFC3339Nano, newest[i].PublishedAt)
+		tj, _ := time.Parse(time.RFC3339Nano, newest[j].PublishedAt)
+		return ti.After(tj)
+	})
+	if len(feed) > list.Limit {
+		// The newest Limit entries stay, in listing order.
+		kept := map[string]bool{}
+		for _, v := range newest[:list.Limit] {
+			kept[v.ID] = true
+		}
+		feed = slices.DeleteFunc(feed, func(v Video) bool { return !kept[v.ID] })
+		newest = newest[:list.Limit]
+	} else if list.Count && len(feed) < list.Limit && result.Listing == ListingFeed && len(feed) >= feedLimit {
+		// The feed cannot list more; only the Data API reaches further back.
+		result.Errors = append(result.Errors, "youtube_count_limited")
 	}
 	result.Discovered = len(feed)
 	if state.Videos == nil {
@@ -105,22 +155,17 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 			result.Shorts[v.ID] = *v.Short
 		}
 		t, _ := time.Parse(time.RFC3339Nano, v.PublishedAt)
-		if !t.Before(cutoff) {
+		if listed(t) {
 			feedIDs = append(feedIDs, v.ID)
 		}
-		if _, exists := state.Videos[v.ID]; !exists && !t.Before(cutoff) && t.Before(now) {
+		if _, exists := state.Videos[v.ID]; !exists && listed(t) && t.Before(now) {
 			v.FeedOnly = true
 			result.Videos = append(result.Videos, v)
 			state.Videos[v.ID] = v
 		}
 	}
-	if len(feed) > 0 {
-		sort.Slice(feed, func(i, j int) bool {
-			ti, _ := time.Parse(time.RFC3339Nano, feed[i].PublishedAt)
-			tj, _ := time.Parse(time.RFC3339Nano, feed[j].PublishedAt)
-			return ti.After(tj)
-		})
-		result.NextCursor, result.NextCursorTime = feed[0].ID, feed[0].PublishedAt
+	if len(newest) > 0 {
+		result.NextCursor, result.NextCursorTime = newest[0].ID, newest[0].PublishedAt
 	}
 	streamIDs := []string{}
 	body, err := a.Client.Streams(ctx, a.Options.ChannelID)
@@ -216,14 +261,9 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State, days int) (Resul
 // playlist when a key is set, then the RSS feed. Each failure is recorded in
 // the result; when neither answers it returns nil and the feed's error, so a
 // public outage keeps its retryable category.
-func (a *Adapter) listUploads(ctx context.Context, result *Result) ([]Video, error) {
+func (a *Adapter) listUploads(ctx context.Context, result *Result, state State, list List) ([]Video, error) {
 	if a.Options.APIKey != "" {
-		result.APIRequests++
-		body, err := a.Client.PlaylistItems(ctx, a.Options.APIKey, a.Options.ChannelID)
-		var uploads []Video
-		if err == nil {
-			uploads, err = ParseUploads(body)
-		}
+		uploads, err := a.apiUploads(ctx, result, state, list)
 		if err == nil {
 			result.Listing = ListingAPI
 			a.feedShorts(ctx, result)
@@ -247,6 +287,50 @@ func (a *Adapter) listUploads(ctx context.Context, result *Result) ([]Video, err
 		result.Errors = append(result.Errors, safeError(err))
 	}
 	return nil, err
+}
+
+// apiUploads pages the uploads playlist, newest first, until list.Limit
+// entries, the playlist's end or, unless list.Count, a page that holds a
+// stored video or one older than list.Since. A failed first page is
+// returned; a later failure is recorded and keeps the pages already read.
+func (a *Adapter) apiUploads(ctx context.Context, result *Result, state State, list List) ([]Video, error) {
+	out := []Video{}
+	seen := map[string]bool{}
+	token := ""
+	for page := 0; len(out) < list.Limit && page*uploadsPageSize < MaxListLimit; page++ {
+		result.APIRequests++
+		body, err := a.Client.PlaylistPage(ctx, a.Options.APIKey, a.Options.ChannelID, token)
+		var videos []Video
+		next := ""
+		if err == nil {
+			videos, next, err = ParseUploadsPage(body)
+		}
+		if err != nil {
+			if page == 0 || ctx.Err() != nil {
+				return nil, err
+			}
+			result.Errors = append(result.Errors, safeError(err))
+			break
+		}
+		reached := false
+		for _, v := range videos {
+			if seen[v.ID] {
+				continue
+			}
+			seen[v.ID] = true
+			out = append(out, v)
+			_, stored := state.Videos[v.ID]
+			t, _ := time.Parse(time.RFC3339Nano, v.PublishedAt)
+			if stored || v.ID == state.CursorID || (!list.Since.IsZero() && t.Before(list.Since)) {
+				reached = true
+			}
+		}
+		if next == "" || next == token || (reached && !list.Count) {
+			break
+		}
+		token = next
+	}
+	return out, nil
 }
 
 // feedShorts reads the feed for its Shorts verdicts alone, the one signal the

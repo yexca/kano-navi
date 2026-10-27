@@ -15,7 +15,7 @@ import {
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import { formatDateTime, formatInterval, formatRelative } from "@/admin/format"
-import type { Run, Workflow, WorkflowCatalog } from "@/admin/types"
+import type { Run, SourceSync, Workflow, WorkflowCatalog } from "@/admin/types"
 import {
   Badge,
   Button,
@@ -36,6 +36,11 @@ import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { RunLine, stepIcons } from "@/admin/views/run-parts"
 
 const intervals = [15, 30, 60, 120, 180, 360, 720, 1440]
+
+const syncSources = ["x", "youtube"] as const
+type SyncSource = (typeof syncSources)[number]
+// Workflows saved before sourceSync read as this default too.
+const defaultSync: SourceSync = { mode: "incremental", max: 50 }
 
 function WorkflowDialog({
   workflow,
@@ -61,9 +66,9 @@ function WorkflowDialog({
   )
   const [scheduled, setScheduled] = useState(workflow?.scheduleEnabled ?? true)
   const [interval, setInterval] = useState(workflow?.intervalMinutes || 60)
-  const [lookback, setLookback] = useState({
-    x: workflow?.sourceLookbackDays?.x ?? 7,
-    youtube: workflow?.sourceLookbackDays?.youtube ?? 14,
+  const [sync, setSync] = useState<Record<SyncSource, SourceSync>>({
+    x: workflow?.sourceSync?.x ?? defaultSync,
+    youtube: workflow?.sourceSync?.youtube ?? defaultSync,
   })
   const [busy, setBusy] = useState(false)
   const options = intervals.includes(interval)
@@ -77,7 +82,7 @@ function WorkflowDialog({
       steps,
       scheduleEnabled: scheduled,
       intervalMinutes: interval,
-      sourceLookbackDays: lookback,
+      sourceSync: sync,
     }
     const result = await act(
       () =>
@@ -144,32 +149,63 @@ function WorkflowDialog({
             })}
           </div>
         </fieldset>
-        <div className="adm-form-row">
-          {(["x", "youtube"] as const).map((source) =>
-            steps.includes(source) ? (
+        {syncSources.map((source) => {
+          if (!steps.includes(source)) return null
+          const setting = sync[source]
+          const limit = setting.mode === "count" ? setting.count : setting.max
+          return (
+            <div key={source} className="adm-form-row is-top">
               <Field
-                key={source}
-                label={t("admin.runs.field.lookback", {
+                label={t("admin.runs.field.sync", {
                   source: t(`admin.step.${source}`),
                 })}
-                hint={t("admin.runs.field.lookbackHint")}
+                hint={t(`admin.runs.field.syncHint.${setting.mode}`)}
+              >
+                <select
+                  value={setting.mode}
+                  onChange={(e) =>
+                    setSync((current) => ({
+                      ...current,
+                      [source]:
+                        e.target.value === "count"
+                          ? { mode: "count", count: limit }
+                          : { mode: "incremental", max: limit },
+                    }))
+                  }
+                >
+                  <option value="incremental">
+                    {t("admin.fetch.mode.incremental")}
+                  </option>
+                  <option value="count">{t("admin.fetch.mode.count")}</option>
+                </select>
+              </Field>
+              <Field
+                label={t(
+                  `admin.runs.field.syncLimit.${setting.mode}.${source}`,
+                )}
+                hint={t(`admin.runs.field.syncLimitHint.${source}`)}
               >
                 <input
                   type="number"
                   min={1}
-                  max={365}
-                  value={lookback[source]}
-                  onChange={(e) =>
-                    setLookback((current) => ({
+                  max={200}
+                  value={limit}
+                  onChange={(e) => {
+                    const value = Number(e.target.value)
+                    setSync((current) => ({
                       ...current,
-                      [source]: Number(e.target.value),
+                      [source]:
+                        setting.mode === "count"
+                          ? { mode: "count", count: value }
+                          : { mode: "incremental", max: value },
                     }))
-                  }
+                  }}
+                  required
                 />
               </Field>
-            ) : null,
-          )}
-        </div>
+            </div>
+          )
+        })}
         <Switch
           checked={scheduled}
           onChange={setScheduled}
@@ -387,8 +423,11 @@ function RunDetail({ run, onChanged }: { run: Run; onChanged: () => void }) {
                 {run.fetchWindows[step].days
                   ? ` · ${t("admin.fetch.daysCount", { count: run.fetchWindows[step].days })}`
                   : ""}
+                {run.fetchWindows[step].max
+                  ? ` · ${t("admin.fetch.maxCount", { count: run.fetchWindows[step].max })}`
+                  : ""}
                 {run.fetchWindows[step].count
-                  ? ` · ${t("admin.fetch.postsCount", { count: run.fetchWindows[step].count })}`
+                  ? ` · ${t(step === "youtube" ? "admin.fetch.videosCount" : "admin.fetch.postsCount", { count: run.fetchWindows[step].count })}`
                   : ""}
                 {run.fetchWindows[step].startDate
                   ? ` · ${run.fetchWindows[step].startDate} – ${run.fetchWindows[step].endDate}`
