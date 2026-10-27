@@ -76,6 +76,10 @@ snapshot health dot.
    videos rather than being guessed from their length. An All / Streams /
    Works / Shorts filter shows one kind at a time, with a tab only for the
    kinds present. A Past videos dialog browses stored videos month by month.
+   A video with a merged bilibili upload carries a small two-platform mark
+   on its cover and a link per platform on every card, ticket and row;
+   Chinese readers open such a past video on bilibili first, while
+   reservations and broadcasts stay on YouTube.
 5. Links: the resource directory, a milestone summary linking to the full
    journey page, and common hashtags.
 

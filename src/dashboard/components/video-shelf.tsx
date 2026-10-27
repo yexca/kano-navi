@@ -37,77 +37,29 @@ import {
   groupVideos,
   splitVideos,
   videoIsStream,
+  videoLinks,
   videoMatchesFilter,
   videoPhase,
   type VideoFilter,
+  type VideoLink,
   type VideoPhase,
 } from "../video-groups"
 import { ArchiveMore, ArchiveState } from "./archive-dialog"
+import { PlatformBadge, PlatformLinks } from "./platform-links"
 import { TranslatedHeading, TranslatedTitle } from "./translated-title"
-
-const platformNames: Record<string, string> = {
-  youtube: "YouTube",
-  bilibili: "bilibili",
-}
-
-function PlatformMark({ source }: { source: string }) {
-  if (source === "youtube") return <YouTubeLogo aria-hidden="true" />
-  if (source === "bilibili") return <BilibiliLogo aria-hidden="true" />
-  return <ArrowUpRight aria-hidden="true" />
-}
-
-/**
- * One link per platform: the video itself, then every merged upload of the
- * same work, such as its bilibili copy.
- */
-function PlatformLinks({
-  video,
-  title,
-  variant,
-  t,
-}: {
-  video: Video
-  title: string
-  variant: "pill" | "chip"
-  t: Translator
-}) {
-  const links = [
-    { source: video.source, url: video.url },
-    ...(video.alternates || []),
-  ]
-  return (
-    <span className="platform-links">
-      {links.map((link, index) => {
-        const name = platformNames[link.source] || link.source
-        const className =
-          variant === "pill"
-            ? `pill-button${index === 0 ? " is-solid" : ""}`
-            : "platform-chip"
-        return (
-          <ExternalLink
-            key={link.url}
-            className={className}
-            href={link.url}
-            aria-label={`${t("videos.watchOn", { platform: name })}: ${title}`}
-          >
-            <PlatformMark source={link.source} />
-            {name}
-          </ExternalLink>
-        )
-      })}
-    </span>
-  )
-}
 
 function Thumb({
   url,
   badge = null,
   seconds,
+  links = [],
   t,
 }: {
   url: string | null
   badge?: "play" | "upcoming" | null
   seconds?: number | null
+  /** The video's platforms; two or more mark the cover. */
+  links?: VideoLink[]
   t: Translator
 }) {
   const length = formatDuration(seconds)
@@ -121,6 +73,7 @@ function Thumb({
           <span>{t("media.unavailable")}</span>
         </span>
       )}
+      <PlatformBadge links={links} />
       {badge ? (
         <span className="video-thumb-badge" aria-hidden="true">
           {badge === "upcoming" ? <Clock3 /> : <Play fill="currentColor" />}
@@ -233,16 +186,18 @@ function LeadCard({
   const thumbnail = (usesFocus && focus.imageUrl) || video.thumbnailUrl
   const phase = videoPhase(video, now)
   const length = formatDuration(video.durationSeconds)
+  const links = videoLinks(video, locale, now)
   return (
     <article className="video-lead">
       <ExternalLink
         className="video-lead-art"
-        href={video.url}
+        href={links[0].url}
         aria-label={`${t("videos.watch")}: ${title}`}
       >
         <Thumb
           url={thumbnail}
           badge={phase === "upcoming" ? "upcoming" : "play"}
+          links={links}
           t={t}
         />
       </ExternalLink>
@@ -280,7 +235,7 @@ function LeadCard({
         )}
         {usesFocus && focus.description ? <p>{focus.description}</p> : null}
         <div className="video-lead-actions">
-          <PlatformLinks video={video} title={title} variant="pill" t={t} />
+          <PlatformLinks links={links} title={title} variant="pill" t={t} />
           {usesFocus && focus.sourceUrl ? (
             <ExternalLink className="text-link" href={focus.sourceUrl}>
               {t("videos.officialSource")}
@@ -308,6 +263,8 @@ function VideoTicket({
   const phase = videoPhase(video, now)
   const time = videoTime(video)
   const parts = japanDateParts(time, locale)
+  const title = cleanVideoTitle(video.title)
+  const links = videoLinks(video, locale, now)
   return (
     <li>
       <div
@@ -337,12 +294,15 @@ function VideoTicket({
                 {formatJapanTime(time)} {t("common.timezoneShort")}
               </time>
             ) : null}
+            {links.length > 1 ? (
+              <PlatformLinks links={links} title={title} variant="chip" t={t} />
+            ) : null}
           </span>
           <TranslatedTitle
             className="video-ticket-title"
-            title={cleanVideoTitle(video.title)}
+            title={title}
             translations={video.translations}
-            href={video.url}
+            href={links[0].url}
             locale={locale}
             t={t}
           />
@@ -357,23 +317,31 @@ function VideoCard({
   video,
   showKind,
   locale,
+  now,
   t,
 }: {
   video: Video
   showKind: boolean
   locale: Locale
+  now: number
   t: Translator
 }) {
   const title = cleanVideoTitle(video.title)
+  const links = videoLinks(video, locale, now)
   return (
     <li className="video-card">
       <div className="video-card-link link-card" onClick={followCardLink}>
-        <Thumb url={video.thumbnailUrl} seconds={video.durationSeconds} t={t} />
+        <Thumb
+          url={video.thumbnailUrl}
+          seconds={video.durationSeconds}
+          links={links}
+          t={t}
+        />
         <TranslatedTitle
           className="video-card-title"
           title={title}
           translations={video.translations}
-          href={video.url}
+          href={links[0].url}
           locale={locale}
           t={t}
         />
@@ -384,8 +352,8 @@ function VideoCard({
           <span className="tag">{videoKindLabel(video, t)}</span>
         ) : null}
         <LengthNote video={video} t={t} />
-        {video.alternates?.length ? (
-          <PlatformLinks video={video} title={title} variant="chip" t={t} />
+        {links.length > 1 ? (
+          <PlatformLinks links={links} title={title} variant="chip" t={t} />
         ) : null}
       </p>
     </li>
@@ -434,6 +402,8 @@ function VideoRow({
   now: number
   t: Translator
 }) {
+  const title = cleanVideoTitle(video.title)
+  const links = videoLinks(video, locale, now)
   return (
     <li>
       <div
@@ -444,6 +414,7 @@ function VideoRow({
           url={video.thumbnailUrl}
           badge={video.isUpcoming ? "upcoming" : "play"}
           seconds={video.durationSeconds}
+          links={links}
           t={t}
         />
         <span className="video-row-copy">
@@ -461,12 +432,15 @@ function VideoRow({
               t={t}
             />
             <LengthNote video={video} t={t} />
+            {links.length > 1 ? (
+              <PlatformLinks links={links} title={title} variant="chip" t={t} />
+            ) : null}
           </span>
           <TranslatedTitle
             className="video-row-title"
-            title={cleanVideoTitle(video.title)}
+            title={title}
             translations={video.translations}
-            href={video.url}
+            href={links[0].url}
             locale={locale}
             t={t}
           />
@@ -507,6 +481,7 @@ function VideoGrid({
   showKind,
   variant,
   locale,
+  now,
   t,
 }: {
   videos: Video[]
@@ -514,6 +489,7 @@ function VideoGrid({
   /** Shorts get 9:16 cards; a Shorts row keeps to one line of them. */
   variant?: "shorts" | "shorts-row"
   locale: Locale
+  now: number
   t: Translator
 }) {
   return (
@@ -526,6 +502,7 @@ function VideoGrid({
           video={video}
           showKind={showKind}
           locale={locale}
+          now={now}
           t={t}
         />
       ))}
@@ -656,6 +633,7 @@ export function VideoShelf({
               videos={archives}
               showKind={false}
               locale={locale}
+              now={now}
               t={t}
             />
           </div>
@@ -668,6 +646,7 @@ export function VideoShelf({
               showKind={false}
               variant="shorts-row"
               locale={locale}
+              now={now}
               t={t}
             />
           </div>
@@ -723,6 +702,7 @@ export function VideoShelf({
                 showKind={active === "works"}
                 variant={active === "shorts" ? "shorts" : undefined}
                 locale={locale}
+                now={now}
                 t={t}
               />
             </div>

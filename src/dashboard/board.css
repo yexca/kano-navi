@@ -1723,6 +1723,66 @@ a.month-event:hover {
   height: 12px;
 }
 
+/* Fingers get a taller chip; a pointer keeps the meta line light. */
+@media (max-width: 720px), (pointer: coarse) {
+  .platform-chip {
+    min-height: 30px;
+    padding: 3px 12px;
+  }
+}
+
+/*
+ * A cover's mark for a work on more than one platform. Top left is free of
+ * the length and play marks; the mark lets taps through to the card.
+ */
+.platform-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.62);
+  color: #fff;
+  pointer-events: none;
+}
+
+.platform-badge svg {
+  width: 13px;
+  height: 13px;
+}
+
+.video-row .platform-badge,
+.latest-card-art .platform-badge {
+  top: 6px;
+  left: 6px;
+  gap: 4px;
+  padding: 2px 5px;
+}
+
+.video-row .platform-badge svg,
+.latest-card-art .platform-badge svg {
+  width: 11px;
+  height: 11px;
+}
+
+.video-lead-art .platform-badge,
+.ticket-art .platform-badge {
+  top: 16px;
+  left: 16px;
+  gap: 7px;
+  padding: 5px 9px;
+  border-radius: 8px;
+}
+
+.video-lead-art .platform-badge svg,
+.ticket-art .platform-badge svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Lead row */
 
 .videos-lead {

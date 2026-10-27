@@ -1,4 +1,4 @@
-import type { Video } from "../types.ts"
+import type { Locale, Video } from "../types.ts"
 import {
   confirmedLiveStatus,
   LIVE_GRACE_MS,
@@ -139,6 +139,33 @@ export function groupVideos(
     if (lead) split.works.splice(split.works.indexOf(lead), 1)
   }
   return { ...split, lead, leadIsFeatured: Boolean(featured) }
+}
+
+/** One platform's page for a video. */
+export interface VideoLink {
+  source: string
+  url: string
+}
+
+/**
+ * A video's platform links, the one its card opens first: the video itself,
+ * then every merged upload of the same work. Chinese readers open a past
+ * video on bilibili when a copy is merged; a reservation or broadcast keeps
+ * its own platform, the only one that carries it.
+ */
+export function videoLinks(
+  video: Video,
+  locale: Locale,
+  now: number,
+): VideoLink[] {
+  const links = [
+    { source: video.source, url: video.url },
+    ...(video.alternates || []),
+  ]
+  if (locale !== "zh-CN" || videoPhase(video, now) !== "past") return links
+  const index = links.findIndex((link) => link.source === "bilibili")
+  if (index <= 0) return links
+  return [links[index], ...links.slice(0, index), ...links.slice(index + 1)]
 }
 
 /**

@@ -34,8 +34,14 @@ present, and only when two are. Shorts render as 9:16 cards cropped from the
 centre of the 1280×720 cover (the vertical frame between YouTube's blurred
 pillarbox): one row of up to six in the All view, fewer as columns narrow and
 a swipeable rail on phones, and up to twelve in the Shorts view. The shelf
-shows a platform link for the video and each of its `alternates`, and the
-length from `durationSeconds` when known. Its styles are in
+shows the length from `durationSeconds` when known. `videoLinks` in
+`src/dashboard/video-groups.ts` orders a video's platform links (the video,
+then each of its `alternates`); the first is the link its card, ticket or row
+follows. For `zh-CN` a past video with a bilibili alternate puts bilibili
+first; reservations, started and live videos keep their own platform. With
+two or more links, the shelf cards, rows, tickets and the stage's latest
+video show `PlatformLinks` in that order and an `aria-hidden`
+`PlatformBadge` on the cover (`src/dashboard/components/platform-links.tsx`). Its styles are in
 `src/dashboard/board.css` on top of `src/site/site.css` and the shared tokens
 in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`

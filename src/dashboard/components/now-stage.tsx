@@ -26,6 +26,8 @@ import {
 } from "../format"
 import { pickCompanion, pickSpotlight, spotlightIsLive } from "../spotlight"
 import type { SyncState } from "../freshness"
+import { videoLinks } from "../video-groups"
+import { PlatformBadge, PlatformLinks } from "./platform-links"
 import { TranslatedTitle } from "./translated-title"
 
 function dateOnlyParts(key: string, locale: Locale) {
@@ -189,10 +191,12 @@ function FullTicket({
   now: number
   t: Translator
 }) {
+  const links = item.video ? videoLinks(item.video, locale, now) : []
+  const url = links[0]?.url || item.url
   return (
     <div
-      className={`ticket is-${isLive ? "live" : item.mode}${item.thumbnailUrl ? " has-art" : ""}${item.url ? " link-card" : ""}`}
-      onClick={item.url ? followCardLink : undefined}
+      className={`ticket is-${isLive ? "live" : item.mode}${item.thumbnailUrl ? " has-art" : ""}${url ? " link-card" : ""}`}
+      onClick={url ? followCardLink : undefined}
     >
       <span className="ticket-art" aria-hidden="true">
         {item.thumbnailUrl ? (
@@ -200,6 +204,7 @@ function FullTicket({
         ) : (
           <span className="ticket-art-fallback" />
         )}
+        <PlatformBadge links={links} />
         {item.link === "watch" ? (
           <span className="ticket-play">
             <Play fill="currentColor" />
@@ -217,11 +222,19 @@ function FullTicket({
               className="ticket-title"
               title={item.title}
               translations={(item.video || item.event)?.translations}
-              href={item.url}
+              href={url}
               locale={locale}
               t={t}
             />
             <TicketWhen item={item} locale={locale} now={now} t={t} />
+            {links.length > 1 ? (
+              <PlatformLinks
+                links={links}
+                title={item.title}
+                variant="chip"
+                t={t}
+              />
+            ) : null}
           </span>
         </span>
         {item.mode === "next" && item.time && !isLive ? (
@@ -230,7 +243,7 @@ function FullTicket({
         {isLive && !confirmedLiveStatus(item.event || item.video) ? (
           <span className="ticket-note">{t("spotlight.started")}</span>
         ) : null}
-        {item.url ? (
+        {url ? (
           <span className="ticket-open">
             {t("spotlight.open")}
             <ArrowUpRight aria-hidden="true" />
@@ -316,6 +329,7 @@ function LatestCard({
   now: number
   t: Translator
 }) {
+  const links = videoLinks(companion.video, locale, now)
   return (
     <div className="latest-card link-card" onClick={followCardLink}>
       <span className="latest-card-art" aria-hidden="true">
@@ -324,6 +338,7 @@ function LatestCard({
         ) : (
           <span className="ticket-art-fallback" />
         )}
+        <PlatformBadge links={links} />
         <span className="latest-card-play">
           <Play fill="currentColor" />
         </span>
@@ -337,12 +352,20 @@ function LatestCard({
           className="latest-card-title"
           title={companion.title}
           translations={companion.video.translations}
-          href={companion.url}
+          href={links[0].url}
           locale={locale}
           t={t}
         />
         {companion.time ? (
           <small>{formatRelative(companion.time, locale, now)}</small>
+        ) : null}
+        {links.length > 1 ? (
+          <PlatformLinks
+            links={links}
+            title={companion.title}
+            variant="chip"
+            t={t}
+          />
         ) : null}
       </span>
       <ArrowUpRight className="latest-card-open" aria-hidden="true" />

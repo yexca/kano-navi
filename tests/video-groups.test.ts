@@ -6,6 +6,7 @@ import {
   splitVideos,
   videoIsShort,
   videoIsStream,
+  videoLinks,
   videoMatchesFilter,
   videoPhase,
 } from "../src/dashboard/video-groups.ts"
@@ -308,4 +309,41 @@ test("Shorts are their own group, never a work, an archive or the lead", () => {
   const t = (key: string) => key
   assert.equal(videoKindLabel(streamShort, t), "media.kind.short")
   assert.equal(videoKindLabel(brief, t), "media.kind.video")
+})
+
+test("Chinese readers open a past video's bilibili copy first", () => {
+  const bilibili = {
+    source: "bilibili",
+    url: "https://www.bilibili.com/video/BV1synthetic1",
+  }
+  const merged = video("m", {
+    kind: "MUSIC",
+    publishedAt: at(-hour),
+    alternates: [bilibili],
+  })
+  const youtube = { source: "youtube", url: merged.url }
+
+  assert.deepEqual(videoLinks(merged, "zh-CN", now), [bilibili, youtube])
+  for (const locale of ["en", "ja"] as const)
+    assert.deepEqual(videoLinks(merged, locale, now), [youtube, bilibili])
+
+  // Without a bilibili copy every reader gets the video's own link.
+  assert.deepEqual(videoLinks(video("y"), "zh-CN", now), [
+    { source: "youtube", url: "https://www.youtube.com/watch?v=y" },
+  ])
+
+  // A reservation or a broadcast on air stays on its own platform.
+  const reserved = video("r", {
+    kind: "UPCOMING LIVE",
+    isUpcoming: true,
+    scheduledAt: at(hour),
+    alternates: [bilibili],
+  })
+  const onAir = video("l", {
+    scheduledAt: at(-hour),
+    liveStatus: "live",
+    alternates: [bilibili],
+  })
+  for (const item of [reserved, onAir])
+    assert.equal(videoLinks(item, "zh-CN", now)[0].source, "youtube", item.id)
 })
