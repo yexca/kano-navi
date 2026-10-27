@@ -585,21 +585,6 @@ export function VideoShelf({
     { value: "all", label: t("common.all"), count: videos.length },
     ...kinds,
   ]
-  // Under a shortened grid, the month archive holds the rest.
-  const more = (
-    <div className="videos-more">
-      <button
-        type="button"
-        className="pill-button"
-        onClick={onOpenArchive}
-        aria-haspopup="dialog"
-      >
-        <History aria-hidden="true" />
-        {t("videos.archive")}
-      </button>
-    </div>
-  )
-
   let body: ReactNode
   if (isLoading) body = <Placeholder lines={4} />
   else if (!videos.length) body = <EmptyNote title={t("videos.empty")} />
@@ -673,7 +658,6 @@ export function VideoShelf({
               locale={locale}
               t={t}
             />
-            {groups.archives.length > archives.length ? more : null}
           </div>
         ) : null}
         {shorts.length ? (
@@ -741,7 +725,6 @@ export function VideoShelf({
                 locale={locale}
                 t={t}
               />
-              {items.length > FILTERED_ITEMS ? more : null}
             </div>
           ) : null}
         </>
