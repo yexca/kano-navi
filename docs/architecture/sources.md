@@ -39,7 +39,10 @@ accounts with an open gap as `timelineGaps`
 
 When the first timeline page fails, is not a timeline, or yields none of the
 account's own statuses, discovery falls back to the logged-out profile page
-`x.com/<handle>`, which lists only the newest few statuses. The run records the
+`x.com/<handle>`, which lists only the newest few statuses. Only links whose
+path is `/<handle>/status/<id>` (handle case-insensitive, plain or
+URL-encoded) count; quoted statuses, reposts and other handles' links are left
+out, as the timeline leaves them out. The run records the
 source used in `sync_state.metadata_json.discovery` (`timeline` or `profile`)
 and counts fallback accounts as `profileFallbacks` in the step result. A
 fallback alone does not fail the account or mark the run partial.
@@ -113,10 +116,12 @@ incremental state.
 Failed detail requests are counted per ID in
 `sync_state.metadata_json.pendingRetries` (`{failures, gone, retryAt}` by
 ID, kept beside the `pendingStatusIds` array; rows without it start with no
-failures). A 404 or 410 answer, or a status of another account
-(`account_mismatch`, which a profile page can list), counts as gone. The
-second consecutive gone answer drops the ID with `x_status_gone`. Any other
-failure (timeout, 429, 5xx, invalid JSON or response) waits 1 hour after the
+failures). A 404 or 410 answer counts as gone, and the second consecutive
+gone answer drops the ID with `x_status_gone`. An answer that the status is
+another account's (an ID an older profile fallback queued from a quote, say)
+is no failure: it drops the ID at once with `x_status_foreign`, without an
+error, retry state or partial run, though it still counts as requested. Any
+other failure (timeout, 429, 5xx, invalid JSON or response) waits 1 hour after the
 first consecutive failure, 6 hours after the second and 24 hours after the
 third, as the extraction failure backoff does, and the fourth drops the ID
 with `x_retry_limit`; a gone answer waits the same way before its second

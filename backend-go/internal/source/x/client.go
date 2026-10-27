@@ -198,15 +198,16 @@ func SetEnvReader(fn func(string) string) {
 	}
 }
 
-var (
-	statusPattern   = regexp.MustCompile(`(?i)(?:status%2F|status/)(\d{10,})`)
-	statusIDPattern = regexp.MustCompile(`^\d{10,22}$`)
-)
+var statusIDPattern = regexp.MustCompile(`^\d{10,22}$`)
 
-func DiscoverIDs(body []byte, limit int) []string {
+// DiscoverIDs lists the IDs of the account's own status links on a profile
+// page, plain or URL-encoded. Links of other handles, such as quoted
+// statuses and reposts, are left out as the timeline leaves them out.
+func DiscoverIDs(body []byte, account string, limit int) []string {
+	pattern := regexp.MustCompile(`(?i)(?:/|%2F)` + regexp.QuoteMeta(account) + `(?:/|%2F)status(?:/|%2F)(\d{10,})`)
 	seen := map[string]bool{}
 	out := []string{}
-	for _, m := range statusPattern.FindAllSubmatch(body, -1) {
+	for _, m := range pattern.FindAllSubmatch(body, -1) {
 		id := string(m[1])
 		if !seen[id] {
 			seen[id] = true
@@ -311,7 +312,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		if profileErr != nil {
 			return result, profileErr
 		}
-		ids = DiscoverIDs(profile, opts.DiscoveryLimit)
+		ids = DiscoverIDs(profile, account, opts.DiscoveryLimit)
 		// The profile lists only the newest few statuses; when none of them is
 		// stored, the timeline reads the rest later.
 		if opts.CursorID != "" && !slices.ContainsFunc(ids, func(id string) bool { return reachesStored(id, opts, cutoff) }) {
@@ -395,6 +396,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 	detail = detail[:min(max(opts.MaxDetailRequests, 0), len(detail))]
 	attempted := map[string]bool{}
 	failed := []string{}
+	foreign := 0
 	var firstDetailErr error
 	fail := func(id, code string, err error, gone bool) {
 		if firstDetailErr == nil && err != nil {
@@ -439,9 +441,11 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 			fail(id, string(ErrInvalidResponse), &Error{Code: ErrInvalidResponse}, false)
 			continue
 		}
-		// Another account's status never becomes this account's post.
+		// Another account's status never becomes this account's post. It is
+		// no failure either: the ID leaves the queue at once.
 		if !accept(post) {
-			fail(id, "account_mismatch", nil, true)
+			result.Dropped = append(result.Dropped, DroppedStatus{ID: id, Code: DroppedForeign})
+			foreign++
 		}
 	}
 	// Unattempted work keeps its order and failed work moves behind it, so a
@@ -467,7 +471,8 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		result.NextCursor = result.NewestID(newest)
 		result.NextCursorTime = newest.PublishedAt
 	}
-	if result.RequestedCount > 0 && len(result.Posts) == 0 {
+	// Requests answered only with other accounts' statuses fail nothing.
+	if result.RequestedCount > foreign && len(result.Posts) == 0 {
 		if firstDetailErr != nil {
 			return result, firstDetailErr
 		}

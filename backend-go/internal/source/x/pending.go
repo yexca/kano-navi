@@ -12,7 +12,7 @@ type PendingRetry struct {
 	// Failures counts consecutive failures of any kind.
 	Failures int `json:"failures"`
 	// Gone counts consecutive answers that the status is not there: 404 or
-	// 410, or a status of another account.
+	// 410. A status of another account is dropped at once instead.
 	Gone int `json:"gone,omitempty"`
 	// RetryAt is when the next detail request may be made.
 	RetryAt string `json:"retryAt,omitempty"`
@@ -28,6 +28,9 @@ const (
 	DroppedGone = "x_status_gone"
 	// DroppedRetryLimit follows the last allowed consecutive failure.
 	DroppedRetryLimit = "x_retry_limit"
+	// DroppedForeign follows the first detail answer that the status is
+	// another account's, such as one the profile page quoted.
+	DroppedForeign = "x_status_foreign"
 )
 
 // pendingBackoff is the wait after the first, second and third consecutive

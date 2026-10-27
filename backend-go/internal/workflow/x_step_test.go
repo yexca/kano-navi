@@ -24,7 +24,7 @@ func TestXRecentExecutorPersistsWorkflowAttempt(t *testing.T) {
 	}
 	defer s.Close()
 	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
-		body := `status/111111111111`
+		body := `/kano/status/111111111111`
 		if r.URL.Host == "api.vxtwitter.com" {
 			body = `{"tweetID":"111111111111","text":"hello","date":"2026-10-11T00:00:00Z"}`
 		}
@@ -57,7 +57,7 @@ func TestXSingleRequestBudgetRotatesAccountsAcrossRestart(t *testing.T) {
 		if strings.Contains(r.URL.Path, "fixture_b") {
 			id, account = "222222222222", "fixture_b"
 		}
-		body := "status/" + id
+		body := "/" + account + "/status/" + id
 		if r.URL.Host == "api.vxtwitter.com" {
 			requested = append(requested, account)
 			body = `{"tweetID":"` + id + `","text":"fixture","date":"2026-01-02T00:00:00Z"}`
@@ -145,6 +145,49 @@ func TestXRecentStoresTimelinePostsAndDropsAGoneStatus(t *testing.T) {
 	}
 	state, err := s.XRecentState(context.Background(), "fixture")
 	if err != nil || len(state.PendingIDs) != 0 || len(state.PendingRetries) != 0 || state.CursorID != "400000000000" {
+		t.Fatalf("state=%#v err=%v", state, err)
+	}
+}
+
+func TestXRecentDropsAnotherAccountsStatusWithoutFailing(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := sqlite.OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	// An earlier profile fallback queued a status the account quoted.
+	foreign := "1900000000000000002"
+	testutil.Exec(t, p, `INSERT INTO sync_state(source,account_id,metadata_json) VALUES('x','fixture',?)`, `{"pendingStatusIds":["`+foreign+`"]}`)
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	details := []string{}
+	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
+		var body string
+		switch r.URL.Host {
+		case "api.fxtwitter.com":
+			body = `{"code":200,"results":[{"id":"200000000000","text":"fixture","created_timestamp":` + strconv.FormatInt(now.Add(-time.Hour).Unix(), 10) + `,"author":{"screen_name":"fixture"}}],"cursor":{"bottom":""}}`
+		case "api.vxtwitter.com":
+			details = append(details, r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:])
+			body = `{"tweetID":"` + foreign + `","text":"quoted","date":"2026-01-02T00:00:00Z","author":{"screenName":"other"}}`
+		default:
+			t.Fatalf("unexpected destination %s", r.URL.Host)
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
+	opts := xsource.Options{Handles: []string{"fixture"}, DiscoveryLimit: 50, MaxDetailRequests: 5, BootstrapDays: 7}
+	a := xsource.NewAdapter(xsource.NewClient(&http.Client{Transport: rt}), opts)
+	a.Now = func() time.Time { return now }
+	got, err := (&XRecentExecutor{Store: s, Adapter: a, Options: opts}).Execute(context.Background(), StepInput{StepID: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropped, _ := got.Result["pendingDropped"].([]string)
+	errs, _ := got.Result["errors"].([]string)
+	if got.Status != "succeeded" || got.Result["requested"] != 1 || strings.Join(details, ",") != foreign || len(errs) != 0 || strings.Join(dropped, ",") != "fixture: "+foreign+": "+xsource.DroppedForeign {
+		t.Fatalf("status=%s result=%#v details=%v", got.Status, got.Result, details)
+	}
+	state, err := s.XRecentState(context.Background(), "fixture")
+	if err != nil || len(state.PendingIDs) != 0 || len(state.PendingRetries) != 0 {
 		t.Fatalf("state=%#v err=%v", state, err)
 	}
 }

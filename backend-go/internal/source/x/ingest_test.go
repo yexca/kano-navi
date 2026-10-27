@@ -265,18 +265,23 @@ func TestPendingStatusesBackOffAndAreDropped(t *testing.T) {
 		return strings.Join(out, ",")
 	}
 
+	// Another account's status is dropped on its first answer, without a
+	// failure or retry state.
 	first := run(0)
-	if len(s.details) != 3 || len(first.Dropped) != 0 || first.PendingRetries[gone].Gone != 1 || first.PendingRetries[flaky].RetryAt != start.Add(time.Hour).Format(time.RFC3339Nano) {
-		t.Fatalf("details=%v retries=%+v", s.details, first.PendingRetries)
+	if len(s.details) != 3 || dropped(first) != foreign+":"+DroppedForeign || first.PendingRetries[gone].Gone != 1 || first.PendingRetries[flaky].RetryAt != start.Add(time.Hour).Format(time.RFC3339Nano) {
+		t.Fatalf("details=%v dropped=%v retries=%+v", s.details, first.Dropped, first.PendingRetries)
+	}
+	if _, ok := first.PendingRetries[foreign]; ok || slices.Contains(first.PendingIDs, foreign) || strings.Contains(strings.Join(first.Errors, ","), foreign) {
+		t.Fatalf("pending=%v retries=%+v errors=%v", first.PendingIDs, first.PendingRetries, first.Errors)
 	}
 	// Within the first hour nothing is requested and nothing is lost.
 	held := run(30 * time.Minute)
-	if len(s.details) != 0 || held.Held != 3 || len(held.PendingIDs) != 3 || held.PendingRetries[flaky].Failures != 1 {
+	if len(s.details) != 0 || held.Held != 2 || len(held.PendingIDs) != 2 || held.PendingRetries[flaky].Failures != 1 {
 		t.Fatalf("details=%v held=%d pending=%v", s.details, held.Held, held.PendingIDs)
 	}
-	// A second 404 or a second answer for another account drops the status.
+	// A second 404 drops the status.
 	second := run(time.Hour)
-	if dropped(second) != gone+":"+DroppedGone+","+foreign+":"+DroppedGone || strings.Join(second.PendingIDs, ",") != flaky || second.PendingRetries[flaky].Failures != 2 {
+	if dropped(second) != gone+":"+DroppedGone ||strings.Join(second.PendingIDs, ",") != flaky || second.PendingRetries[flaky].Failures != 2 {
 		t.Fatalf("dropped=%v pending=%v retries=%+v", second.Dropped, second.PendingIDs, second.PendingRetries)
 	}
 	// Other failures wait 1, 6 and 24 hours; the fourth drops the status.
