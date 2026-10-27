@@ -4,14 +4,21 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"image"
 	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/yexca/kano-navi/backend-go/internal/mediavariant"
 )
 
 func syntheticImage(t *testing.T, mime string, width, height int, alpha bool) []byte {
@@ -188,5 +195,78 @@ func TestReadMediaVariantServesOriginalWhenCacheIsReadOnly(t *testing.T) {
 	file, err := s.ReadMediaVariant(context.Background(), id, "", 320)
 	if err != nil || file.Size >= int64(len(original)) {
 		t.Fatalf("unstored variant not served: %v", err)
+	}
+}
+
+func TestReadMediaVariantMakesAColdCopyOnce(t *testing.T) {
+	s := openVariantStore(t)
+	original := syntheticImage(t, "image/jpeg", 1000, 500, false)
+	id := readyAsset(t, s, "https://pbs.twimg.com/media/synthetic-cold.jpg", original, "image/jpeg")
+	var resizes atomic.Int32
+	started, proceed := make(chan struct{}, 8), make(chan struct{})
+	t.Cleanup(func() { resizeVariant = mediavariant.Resize })
+	resizeVariant = func(content []byte, width int) ([]byte, string, error) {
+		resizes.Add(1)
+		started <- struct{}{}
+		<-proceed
+		return mediavariant.Resize(content, width)
+	}
+	const requests = 4
+	results := make(chan *MediaFile, requests)
+	var wg sync.WaitGroup
+	for range requests {
+		wg.Go(func() {
+			file, err := s.ReadMediaVariant(context.Background(), id, "", 320)
+			if err != nil {
+				t.Error(err)
+			}
+			results <- file
+		})
+	}
+	<-started
+	// A request that gives up while the copy is being made gets the original.
+	cancelled, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if file, err := s.ReadMediaVariant(cancelled, id, "", 320); err != nil || !bytes.Equal(file.Content, original) {
+		t.Fatalf("cancelled waiter: %v", err)
+	}
+	// Let the other requests queue behind the first maker before it finishes.
+	time.Sleep(50 * time.Millisecond)
+	close(proceed)
+	wg.Wait()
+	close(results)
+	if got := resizes.Load(); got != 1 {
+		t.Fatalf("resized %d times for one copy", got)
+	}
+	var first *MediaFile
+	for file := range results {
+		if file == nil || file.Size >= int64(len(original)) || (first != nil && file.SHA256 != first.SHA256) {
+			t.Fatalf("request got %#v", file)
+		}
+		first = file
+	}
+}
+
+// failingStat is an open copy whose metadata cannot be read.
+type failingStat struct{ *bytes.Reader }
+
+func (failingStat) Stat() (fs.FileInfo, error) { return nil, errors.New("synthetic stat failure") }
+
+func TestReadVariantFileSkipsACopyItCannotExamine(t *testing.T) {
+	content := syntheticImage(t, "image/jpeg", 8, 8, false)
+	if out := readVariantFile(failingStat{bytes.NewReader(content)}, "image/jpeg"); out != nil {
+		t.Fatalf("unexaminable copy served: %+v", out)
+	}
+	path := filepath.Join(t.TempDir(), "copy.jpg")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if out := readVariantFile(file, "image/jpeg"); out == nil || !bytes.Equal(out.Content, content) || out.MIMEType != "image/jpeg" {
+		t.Fatalf("readable copy not served: %+v", out)
 	}
 }

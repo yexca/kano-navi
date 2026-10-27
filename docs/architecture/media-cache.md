@@ -188,7 +188,9 @@ browser does not silently fall back to a CDN.
 `GET /media/<id>?v=<hash>&w=<width>` serves a smaller copy of a ready asset.
 `w` must be one of 320, 640, 960, 1280 or 1920; any other value, or a
 repeated `w`, answers 404. The first request decodes the original (JPEG, PNG
-or WebP no larger than 40 megapixels, at most two at a time), scales it to
+or WebP no larger than 40 megapixels, at most two at a time; concurrent
+requests for the same copy wait for the first and then read it from the
+cache), scales it to
 that width with Catmull-Rom filtering, encodes JPEG at quality 82 (or PNG when
 the image has transparency) and stores it atomically in
 `data/cache/variants/<first-two>/<hash>-<width>.<jpg|png>`. When the original

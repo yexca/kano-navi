@@ -7,9 +7,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 
 	"github.com/yexca/kano-navi/backend-go/internal/mediaformat"
 	"github.com/yexca/kano-navi/backend-go/internal/mediavariant"
@@ -27,6 +29,9 @@ const variantKeepOriginal = "orig"
 // resizeSlots bounds concurrent decodes: a 40-megapixel image needs about
 // 160 MB as RGBA.
 var resizeSlots = make(chan struct{}, 2)
+
+// resizeVariant makes one copy; tests count and pace it.
+var resizeVariant = mediavariant.Resize
 
 // ReadMediaVariant returns a copy of a ready asset no wider than width, made
 // once and kept in the variant cache. It returns the original file whenever
@@ -47,6 +52,20 @@ func (s *Store) ReadMediaVariant(ctx context.Context, id, version string, width 
 	} else if keepOriginal {
 		return s.readMediaRecord(record)
 	}
+	// Concurrent cold requests for one copy wait for the first to make it,
+	// then find it in the cache, instead of each reading and decoding the
+	// original.
+	release, err := s.claimVariant(ctx, name)
+	if err != nil {
+		return s.readMediaRecord(record)
+	}
+	defer release()
+	if file, keepOriginal := s.readVariant(name); file != nil {
+		file.LastModified = record.lastModified(file.LastModified)
+		return file, nil
+	} else if keepOriginal {
+		return s.readMediaRecord(record)
+	}
 	original, err := s.readMediaRecord(record)
 	if err != nil {
 		return nil, err
@@ -56,7 +75,7 @@ func (s *Store) ReadMediaVariant(ctx context.Context, id, version string, width 
 	case <-ctx.Done():
 		return original, nil
 	}
-	content, mime, resizeErr := mediavariant.Resize(original.Content, width)
+	content, mime, resizeErr := resizeVariant(original.Content, width)
 	<-resizeSlots
 	if resizeErr != nil {
 		s.writeVariant(name+"."+variantKeepOriginal, nil)
@@ -66,6 +85,40 @@ func (s *Store) ReadMediaVariant(ctx context.Context, id, version string, width 
 	file := variantFile(content, mime)
 	file.LastModified = original.LastModified
 	return file, nil
+}
+
+// variantMakers holds the variant copies being made, keyed by their cache
+// path, each with a channel closed when its maker is done.
+var (
+	variantMakersMu sync.Mutex
+	variantMakers   = map[string]chan struct{}{}
+)
+
+// claimVariant waits until no other request is making name and claims it.
+// The returned release must be called; an error means ctx ended first.
+func (s *Store) claimVariant(ctx context.Context, name string) (func(), error) {
+	key := filepath.Join(s.dataRoot, variantRoot, name)
+	for {
+		variantMakersMu.Lock()
+		busy, ok := variantMakers[key]
+		if !ok {
+			done := make(chan struct{})
+			variantMakers[key] = done
+			variantMakersMu.Unlock()
+			return func() {
+				variantMakersMu.Lock()
+				delete(variantMakers, key)
+				variantMakersMu.Unlock()
+				close(done)
+			}, nil
+		}
+		variantMakersMu.Unlock()
+		select {
+		case <-busy:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 func variantName(hash string, width int) string {
@@ -93,20 +146,35 @@ func (s *Store) readVariant(name string) (*MediaFile, bool) {
 		if openErr != nil {
 			continue
 		}
-		info, statErr := file.Stat()
-		var content []byte
-		if statErr == nil && info.Mode().IsRegular() && info.Size() > 0 && info.Size() <= maxCachedMediaBytes {
-			content, _ = io.ReadAll(io.LimitReader(file, maxCachedMediaBytes+1))
-		}
+		out := readVariantFile(file, mime)
 		file.Close()
-		if int64(len(content)) != info.Size() || mediaformat.Sniff(content) != mime {
-			continue
+		if out != nil {
+			return out, false
 		}
-		out := variantFile(content, mime)
-		out.LastModified = info.ModTime()
-		return out, false
 	}
 	return nil, false
+}
+
+// statReader is the part of an open file readVariantFile needs.
+type statReader interface {
+	io.Reader
+	Stat() (fs.FileInfo, error)
+}
+
+// readVariantFile reads one stored copy, or returns nil when it cannot be
+// examined, is not a complete regular file, or does not hold mime.
+func readVariantFile(file statReader, mime string) *MediaFile {
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxCachedMediaBytes {
+		return nil
+	}
+	content, _ := io.ReadAll(io.LimitReader(file, maxCachedMediaBytes+1))
+	if int64(len(content)) != info.Size() || mediaformat.Sniff(content) != mime {
+		return nil
+	}
+	out := variantFile(content, mime)
+	out.LastModified = info.ModTime()
+	return out
 }
 
 // writeVariant stores a copy atomically. A read-only data directory or any
