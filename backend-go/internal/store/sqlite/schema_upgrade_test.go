@@ -112,8 +112,10 @@ func TestStandaloneUpgradesOlderSnapshotAdditively(t *testing.T) {
 		`SELECT group_concat(route,',') FROM (SELECT route FROM llm_route_targets WHERE provider_id='synthetic' ORDER BY route)`:                           "schedule",
 		`SELECT model_id||'/'||origin FROM llm_models WHERE provider_id='synthetic'`:                                                                       "synthetic-model/legacy",
 		`SELECT value FROM app_settings WHERE key='llm_route_targets_migrated'`:                                                                            "1",
+
 		`SELECT title FROM resources WHERE id=9`:                                                     "official site",
 		`SELECT active_sha256||'/'||active_mime_type FROM profile_media WHERE id='synthetic-avatar'`: hex.EncodeToString(sum[:]) + "/image/png",
+
 		`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN('events_instant_idx','events_stream_identity_idx','posts_instant_idx','posts_url_published_at_idx','videos_instant_idx','videos_schedule_instant_idx','events_source_item_idx','schedule_asset_reviews_status_idx')`: "8",
 		`SELECT COUNT(*) FROM pragma_table_info('videos') WHERE name IN('live_status','live_checked_at')`:                                                                          "2",
 		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN('workflow_runs','workflow_run_steps','workflow_step_attempts','workflow_leases','workflow_migrations')`: "5",
