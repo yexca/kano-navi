@@ -261,6 +261,13 @@ text, URL, image alt text and the stored post ID before pagination, so older
 matching posts remain reachable. The console preserves these filters while
 paging and resets to page one when a filter changes.
 
+A post whose extraction keeps failing carries `llmRetryAt`, the earliest time
+the automatic scan tries it again, or `llmRetryStopped: true` once the scan
+no longer retries its current input (see
+[Failure backoff](sources.md#extraction-failure-backoff)). Both stay
+`null`/`false` for other posts and for a post with a queued reprocess request,
+which runs regardless. `POST /posts/{id}/reprocess` clears the backoff.
+
 An X post carries `translation` (see [Translations](#translations)); other
 posts carry `null`. `GET /videos` does the same for YouTube videos.
 

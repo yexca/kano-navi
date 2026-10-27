@@ -480,17 +480,29 @@ function CancellationsTab() {
 }
 
 /**
- * The extraction state, last error and queue flag of one post. A queued state
- * already says the post waits, so the flag is not repeated.
+ * The extraction state, last error, failure backoff and queue flag of one
+ * post. A queued state already says the post waits, so the flag is not
+ * repeated.
  */
 export function PostStatus({ post }: { post: AdminPost }) {
-  const { t } = useAppSettings()
+  const { t, locale } = useAppSettings()
   return (
     <>
       <StatusBadge status={post.llmStatus} />
       {post.llmLastError ? (
         <Badge tone="danger">
           {t(`admin.posts.error.${post.llmLastError}`)}
+        </Badge>
+      ) : null}
+      {post.llmRetryStopped ? (
+        <Badge tone="warning" className="adm-retry-badge">
+          {t("admin.posts.retryStopped")}
+        </Badge>
+      ) : post.llmRetryAt ? (
+        <Badge tone="neutral" className="adm-retry-badge">
+          {t("admin.posts.retryAt", {
+            time: formatDateTime(post.llmRetryAt, locale),
+          })}
         </Badge>
       ) : null}
       {post.llmReprocessRequested && post.llmStatus !== "queued" ? (

@@ -50,6 +50,8 @@ test("post date filters reach server queries, survive pagination and clear indep
       llmLastAttemptAt: null,
       llmLastError: null,
       llmReprocessRequested: false,
+      llmRetryAt: null,
+      llmRetryStopped: false,
       translation: null,
     }
     const queries: Record<string, string | number>[] = []

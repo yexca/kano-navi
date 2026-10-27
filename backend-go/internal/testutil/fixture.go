@@ -30,7 +30,8 @@ func NewSnapshot(t testing.TB) string {
 			post_id TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'never', route TEXT,
 			last_attempt_at TEXT, last_processed_at TEXT, last_error TEXT,
 			last_extraction_id INTEGER, reprocess_requested INTEGER NOT NULL DEFAULT 0,
-			updated_at TEXT NOT NULL DEFAULT ''
+			updated_at TEXT NOT NULL DEFAULT '', failure_count INTEGER NOT NULL DEFAULT 0,
+			failure_fingerprint TEXT, next_attempt_at TEXT
 		);
 		CREATE TABLE events (
 			id TEXT PRIMARY KEY, source TEXT NOT NULL, source_item_id TEXT, source_key TEXT, title TEXT NOT NULL, detail TEXT,

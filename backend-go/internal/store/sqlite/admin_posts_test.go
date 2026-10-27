@@ -91,3 +91,43 @@ func TestAdminPostsPreviewOnlyLocalImages(t *testing.T) {
 		t.Fatalf("account filter = %d %+v", page.Total, page.Items)
 	}
 }
+
+func TestAdminPostsShowFailureBackoff(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	for _, id := range []string{"waiting", "stopped", "requested", "fresh"} {
+		testutil.Exec(t, path, `INSERT INTO posts (id,source,type,text,published_at,url) VALUES (?,'x','post','text','2026-10-11T00:00:00.000Z',?)`, id, "https://x.example.invalid/"+id)
+	}
+	testutil.Exec(t, path, `INSERT INTO post_llm_states (post_id,status,failure_count,failure_fingerprint,next_attempt_at,reprocess_requested,updated_at) VALUES
+		('waiting','failed',2,'synthetic-input','2026-10-12T06:00:00.000Z',0,'2026-10-12T00:00:00.000Z'),
+		('stopped','failed',4,'synthetic-input',NULL,0,'2026-10-12T00:00:00.000Z'),
+		('requested','failed',4,'synthetic-input',NULL,1,'2026-10-12T00:00:00.000Z'),
+		('fresh','failed',0,NULL,NULL,0,'2026-10-12T00:00:00.000Z')`)
+	store, err := OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	page, err := store.ListAdminPosts(context.Background(), AdminPostFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, item := range page.Items {
+		retryAt := "-"
+		if item.LLMRetryAt != nil {
+			retryAt = *item.LLMRetryAt
+		}
+		got[item.ID] = retryAt + "|" + map[bool]string{true: "stopped", false: "retrying"}[item.LLMRetryStopped]
+	}
+	// A queued operator request runs at once, so it shows no backoff.
+	for id, want := range map[string]string{
+		"waiting":   "2026-10-12T06:00:00.000Z|retrying",
+		"stopped":   "-|stopped",
+		"requested": "-|retrying",
+		"fresh":     "-|retrying",
+	} {
+		if got[id] != want {
+			t.Errorf("%s = %q, want %q", id, got[id], want)
+		}
+	}
+}

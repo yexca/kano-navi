@@ -24,8 +24,9 @@ type postLLMState struct {
 
 var errPostNotFound = errors.New("post not found")
 
-// requestPostReprocess queues a post for the next extraction run. Only the
-// two schedule routes may be pinned; anything else keeps the stored route.
+// requestPostReprocess queues a post for the next extraction run and clears
+// its failure backoff. Only the two schedule routes may be pinned; anything
+// else keeps the stored route.
 func (m *Module) requestPostReprocess(ctx context.Context, postID string, route *string) (*postLLMState, error) {
 	var state postLLMState
 	now := m.timestamp()
@@ -44,7 +45,8 @@ func (m *Module) requestPostReprocess(ctx context.Context, postID string, route 
 		     status=excluded.status, route=COALESCE(excluded.route, post_llm_states.route),
 		     last_error=excluded.last_error,
 		     reprocess_requested=excluded.reprocess_requested,
-		     updated_at=excluded.updated_at`, postID, nullString(route), now); execErr != nil {
+		     updated_at=excluded.updated_at,
+		     failure_count=0, failure_fingerprint=NULL, next_attempt_at=NULL`, postID, nullString(route), now); execErr != nil {
 			return execErr
 		}
 		var storedRoute, lastAttempt, lastProcessed, lastError, updatedAt sql.NullString

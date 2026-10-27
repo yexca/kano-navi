@@ -874,7 +874,8 @@ func TestScheduleAssetPeriod(t *testing.T) {
 func TestPostReprocessRequest(t *testing.T) {
 	f := newFixture(t, true)
 	f.exec(`INSERT INTO posts(id,source,text,published_at,url) VALUES('p/1','x','synthetic','2026-10-01T00:00:00.000Z','https://x.com/synthetic/status/1')`)
-	f.exec(`INSERT INTO post_llm_states(post_id,status,last_error,last_extraction_id,last_processed_at,updated_at) VALUES('p/1','failed','synthetic failure',7,'2026-10-02T00:00:00.000Z','2026-10-02T00:00:00.000Z')`)
+	f.exec(`INSERT INTO post_llm_states(post_id,status,last_error,last_extraction_id,last_processed_at,updated_at,failure_count,failure_fingerprint,next_attempt_at)
+		VALUES('p/1','failed','synthetic failure',7,'2026-10-02T00:00:00.000Z','2026-10-02T00:00:00.000Z',4,'synthetic-input',NULL)`)
 	module := f.module
 	module.now = func() time.Time { return time.Date(2026, 10, 13, 1, 2, 3, 4_000_000, time.UTC) }
 
@@ -886,6 +887,10 @@ func TestPostReprocessRequest(t *testing.T) {
 		state["lastError"] != nil || state["lastExtractionId"] != float64(7) || state["lastProcessedAt"] != "2026-10-02T00:00:00.000Z" ||
 		state["lastAttemptAt"] != nil || state["updatedAt"] != "2026-10-13T01:02:03.004Z" {
 		t.Fatalf("unexpected reprocess state: %#v", state)
+	}
+	// The request starts the failure backoff over, even after retries stopped.
+	if got := f.text(`SELECT failure_count || '|' || COALESCE(failure_fingerprint, '-') || '|' || COALESCE(next_attempt_at, '-') FROM post_llm_states`); got != "0|-|-" {
+		t.Fatalf("failure backoff kept: %s", got)
 	}
 	// An unknown route never replaces the stored one.
 	kept := f.post("/posts/p%2F1/reprocess", map[string]any{"route": "anything"})

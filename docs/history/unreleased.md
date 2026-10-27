@@ -29,6 +29,14 @@
   the oldest one it read. A timeline that ends first reports
   `x_timeline_gap`. `X_BOOTSTRAP_DAYS` now applies only while an account has
   no cursor.
+- Schedule extraction backs off posts that keep failing instead of retrying
+  them on every X run: 1, 6 and 24 hours after the first three consecutive
+  failures of the same input, and no automatic retry after the fourth. New
+  content, a changed model queue or an operator reprocess starts it over, and
+  a queued reprocess always runs. Held posts make no model call, do not use
+  the scan limit and are counted as `backoff` or `retryStopped`. Startup adds
+  `failure_count`, `failure_fingerprint` and `next_attempt_at` to
+  `post_llm_states`.
 
 </details>
 
@@ -59,5 +67,8 @@
   straight on their lists, with a Fetch button in the header that leads
   there, and adding a Bilibili upload by BV ID moves to the Bilibili section
   of the Sources page.
+- Posts whose extraction keeps failing show when they are retried next, or
+  that automatic retries stopped, next to their state on the Posts and Review
+  pages. `GET /api/admin/posts` adds `llmRetryAt` and `llmRetryStopped`.
 
 </details>

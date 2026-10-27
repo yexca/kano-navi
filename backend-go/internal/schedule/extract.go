@@ -140,6 +140,12 @@ type candidate struct {
 
 const scanLimit = 20
 
+// extractionBackoff is how long the automatic scan leaves a post alone after
+// the first, second and third consecutive failed extraction of the same
+// input. The fourth failure stops automatic retries until the input or the
+// model queue changes or an operator requests a reprocess.
+var extractionBackoff = []time.Duration{time.Hour, 6 * time.Hour, 24 * time.Hour}
+
 func (e *Extractor) extractPending(ctx context.Context) (map[string]any, error) {
 	config, err := e.loadConfig(ctx)
 	if err != nil {
@@ -224,7 +230,10 @@ func (e *Extractor) extractPending(ctx context.Context) (map[string]any, error) 
 		if err != nil {
 			return counts, err
 		}
-		if result.status != "cached" || result.budgetUsed {
+		// Cache hits and posts held back by the failure backoff make no
+		// provider call and leave the limit to other work. The held posts are
+		// counted as backoff or retryStopped, keys present only when used.
+		if result.budgetUsed || (result.status != "cached" && !result.heldBack()) {
 			counts["attempted"] = countOf(counts, "attempted") + 1
 			counts[item.detectionType+"Attempted"] = countOf(counts, item.detectionType+"Attempted") + 1
 		}
@@ -317,6 +326,12 @@ type postResult struct {
 	budgetUsed bool
 }
 
+// heldBack is a failed post the scan left alone: still waiting for its
+// backoff ("backoff") or out of automatic retries ("retryStopped").
+func (r postResult) heldBack() bool {
+	return r.status == "backoff" || r.status == "retryStopped"
+}
+
 func (e *Extractor) skipPost(ctx context.Context, postID, route, reason string, force bool) (postResult, error) {
 	err := e.markPost(ctx, postID, stateUpdate{
 		status:        "skipped",
@@ -374,6 +389,23 @@ func (e *Extractor) extractPost(ctx context.Context, item post, detectionType st
 	identity.set("images", hashes)
 	fingerprint := sha256Hex(stringify(identity))
 
+	// The backoff belongs to this input and these targets: new content, a
+	// different queue or model, or an operator request starts it over.
+	targets := []any{fingerprint}
+	for _, target := range providers {
+		targets = append(targets, extractorVersionFor(target, detectionType, inputMode))
+	}
+	failureKey := sha256Hex(stringify(targets))
+	repeated := !force && previous != nil && previous.failureCount > 0 && previous.failureFingerprint == failureKey
+	if repeated {
+		if previous.nextAttemptAt == "" {
+			return postResult{status: "retryStopped"}, nil
+		}
+		if retryAt, ok := parseInstant(previous.nextAttemptAt); ok && e.now().Before(retryAt) {
+			return postResult{status: "backoff"}, nil
+		}
+	}
+
 	budgetUsed := false
 	for _, target := range providers {
 		status, err := e.extractWithProvider(ctx, item, media.images, fingerprint, target, detectionType, inputMode, route, force)
@@ -387,7 +419,15 @@ func (e *Extractor) extractPost(ctx context.Context, item post, detectionType st
 			return postResult{status: status, budgetUsed: budgetUsed}, nil
 		}
 	}
-	return postResult{status: "failed"}, nil
+	failures := 1
+	if repeated {
+		failures = previous.failureCount + 1
+	}
+	retryAt := ""
+	if failures <= len(extractionBackoff) {
+		retryAt = sqlite.ISOTime(e.now().Add(extractionBackoff[failures-1]))
+	}
+	return postResult{status: "failed"}, e.recordFailure(ctx, item.id, failureKey, failures, retryAt)
 }
 
 const (

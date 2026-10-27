@@ -31,7 +31,7 @@ belong to the TypeScript initializer. See
 | `sync_state`             | Durable per-account X, YouTube and Bilibili cursors and read bookkeeping                               |
 | `app_settings`           | Model, schedule-extractor, X-account, Featured, and YouTube push settings (push secret sealed)         |
 | `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                         |
-| `post_llm_states`        | Per-post LLM status, last attempt, error, and reprocess queue state                                    |
+| `post_llm_states`        | Per-post LLM status, last attempt, error, reprocess queue state, and extraction failure backoff        |
 | `schedule_asset_reviews` | Per-schedule-image LLM verdict, skip reason (`no_image` for a URL-less row), and optional manual label |
 | `llm_providers`          | OpenAI-compatible or Anthropic endpoints, Text/Image capabilities, health, and encrypted keys          |
 | `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)  |
@@ -470,6 +470,16 @@ older per-stage `schedule_message`, `schedule_board`, and `schedule_vision`
 targets into it in that order, keeping the first position of a repeated
 provider + model pair. `post_llm_states.route` still records which detection
 path (`schedule_message` or `schedule_board`) handled a post.
+
+`post_llm_states.failure_count` counts consecutive failed extractions of the
+input named by `failure_fingerprint` (a hash of the post's input fingerprint
+and the ordered targets that were tried), and `next_attempt_at` is the ISO
+time the automatic scan may try it again; a positive count with a null
+`next_attempt_at` means automatic retries stopped. A success or uncertain
+outcome, cached or not, and an operator reprocess request reset all three
+(`0`, `NULL`, `NULL`); the startup upgrade adds them to existing snapshots
+with those values, so older failures are retried once more before backing
+off. See [Extraction failure backoff](sources.md#extraction-failure-backoff).
 
 `internal/httpapi/media.go` and `internal/store/sqlite/media.go` own cache-root
 path validation and serving; `internal/store/sqlite/source_write.go` owns

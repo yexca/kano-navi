@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -249,10 +250,12 @@ func TestProviderFailureKeepsEventsAndRecordsFailure(t *testing.T) {
 			}
 			f.assertNoSecretStored()
 
-			// The failed extraction is not treated as processed.
+			// The failed extraction is not treated as processed: once its
+			// first backoff has passed, the next scan tries it again.
 			f.provider.respond = func(recordedRequest) (int, string) {
 				return http.StatusOK, chatReply(scheduleReply(songTitle, songDate, songClock, "scheduled"))
 			}
+			f.at(time.Now().Add(extractionBackoff[0]))
 			if recovered := f.scan(); recovered.Status != "success" || countOf(recovered.Counts, "success") != 1 {
 				t.Errorf("recovery = %q %v", recovered.Status, recovered.Counts)
 			}

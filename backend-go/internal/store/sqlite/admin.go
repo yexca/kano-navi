@@ -27,6 +27,10 @@ type AdminPost struct {
 	LLMLastError          *string `json:"llmLastError"`
 	LLMLastExtractionID   *int64  `json:"llmLastExtractionId"`
 	LLMReprocessRequested bool    `json:"llmReprocessRequested"`
+	// LLMRetryAt is the earliest time the automatic scan retries a post whose
+	// extraction keeps failing; LLMRetryStopped means it no longer will.
+	LLMRetryAt      *string `json:"llmRetryAt"`
+	LLMRetryStopped bool    `json:"llmRetryStopped"`
 	// Media lists the post's images in order. MediaStatus is the first
 	// image's status, or "none" for a text-only post.
 	Media       []AdminPostImage `json:"media"`
@@ -404,7 +408,7 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	totalPages := pageCount(total, pageSize)
 	page = safePage(page, totalPages)
 	offset := (page - 1) * pageSize
-	query := `SELECT p.id,p.source,p.account_handle,p.text,p.published_at,p.url,p.media_url,p.media_alt,COALESCE(s.status,'never'),s.route,s.last_attempt_at,s.last_processed_at,s.last_error,s.last_extraction_id,COALESCE(s.reprocess_requested,0) FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE ` + where + ` ORDER BY julianday(p.published_at) DESC,p.id ASC LIMIT ? OFFSET ?`
+	query := `SELECT p.id,p.source,p.account_handle,p.text,p.published_at,p.url,p.media_url,p.media_alt,COALESCE(s.status,'never'),s.route,s.last_attempt_at,s.last_processed_at,s.last_error,s.last_extraction_id,COALESCE(s.reprocess_requested,0),COALESCE(s.failure_count,0),s.next_attempt_at FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE ` + where + ` ORDER BY julianday(p.published_at) DESC,p.id ASC LIMIT ? OFFSET ?`
 	rows, err := s.db.QueryContext(ctx, query, append(args, pageSize, offset)...)
 	if err != nil {
 		return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
@@ -413,10 +417,10 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	items := []AdminPost{}
 	for rows.Next() {
 		var p AdminPost
-		var account, mediaURL, mediaAlt, route, lastAttempt, lastProcessed, lastError sql.NullString
+		var account, mediaURL, mediaAlt, route, lastAttempt, lastProcessed, lastError, retryAt sql.NullString
 		var extraction sql.NullInt64
-		var requested int
-		if err := rows.Scan(&p.ID, &p.Source, &account, &p.Text, &p.PublishedAt, &p.URL, &mediaURL, &mediaAlt, &p.LLMStatus, &route, &lastAttempt, &lastProcessed, &lastError, &extraction, &requested); err != nil {
+		var requested, failures int
+		if err := rows.Scan(&p.ID, &p.Source, &account, &p.Text, &p.PublishedAt, &p.URL, &mediaURL, &mediaAlt, &p.LLMStatus, &route, &lastAttempt, &lastProcessed, &lastError, &extraction, &requested, &failures, &retryAt); err != nil {
 			return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
 		}
 		p.AccountHandle = nullString(account)
@@ -428,6 +432,11 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 		p.LLMLastError = sanitizeLLMError(lastError)
 		p.LLMLastExtractionID = nullInt(extraction)
 		p.LLMReprocessRequested = requested != 0
+		// A queued request runs regardless of the backoff.
+		if failures > 0 && !p.LLMReprocessRequested {
+			p.LLMRetryAt = nullString(retryAt)
+			p.LLMRetryStopped = !retryAt.Valid
+		}
 		items = append(items, p)
 	}
 	if err := rows.Err(); err != nil {

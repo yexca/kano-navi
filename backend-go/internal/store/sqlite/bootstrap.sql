@@ -185,7 +185,10 @@ CREATE TABLE post_llm_states (
     last_error TEXT,
     last_extraction_id INTEGER,
     reprocess_requested INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    failure_fingerprint TEXT,
+    next_attempt_at TEXT
   );
 
 CREATE TABLE posts (

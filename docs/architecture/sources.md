@@ -465,9 +465,37 @@ timestamp alone.
 The two candidate lists are merged, de-duplicated by X post ID, sorted by
 least recent attempt (unattempted posts first), with publication time as a tie
 breaker. The shared limit counts candidates requiring work; unchanged fingerprint
-cache hits do not consume it. Failures and blocked candidates move behind older
+cache hits and posts held back by the failure backoff below do not consume it.
+Failures and blocked candidates move behind older
 unattempted work on later scans. Manual reprocess requests still run first. A post selected by the
 board path is not sent a second time through the message path in the same scan.
+
+#### Extraction Failure Backoff
+
+A post fails when every compatible queue target exhausted its calls. The
+scan then records a consecutive failure count for that input (its fingerprint
+plus the ordered targets that were tried) and leaves the post alone for 1 hour
+after the first failure, 6 hours after the second and 24 hours after the
+third. The fourth consecutive failure stops automatic retries. A post held
+back this way makes no provider call, keeps its `failed` state and last error,
+and is counted as `backoff` (waiting) or `retryStopped` in the step result;
+these keys appear only when a post was held back, and held posts are not
+failures of that run. X timers run as often as every 15 minutes and each
+failure already costs up to three calls per target, so the first wait covers a
+short provider outage, the 24-hour wait a daily quota reset, and a post that
+still fails after about 31 hours most likely fails on its content.
+
+The backoff starts over when the input changes (edited text, publication
+time, URL or cached images), when the queue's targets or models change, and
+when an operator requests a reprocess, which also clears it immediately. A
+queued reprocess request always runs, whatever the backoff, and a forced pass
+that fails counts as the first failure. A success or `uncertain` result,
+including a cache hit, clears the backoff. A cancelled run is not a failure.
+`skipped` outcomes that make no call (`media_pending`, `no_content`, no
+configured or compatible target) are not failures, keep any earlier count,
+and are scanned as before. The console shows the next retry time or that
+retries stopped next to the post's state. Older snapshots start with no
+backoff, so their failed posts are tried once more first.
 
 Both paths, and the schedule-image check below, draw from one model priority
 queue: an ordered list of targets, each a provider plus one of its catalog
@@ -548,7 +576,7 @@ queues a forced pass that bypasses the successful-result cache. The automatic
 scan consumes queued posts even when they no longer match the current keyword
 heuristic; a missing provider or queue target or a pending image keeps the reprocess request
 pending,
-while a provider failure consumes it. Queued posts run before keyword
+while a provider failure consumes it and starts the failure backoff over. Queued posts run before keyword
 candidates within the shared scan limit. They use the detection route the
 operator requested; without one, a post that a keyword path also selected
 keeps that route, image posts use `schedule_board`, and text posts use

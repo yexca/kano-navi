@@ -1820,8 +1820,10 @@ button.adm-run-line:hover,
   min-width: 0;
 }
 
-/* A merge target title can be long; it wraps instead of widening the row. */
-.adm-badge.adm-merge-badge {
+/* A merge target title or a post's retry time can be long; it wraps instead
+   of widening the row or spilling into the next column. */
+.adm-badge.adm-merge-badge,
+.adm-badge.adm-retry-badge {
   padding-block: 4px;
   line-height: 1.3;
   white-space: normal;

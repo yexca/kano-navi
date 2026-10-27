@@ -290,6 +290,10 @@ export interface AdminPost {
   llmLastAttemptAt: string | null
   llmLastError: string | null
   llmReprocessRequested: boolean
+  /** Earliest automatic retry of a post whose extraction keeps failing. */
+  llmRetryAt: string | null
+  /** The automatic scan no longer retries this post's current input. */
+  llmRetryStopped: boolean
   /** Null for posts the translate step does not cover (non-X). */
   translation: AdminTranslation | null
 }

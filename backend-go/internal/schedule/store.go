@@ -486,20 +486,42 @@ func (e *Extractor) listRequestedPosts(ctx context.Context, limit int) ([]post, 
 type postState struct {
 	lastAttemptAt      string
 	reprocessRequested bool
+	// failureCount counts consecutive failed extractions of the input named by
+	// failureFingerprint. nextAttemptAt is empty once automatic retries stop.
+	failureCount       int
+	failureFingerprint string
+	nextAttemptAt      string
 }
 
 func getPostState(ctx context.Context, q queryer, postID string) (*postState, error) {
-	var lastAttemptAt sql.NullString
-	var reprocess sql.NullInt64
-	err := q.QueryRowContext(ctx, `SELECT last_attempt_at, reprocess_requested
-		FROM post_llm_states WHERE post_id = ?`, postID).Scan(&lastAttemptAt, &reprocess)
+	var lastAttemptAt, fingerprint, nextAttemptAt sql.NullString
+	var reprocess, failures sql.NullInt64
+	err := q.QueryRowContext(ctx, `SELECT last_attempt_at, reprocess_requested,
+		failure_count, failure_fingerprint, next_attempt_at
+		FROM post_llm_states WHERE post_id = ?`, postID).
+		Scan(&lastAttemptAt, &reprocess, &failures, &fingerprint, &nextAttemptAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &postState{lastAttemptAt.String, reprocess.Int64 != 0}, nil
+	return &postState{
+		lastAttemptAt:      lastAttemptAt.String,
+		reprocessRequested: reprocess.Int64 != 0,
+		failureCount:       int(failures.Int64),
+		failureFingerprint: fingerprint.String,
+		nextAttemptAt:      nextAttemptAt.String,
+	}, nil
+}
+
+// recordFailure stores the consecutive failure count of one input and when
+// the automatic scan may try it again; an empty retryAt stops retries.
+func (e *Extractor) recordFailure(ctx context.Context, postID, fingerprint string, count int, retryAt string) error {
+	_, err := e.db.ExecContext(ctx, `UPDATE post_llm_states SET failure_count=?,
+		failure_fingerprint=?, next_attempt_at=? WHERE post_id=?`,
+		count, fingerprint, nullable(retryAt), postID)
+	return err
 }
 
 var postStatuses = map[string]bool{
@@ -520,6 +542,8 @@ type stateUpdate struct {
 
 // markPost mirrors markPostLlm + upsertPostLlmState. Empty strings are stored
 // as NULL, and NULL keeps the previous route, timestamps and extraction ID.
+// A success or uncertain outcome, cached or not, clears the failure backoff;
+// every other status keeps it.
 func (e *Extractor) markPost(ctx context.Context, postID string, update stateUpdate) error {
 	if postID == "" {
 		return nil
@@ -557,7 +581,10 @@ func (e *Extractor) markPost(ctx context.Context, postID string, update stateUpd
 			last_error=excluded.last_error,
 			last_extraction_id=COALESCE(excluded.last_extraction_id, post_llm_states.last_extraction_id),
 			reprocess_requested=excluded.reprocess_requested,
-			updated_at=excluded.updated_at`,
+			updated_at=excluded.updated_at,
+			failure_count=CASE WHEN excluded.status IN ('success', 'uncertain') THEN 0 ELSE post_llm_states.failure_count END,
+			failure_fingerprint=CASE WHEN excluded.status IN ('success', 'uncertain') THEN NULL ELSE post_llm_states.failure_fingerprint END,
+			next_attempt_at=CASE WHEN excluded.status IN ('success', 'uncertain') THEN NULL ELSE post_llm_states.next_attempt_at END`,
 		postID, status, nullable(update.route), nullable(update.lastAttemptAt),
 		nullable(update.lastProcessedAt), nullable(update.lastError), extractionID, flag, e.nowISO())
 	return err
