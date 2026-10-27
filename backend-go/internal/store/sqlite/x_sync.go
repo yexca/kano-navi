@@ -28,13 +28,27 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	// A post read from a timeline page that is already stored keeps the text,
+	// media and schedule candidate it has, as a fetch window leaves it.
+	kept := map[string]bool{}
 	for _, p := range result.Posts {
+		if result.FromTimeline[p.ID] {
+			var exists int
+			lookupErr := tx.QueryRowContext(ctx, `SELECT 1 FROM posts WHERE id=?`, p.ID).Scan(&exists)
+			if lookupErr == nil {
+				kept[p.ID] = true
+				continue
+			}
+			if !errors.Is(lookupErr, sql.ErrNoRows) {
+				return ErrSourceWrite
+			}
+		}
 		if stored, writeErr := writeXPost(ctx, tx, account, p, now); writeErr != nil || !stored {
 			return ErrSourceWrite
 		}
 	}
 	for _, c := range result.ScheduleCandidates {
-		if c.MediaURL == "" || c.SourceURL == "" {
+		if c.MediaURL == "" || c.SourceURL == "" || kept[c.PostID] {
 			continue
 		}
 		if err = writeScheduleCandidate(ctx, tx, c, now); err != nil {
@@ -44,20 +58,25 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 	var oldMetadata string
 	_ = tx.QueryRowContext(ctx, "SELECT COALESCE(metadata_json,'') FROM sync_state WHERE source='x' AND account_id=?", account).Scan(&oldMetadata)
 	pending := append([]string(nil), result.PendingIDs...)
+	var old struct {
+		Pending []any                           `json:"pendingStatusIds"`
+		Retries map[string]xsource.PendingRetry `json:"pendingRetries"`
+	}
 	if oldMetadata != "" {
-		var old map[string]any
-		if json.Unmarshal([]byte(oldMetadata), &old) == nil {
-			if values, ok := old["pendingStatusIds"].([]any); ok {
-				seen := map[string]bool{}
-				for _, id := range pending {
-					seen[id] = true
-				}
-				for _, value := range values {
-					if id, ok := value.(string); ok && !seen[id] {
-						pending = append(pending, id)
-						seen[id] = true
-					}
-				}
+		// A field of another shape is skipped and the rest still read.
+		_ = json.Unmarshal([]byte(oldMetadata), &old)
+		// A dropped ID is not taken back from the earlier queue.
+		seen := map[string]bool{}
+		for _, id := range pending {
+			seen[id] = true
+		}
+		for _, dropped := range result.Dropped {
+			seen[dropped.ID] = true
+		}
+		for _, value := range old.Pending {
+			if id, ok := value.(string); ok && !seen[id] {
+				pending = append(pending, id)
+				seen[id] = true
 			}
 		}
 	}
@@ -72,7 +91,20 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 	if len(pending) > 1000 {
 		pending = pending[:1000]
 	}
+	// Failure counts are kept only for IDs still pending; the run's state
+	// replaces the earlier one.
+	retries := map[string]xsource.PendingRetry{}
+	for _, id := range pending {
+		if retry, ok := result.PendingRetries[id]; ok {
+			retries[id] = retry
+		} else if retry, ok = old.Retries[id]; ok {
+			retries[id] = retry
+		}
+	}
 	metadata := map[string]any{"handle": account, "discovered": result.DiscoveredCount, "requested": result.RequestedCount, "pendingStatusIds": pending}
+	if len(retries) > 0 {
+		metadata["pendingRetries"] = retries
+	}
 	if result.Discovery != "" {
 		metadata["discovery"] = result.Discovery
 	}
@@ -168,7 +200,10 @@ func writeScheduleCandidate(ctx context.Context, tx *sql.Tx, c xsource.ScheduleC
 
 type XRecentState struct {
 	PendingIDs []string
-	KnownIDs   map[string]bool
+	// PendingRetries is the failure state of pending IDs, from
+	// metadata_json.pendingRetries; older rows have none.
+	PendingRetries map[string]xsource.PendingRetry
+	KnownIDs       map[string]bool
 	// CursorID is the newest successfully stored status of the account.
 	CursorID string
 	// Gap is the timeline stretch a capped run left unread, or nil.
@@ -212,11 +247,12 @@ func (s *Store) XRecentState(ctx context.Context, account string) (XRecentState,
 		return out, ErrSourceWrite
 	}
 	var data struct {
-		Pending []string     `json:"pendingStatusIds"`
-		Gap     *xsource.Gap `json:"timelineGap"`
+		Pending []string                        `json:"pendingStatusIds"`
+		Retries map[string]xsource.PendingRetry `json:"pendingRetries"`
+		Gap     *xsource.Gap                    `json:"timelineGap"`
 	}
 	_ = json.Unmarshal([]byte(meta), &data)
-	out.PendingIDs = data.Pending
+	out.PendingIDs, out.PendingRetries = data.Pending, data.Retries
 	if data.Gap != nil && data.Gap.Floor != "" {
 		out.Gap = data.Gap
 	}

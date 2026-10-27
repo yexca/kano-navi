@@ -142,7 +142,9 @@ type Options struct {
 	Handles           []string
 	ScheduleKeywords  []string
 	PendingIDs        []string
-	KnownIDs          map[string]bool
+	// PendingRetries holds the consecutive failures of pending IDs.
+	PendingRetries map[string]PendingRetry
+	KnownIDs       map[string]bool
 	// CursorID is the account's newest stored status; timeline paging stops
 	// once it reaches it.
 	CursorID string
@@ -233,7 +235,16 @@ type Result struct {
 	Errors                          []string
 	NextCursor, NextCursorTime      string
 	PendingIDs                      []string
-	ScheduleCandidates              []ScheduleCandidate
+	// PendingRetries is the failure state of the IDs still pending.
+	PendingRetries map[string]PendingRetry
+	// Held counts pending IDs left for a later run by their backoff; Dropped
+	// lists the IDs the run stopped requesting.
+	Held               int
+	Dropped            []DroppedStatus
+	ScheduleCandidates []ScheduleCandidate
+	// FromTimeline marks posts read from a timeline page without a detail
+	// request. A stored one keeps the values it has.
+	FromTimeline map[string]bool
 	// Discovery names where the status IDs came from: DiscoveryTimeline, or
 	// DiscoveryProfile after a timeline fallback.
 	Discovery string
@@ -293,6 +304,8 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 	ids := found.ids
 	result.Discovery, result.Gap, result.Notes = DiscoveryTimeline, found.gap, found.notes
 	if err != nil || len(ids) == 0 {
+		// The profile page lists IDs only; every one needs a detail request.
+		found.posts = nil
 		result.Discovery, result.Gap, result.Notes = DiscoveryProfile, opts.Gap, nil
 		profile, profileErr := a.Client.Profile(ctx, account)
 		if profileErr != nil {
@@ -336,65 +349,112 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 			add(id)
 		}
 	}
+	// Known posts are refreshed through the detail request even when the
+	// timeline lists them, so a stored post is rewritten from one shape only.
+	refreshing := map[string]bool{}
 	refresh := opts.RefreshKnown
 	for _, id := range ids {
 		if opts.KnownIDs[id] && refresh > 0 {
 			add(id)
+			refreshing[id] = true
 			refresh--
 		}
 	}
-	ids = queue
-	if opts.MaxDetailRequests <= 0 {
-		result.PendingIDs = ids
-		return result, nil
+	now := time.Now()
+	if a.Now != nil {
+		now = a.Now()
 	}
-	if len(ids) > opts.MaxDetailRequests {
-		result.PendingIDs = append(result.PendingIDs, ids[opts.MaxDetailRequests:]...)
-		ids = ids[:opts.MaxDetailRequests]
-	}
+	result.FromTimeline = map[string]bool{}
+	result.PendingRetries = map[string]PendingRetry{}
 	successful := map[string]bool{}
+	accept := func(post *Post) bool {
+		if post.AuthorScreenName != "" && !strings.EqualFold(strings.TrimPrefix(post.AuthorScreenName, "@"), account) {
+			return false
+		}
+		result.Posts = append(result.Posts, *post)
+		successful[post.ID] = true
+		if len(post.MediaURLs) > 0 && isSchedule(post.Text, opts.ScheduleKeywords) {
+			result.ScheduleCandidates = append(result.ScheduleCandidates, ScheduleCandidate{PostID: post.ID, SourceURL: post.URL, MediaURL: post.MediaURLs[0], AccountHandle: account})
+		}
+		return true
+	}
+	// A status the timeline page carried is stored from the page, pending or
+	// not; the rest wait for their backoff or take a detail request.
+	detail := []string{}
+	for _, id := range queue {
+		if post := found.posts[id]; post != nil && !refreshing[id] && accept(post) {
+			result.FromTimeline[id] = true
+			continue
+		}
+		if retry, ok := opts.PendingRetries[id]; ok && retry.waiting(now) {
+			result.Held++
+			continue
+		}
+		detail = append(detail, id)
+	}
+	detail = detail[:min(max(opts.MaxDetailRequests, 0), len(detail))]
+	attempted := map[string]bool{}
+	failed := []string{}
 	var firstDetailErr error
-	for _, id := range ids {
+	fail := func(id, code string, err error, gone bool) {
+		if firstDetailErr == nil && err != nil {
+			firstDetailErr = err
+		}
+		result.Errors = append(result.Errors, id+": "+code)
+		retry, dropped := opts.PendingRetries[id].failed(gone, now)
+		if dropped != "" {
+			result.Dropped = append(result.Dropped, DroppedStatus{ID: id, Code: dropped})
+			return
+		}
+		result.PendingRetries[id] = retry
+		failed = append(failed, id)
+	}
+	for _, id := range detail {
+		if ctx.Err() != nil {
+			break
+		}
+		attempted[id] = true
 		result.RequestedCount++
 		body, e := a.Client.Detail(ctx, account, id)
-		if e != nil {
+		// A cancelled run is not a failure of the status: it stays pending
+		// in its place.
+		if e != nil && ctx.Err() != nil {
+			delete(attempted, id)
 			if firstDetailErr == nil {
 				firstDetailErr = e
 			}
-			result.Errors = append(result.Errors, id+": "+safeCode(e))
+			break
+		}
+		if e != nil {
+			fail(id, safeCode(e), e, isGone(e))
 			continue
 		}
 		var payload map[string]any
 		if json.Unmarshal(body, &payload) != nil {
-			if firstDetailErr == nil {
-				firstDetailErr = &Error{Code: ErrInvalidJSON}
-			}
-			result.Errors = append(result.Errors, id+": "+string(ErrInvalidJSON))
+			fail(id, string(ErrInvalidJSON), &Error{Code: ErrInvalidJSON}, false)
 			continue
 		}
 		post := Normalize(payload, id, account)
 		if post == nil || post.ID != id {
-			if firstDetailErr == nil {
-				firstDetailErr = &Error{Code: ErrInvalidResponse}
-			}
-			result.Errors = append(result.Errors, id+": "+string(ErrInvalidResponse))
+			fail(id, string(ErrInvalidResponse), &Error{Code: ErrInvalidResponse}, false)
 			continue
 		}
-		if post.AuthorScreenName != "" && !strings.EqualFold(strings.TrimPrefix(post.AuthorScreenName, "@"), account) {
-			result.Errors = append(result.Errors, id+": account_mismatch")
-			continue
-		}
-		result.Posts = append(result.Posts, *post)
-		successful[id] = true
-		if len(post.MediaURLs) > 0 && isSchedule(post.Text, opts.ScheduleKeywords) {
-			result.ScheduleCandidates = append(result.ScheduleCandidates, ScheduleCandidate{PostID: post.ID, SourceURL: post.URL, MediaURL: post.MediaURLs[0], AccountHandle: account})
+		// Another account's status never becomes this account's post.
+		if !accept(post) {
+			fail(id, "account_mismatch", nil, true)
 		}
 	}
-	for _, id := range ids {
-		if !successful[id] {
+	// Unattempted work keeps its order and failed work moves behind it, so a
+	// failing ID cannot keep blocking the rest.
+	for _, id := range queue {
+		if !successful[id] && !attempted[id] {
 			result.PendingIDs = append(result.PendingIDs, id)
+			if retry, ok := opts.PendingRetries[id]; ok {
+				result.PendingRetries[id] = retry
+			}
 		}
 	}
+	result.PendingIDs = append(result.PendingIDs, failed...)
 	if len(result.Posts) > 0 {
 		newest := result.Posts[0]
 		for _, p := range result.Posts[1:] {

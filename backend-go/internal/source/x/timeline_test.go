@@ -34,6 +34,9 @@ type timelineServer struct {
 	bodies   map[string]string
 	cursors  []string
 	profiles int
+	// detail answers a detail request for a status ID; details lists them.
+	detail  func(id string) *http.Response
+	details []string
 }
 
 func (s *timelineServer) adapter(opts Options) *Adapter {
@@ -55,6 +58,12 @@ func (s *timelineServer) adapter(opts Options) *Adapter {
 		case profileHost:
 			s.profiles++
 			return response(200, `<a href="/kano/status/`+statusAt(timelineNow.Add(-time.Hour))+`">a</a>`), nil
+		case detailHost:
+			id := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+			s.details = append(s.details, id)
+			if s.detail != nil {
+				return s.detail(id), nil
+			}
 		}
 		return response(500, "unexpected"), nil
 	})

@@ -38,27 +38,51 @@ source used in `sync_state.metadata_json.discovery` (`timeline` or `profile`)
 and counts fallback accounts as `profileFallbacks` in the step result. A
 fallback alone does not fail the account or mark the run partial.
 
-Discovered IDs keep the existing detail path: before an account has a cursor,
-their Snowflake timestamps are decoded and IDs older than `X_BOOTSTRAP_DAYS`
-are skipped before `api.vxtwitter.com` detail requests.
-Each account has its own cursor in `sync_state`. Later runs prioritize unknown
-IDs and may refresh only a small `X_REFRESH_KNOWN` budget.
+Before an account has a cursor, the Snowflake timestamps of discovered IDs are
+decoded and IDs older than `X_BOOTSTRAP_DAYS` are skipped. Each account has
+its own cursor in `sync_state`. Later runs prioritize unknown IDs and may
+refresh only a small `X_REFRESH_KNOWN` budget.
+
+The timeline pages a run reads already carry each status, so a new or pending
+status that a page lists with usable content is stored from the page, through
+the same mapping as an operator fetch window (below), without a detail
+request. An `api.vxtwitter.com` detail request remains the fallback for a
+status the timeline lists without content, for a pending status the pages no
+longer list, for the `X_REFRESH_KNOWN` refreshes, and for every status found
+on the logged-out profile page, which lists IDs only.
 `X_MAX_STATUS_REQUESTS` is the total detail-request budget shared by all
-configured accounts. Successful posts are stored with `account_handle` and
-returned as one time-ordered feed. Image-only posts are retained as candidates
-as long as they have a publication time and a media URL. `X_HANDLE` remains a
-single-account compatibility fallback.
+configured accounts; posts read from the timeline do not use it, and the step
+result counts them as `timelinePosts`. A stored post that a page lists again
+keeps the text, media and schedule candidate it has, as in a fetch window.
+Successful posts are stored with `account_handle` and returned as one
+time-ordered feed. Image-only posts are retained as candidates as long as they
+have a publication time and a media URL. `X_HANDLE` remains a single-account
+compatibility fallback.
+
+Both paths store the same values for one status, so a post first stored from
+the timeline and refreshed through a detail request later keeps its
+extraction fingerprint. Text, publication time, URL and counters match as
+they are. FxTwitter appends `?name=orig` to a photo's URL and the detail
+answer does not, so the timeline mapping drops that size. The detail answer
+lists a video's or GIF's file in `mediaURLs`; the adapter reads its
+`media_extended` instead and keeps the thumbnail, as the timeline does, and
+rewrites `raw_json.mediaURLs` to match. A timeline post's `raw_json` lists its
+own images (not a quoted status's) as `mediaURLs` too, because schedule
+extraction declares a post's images from that field. Photo-only posts already
+stored from detail answers keep identical values; a stored video or GIF post
+changes once, on its next refresh, from a file that could not be cached to
+its thumbnail.
 
 Operator fetch windows read the same timeline differently (see
 [Fetch windows](workflows.md#fetch-windows-and-historical-backfill)): without
 `X_API_BEARER_TOKEN`, `recent` and `range` windows, and `count` windows
 always, request pages of 100 and store each own status from the page itself.
 The adapter maps FxTwitter's `created_timestamp`, `text`, counters and
-`media` (a photo's URL, or a video's or GIF's thumbnail, in post order, also
-inside a quoted status) onto the same post fields the detail path fills, and
-keeps only the author's name and handle of the repeated profile in
-`raw_json`. Such windows leave stored posts, the cursor and the pending queue
-unchanged.
+`media` (a photo's URL without the `?name=orig` size, or a video's or GIF's
+thumbnail, in post order, also inside a quoted status) onto the same post
+fields the detail path fills, and keeps only the author's name and handle of
+the repeated profile in `raw_json`. Such windows leave stored posts, the
+cursor and the pending queue unchanged.
 
 Both discovery hosts and the detail host share one client: a fixed timeout and
 User-Agent, a 4 MiB response limit, rejected redirects, typed error codes, and
@@ -71,19 +95,36 @@ The array's order is the per-account retry order. Newly admitted IDs join after
 existing pending work; IDs selected within the account's request allocation move
 behind unattempted work, with that rotation persisted before detail requests.
 Thus a repeatedly failing ID cannot keep blocking other admitted work, even
-after a process restart. Retries use each run's existing budget without time
-backoff or discarding failures. Pending work remains retryable when it falls out
-of the profile or ages beyond the bootstrap window. Successful posts,
-pending-work removal, and the latest successful cursor commit atomically.
-Budget exhaustion and failed/invalid detail responses retain unfinished IDs;
-an all-failed run does not record a successful cursor or timestamp. Date-window
-fetches neither consume this queue nor update normal incremental state.
+after a process restart. Pending work remains retryable when it falls out
+of the profile or ages beyond the bootstrap window, and a pending status that
+a timeline page lists with content is stored from the page whatever its
+failures. Successful posts, pending-work removal, the failure counts and the
+latest successful cursor commit atomically. Budget exhaustion retains
+unfinished IDs; an all-failed run does not record a successful cursor or
+timestamp. Date-window fetches neither consume this queue nor update normal
+incremental state.
+
+Failed detail requests are counted per ID in
+`sync_state.metadata_json.pendingRetries` (`{failures, gone, retryAt}` by
+ID, kept beside the `pendingStatusIds` array; rows without it start with no
+failures). A 404 or 410 answer, or a status of another account
+(`account_mismatch`, which a profile page can list), counts as gone. The
+second consecutive gone answer drops the ID with `x_status_gone`. Any other
+failure (timeout, 429, 5xx, invalid JSON or response) waits 1 hour after the
+first consecutive failure, 6 hours after the second and 24 hours after the
+third, as the extraction failure backoff does, and the fourth drops the ID
+with `x_retry_limit`; a gone answer waits the same way before its second
+request. A waiting ID makes no request, uses none of the budget and keeps its
+place in the queue, and a cancelled run counts no failure. A dropped ID leaves the queue for good; a date window can
+still store it. The step result counts waiting IDs as `pendingHeld` and lists
+dropped ones as `pendingDropped` (`<account>: <id>: <code>`); both keys
+appear only when used.
 
 Each discovered image URL is registered and linked to its post. A bounded media
 stage later in the same command downloads pending image files from X's
 `*.twimg.com` media CDN subdomains.
-The X adapter also accepts media and schedule keywords carried by a quoted
-tweet (`qrt`) in the detail response.
+The X adapter also accepts media carried by a quoted tweet (`qrt` in the
+detail response, `quote` on a timeline page).
 When a schedule asset already has a source status URL but no image URL, the
 synchronizer adds up to `X_SCHEDULE_REFRESH_LIMIT` recent source IDs per
 account to the detail-request queue. On a cursorless bootstrap with no asset

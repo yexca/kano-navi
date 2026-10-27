@@ -16,43 +16,6 @@ const (
 	DiscoveryProfile  = "profile"
 )
 
-// timelinePage is one page of FxTwitter's newest-first status list.
-type timelinePage struct {
-	// IDs are the account's own statuses in page order; reposts are left out.
-	IDs  []string
-	Next string
-}
-
-func parseTimeline(body []byte, account string) (timelinePage, error) {
-	var payload struct {
-		Code    int `json:"code"`
-		Results []struct {
-			ID     string `json:"id"`
-			Author struct {
-				ScreenName string `json:"screen_name"`
-			} `json:"author"`
-		} `json:"results"`
-		Cursor struct {
-			Bottom string `json:"bottom"`
-		} `json:"cursor"`
-	}
-	if json.Unmarshal(body, &payload) != nil {
-		return timelinePage{}, &Error{Code: ErrInvalidJSON}
-	}
-	if (payload.Code != 0 && payload.Code != 200) || payload.Results == nil {
-		return timelinePage{}, &Error{Code: ErrInvalidResponse, Err: errors.New("timeline without results")}
-	}
-	page := timelinePage{IDs: []string{}, Next: payload.Cursor.Bottom}
-	for _, status := range payload.Results {
-		// A repost carries the original author; only the account's own posts
-		// are its feed.
-		if statusIDPattern.MatchString(status.ID) && strings.EqualFold(status.Author.ScreenName, account) {
-			page.IDs = append(page.IDs, status.ID)
-		}
-	}
-	return page, nil
-}
-
 // TimelineStatus is one of the account's own statuses as a timeline page lists
 // it. Post is nil when the entry has no usable publication time or content;
 // PublishedAt then comes from the Snowflake ID when it is a real one.
@@ -109,6 +72,15 @@ func parseTimelineStatuses(body []byte, account string) (TimelineStatuses, error
 		status["author"] = map[string]any{"screen_name": author["screen_name"], "name": author["name"]}
 		entry := TimelineStatus{ID: id}
 		if post := Normalize(status, id, account); post != nil && post.ID == id {
+			// Like the detail answer, raw_json declares the post's own images,
+			// without a quoted status's, for schedule extraction.
+			own := []any{}
+			for _, u := range fxMediaURLs(object(status["media"])) {
+				if u != "" {
+					own = append(own, u)
+				}
+			}
+			post.Raw["mediaURLs"] = own
 			entry.Post, entry.PublishedAt = post, post.PublishedAt
 		} else if len(id) >= 15 {
 			entry.PublishedAt = snowflakeTime(id).Format(time.RFC3339Nano)
@@ -140,12 +112,20 @@ func withGap(earlier *Gap, opened Gap) *Gap {
 	return &opened
 }
 
-// discovery is what one run read from the timeline. gap is the account's gap
-// after the run; notes are controlled codes about it.
+// discovery is what one run read from the timeline. posts holds the statuses
+// a page listed with usable content, by ID; gap is the account's gap after the
+// run; notes are controlled codes about it.
 type discovery struct {
 	ids   []string
+	posts map[string]*Post
 	gap   *Gap
 	notes []string
+}
+
+// timelinePage is one page's own status IDs, newest first, and continuation.
+type timelinePage struct {
+	IDs  []string
+	Next string
 }
 
 // discoverTimeline pages the account's timeline back until a page ends at a
@@ -159,7 +139,7 @@ type discovery struct {
 func (a *Adapter) discoverTimeline(ctx context.Context, account string, opts Options, cutoff time.Time) (discovery, error) {
 	pages := (opts.DiscoveryLimit + timelinePageSize - 1) / timelinePageSize
 	pages = min(max(pages, 1), maxTimelinePages)
-	found := discovery{ids: []string{}, gap: opts.Gap}
+	found := discovery{ids: []string{}, posts: map[string]*Post{}, gap: opts.Gap}
 	seen := map[string]bool{}
 	taken := 0
 	full := func() bool { return opts.DiscoveryLimit > 0 && taken >= opts.DiscoveryLimit }
@@ -192,7 +172,20 @@ func (a *Adapter) discoverTimeline(ctx context.Context, account string, opts Opt
 		if err != nil {
 			return timelinePage{}, err
 		}
-		return parseTimeline(body, account)
+		statuses, err := parseTimelineStatuses(body, account)
+		if err != nil {
+			return timelinePage{}, err
+		}
+		// The page already carries each status, so the run stores it without
+		// a detail request; one without usable content is left to the detail.
+		page := timelinePage{IDs: make([]string, 0, len(statuses.Statuses)), Next: statuses.Next}
+		for _, status := range statuses.Statuses {
+			page.IDs = append(page.IDs, status.ID)
+			if status.Post != nil {
+				found.posts[status.ID] = status.Post
+			}
+		}
+		return page, nil
 	}
 	all := func(string) bool { return true }
 	fresh := func(id string) bool { return !reachesStored(id, opts, cutoff) }

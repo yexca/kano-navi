@@ -7,6 +7,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/testutil"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -82,6 +83,69 @@ func TestXSingleRequestBudgetRotatesAccountsAcrossRestart(t *testing.T) {
 	}
 	if len(requested) != 2 || requested[0] != "fixture_a" || requested[1] != "fixture_b" {
 		t.Fatalf("account budget starved a source: %v", requested)
+	}
+}
+
+func TestXRecentStoresTimelinePostsAndDropsAGoneStatus(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := sqlite.OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	// An earlier run left a status that no longer exists in the queue.
+	gone := "1900000000000000001"
+	testutil.Exec(t, p, `INSERT INTO sync_state(source,account_id,metadata_json) VALUES('x','fixture',?)`, `{"pendingStatusIds":["`+gone+`"]}`)
+	page := ""
+	details := []string{}
+	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
+		status, body := 200, page
+		switch r.URL.Host {
+		case "api.fxtwitter.com":
+		case "api.vxtwitter.com":
+			details = append(details, r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:])
+			status, body = 404, `{"error":"not found"}`
+		default:
+			t.Fatalf("unexpected destination %s", r.URL.Host)
+		}
+		return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
+	listed := func(id, hour string) string {
+		return `{"code":200,"results":[{"id":"` + id + `","text":"fixture","created_timestamp":` + hour + `,"author":{"screen_name":"fixture"}}],"cursor":{"bottom":""}}`
+	}
+	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	opts := xsource.Options{Handles: []string{"fixture"}, DiscoveryLimit: 50, MaxDetailRequests: 5, BootstrapDays: 7}
+	a := xsource.NewAdapter(xsource.NewClient(&http.Client{Transport: rt}), opts)
+	a.Now = func() time.Time { return now }
+	ex := &XRecentExecutor{Store: s, Adapter: a, Options: opts}
+	run := func(at time.Duration, id string) map[string]any {
+		t.Helper()
+		a.Now = func() time.Time { return now.Add(at) }
+		page, details = listed(id, strconv.FormatInt(now.Add(at-time.Hour).Unix(), 10)), nil
+		got, runErr := ex.Execute(context.Background(), StepInput{StepID: "x"})
+		if runErr != nil {
+			t.Fatal(runErr)
+		}
+		return got.Result
+	}
+	// The timeline's status is stored without a detail request; only the
+	// pending one is requested, and its first 404 keeps it for an hour.
+	first := run(0, "200000000000")
+	if first["timelinePosts"] != 1 || first["posts"] != 1 || first["requested"] != 1 || strings.Join(details, ",") != gone || first["pendingDropped"] != nil {
+		t.Fatalf("result=%#v details=%v", first, details)
+	}
+	held := run(30*time.Minute, "300000000000")
+	if held["pendingHeld"] != 1 || held["requested"] != 0 || len(details) != 0 {
+		t.Fatalf("result=%#v details=%v", held, details)
+	}
+	second := run(time.Hour, "400000000000")
+	dropped, _ := second["pendingDropped"].([]string)
+	if strings.Join(dropped, ",") != "fixture: "+gone+": "+xsource.DroppedGone {
+		t.Fatalf("result=%#v", second)
+	}
+	state, err := s.XRecentState(context.Background(), "fixture")
+	if err != nil || len(state.PendingIDs) != 0 || len(state.PendingRetries) != 0 || state.CursorID != "400000000000" {
+		t.Fatalf("state=%#v err=%v", state, err)
 	}
 }
 

@@ -37,6 +37,20 @@
   the scan limit and are counted as `backoff` or `retryStopped`. Startup adds
   `failure_count`, `failure_fingerprint` and `next_attempt_at` to
   `post_llm_states`.
+- Incremental X runs store a status straight from the timeline page they
+  already read and keep vxtwitter detail requests for statuses listed
+  without content, pending statuses no longer listed, known-post refreshes
+  and profile fallbacks. `X_MAX_STATUS_REQUESTS` now bounds only those
+  requests, so a backlog drains in fewer runs; the step result counts
+  `timelinePosts`. Timeline photos are stored without FxTwitter's
+  `?name=orig`, and detail answers keep a video's or GIF's thumbnail instead
+  of its file, so both paths store the same post.
+- Pending X statuses stop being requested forever: two consecutive 404/410
+  (or other-account) answers drop one with `x_status_gone`, and other
+  failures wait 1, 6 and 24 hours before the fourth drops it with
+  `x_retry_limit`. Failure counts live in
+  `sync_state.metadata_json.pendingRetries`; the step result reports
+  `pendingHeld` and `pendingDropped`.
 
 </details>
 

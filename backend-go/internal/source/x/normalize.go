@@ -2,6 +2,8 @@ package x
 
 import (
 	"fmt"
+	"net/url"
+	"path"
 	"strings"
 )
 
@@ -25,6 +27,11 @@ func Normalize(payload map[string]any, fallbackID, account string) *Post {
 	}
 	// FxTwitter's created_at is the legacy Twitter format; its epoch comes first.
 	published := parseDate(first(payload, "date_epoch", "dateEpoch", "created_timestamp", "date", "created_at"))
+	// vxtwitter lists a video's or GIF's file in mediaURLs; the post keeps its
+	// thumbnail, as the timeline does, and raw_json declares the same images.
+	if own := extendedMediaURLs(payload); own != nil {
+		payload["mediaURLs"] = own
+	}
 	media := mediaURLs(payload, 0)
 	if id == "" || published == "" || (text == "" && len(media) == 0) {
 		return nil
@@ -106,20 +113,21 @@ func mediaURLs(payload map[string]any, depth int) []string {
 			out = append(out, s)
 		}
 	}
-	for _, k := range []string{"mediaURLs", "media_urls"} {
-		if vals, ok := payload[k].([]any); ok {
-			for _, v := range vals {
-				add(v)
+	// vxtwitter builds mediaURLs from media_extended, which also names a
+	// video's thumbnail; the list is read only without it.
+	if own := extendedMediaURLs(payload); own != nil {
+		for _, v := range own {
+			add(v)
+		}
+	} else {
+		for _, k := range []string{"mediaURLs", "media_urls"} {
+			if vals, ok := payload[k].([]any); ok {
+				for _, v := range vals {
+					add(v)
+				}
 			}
-		}
-		if s, ok := payload[k].(string); ok {
-			add(s)
-		}
-	}
-	if vals, ok := payload["media_extended"].([]any); ok {
-		for _, v := range vals {
-			if m, ok := v.(map[string]any); ok {
-				add(firstString(m, "url", "media_url"))
+			if s, ok := payload[k].(string); ok {
+				add(s)
 			}
 		}
 	}
@@ -143,6 +151,27 @@ func mediaURLs(payload map[string]any, depth int) []string {
 	return uniq
 }
 
+// extendedMediaURLs reads vxtwitter's media_extended in post order: an image's
+// URL, or a video's or GIF's thumbnail. It is nil without such a list.
+func extendedMediaURLs(payload map[string]any) []any {
+	items, _ := payload["media_extended"].([]any)
+	if len(items) == 0 {
+		return nil
+	}
+	out := []any{}
+	for _, item := range items {
+		m := object(item)
+		u := firstString(m, "url", "media_url")
+		if t := stringValue(m["type"]); t == "video" || t == "gif" {
+			u = stringValue(m["thumbnail_url"])
+		}
+		if u != "" {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
 // fxMediaURLs reads FxTwitter's media object in post order: a photo's image,
 // or a video's or GIF's thumbnail, which is the image the board can show.
 func fxMediaURLs(media map[string]any) []string {
@@ -157,10 +186,26 @@ func fxMediaURLs(media map[string]any) []string {
 		m := object(item)
 		switch stringValue(m["type"]) {
 		case "photo":
-			out = append(out, stringValue(m["url"]))
+			out = append(out, detailPhotoURL(stringValue(m["url"])))
 		case "video", "gif":
 			out = append(out, stringValue(m["thumbnail_url"]))
 		}
 	}
 	return out
+}
+
+// detailPhotoURL drops the size FxTwitter appends to a photo
+// (".../media/<id>.jpg?name=orig"), which vxtwitter's detail answer leaves
+// out, so both paths store the same image URL and extraction fingerprint.
+func detailPhotoURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host != "pbs.twimg.com" || !strings.HasPrefix(u.Path, "/media/") || path.Ext(u.Path) == "" {
+		return raw
+	}
+	query := u.Query()
+	if len(query) != 1 || len(query["name"]) != 1 {
+		return raw
+	}
+	u.RawQuery = ""
+	return u.String()
 }

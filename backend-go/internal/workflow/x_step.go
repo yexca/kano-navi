@@ -47,6 +47,10 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	discovered := 0
 	requested := 0
 	profileFallbacks := 0
+	// Posts read straight from timeline pages, pending IDs waiting for their
+	// backoff, and pending IDs the run stopped requesting.
+	fromTimeline, held := 0, 0
+	dropped := []string{}
 	partial := false
 	errorsOut := []string{}
 	// Gap notes do not count as fetch failures: they never fail the step.
@@ -68,6 +72,7 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 		}
 		accountOpts.PendingIDs = state.PendingIDs
+		accountOpts.PendingRetries = state.PendingRetries
 		accountOpts.KnownIDs = state.KnownIDs
 		accountOpts.CursorID = state.CursorID
 		accountOpts.Gap = state.Gap
@@ -84,6 +89,11 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		discovered += result.DiscoveredCount
 		requested += result.RequestedCount
 		total += len(result.Posts)
+		fromTimeline += len(result.FromTimeline)
+		held += result.Held
+		for _, d := range result.Dropped {
+			dropped = append(dropped, account+": "+d.ID+": "+d.Code)
+		}
 		errorsOut = append(errorsOut, result.Errors...)
 		if result.RequestedCount > 0 {
 			remaining -= result.RequestedCount
@@ -119,5 +129,13 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	if partial {
 		status = "partial"
 	}
-	return AttemptResult{Status: status, Result: map[string]any{"source": "x", "count": total, "posts": total, "discovered": discovered, "requested": requested, "profileFallbacks": profileFallbacks, "timelineGaps": gaps, "errors": errorsOut}}, nil
+	out := map[string]any{"source": "x", "count": total, "posts": total, "discovered": discovered, "requested": requested, "timelinePosts": fromTimeline, "profileFallbacks": profileFallbacks, "timelineGaps": gaps, "errors": errorsOut}
+	// Like the extraction backoff keys, these appear only when used.
+	if held > 0 {
+		out["pendingHeld"] = held
+	}
+	if len(dropped) > 0 {
+		out["pendingDropped"] = dropped
+	}
+	return AttemptResult{Status: status, Result: out}, nil
 }
