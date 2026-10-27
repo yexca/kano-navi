@@ -100,6 +100,7 @@ func number(v any) int {
 	}
 	return 0
 }
+
 // mediaURLs lists a status's own images, never those of a status it quotes.
 func mediaURLs(payload map[string]any) []string {
 	out := []string{}

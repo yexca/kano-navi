@@ -351,7 +351,7 @@ func TestPendingStatusesBackOffAndAreDropped(t *testing.T) {
 	}
 	// A second 404 drops the status.
 	second := run(time.Hour)
-	if dropped(second) != gone+":"+DroppedGone ||strings.Join(second.PendingIDs, ",") != flaky || second.PendingRetries[flaky].Failures != 2 {
+	if dropped(second) != gone+":"+DroppedGone || strings.Join(second.PendingIDs, ",") != flaky || second.PendingRetries[flaky].Failures != 2 {
 		t.Fatalf("dropped=%v pending=%v retries=%+v", second.Dropped, second.PendingIDs, second.PendingRetries)
 	}
 	// Other failures wait 1, 6 and 24 hours; the fourth drops the status.
