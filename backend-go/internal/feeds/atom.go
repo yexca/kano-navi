@@ -2,6 +2,7 @@ package feeds
 
 import (
 	"encoding/xml"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 type atomFeed struct {
 	XMLName  xml.Name    `xml:"http://www.w3.org/2005/Atom feed"`
+	Lang     string      `xml:"http://www.w3.org/XML/1998/namespace lang,attr"`
 	Title    string      `xml:"title"`
 	Subtitle string      `xml:"subtitle"`
 	ID       string      `xml:"id"`
@@ -46,13 +48,24 @@ type atomEntry struct {
 // MaxEntries bounds the Atom feed.
 const MaxEntries = 50
 
+// FeedPath is where the server publishes the Atom feed.
+const FeedPath = "/api/feed.xml"
+
 // Atom renders videos, reservations included, as an Atom 1.0 feed, newest
 // first. An entry is dated when its video or reservation was published, never
-// in the future; the schedule itself belongs to the calendar feed. Entry IDs
+// in the future: a later instant is dated at the start of now's Japan day, so
+// it stays put between polls, and takes its own time once it passes. The
+// schedule itself belongs to the calendar feed. Entry IDs
 // are URNs over public video IDs, so they stay stable whichever host serves
-// the feed, and the feed has no self link because the server does not trust a
-// request's Host header.
-func Atom(videos []sqlite.Video, now time.Time) ([]byte, error) {
+// the feed. The server never trusts a request's Host header: origin is the
+// configured PUBLIC_ORIGIN, which adds a self link and makes the site link
+// absolute, or empty, which leaves the feed without a self link. Titles and
+// the fixed wording follow locale, and a non-English feed declares its
+// language and has its own feed ID and self link.
+func Atom(videos []sqlite.Video, now time.Time, origin string, locale Locale) ([]byte, error) {
+	m := locale.messages()
+	year, month, day := now.In(japan).Date()
+	today := time.Date(year, month, day, 0, 0, 0, 0, japan)
 	type dated struct {
 		at    time.Time
 		entry atomEntry
@@ -69,19 +82,19 @@ func Atom(videos []sqlite.Video, now time.Time) ([]byte, error) {
 			continue
 		}
 		if at.After(now) {
-			at = now.Truncate(time.Hour)
+			at = today
 		}
-		summary := "Published " + japanTime(at) + "."
+		summary := fmt.Sprintf(m.published, japanTime(at))
 		if v.IsUpcoming && hasSchedule {
-			summary = "Scheduled for " + japanTime(scheduled) + "."
+			summary = fmt.Sprintf(m.scheduled, japanTime(scheduled))
 		} else if hasSchedule {
-			summary = "Aired " + japanTime(scheduled) + "."
+			summary = fmt.Sprintf(m.aired, japanTime(scheduled))
 		}
 		if v.IsCancelled {
-			summary = "Cancelled. " + summary
+			summary = m.cancelled + summary
 		}
 		entry := atomEntry{
-			Title:      v.Title,
+			Title:      localizedTitle(v.Title, v.Translations, locale),
 			ID:         "urn:kano-navi:video:" + v.ID,
 			Updated:    at.UTC().Format(time.RFC3339),
 			Links:      []atomLink{{Href: link, Rel: "alternate", Type: "text/html"}},
@@ -104,13 +117,21 @@ func Atom(videos []sqlite.Video, now time.Time) ([]byte, error) {
 	if len(items) > MaxEntries {
 		items = items[:MaxEntries]
 	}
+	feedID, self := "urn:kano-navi:feed", origin+FeedPath
+	if locale != English {
+		feedID, self = feedID+":"+string(locale), self+"?lang="+string(locale)
+	}
 	feed := atomFeed{
-		Title:    SiteName,
-		Subtitle: "Unofficial fan-made updates: Kano Mahoro's videos and streams.",
-		ID:       "urn:kano-navi:feed",
-		Updated:  now.UTC().Truncate(time.Hour).Format(time.RFC3339),
+		Lang:     string(locale),
+		Title:    m.siteName,
+		Subtitle: m.atomSubtitle,
+		ID:       feedID,
+		Updated:  today.UTC().Format(time.RFC3339),
 		Author:   atomPerson{Name: "Kano Navi"},
-		Links:    []atomLink{{Href: "/", Rel: "alternate", Type: "text/html"}},
+		Links:    []atomLink{{Href: origin + "/", Rel: "alternate", Type: "text/html"}},
+	}
+	if origin != "" {
+		feed.Links = append(feed.Links, atomLink{Href: self, Rel: "self", Type: "application/atom+xml"})
 	}
 	if len(items) > 0 {
 		feed.Updated = items[0].entry.Updated

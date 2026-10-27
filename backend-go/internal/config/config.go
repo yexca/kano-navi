@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -134,17 +135,54 @@ func Parse(args []string) (Config, error) {
 	return c, nil
 }
 
-// PublicOrigin normalizes PUBLIC_ORIGIN to scheme://host. An empty value is
-// allowed; anything that is not an HTTP(S) origin fails startup.
+// PublicOrigin normalizes PUBLIC_ORIGIN to scheme://host[:port] with a
+// lowercase host. An empty value is allowed; anything that is not an HTTP(S)
+// origin whose host is a DNS name or IP address fails startup, so the value
+// can never carry markup into the pages and feeds that print it.
 func PublicOrigin(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", nil
 	}
+	invalid := errors.New("PUBLIC_ORIGIN must be an http or https origin")
 	parsed, err := url.Parse(raw)
-	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil ||
-		(parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", errors.New("PUBLIC_ORIGIN must be an http or https origin")
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil || parsed.Opaque != "" ||
+		(parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.HasSuffix(parsed.Host, ":") {
+		return "", invalid
 	}
-	return parsed.Scheme + "://" + parsed.Host, nil
+	host := strings.ToLower(parsed.Hostname())
+	if ip := net.ParseIP(host); ip != nil {
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+	} else if !dnsName(host) {
+		return "", invalid
+	}
+	if port := parsed.Port(); port != "" {
+		number, err := strconv.Atoi(port)
+		if err != nil || number < 1 || number > 65535 || strconv.Itoa(number) != port {
+			return "", invalid
+		}
+		host += ":" + port
+	}
+	return parsed.Scheme + "://" + host, nil
+}
+
+// dnsName reports whether host is a hostname of letters, digits and inner
+// hyphens in dot-separated labels of at most 63 characters.
+func dnsName(host string) bool {
+	if host == "" || len(host) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, c := range label {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -85,7 +85,7 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 	}
 	offset := (page - 1) * pageSize
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at
+		SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at,updated_at
 		FROM events
 		WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on BETWEEN ? AND ?
 		ORDER BY COALESCE(julianday(starts_at), julianday(starts_on || 'T23:59:59.999+09:00')) ASC, id ASC

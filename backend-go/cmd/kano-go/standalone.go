@@ -116,9 +116,10 @@ func runStandalone(cfg config.Config) int {
 			HistoryAvailable: run.steps.History.Available,
 			WindowAvailable:  run.steps.History.WindowAvailable,
 		}),
-		Static: httpapi.NewStaticSite(cfg.StaticDirectory, cfg.PublicOrigin),
-		MCP:    standaloneMCP(store, manager),
-		WebSub: push,
+		Static:       httpapi.NewStaticSite(cfg.StaticDirectory, cfg.PublicOrigin),
+		MCP:          standaloneMCP(store, manager),
+		WebSub:       push,
+		PublicOrigin: cfg.PublicOrigin,
 	})
 	server := httpapi.NewServer(httpapi.RequestLog(httpapi.Compress(handler), os.Stdout), cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

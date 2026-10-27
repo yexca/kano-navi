@@ -111,7 +111,14 @@ intermediaries also have an explicit transformation prohibition.
 Only content-hashed JS/CSS in `dist/assets` listed in Vite's
 `dist/.vite/manifest.json` receive `public, max-age=31536000, immutable`.
 HTML (including SPA fallback routes), fixed history images, icons and other
-files receive `public, max-age=0, must-revalidate`. A missing/invalid manifest
+files receive `public, max-age=0, must-revalidate`. A path that is neither a
+build file nor one of the frontend's pages (`/`, `/history`, `/about`,
+`/admin`, with or without a trailing slash) still receives `index.html`, which
+shows the frontend's not-found view, but with status 404. `robots.txt` comes
+from `public/` and disallows `/admin`, `/api/` and `/mcp` but allows the two
+public feeds, `/api/calendar.ics` and `/api/feed.xml`, whose subscription
+fetchers (Google Calendar's among them) honour it. `/index.html` is the file
+itself, which the frontend shows as the board. A missing/invalid manifest
 falls back to revalidation. Dynamic media retains its independent version/hash
 validation and caching. Dashboard/revision remain `no-store`; this does not
 introduce a dashboard response cache.
@@ -184,11 +191,19 @@ fetch platforms. The board's month dialogs use them with the calendar.
 
 `GET /api/calendar.ics` is an iCalendar (RFC 5545) subscription of the events
 dated 30 days before to 90 days after today's Japan date, at most 500 events,
-read through the same bounded calendar pages and event projection as
+each once: events from today on fill the cap first and the most recent past
+events take what is left. They are read through the same bounded calendar pages and event projection as
 `/api/calendar`. Times are UTC; an event without a time, or of `unknown`
-precision, is an all-day entry on its Japan date. A UID is the public event ID
-with `@kano-navi`. `STATUS` is `CANCELLED` only for a cancelled status or an
-operator's confirmation (`manual_confirmed`), `TENTATIVE` for a suspected
+precision, is an all-day entry on its Japan date. A timed event without a
+stored end after its start lasts an hour when it is a stream (the `stream` and
+`member` types the board treats as streams) and half an hour otherwise, since
+RFC 5545 would make it zero-length. A UID is the public event ID with
+`@kano-navi`. `LAST-MODIFIED` is the event's stored `updated_at`, and
+`SEQUENCE` is that time in whole seconds since 2020-01-01 UTC, so it grows
+whenever the event is written and clients replace a changed entry; an event
+without a parseable update time has neither. `STATUS` is `CANCELLED` only
+for a cancelled status or an operator's confirmation (`manual_confirmed`),
+`TENTATIVE` for a suspected
 cancellation or a `tentative` status, and `CONFIRMED` otherwise. The
 description carries the event's detail, its provenance and its public link;
 only absolute HTTP(S) links are written. Text is escaped and lines are folded
@@ -196,14 +211,35 @@ at 75 octets without splitting a character.
 
 `GET /api/feed.xml` is an Atom 1.0 feed of at most 50 YouTube videos and
 reservations dated 30 days before to 11 days after today, newest first. An
-entry is dated by its publication (a future time is clamped to the current
-hour), says when a reservation is scheduled, and links the video and any
-merged platform copy. Entry and feed IDs are `urn:kano-navi:` URNs; the feed
-has no self link because the server does not trust the request's `Host`.
+entry is dated by its publication (a future time is dated at the start of
+today's Japan day until it passes, so the entry does not move between polls),
+says when a reservation is scheduled, and links the video and any
+merged platform copy. Entry and feed IDs are `urn:kano-navi:` URNs. The
+server never builds links from the request's `Host`: with `PUBLIC_ORIGIN` the
+feed links the site absolutely and adds a `rel="self"` link to
+`/api/feed.xml`; without it the site link stays `/` and there is no self link.
+
+Both take an optional `lang` query, `en`, `ja` or `zh-CN`; a missing or
+unknown value is the English base, so the bare paths stay English. Titles
+resolve [translations](data-model.md#translations) the way the board does:
+Japanese readers get the source wording, and English and Chinese readers get
+the locale's translation when one exists (an event only through its linked
+video's title). The fixed wording the server writes — the calendar and feed
+names (the board's `site.name`), the event descriptions' provenance and
+unofficial notes, the generated YouTube details (`YouTube Live`,
+`YouTube Premiere` and their legacy forms) and the Atom subtitle and
+summaries — comes from a small table in `backend-go/internal/feeds/locale.go`.
+Stored data is unchanged: only rendering picks the language. A non-English
+Atom feed declares `xml:lang`, has the feed ID `urn:kano-navi:feed:<lang>`
+and its self link keeps the `lang` query.
 
 Both answer `GET` and `HEAD`, never fetch platforms or models, and send
-`Cache-Control: public, max-age=600` with an ETag made of the dashboard
-revision and the Japan date, which together decide their content; a matching
+`Cache-Control: public, max-age=600` with an ETag that names the language and
+the build version, so an upgrade's rewording is not hidden by a cached copy.
+The calendar's ETag adds the dashboard revision and the Japan date, which
+decide its content (only `DTSTAMP` follows the clock). The Atom feed also
+depends on the clock, since a reservation turns into an aired video when its
+time passes, so its ETag adds a hash of the rendered body. A matching
 `If-None-Match` answers 304. A database failure answers 503 without an ETag.
 The routes sit under `/api/`, so the development proxy and the read-only
 sidecar serve them unchanged.
@@ -212,7 +248,15 @@ sidecar serve them unchanged.
 
 `index.html` carries static Open Graph and Twitter card tags (site name,
 description, the bundled banner) and `rel="alternate"` links to both feeds.
-Link previews need absolute URLs, which a static file cannot know, so the
-standalone server rewrites the page's root-relative `content="/..."` values
-to the optional `PUBLIC_ORIGIN` when it serves `index.html`. Without it the
-tags stay relative. Nothing else in the build is rewritten.
+Those tags describe the board. When the standalone server serves `index.html`
+for `/history` or `/about`, it replaces the page's `<title>`, `description`,
+`og:title`, `og:description` and `og:url` (and Twitter title and description
+tags, if present) with that page's English title, description and path; the
+route table `spaPages` in `backend-go/internal/httpapi/static.go` holds them
+next to the list of known pages. `/`, `/admin` and missing pages keep the
+file's own tags. Link previews need absolute URLs, which a static file cannot
+know, so the server then rewrites the page's root-relative `content="/..."`
+values to the optional `PUBLIC_ORIGIN` (HTML-escaped, although configuration
+already accepts only a DNS name or IP address as its host). Without it the
+tags stay relative.
+Nothing else in the build is rewritten.

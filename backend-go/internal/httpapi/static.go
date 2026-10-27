@@ -3,24 +3,82 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"html"
 	"io"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
 // maxIndexBytes bounds the index.html read for share-tag rewriting.
 const maxIndexBytes = 1 << 20
 
+// pageTags are a page's own link-preview wording in the English base locale,
+// matching the frontend's metaTitle and metaDescription messages.
+type pageTags struct {
+	title       string
+	description string
+}
+
+// spaPages are the cleaned request paths the frontend renders as pages
+// (src/main.tsx), with their share tags, or nil to keep index.html's (the
+// board's). The operator console routes by URL fragment, so /admin owns no
+// deeper paths.
+var spaPages = map[string]*pageTags{
+	"":      nil,
+	"admin": nil,
+	"about": {
+		title:       "About · What’s Kano Up To?",
+		description: "Project overview, AI development credits, technology stack, and license for What’s Kano Up To?",
+	},
+	"history": {
+		title:       "Journey · What’s Kano Up To?",
+		description: "Kano's public milestones from the first 2010 covers to joining Milpro SONA in 2026, with sources.",
+	},
+}
+
+var (
+	metaTag     = regexp.MustCompile(`(?s)<meta\b[^>]*>`)
+	metaKey     = regexp.MustCompile(`\b(?:name|property)="([^"]+)"`)
+	metaContent = regexp.MustCompile(`\bcontent="[^"]*"`)
+	titleTag    = regexp.MustCompile(`(?s)<title>.*?</title>`)
+)
+
+// apply gives index.html the page's title, description and root-relative
+// og:url, which PUBLIC_ORIGIN then makes absolute like the other share tags.
+func (p *pageTags) apply(page []byte, route string) []byte {
+	values := map[string]string{
+		"description":         p.description,
+		"og:title":            p.title,
+		"og:description":      p.description,
+		"og:url":              "/" + route,
+		"twitter:title":       p.title,
+		"twitter:description": p.description,
+	}
+	page = metaTag.ReplaceAllFunc(page, func(tag []byte) []byte {
+		key := metaKey.FindSubmatch(tag)
+		if key == nil {
+			return tag
+		}
+		value, ok := values[string(key[1])]
+		if !ok {
+			return tag
+		}
+		return metaContent.ReplaceAllLiteral(tag, []byte(`content="`+html.EscapeString(value)+`"`))
+	})
+	return titleTag.ReplaceAllLiteral(page, []byte("<title>"+html.EscapeString(p.title)+"</title>"))
+}
+
 var hashedBuildFile = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$`)
 
 // staticSite serves the built single-page application. Only manifest-listed,
 // content-hashed JS/CSS filenames are immutable; curated /assets/history and
-// replaceable icons keep revalidation. Unknown paths receive index.html so
-// client-side routes survive a reload.
+// replaceable icons keep revalidation. Other paths receive index.html so a
+// reload keeps working: 200 for the frontend's pages, 404 for anything else.
 type staticSite struct {
 	root       string
 	buildFiles map[string]bool
@@ -68,10 +126,16 @@ func (s *staticSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	relative := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 	if name, ok := s.file(relative); ok {
-		s.serve(w, r, name, relative)
+		s.serve(w, r, name, relative, http.StatusOK, "")
 		return
 	}
-	s.serve(w, r, filepath.Join(s.root, "index.html"), "index.html")
+	// Other paths still get the application, which shows its not-found view,
+	// but with a 404 status so crawlers and link checkers see a missing page.
+	status := http.StatusOK
+	if _, ok := spaPages[relative]; !ok {
+		status = http.StatusNotFound
+	}
+	s.serve(w, r, filepath.Join(s.root, "index.html"), "index.html", status, relative)
 }
 
 // file resolves a request path to a regular file contained by the build
@@ -105,7 +169,9 @@ func (s *staticSite) file(relative string) (string, bool) {
 	return resolved, true
 }
 
-func (s *staticSite) serve(w http.ResponseWriter, r *http.Request, name, relative string) {
+// serve writes one file. route names the page index.html is served for, whose
+// share tags it then carries.
+func (s *staticSite) serve(w http.ResponseWriter, r *http.Request, name, relative string, status int, route string) {
 	file, err := os.Open(name)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
@@ -129,13 +195,31 @@ func (s *staticSite) serve(w http.ResponseWriter, r *http.Request, name, relativ
 	if contentType := staticContentType(name); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
-	if relative == "index.html" && s.publicOrigin != "" && info.Size() <= maxIndexBytes {
-		if page, err := io.ReadAll(io.LimitReader(file, maxIndexBytes+1)); err == nil {
-			page = bytes.ReplaceAll(page, []byte(`content="/`), []byte(`content="`+s.publicOrigin+`/`))
-			http.ServeContent(w, r, filepath.Base(name), info.ModTime(), bytes.NewReader(page))
+	tags := spaPages[route]
+	if relative == "index.html" && (s.publicOrigin != "" || status != http.StatusOK || tags != nil) {
+		page, err := io.ReadAll(io.LimitReader(file, maxIndexBytes+1))
+		if err != nil || len(page) > maxIndexBytes {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
 			return
 		}
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
+		if tags != nil {
+			page = tags.apply(page, route)
+		}
+		if s.publicOrigin != "" {
+			// Configuration validates the origin; escaping keeps the
+			// attribute intact whatever a caller passes.
+			page = bytes.ReplaceAll(page, []byte(`content="/`), []byte(`content="`+html.EscapeString(s.publicOrigin)+`/`))
+		}
+		if status != http.StatusOK {
+			// A missing page has nothing to revalidate; answer it whole.
+			w.Header().Set("Content-Length", strconv.Itoa(len(page)))
+			w.WriteHeader(status)
+			if r.Method != http.MethodHead {
+				_, _ = w.Write(page)
+			}
+			return
+		}
+		http.ServeContent(w, r, filepath.Base(name), info.ModTime(), bytes.NewReader(page))
 		return
 	}
 	http.ServeContent(w, r, filepath.Base(name), info.ModTime(), file)

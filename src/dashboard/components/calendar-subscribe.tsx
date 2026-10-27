@@ -1,4 +1,3 @@
-import type { Translator } from "@/types"
 import { useState } from "react"
 import { CalendarPlus, Check, Copy } from "lucide-react"
 
@@ -10,14 +9,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useAppSettings } from "@/app-settings"
 import { calendarFeedUrls } from "@/lib/feeds"
+import type { Translator } from "@/types"
 
 type CopyState = "idle" | "copied" | "failed"
 
 /** Offers the schedule as a calendar subscription. */
 export function CalendarSubscribe({ t }: { t: Translator }) {
   const [copy, setCopy] = useState<CopyState>("idle")
-  const urls = calendarFeedUrls(window.location.origin)
+  const { locale } = useAppSettings()
+  // The subscription follows the language the reader picked.
+  const urls = calendarFeedUrls(window.location.origin, locale)
   const copyLink = async (event: Event) => {
     // Keep the menu open so the result is visible.
     event.preventDefault()

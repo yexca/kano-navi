@@ -14,6 +14,7 @@ import {
 } from "@/app-settings"
 import type { PageMessages } from "@/i18n"
 import { DashboardApp } from "@/dashboard/dashboard-app"
+import { pagePath } from "@/lib/page-path"
 import "./index.css"
 
 declare global {
@@ -77,6 +78,24 @@ function PageStatus({ failed = false }: { failed?: boolean }) {
   )
 }
 
+/** Paths outside the routes; the server answers them with a 404 status. */
+function NotFoundPage() {
+  const { t } = useAppSettings()
+  return (
+    <main className="min-h-screen grid place-items-center p-6">
+      <div className="rounded-2xl border bg-card p-8 text-center shadow-sm">
+        <h1>{t("page.notFound")}</h1>
+        <a
+          className="mt-4 inline-block rounded-lg border px-4 py-2 focus-visible:outline-ring"
+          href="/"
+        >
+          {t("page.home")}
+        </a>
+      </div>
+    </main>
+  )
+}
+
 class PageBoundary extends Component<
   { children: ReactNode },
   { failed: boolean }
@@ -92,8 +111,10 @@ class PageBoundary extends Component<
 
 const rootElement = document.getElementById("root")
 if (!rootElement) throw new Error("Missing application root element")
-const normalizedPath = window.location.pathname.replace(/\/+$/u, "") || "/"
-const PageApp = routes[normalizedPath] || DashboardApp
+// Keep in step with spaPages in backend-go/internal/httpapi/static.go.
+const normalizedPath = pagePath(window.location.pathname)
+const PageApp =
+  normalizedPath === "/" ? DashboardApp : routes[normalizedPath] || NotFoundPage
 const reactRoot =
   globalThis.__kanoReactRoot && globalThis.__kanoRootElement === rootElement
     ? globalThis.__kanoReactRoot

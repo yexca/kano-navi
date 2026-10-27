@@ -115,12 +115,28 @@
 - The schedule has a Subscribe menu: `GET /api/calendar.ics` is an
   iCalendar subscription of the events 30 days before to 90 days after
   today (Japan dates, at most 500), with all-day entries for undated events
-  and `CANCELLED` only for a definitive cancellation. `GET /api/feed.xml` is
-  an Atom feed of the latest 50 YouTube videos and reservations. Both are
-  built from the stored snapshot, cached for 10 minutes and answer
-  conditional requests by revision.
+  and `CANCELLED` only for a definitive cancellation. A timed event without
+  an end lasts an hour when it is a stream and half an hour otherwise, and
+  `LAST-MODIFIED` and `SEQUENCE` follow its update time so calendar apps
+  pick up a rescheduled entry. `GET /api/feed.xml` is an Atom feed of the
+  latest 50 YouTube videos and reservations. Both are built from the stored
+  snapshot, cached for 10 minutes and answer conditional requests; the
+  ETags change with the snapshot, the day, the build version and, for the
+  Atom feed, a reservation's start passing. The calendar keeps coming
+  events first when it reaches its cap. Both take `?lang=en|ja|zh-CN` (English when missing or
+  unknown): titles use the board's translations and the fixed wording is
+  localized. The Subscribe menu and the feed discovery links follow the
+  reader's language.
 - `index.html` has Open Graph and Twitter card tags and feed discovery
-  links. The new optional `PUBLIC_ORIGIN` makes the preview URLs absolute.
+  links. The new optional `PUBLIC_ORIGIN` (an `http` or `https` origin
+  whose host is a DNS name or IP address) makes the preview URLs absolute
+  and gives the Atom feed an absolute site link and a self link. Shared
+  links to `/history` and `/about` preview with their own title,
+  description and URL.
+- Paths that are not pages of the site now show a not-found view and answer
+  404 instead of the board with 200 (`/index.html` still shows the board),
+  and `robots.txt` asks crawlers to skip `/admin`, `/api/` and `/mcp`
+  while leaving the two feeds fetchable for calendar and feed subscriptions.
 - Board images load smaller copies: `/media/<id>?v=…&w=<width>` (320, 640,
   960, 1280 or 1920) serves a JPEG or PNG resized once and kept in
   `data/cache/variants/`, or the original when it cannot shrink. Originals

@@ -18,8 +18,11 @@
       content="An unofficial Kano Mahoro status board: X posts, stream schedule, YouTube, and public links at a glance."
     />
     <!--
-      Link previews. Root-relative content="/..." URLs become absolute when
-      the server knows PUBLIC_ORIGIN (backend-go/internal/httpapi/static.go).
+      Link previews for the board. The server gives /history and /about their
+      own title, description and og:url, and makes root-relative
+      content="/..." URLs absolute when it knows PUBLIC_ORIGIN
+      (backend-go/internal/httpapi/static.go). The feed links below follow
+      the reader's language (src/lib/feeds.ts).
     -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="What’s Kano Up To?" />

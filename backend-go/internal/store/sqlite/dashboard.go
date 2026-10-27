@@ -109,6 +109,9 @@ type DashboardEvent struct {
 	CancellationAt       *string
 	ManualLocked         bool
 	IsUpcoming           bool
+	// UpdatedAt is the stored ISO time of the event's last write, which
+	// feeds use to tell calendar clients that an entry changed.
+	UpdatedAt string
 	// LiveStatus is the linked video's trusted broadcast state, or nil.
 	LiveStatus *string
 	// Translations are the linked video's title translations while the
@@ -705,7 +708,7 @@ func (s *Store) queryPostMedia(ctx context.Context, id string) ([]PostMedia, err
 }
 
 func (s *Store) queryDashboardEvents(ctx context.Context, from, to string, now time.Time) ([]DashboardEvent, error) {
-	q := `SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND id IN (SELECT id FROM (SELECT id FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on BETWEEN ? AND ? ORDER BY julianday(COALESCE(starts_at,starts_on)) ASC,id ASC LIMIT 100) UNION SELECT id FROM (SELECT id FROM events WHERE ` + eligibleEventSQL + ` AND (julianday(starts_at)>=julianday(?) OR (starts_at IS NULL AND starts_on>=?)) ORDER BY COALESCE(julianday(starts_at),julianday(starts_on||'T23:59:59.999+09:00')) ASC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM events WHERE ` + eligibleEventSQL + ` AND (julianday(starts_at)<=julianday(?) AND (julianday(ends_at)>julianday(?) OR (ends_at IS NULL AND event_type IN ('stream','member') AND julianday(starts_at)>julianday(?,'-3 hours')))) AND (event_type IN ('stream','member') OR source='youtube') ORDER BY julianday(starts_at) ASC,id ASC LIMIT 30)) ORDER BY COALESCE(julianday(starts_at),julianday(starts_on||'T23:59:59.999+09:00')) ASC,id ASC`
+	q := `SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at,updated_at FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND id IN (SELECT id FROM (SELECT id FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on BETWEEN ? AND ? ORDER BY julianday(COALESCE(starts_at,starts_on)) ASC,id ASC LIMIT 100) UNION SELECT id FROM (SELECT id FROM events WHERE ` + eligibleEventSQL + ` AND (julianday(starts_at)>=julianday(?) OR (starts_at IS NULL AND starts_on>=?)) ORDER BY COALESCE(julianday(starts_at),julianday(starts_on||'T23:59:59.999+09:00')) ASC,id ASC LIMIT 30) UNION SELECT id FROM (SELECT id FROM events WHERE ` + eligibleEventSQL + ` AND (julianday(starts_at)<=julianday(?) AND (julianday(ends_at)>julianday(?) OR (ends_at IS NULL AND event_type IN ('stream','member') AND julianday(starts_at)>julianday(?,'-3 hours')))) AND (event_type IN ('stream','member') OR source='youtube') ORDER BY julianday(starts_at) ASC,id ASC LIMIT 30)) ORDER BY COALESCE(julianday(starts_at),julianday(starts_on||'T23:59:59.999+09:00')) ASC,id ASC`
 	args := []any{from, to, now.UTC().Format(time.RFC3339Nano), dateInJapan(now), now.UTC().Format(time.RFC3339Nano), now.UTC().Format(time.RFC3339Nano), now.UTC().Format(time.RFC3339Nano)}
 	return s.scanEvents(ctx, q, args, now)
 }
@@ -735,7 +738,7 @@ func scanEvent(row scanner, now time.Time) (DashboardEvent, error) {
 	var e DashboardEvent
 	var detail, sa, ea, status, et, urlv, cs, cr, ce, cat sql.NullString
 	var locked int64
-	if err := row.Scan(&e.ID, &e.Source, &e.Title, &detail, &e.StartsOn, &sa, &ea, &e.Timezone, &e.TimePrecision, &status, &et, &urlv, &e.Provenance, &locked, &e.CancellationStatus, &cs, &cr, &ce, &cat); err != nil {
+	if err := row.Scan(&e.ID, &e.Source, &e.Title, &detail, &e.StartsOn, &sa, &ea, &e.Timezone, &e.TimePrecision, &status, &et, &urlv, &e.Provenance, &locked, &e.CancellationStatus, &cs, &cr, &ce, &cat, &e.UpdatedAt); err != nil {
 		return e, dbErr(err)
 	}
 	if detail.Valid {
@@ -858,7 +861,7 @@ func (s *Store) getVideo(ctx context.Context, id string, liveCutoff time.Time) (
 	return &v, nil
 }
 func (s *Store) queryLinkedEvent(ctx context.Context, v Video, now time.Time) (*DashboardEvent, error) {
-	q := `SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at FROM events e WHERE e.deleted_at IS NULL AND (e.id='youtube-'||? OR (e.source='youtube' AND e.source_item_id=?) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=?) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(?))) ORDER BY ABS(julianday(e.starts_at)-julianday(?)),e.id ASC LIMIT 1`
+	q := `SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at,updated_at FROM events e WHERE e.deleted_at IS NULL AND (e.id='youtube-'||? OR (e.source='youtube' AND e.source_item_id=?) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=?) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(?))) ORDER BY ABS(julianday(e.starts_at)-julianday(?)),e.id ASC LIMIT 1`
 	rows, err := s.db.QueryContext(ctx, q, v.ID, v.ID, v.ID, v.URL, stringValue(v.ScheduledAt))
 	if err != nil {
 		return nil, dbErr(err)

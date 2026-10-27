@@ -1,7 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { mediaSrcSet, mediaVariantUrl } from "../src/lib/media.ts"
-import { calendarFeedUrls } from "../src/lib/feeds.ts"
+import {
+  ATOM_FEED_PATH,
+  calendarFeedUrls,
+  feedPath,
+  syncFeedLinks,
+} from "../src/lib/feeds.ts"
 
 const id = "a".repeat(64)
 const cached = `/media/${id}?v=${"b".repeat(64)}`
@@ -53,4 +58,39 @@ test("calendar subscription addresses follow the page origin", () => {
     calendarFeedUrls("http://127.0.0.1:7657").webcal,
     "webcal://127.0.0.1:7657/api/calendar.ics",
   )
+})
+
+test("feed addresses carry a non-English reader's language", () => {
+  assert.equal(feedPath(ATOM_FEED_PATH), "/api/feed.xml")
+  assert.equal(feedPath(ATOM_FEED_PATH, "en"), "/api/feed.xml")
+  assert.equal(feedPath(ATOM_FEED_PATH, "ja"), "/api/feed.xml?lang=ja")
+  assert.deepEqual(calendarFeedUrls("https://kano.example.invalid", "zh-CN"), {
+    https: "https://kano.example.invalid/api/calendar.ics?lang=zh-CN",
+    webcal: "webcal://kano.example.invalid/api/calendar.ics?lang=zh-CN",
+  })
+})
+
+test("feed discovery links follow the reader's language", () => {
+  const links: Record<string, { href: string }> = {
+    "application/atom+xml": { href: "/api/feed.xml" },
+    "text/calendar": { href: "/api/calendar.ics" },
+  }
+  const root = {
+    querySelector(selector: string) {
+      const type = /type="([^"]+)"/u.exec(selector)?.[1] || ""
+      const link = links[type]
+      return link
+        ? {
+            setAttribute: (_name: string, value: string) => {
+              link.href = value
+            },
+          }
+        : null
+    },
+  } as unknown as ParentNode
+  syncFeedLinks("ja", root)
+  assert.equal(links["application/atom+xml"].href, "/api/feed.xml?lang=ja")
+  assert.equal(links["text/calendar"].href, "/api/calendar.ics?lang=ja")
+  syncFeedLinks("en", root)
+  assert.equal(links["application/atom+xml"].href, "/api/feed.xml")
 })

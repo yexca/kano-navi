@@ -5,6 +5,7 @@ package feeds
 
 import (
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -18,9 +19,12 @@ const SiteName = "What’s Kano Up To?"
 var japan = time.FixedZone("JST", 9*60*60)
 
 // Calendar renders events as an iCalendar document (RFC 5545) with CRLF line
-// endings and folded lines. Times are UTC; date-only and unknown-time events
-// become all-day entries on their Japan date.
-func Calendar(events []sqlite.DashboardEvent, now time.Time) []byte {
+// endings and folded lines, worded for locale: titles resolve translations
+// as the board does and the fixed strings come from the locale's messages.
+// Times are UTC; date-only and unknown-time events become all-day entries on
+// their Japan date. LAST-MODIFIED and SEQUENCE follow the stored update time
+// so clients replace a changed entry.
+func Calendar(events []sqlite.DashboardEvent, now time.Time, locale Locale) []byte {
 	var b strings.Builder
 	line := func(name, value string) { writeFolded(&b, name+":"+value) }
 	line("BEGIN", "VCALENDAR")
@@ -28,7 +32,7 @@ func Calendar(events []sqlite.DashboardEvent, now time.Time) []byte {
 	line("PRODID", "-//Kano Navi//Schedule//EN")
 	line("CALSCALE", "GREGORIAN")
 	line("METHOD", "PUBLISH")
-	line("X-WR-CALNAME", escapeText(SiteName))
+	line("X-WR-CALNAME", escapeText(locale.messages().siteName))
 	line("X-WR-TIMEZONE", "Asia/Tokyo")
 	line("REFRESH-INTERVAL;VALUE=DURATION", "PT1H")
 	line("X-PUBLISHED-TTL", "PT1H")
@@ -41,18 +45,24 @@ func Calendar(events []sqlite.DashboardEvent, now time.Time) []byte {
 		line("BEGIN", "VEVENT")
 		line("UID", escapeText(e.ID+"@kano-navi"))
 		line("DTSTAMP", stamp)
+		if updated, ok := parseInstant(&e.UpdatedAt); ok {
+			line("LAST-MODIFIED", updated.UTC().Format("20060102T150405Z"))
+			line("SEQUENCE", strconv.FormatInt(sequence(updated), 10))
+		}
 		start, timed := eventStart(e)
 		if timed {
 			line("DTSTART", start.UTC().Format("20060102T150405Z"))
-			if end, ok := parseInstant(e.EndsAt); ok && end.After(start) {
-				line("DTEND", end.UTC().Format("20060102T150405Z"))
+			end, ok := parseInstant(e.EndsAt)
+			if !ok || !end.After(start) {
+				end = start.Add(defaultDuration(e))
 			}
+			line("DTEND", end.UTC().Format("20060102T150405Z"))
 		} else {
 			line("DTSTART;VALUE=DATE", day.Format("20060102"))
 			line("DTEND;VALUE=DATE", day.AddDate(0, 0, 1).Format("20060102"))
 		}
-		line("SUMMARY", escapeText(e.Title))
-		if description := eventDescription(e, timed); description != "" {
+		line("SUMMARY", escapeText(localizedTitle(e.Title, e.Translations, locale)))
+		if description := eventDescription(e, timed, locale); description != "" {
 			line("DESCRIPTION", escapeText(description))
 		}
 		if link := publicLink(e.URL); link != "" {
@@ -64,6 +74,36 @@ func Calendar(events []sqlite.DashboardEvent, now time.Time) []byte {
 	}
 	line("END", "VCALENDAR")
 	return []byte(b.String())
+}
+
+// Default lengths for timed events without a stored end. RFC 5545 makes an
+// event with a DTSTART time and no DTEND zero-length, which calendar apps draw
+// as a sliver, so streams get an hour and other timed entries half an hour.
+const (
+	defaultStreamDuration = time.Hour
+	defaultEventDuration  = 30 * time.Minute
+)
+
+// defaultDuration classifies streams the way the board does: the stream and
+// member (membership stream) event types.
+func defaultDuration(e sqlite.DashboardEvent) time.Duration {
+	if e.EventType != nil {
+		switch strings.TrimSpace(*e.EventType) {
+		case "stream", "member":
+			return defaultStreamDuration
+		}
+	}
+	return defaultEventDuration
+}
+
+// sequenceEpoch anchors SEQUENCE. Every write to an event sets its updated_at,
+// so whole seconds since a fixed epoch increase whenever the event changes and
+// stay the same between polls, without a stored revision counter. Seconds
+// since 2020 fit the 32-bit integers some clients use until 2088.
+var sequenceEpoch = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func sequence(updated time.Time) int64 {
+	return max(0, int64(updated.Sub(sequenceEpoch)/time.Second))
 }
 
 func eventStart(e sqlite.DashboardEvent) (time.Time, bool) {
@@ -99,23 +139,24 @@ func eventStatus(e sqlite.DashboardEvent) string {
 	return "CONFIRMED"
 }
 
-func eventDescription(e sqlite.DashboardEvent, timed bool) string {
+func eventDescription(e sqlite.DashboardEvent, timed bool, locale Locale) string {
+	m := locale.messages()
 	parts := []string{}
 	if e.Detail != nil && strings.TrimSpace(*e.Detail) != "" {
-		parts = append(parts, strings.TrimSpace(*e.Detail))
+		parts = append(parts, localizedDetail(strings.TrimSpace(*e.Detail), locale))
 	}
 	if timed && e.TimePrecision == "approximate" {
-		parts = append(parts, "The start time is approximate.")
+		parts = append(parts, m.approximate)
 	}
 	if e.Provenance == "manual" {
-		parts = append(parts, "Confirmed by the site maintainer.")
+		parts = append(parts, m.confirmed)
 	} else {
-		parts = append(parts, "Read automatically from the original source; check it for changes.")
+		parts = append(parts, m.automatic)
 	}
 	if link := publicLink(e.URL); link != "" {
 		parts = append(parts, link)
 	}
-	parts = append(parts, "Unofficial fan-made schedule.")
+	parts = append(parts, m.unofficial)
 	return strings.Join(parts, "\n")
 }
 

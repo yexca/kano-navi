@@ -7,7 +7,7 @@
 | `APP_MODE`                      | `production`         | Explicit `development` bypasses login; production requires it     |
 | `ADMIN_PASSWORD`                | Empty                | Production startup requires at least 12 non-padding characters    |
 | `ADMIN_ORIGIN`                  | Empty                | Optional explicit origin accepted for admin mutations             |
-| `PUBLIC_ORIGIN`                 | Empty                | Optional public origin that makes share-tag URLs absolute         |
+| `PUBLIC_ORIGIN`                 | Empty                | Optional public origin for absolute share-tag and feed links      |
 | `LLM_SECRETS_KEY`               | Empty                | Required non-blank encryption master key at startup in every mode |
 | `PORT`                          | `7657`               | Shared frontend/API port for development, preview, and production |
 | `KANO_API_PORT`                 | `7658`               | Development only: loopback port of the backend behind Vite        |
@@ -54,10 +54,13 @@ translation queue set in `/admin` → Models, so it does nothing until that
 queue holds a text model.
 
 `PUBLIC_ORIGIN` is a bare `http` or `https` origin such as
-`https://kano.example.invalid` (a trailing `/` is accepted; a path, query or
-credentials fail startup). It only completes the link-preview tags of
-`index.html` (see [Share tags](../architecture/backend.md#share-tags)); it
-grants no access and is not an admin origin.
+`https://kano.example.invalid` (a trailing `/` is accepted and the host is
+lowercased; a path, query, credentials, or a host that is not a DNS name or
+IP address with an optional port fail startup). It only completes the link-preview tags of
+`index.html` (see [Share tags](../architecture/backend.md#share-tags)) and the
+Atom feed's site and self links (see
+[Public feeds](../architecture/backend.md#public-feeds)); it grants no access
+and is not an admin origin.
 
 Docker Compose also uses `KANO_IMAGE` (default
 `yexca/kano-navi:latest` from Docker Hub) for the published image and `KANO_PORT`

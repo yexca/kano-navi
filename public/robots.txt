@@ -1,0 +1,9 @@
+# What’s Kano Up To? — unofficial fan-made status board.
+# The operator console and machine endpoints are not pages to index; the
+# public calendar and Atom feeds stay fetchable for subscription clients.
+User-agent: *
+Allow: /api/calendar.ics
+Allow: /api/feed.xml
+Disallow: /admin
+Disallow: /api/
+Disallow: /mcp

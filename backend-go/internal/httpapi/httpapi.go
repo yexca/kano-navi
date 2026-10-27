@@ -25,6 +25,9 @@ type Handler struct {
 	mcp    http.Handler
 	// websub receives YouTube hub verifications and signed notifications.
 	websub http.Handler
+	// publicOrigin is the normalized PUBLIC_ORIGIN or empty; the Atom feed
+	// uses it for absolute links.
+	publicOrigin string
 }
 
 // Standalone carries everything the single-process owner serves beyond the
@@ -37,6 +40,8 @@ type Standalone struct {
 	// WebSub answers the YouTube hub; it reports the route as absent while
 	// push is disabled in /admin.
 	WebSub http.Handler
+	// PublicOrigin is the normalized PUBLIC_ORIGIN, or empty.
+	PublicOrigin string
 }
 
 // NewStandaloneHandler serves the whole product from this process.
@@ -45,12 +50,13 @@ func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, options Sta
 		now = time.Now
 	}
 	return &Handler{
-		store:  store,
-		now:    now,
-		admin:  options.Admin,
-		static: options.Static,
-		mcp:    options.MCP,
-		websub: options.WebSub,
+		store:        store,
+		now:          now,
+		admin:        options.Admin,
+		static:       options.Static,
+		mcp:          options.MCP,
+		websub:       options.WebSub,
+		publicOrigin: options.PublicOrigin,
 	}
 }
 

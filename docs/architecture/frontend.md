@@ -73,7 +73,13 @@ and language; page message providers extend its translator without duplicating
 preferences. Shared navigation labels remain in the base dictionary. Suspense
 shows a localized loading status, and a page error boundary offers a full-page
 reload when a chunk fails (including after a deployment). Direct visits and
-trailing-slash routes work through the existing SPA fallback. History/about
+trailing-slash routes work through the existing SPA fallback, and
+`/index.html`, which the server answers as a file, is the board
+(`src/lib/page-path.ts`). Any other path
+shows a localized not-found view with a link back to the board instead of the
+board itself; the server answers it with status 404, so `src/main.tsx` and
+`spaPages` in `backend-go/internal/httpapi/static.go` list the same pages.
+History/about
 remain static and never mount the dashboard hook or request its API.
 
 English is the base locale. Every message exists in English, a key missing
@@ -113,7 +119,10 @@ image's known width, and each card passes a `sizes` hint for its layout. The
 full-image viewer, profile media and bundled assets keep their single URL.
 The schedule header's Subscribe menu (`calendar-subscribe.tsx`) offers the
 [calendar feed](backend.md#public-feeds) as a `webcal:` link and a copyable
-`https` address built by `src/lib/feeds.ts` from the page's origin.
+`https` address built by `src/lib/feeds.ts` from the page's origin. Both carry
+the reader's language as `?lang=ja` or `?lang=zh-CN`; English keeps the bare
+path. The settings provider points `index.html`'s Atom and calendar discovery
+links at the same language whenever the locale changes.
 
 SQLite stores one text per seeded timeline and link row. The board translates
 that text through src/dashboard/seed-copy.ts, keyed by the exact seed wording

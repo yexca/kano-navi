@@ -8,6 +8,7 @@ import {
 } from "react"
 
 import { createTranslator, localeOptions, type PageMessages } from "@/i18n"
+import { syncFeedLinks } from "@/lib/feeds"
 import type { Dispatch, SetStateAction, ReactNode } from "react"
 import type { Locale, Translator } from "@/types"
 
@@ -63,6 +64,7 @@ export function AppSettingsProvider({ children }: { children?: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = locale
+    syncFeedLinks(locale)
     window.localStorage.setItem("kano-locale", locale)
   }, [locale])
 
