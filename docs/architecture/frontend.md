@@ -192,6 +192,22 @@ so existing revision polling reloads a changed avatar URL without increasing
 full-snapshot request frequency. This requires no source
 synchronization or external request.
 
+## Installable App
+
+`index.html` links `public/manifest.webmanifest` (name "What’s Kano Up To?",
+short name "Kano Navi", `start_url` and `scope` `/`, `display: standalone`,
+background and theme colour `#fdf9f6`, the light `--background` token) and
+the icons in `public/assets/icons/`: a 32 px favicon, 192 and 512 px icons, a
+512 px maskable icon with the avatar inside the 80% safe zone on the
+avatar's own pink, and a 180 px `apple-touch-icon`. They are resized copies of
+the bundled `public/assets/kano-avatar.jpg` and follow its provenance; the
+theme-color metas still switch between the light and dark backgrounds.
+There is no service worker or offline mode: an installed app loads the same
+pages, which read the live local API. The Go static server serves
+`.webmanifest` as `application/manifest+json` and, like other unhashed public
+files, revalidates the manifest and icons on each use, so a replaced icon
+takes effect without renaming it.
+
 ## Provider Company Icons
 
 The provider presets are OpenAI, Anthropic, DeepSeek, OpenRouter, Gemini, and

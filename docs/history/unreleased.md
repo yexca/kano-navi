@@ -137,6 +137,11 @@
   404 instead of the board with 200 (`/index.html` still shows the board),
   and `robots.txt` asks crawlers to skip `/admin`, `/api/` and `/mcp`
   while leaving the two feeds fetchable for calendar and feed subscriptions.
+- The board can be added to a phone's home screen: a web app manifest
+  (`/manifest.webmanifest`, standalone, starting at `/`) with 192 and 512 px
+  icons, a maskable icon, an `apple-touch-icon` and a PNG favicon, all
+  resized from the bundled avatar. There is no service worker; the installed
+  app still reads the live API.
 - Board images load smaller copies: `/media/<id>?v=…&w=<width>` (320, 640,
   960, 1280 or 1920) serves a JPEG or PNG resized once and kept in
   `data/cache/variants/`, or the original when it cannot shrink. Originals
