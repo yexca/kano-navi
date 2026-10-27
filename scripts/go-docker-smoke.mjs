@@ -137,34 +137,38 @@ try {
   // The server assigns manual event IDs; a client-supplied ID is ignored.
   const eventId = (await event.json()).event.id
   assert.match(eventId, /^manual-[0-9a-f-]{36}$/u)
-  const created = await send("/api/admin/workflows", "POST", {
-    name: "Synthetic blocked capability",
-    steps: ["schedule"],
-  })
-  assert.equal(created.status, 201)
-  const workflow = (await created.json()).workflow
+  // Saved workflows are retired (ADR-0003); a one-off step run replaces them.
+  // These sidecar flags wire no schedule adapter, so the step is blocked.
   const submitted = await send("/api/admin/runs", "POST", {
     kind: "workflow",
-    workflowId: workflow.id,
+    steps: ["schedule"],
   })
   assert.equal(submitted.status, 202)
   const runID = (await submitted.json()).run.id
-  let finished = false
+  let finished = null
   for (let attempt = 0; attempt < 100; attempt++) {
     const response = await fetch(`${writableOrigin}/api/admin/runs/${runID}`)
     assert.equal(response.status, 200)
     const { run } = await response.json()
-    // A blocked capability ends the run as failed without fetching.
-    if (run.status === "failed") {
-      finished = true
+    if (run.status !== "queued" && run.status !== "running") {
+      finished = run
       break
     }
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
-  assert.ok(
-    finished,
+  assert.ok(finished, "the step run must finish")
+  // A blocked capability ends the run as failed without fetching.
+  assert.equal(finished.kind, "workflow")
+  assert.equal(finished.workflowId, null, "step runs save no workflow")
+  assert.deepEqual(finished.steps, ["schedule", "reconcile"])
+  assert.equal(
+    finished.status,
+    "failed",
     "unmigrated capabilities must finish as blocked without fetching",
   )
+  assert.equal(finished.error, "capability_not_migrated")
+  assert.equal(finished.progress.schedule, "failed")
+  assert.deepEqual(finished.run.counts, {})
   const deleted = await send(
     `/api/admin/events/${encodeURIComponent(eventId)}`,
     "DELETE",
