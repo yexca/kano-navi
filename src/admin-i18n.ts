@@ -307,24 +307,6 @@ export const adminMessages = {
     "admin.profile.title": "Profile images",
     "admin.profile.description":
       "The avatar and banner shown on the board and their candidates.",
-    "admin.quickFetch.title.x": "Fetch posts",
-    "admin.quickFetch.title.youtube": "Fetch videos",
-    "admin.quickFetch.description.x":
-      "Read X posts from a time window or the newest few, then download their media.",
-    "admin.quickFetch.description.youtube":
-      "Read YouTube videos from a time window, then download their thumbnails.",
-    "admin.quickFetch.recent": "Recent",
-    "admin.quickFetch.latest": "Latest",
-    "admin.quickFetch.preset.1": "24 hours",
-    "admin.quickFetch.preset.3": "3 days",
-    "admin.quickFetch.preset.7": "7 days",
-    "admin.quickFetch.preset.30": "30 days",
-    "admin.quickFetch.range": "Fetch range",
-    "admin.quickFetch.more":
-      "Backfills before the oldest record and per-account details are on the Sources page.",
-    "admin.quickFetch.running":
-      "A run is in progress. The list reloads when it finishes.",
-    "admin.quickFetch.openRuns": "View run",
     "admin.videos.filter": "Video state",
     "admin.videos.all": "All",
     "admin.videos.upcoming": "Upcoming",
@@ -437,7 +419,6 @@ export const adminMessages = {
     "admin.bilibili.blockedUntil": "Waiting until {time}",
     "admin.bilibili.notBlocked": "None",
     "admin.bilibili.lastError": "Last error",
-    "admin.bilibili.never": "Never",
     "admin.bilibili.signInHint":
       "Anonymous reads often meet Bilibili's captcha. Set BILIBILI_SESSDATA in the server environment to read as a signed-in account; see the configuration guide.",
     "admin.bilibili.add": "Add an upload",
@@ -535,6 +516,7 @@ export const adminMessages = {
       "Past windows need YOUTUBE_API_KEY on the server.",
     "admin.fetch.noRecords": "Nothing is stored yet; read a date range first.",
     "admin.fetch.run": "Start fetch",
+    "admin.fetch.openSources": "Fetch",
     "admin.push.title": "YouTube push",
     "admin.push.description":
       "Let YouTube's hub notify this site about new videos, which queues a YouTube read.",
@@ -1136,22 +1118,6 @@ export const adminMessages = {
     "admin.videos.description": "已存的 YouTube 视频以及页面上的精选视频。",
     "admin.profile.title": "头像与横幅",
     "admin.profile.description": "页面上显示的头像、横幅及其候选图片。",
-    "admin.quickFetch.title.x": "抓取贴文",
-    "admin.quickFetch.title.youtube": "抓取视频",
-    "admin.quickFetch.description.x":
-      "读取一个时间窗口内或最新若干条 X 贴文，并下载其媒体。",
-    "admin.quickFetch.description.youtube":
-      "读取一个时间窗口内的 YouTube 视频，并下载其缩略图。",
-    "admin.quickFetch.recent": "近期",
-    "admin.quickFetch.latest": "最新",
-    "admin.quickFetch.preset.1": "24 小时",
-    "admin.quickFetch.preset.3": "3 天",
-    "admin.quickFetch.preset.7": "7 天",
-    "admin.quickFetch.preset.30": "30 天",
-    "admin.quickFetch.range": "抓取范围",
-    "admin.quickFetch.more": "向前回填和各账号详情在「来源」页面。",
-    "admin.quickFetch.running": "有任务正在运行，结束后列表会自动刷新。",
-    "admin.quickFetch.openRuns": "查看运行",
     "admin.videos.filter": "视频状态",
     "admin.videos.all": "全部",
     "admin.videos.upcoming": "预定",
@@ -1257,7 +1223,6 @@ export const adminMessages = {
     "admin.bilibili.blockedUntil": "等待至 {time}",
     "admin.bilibili.notBlocked": "无",
     "admin.bilibili.lastError": "最近错误",
-    "admin.bilibili.never": "从未",
     "admin.bilibili.signInHint":
       "未登录读取经常会遇到哔哩哔哩的验证码。在服务器环境中设置 BILIBILI_SESSDATA 即可以登录账号读取，详见配置说明。",
     "admin.bilibili.add": "添加投稿",
@@ -1348,6 +1313,7 @@ export const adminMessages = {
       "过去的时间窗口需要服务器配置 YOUTUBE_API_KEY。",
     "admin.fetch.noRecords": "还没有存储任何记录，请先读取一个日期范围。",
     "admin.fetch.run": "开始抓取",
+    "admin.fetch.openSources": "抓取",
     "admin.push.title": "YouTube 推送",
     "admin.push.description":
       "让 YouTube 的 Hub 在有新视频时通知本站，从而排队一次 YouTube 读取。",

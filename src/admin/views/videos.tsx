@@ -1,6 +1,7 @@
 import { useState } from "react"
 import {
   Clock3,
+  Download,
   ExternalLink,
   History,
   ImageOff,
@@ -26,8 +27,6 @@ import {
   Segmented,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
-import { BilibiliSource } from "@/admin/views/bilibili-parts"
-import { QuickFetch } from "@/admin/views/fetch-parts"
 import { MergeLine, MergeSuggestions } from "@/admin/views/merge-parts"
 import {
   TranslationBacklog,
@@ -242,7 +241,7 @@ function VideoCard({
   )
 }
 
-function VideoList({ reloadKey }: { reloadKey: number }) {
+function VideoList() {
   const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const [status, setStatus] = useState<"" | "published" | "upcoming" | "live">(
@@ -255,7 +254,7 @@ function VideoList({ reloadKey }: { reloadKey: number }) {
   const [merges, setMerges] = useState(0)
   const videos = useResource(
     () => api.videos({ status, source, page, pageSize: 24 }),
-    [status, source, page, reloadKey, merges],
+    [status, source, page, merges],
   )
   const merged = () => setMerges((value) => value + 1)
   const data = videos.data
@@ -297,7 +296,7 @@ function VideoList({ reloadKey }: { reloadKey: number }) {
           onClear={() => feature(null)}
         />
       ) : null}
-      <MergeSuggestions reloadKey={reloadKey + merges} onMerged={merged} />
+      <MergeSuggestions reloadKey={merges} onMerged={merged} />
       <div className="adm-toolbar">
         <Segmented
           label={t("admin.videos.filter")}
@@ -374,26 +373,24 @@ function VideoList({ reloadKey }: { reloadKey: number }) {
 
 export function VideosView({ navigate }: ViewProps) {
   const { t } = useAppSettings()
-  const { api } = useAdmin()
-  const sources = useResource(() => api.sources(), [])
-  // An added Bilibili upload reloads the list and the source state.
-  const [reloadKey, setReloadKey] = useState(0)
   return (
     <div className="adm-view">
       <PageHeader
         title={t("admin.videos.title")}
         description={t("admin.videos.description")}
-      />
-      <QuickFetch source="youtube" sources={sources.data} navigate={navigate} />
-      <BilibiliSource
-        status={sources.data?.bilibili}
-        onAdded={() => {
-          setReloadKey((key) => key + 1)
-          void sources.reload()
-        }}
+        actions={
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Download}
+            onClick={() => navigate("sources")}
+          >
+            {t("admin.fetch.openSources")}
+          </Button>
+        }
       />
       <Panel>
-        <VideoList reloadKey={reloadKey} />
+        <VideoList />
       </Panel>
     </div>
   )

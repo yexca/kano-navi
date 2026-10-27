@@ -2,15 +2,15 @@ import { useState, type SubmitEvent } from "react"
 import { KeyRound, Plus, ShieldAlert, Tv } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
-import { formatDateTime } from "@/admin/format"
 import type { AdminVideo, Sources } from "@/admin/types"
 import { Badge, Button, Facts, Field, Panel } from "@/admin/ui"
 import { useAdmin } from "@/admin/use-admin-data"
 
 /**
- * The Bilibili source on the Videos page: how its reads are going, and an
- * operator's way to add one upload by BV ID or link. Uploads stay in the
- * console; one merged into its YouTube copy is listed on that video.
+ * The Bilibili account on the Sources page, beside its timer (which shows the
+ * last read and backoff), and an operator's way to add one upload by BV ID or
+ * link. Uploads stay in the console; one merged into its YouTube copy is
+ * listed on that video.
  */
 export function BilibiliSource({
   status,
@@ -19,7 +19,7 @@ export function BilibiliSource({
   status: Sources["bilibili"] | undefined
   onAdded: (video: AdminVideo) => void
 }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const [input, setInput] = useState("")
   const [busy, setBusy] = useState(false)
@@ -39,8 +39,6 @@ export function BilibiliSource({
     setInput("")
     onAdded(result.video)
   }
-  const when = (value: string | null | undefined) =>
-    value ? formatDateTime(value, locale) : t("admin.bilibili.never")
   return (
     <Panel
       icon={Tv}
@@ -71,20 +69,11 @@ export function BilibiliSource({
           items={[
             [t("admin.bilibili.account"), status.account],
             [t("admin.bilibili.videos"), String(status.videos)],
-            [t("admin.bilibili.lastSuccess"), when(status.lastSuccessAt)],
             [
               t("admin.bilibili.interval"),
               t("admin.bilibili.everyMinutes", {
                 count: status.minIntervalMinutes ?? 0,
               }),
-            ],
-            [
-              t("admin.bilibili.backoff"),
-              blocked
-                ? t("admin.bilibili.blockedUntil", {
-                    time: formatDateTime(status.blockedUntil, locale),
-                  })
-                : t("admin.bilibili.notBlocked"),
             ],
             [t("admin.bilibili.lastError"), status.lastError ?? "—"],
           ]}

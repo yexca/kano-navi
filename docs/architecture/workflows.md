@@ -3,10 +3,8 @@
 ## Fetch Windows and Historical Backfill
 
 The console's Sources page offers `recent`, `before`, `range` and `count`
-fetches for X and YouTube. The Posts (X) and Videos (YouTube)
-pages repeat the common ones as shortcuts: one-click `recent` windows of 1, 3,
-7 or 30 days, a `range` form, and one-click `count` windows of 20, 50,
-100 or 200 posts or videos. `POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }`
+fetches for X and YouTube; it is the one place to start them. The Posts and
+Videos pages open on their lists and link to it from their header. `POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }`
 plus `"window": { "mode": "recent", "days": 30 }`,
 `"window": { "mode": "before", "days": 30 }`,
 `"window": { "mode": "range", "startDate": "2026-09-01", "endDate": "2026-09-30" }`,

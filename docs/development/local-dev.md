@@ -80,8 +80,8 @@ while developing.
 
 Each source timer's sync setting controls how much a run reads, separately
 from its interval (incremental with a cap of 50 by default). The Sources page
-and the Posts and Videos pages also offer recent windows, older-record
-backfill and date ranges. Without keys, X recent,
+also offers recent windows, older-record backfill, date ranges and latest
+counts. Without keys, X recent,
 date-range and latest-count fetches page the public FxTwitter timeline, and
 YouTube recent fetches keep the finite RSS coverage and report that limitation.
 For backfills and YouTube history, optionally configure environment-only

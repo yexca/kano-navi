@@ -55,5 +55,9 @@
 - YouTube fetches offer a `count` window read from the uploads listing.
   Without a key it reaches only the RSS feed's 15 entries and reports
   `youtube_count_limited` above that.
+- Fetching lives on the Sources page only. The Posts and Videos pages open
+  straight on their lists, with a Fetch button in the header that leads
+  there, and adding a Bilibili upload by BV ID moves to the Bilibili section
+  of the Sources page.
 
 </details>

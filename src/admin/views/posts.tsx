@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import {
   ChevronLeft,
   ChevronRight,
+  Download,
   FileText,
   ImageOff,
   Search,
@@ -12,6 +13,7 @@ import type { ViewProps } from "@/admin"
 import { formatDateTime } from "@/admin/format"
 import type { AdminPost, Sources } from "@/admin/types"
 import {
+  Button,
   Empty,
   IconButton,
   Loading,
@@ -21,7 +23,6 @@ import {
   Panel,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
-import { QuickFetch } from "@/admin/views/fetch-parts"
 import { PostActions, PostStatus, RouteSelect } from "@/admin/views/review"
 import {
   TranslationBacklog,
@@ -371,15 +372,24 @@ function PostList({ sources }: { sources: Sources | undefined }) {
 export function PostsView({ navigate }: ViewProps) {
   const { t } = useAppSettings()
   const { api } = useAdmin()
-  // One read serves both the fetch panel and the account filter.
+  // The account filter lists the configured accounts.
   const sources = useResource(() => api.sources(), [])
   return (
     <div className="adm-view">
       <PageHeader
         title={t("admin.posts.title")}
         description={t("admin.posts.description")}
+        actions={
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Download}
+            onClick={() => navigate("sources")}
+          >
+            {t("admin.fetch.openSources")}
+          </Button>
+        }
       />
-      <QuickFetch source="x" sources={sources.data} navigate={navigate} />
       <Panel>
         <PostList sources={sources.data} />
       </Panel>

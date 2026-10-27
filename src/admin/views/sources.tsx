@@ -8,6 +8,7 @@ import {
 import {
   CalendarClock,
   Download,
+  History,
   KeyRound,
   Play,
   Radio,
@@ -48,8 +49,31 @@ import {
   Switch,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
-import { WindowBadge } from "@/admin/views/fetch-parts"
+import { BilibiliSource } from "@/admin/views/bilibili-parts"
 import { stepIcons } from "@/admin/views/run-parts"
+
+/**
+ * How past windows are read: the source API with its credential, the public
+ * X timeline without it, or not at all.
+ */
+function WindowBadge({ state }: { state: Sources["x"] | Sources["youtube"] }) {
+  const { t } = useAppSettings()
+  if (state.historyAvailable) {
+    return (
+      <Badge tone="leaf" icon={KeyRound}>
+        {t("admin.sources.historyOn")}
+      </Badge>
+    )
+  }
+  if (state.windows.includes("range")) {
+    return (
+      <Badge tone="leaf" icon={History}>
+        {t("admin.sources.historyTimeline")}
+      </Badge>
+    )
+  }
+  return <Badge icon={KeyRound}>{t("admin.sources.historyOff")}</Badge>
+}
 
 function FetchForm({
   source,
@@ -821,6 +845,10 @@ export function SourcesView(_: ViewProps) {
             chips={skipped("bilibili")}
           >
             {schedule("bilibili")}
+            <BilibiliSource
+              status={data.bilibili}
+              onAdded={() => void sources.reload()}
+            />
           </SourceSection>
         </>
       )}
