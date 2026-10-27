@@ -77,8 +77,8 @@ func TestWriteXRecentKeepsStoredTimelinePostsAndPendingRetries(t *testing.T) {
 		ScheduleCandidates: []xsource.ScheduleCandidate{candidate("1", "https://pbs.twimg.com/media/other.jpg"), candidate("2", "https://pbs.twimg.com/media/2.jpg")},
 		FromTimeline:       map[string]bool{"1": true, "2": true},
 		PendingIDs:         []string{"8"}, PendingRetries: map[string]xsource.PendingRetry{"8": retry},
-		Dropped:            []xsource.DroppedStatus{{ID: "7", Code: xsource.DroppedGone}},
-		NextCursor:         "2", NextCursorTime: "2026-10-12T00:00:00Z"}
+		Dropped:    []xsource.DroppedStatus{{ID: "7", Code: xsource.DroppedGone}},
+		NextCursor: "2", NextCursorTime: "2026-10-12T00:00:00Z"}
 	if err = s.WriteXRecent(ctx, "kano", result, true); err != nil {
 		t.Fatal(err)
 	}
@@ -87,11 +87,11 @@ func TestWriteXRecentKeepsStoredTimelinePostsAndPendingRetries(t *testing.T) {
 		t.Fatalf("state=%#v err=%v", state, err)
 	}
 	for query, want := range map[string]string{
-		`SELECT text FROM posts WHERE id='1'`:                     "detail text",
-		`SELECT text FROM posts WHERE id='2'`:                     "new",
-		`SELECT url FROM assets WHERE id='schedule-x-1'`:          "https://pbs.twimg.com/media/1.jpg",
-		`SELECT url FROM assets WHERE id='schedule-x-2'`:          "https://pbs.twimg.com/media/2.jpg",
-		`SELECT COUNT(*) FROM media_links WHERE owner_id='1'`:     "1",
+		`SELECT text FROM posts WHERE id='1'`:                                                   "detail text",
+		`SELECT text FROM posts WHERE id='2'`:                                                   "new",
+		`SELECT url FROM assets WHERE id='schedule-x-1'`:                                        "https://pbs.twimg.com/media/1.jpg",
+		`SELECT url FROM assets WHERE id='schedule-x-2'`:                                        "https://pbs.twimg.com/media/2.jpg",
+		`SELECT COUNT(*) FROM media_links WHERE owner_id='1'`:                                   "1",
 		`SELECT json_type(metadata_json,'$.pendingStatusIds') FROM sync_state WHERE source='x'`: "array",
 	} {
 		var got string
