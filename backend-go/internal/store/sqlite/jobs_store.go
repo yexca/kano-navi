@@ -85,19 +85,13 @@ func (s *Store) RecordStepResult(ctx context.Context, jobID, key string, value m
 	return nil
 }
 
-func (s *Store) SyncRunForJob(ctx context.Context, jobID string) (*JobRun, error) {
-	if s == nil || s.db == nil {
-		return nil, ErrUnavailable
-	}
+const jobRunColumns = "id,source,started_at,finished_at,status,message,counts_json,triggered_by,job_id"
+
+func scanJobRun(row workflowScanner) (*JobRun, error) {
 	var run JobRun
 	var finished, message, counts, triggered, job sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT id,source,started_at,finished_at,status,message,counts_json,triggered_by,job_id FROM sync_runs WHERE job_id=? ORDER BY id DESC LIMIT 1`, jobID).
-		Scan(&run.ID, &run.Source, &run.StartedAt, &finished, &run.Status, &message, &counts, &triggered, &job)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, ErrUnavailable
+	if err := row.Scan(&run.ID, &run.Source, &run.StartedAt, &finished, &run.Status, &message, &counts, &triggered, &job); err != nil {
+		return nil, err
 	}
 	run.FinishedAt = nullString(finished)
 	run.Message = sanitizeRunMessage(message)
@@ -105,6 +99,54 @@ func (s *Store) SyncRunForJob(ctx context.Context, jobID string) (*JobRun, error
 	run.JobID = nullString(job)
 	run.Counts = sanitizeCounts(counts.String)
 	return &run, nil
+}
+
+func (s *Store) SyncRunForJob(ctx context.Context, jobID string) (*JobRun, error) {
+	if s == nil || s.db == nil {
+		return nil, ErrUnavailable
+	}
+	run, err := scanJobRun(s.db.QueryRowContext(ctx, `SELECT `+jobRunColumns+` FROM sync_runs WHERE job_id=? ORDER BY id DESC LIMIT 1`, jobID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	return run, nil
+}
+
+// SyncRunsForJobs is SyncRunForJob for a page of jobs in one query. A job
+// without a history row is absent from the result.
+func (s *Store) SyncRunsForJobs(ctx context.Context, jobIDs []string) (map[string]*JobRun, error) {
+	if s == nil || s.db == nil {
+		return nil, ErrUnavailable
+	}
+	out := make(map[string]*JobRun, len(jobIDs))
+	if len(jobIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(jobIDs))
+	for i, id := range jobIDs {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+jobRunColumns+` FROM sync_runs WHERE id IN (SELECT MAX(id) FROM sync_runs WHERE job_id IN (`+placeholders(len(jobIDs))+`) GROUP BY job_id)`, args...)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	defer rows.Close()
+	for rows.Next() {
+		run, err := scanJobRun(rows)
+		if err != nil {
+			return nil, ErrUnavailable
+		}
+		if run.JobID != nil {
+			out[*run.JobID] = run
+		}
+	}
+	if rows.Err() != nil {
+		return nil, ErrUnavailable
+	}
+	return out, nil
 }
 
 // OldestSourceTimestamp is the earliest stored record for a source, which is

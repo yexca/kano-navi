@@ -3,7 +3,7 @@
 | Symptom                                   | Checks and recovery                                                                                                                                     |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Server refuses startup                    | Check APP_MODE and production ADMIN_PASSWORD length. Authentication is validated before SQLite opens.                                                   |
-| Fresh board has no posts or providers     | Expected initialization. Configure providers and the model queue in /admin and run a workflow.                                                          |
+| Fresh board has no posts or providers     | Expected initialization. Configure providers and the model queue in /admin, then use Run now or enable a timer on the Sources page.                     |
 | Stale data after a failed run             | Inspect guarded sync history; the previous snapshot is retained. Check source coverage and request budgets.                                             |
 | Date range returns partial coverage       | Check source credential-availability flags and pagination budgets. Public timeline/RSS coverage cannot expand to a full archive.                        |
 | Source timer does not run                 | Check WORKFLOW_SCHEDULER_ENABLED, the SKIP_* flags, the next run on the Sources page, and the single-flight queue. The API process must remain running. |

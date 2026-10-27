@@ -12,10 +12,14 @@ type workflowScanner interface{ Scan(...any) error }
 
 const runColumns = "id,workflow_id,status,trigger_source,execution_source,created_at,started_at,finished_at,error_code,cancellation_requested_at,recovery_count"
 
-func scanRun(row workflowScanner) (WorkflowRun, error) {
+// maxRunSteps bounds the steps a run detail reads.
+const maxRunSteps = 16
+
+// scanRun reads runColumns, then any extra columns selected after them.
+func scanRun(row workflowScanner, extra ...any) (WorkflowRun, error) {
 	var x WorkflowRun
 	var sa, fa, ec, ca sql.NullString
-	err := row.Scan(&x.ID, &x.WorkflowID, &x.Status, &x.TriggerSource, &x.ExecutionSource, &x.CreatedAt, &sa, &fa, &ec, &ca, &x.RecoveryCount)
+	err := row.Scan(append([]any{&x.ID, &x.WorkflowID, &x.Status, &x.TriggerSource, &x.ExecutionSource, &x.CreatedAt, &sa, &fa, &ec, &ca, &x.RecoveryCount}, extra...)...)
 	x.Status = workflowStatus(x.Status, false)
 	x.TriggerSource = workflowTrigger(x.TriggerSource)
 	x.ExecutionSource = workflowTrigger(x.ExecutionSource)
@@ -70,47 +74,37 @@ func (s *Store) ListWorkflowRuns(ctx context.Context, page, size int, status, wo
 	// Lists contain headers; details contain bounded steps and attempts.
 	return WorkflowRunPage{out, page, size, total, pageCount(total, size), page < pageCount(total, size)}, nil
 }
-func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, error) {
-	if err := s.requireWorkflow(); err != nil {
-		return nil, err
-	}
-	x, e := scanRun(s.db.QueryRowContext(ctx, "SELECT "+runColumns+" FROM workflow_runs WHERE id=?", id))
-	if errors.Is(e, sql.ErrNoRows) {
-		return nil, ErrWorkflowNotFound
-	}
-	if e != nil {
-		return nil, ErrWorkflowStorage
-	}
-	capabilityColumn := "capability"
+
+// runConfigColumns selects the lookback days, windows and sync frozen on a
+// run, as NULL where an older snapshot lacks the column.
+func (s *Store) runConfigColumns() string {
+	columns := []string{"NULL", "NULL", "NULL"}
 	if s.workflowVersion >= 2 {
-		var lookback string
-		if s.db.QueryRowContext(ctx, `SELECT source_lookback_json FROM workflow_runs WHERE id=?`, id).Scan(&lookback) != nil {
-			return nil, ErrWorkflowStorage
-		}
-		if json.Unmarshal([]byte(lookback), &x.SourceLookbackDays) != nil {
-			return nil, ErrWorkflowStorage
-		}
-		capabilityColumn = "COALESCE(adapter_capability,capability)"
+		columns[0] = "source_lookback_json"
 	}
 	if s.workflowVersion >= 3 {
-		var windows sql.NullString
-		if s.db.QueryRowContext(ctx, `SELECT fetch_windows_json FROM workflow_runs WHERE id=?`, id).Scan(&windows) != nil {
-			return nil, ErrWorkflowStorage
-		}
-		if windows.Valid && windows.String != "" && json.Unmarshal([]byte(windows.String), &x.FetchWindows) != nil {
-			return nil, ErrWorkflowStorage
-		}
+		columns[1] = "fetch_windows_json"
+	}
+	if s.sourceSync {
+		columns[2] = "source_sync_json"
+	}
+	return strings.Join(columns, ",")
+}
+
+// decodeRunConfig fills what runConfigColumns read.
+func (s *Store) decodeRunConfig(x *WorkflowRun, lookback, windows, sync sql.NullString) error {
+	if s.workflowVersion >= 2 && (!lookback.Valid || json.Unmarshal([]byte(lookback.String), &x.SourceLookbackDays) != nil) {
+		return ErrWorkflowStorage
+	}
+	if s.workflowVersion >= 3 && windows.Valid && windows.String != "" && json.Unmarshal([]byte(windows.String), &x.FetchWindows) != nil {
+		return ErrWorkflowStorage
 	}
 	if s.sourceSync {
 		// A run keeps only what its definition froze; ad hoc runs and runs
 		// made before the column carry none and use each step's defaults.
-		var sync string
-		if s.db.QueryRowContext(ctx, `SELECT source_sync_json FROM workflow_runs WHERE id=?`, id).Scan(&sync) != nil {
-			return nil, ErrWorkflowStorage
-		}
 		var stored map[string]SourceSync
-		if json.Unmarshal([]byte(sync), &stored) != nil {
-			return nil, ErrWorkflowStorage
+		if !sync.Valid || json.Unmarshal([]byte(sync.String), &stored) != nil {
+			return ErrWorkflowStorage
 		}
 		for source, setting := range stored {
 			if setting.Valid() {
@@ -121,26 +115,60 @@ func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, er
 			}
 		}
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT id,step_id,step_order,status,`+capabilityColumn+`,started_at,finished_at,error_code,retryable FROM workflow_run_steps WHERE run_id=? ORDER BY step_order LIMIT 16`, id)
+	return nil
+}
+
+func (s *Store) stepColumns() string {
+	capabilityColumn := "capability"
+	if s.workflowVersion >= 2 {
+		capabilityColumn = "COALESCE(adapter_capability,capability)"
+	}
+	return "id,step_id,step_order,status," + capabilityColumn + ",started_at,finished_at,error_code,retryable"
+}
+
+// scanStep reads stepColumns, then any extra columns selected after them.
+func scanStep(row workflowScanner, extra ...any) (WorkflowStep, error) {
+	var st WorkflowStep
+	var sa, fa, ec sql.NullString
+	if err := row.Scan(append([]any{&st.ID, &st.StepID, &st.StepOrder, &st.Status, &st.Capability, &sa, &fa, &ec, &st.Retryable}, extra...)...); err != nil {
+		return st, err
+	}
+	st.Status = workflowStatus(st.Status, true)
+	if st.Capability != "synthetic" && st.Capability != "x_recent" && st.Capability != "youtube_recent" && st.Capability != "bilibili_recent" && st.Capability != "youtube_live" && st.Capability != "media_download" && st.Capability != "schedule_extract" && st.Capability != "text_translate" && st.Capability != "event_reconcile" {
+		st.Capability = "capability_not_migrated"
+	}
+	st.StartedAt = nullableWorkflowString(sa)
+	st.FinishedAt = nullableWorkflowString(fa)
+	st.ErrorCode = workflowCode(ec)
+	return st, nil
+}
+
+func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, error) {
+	if err := s.requireWorkflow(); err != nil {
+		return nil, err
+	}
+	var lookback, windows, sync sql.NullString
+	x, e := scanRun(s.db.QueryRowContext(ctx, "SELECT "+runColumns+","+s.runConfigColumns()+" FROM workflow_runs WHERE id=?", id), &lookback, &windows, &sync)
+	if errors.Is(e, sql.ErrNoRows) {
+		return nil, ErrWorkflowNotFound
+	}
+	if e != nil {
+		return nil, ErrWorkflowStorage
+	}
+	if e = s.decodeRunConfig(&x, lookback, windows, sync); e != nil {
+		return nil, e
+	}
+	rows, e := s.db.QueryContext(ctx, `SELECT `+s.stepColumns()+` FROM workflow_run_steps WHERE run_id=? ORDER BY step_order LIMIT ?`, id, maxRunSteps)
 	if e != nil {
 		return nil, ErrWorkflowStorage
 	}
 	x.Steps = []WorkflowStep{}
 	for rows.Next() {
-		var st WorkflowStep
-		var sa, fa, ec sql.NullString
-		e = rows.Scan(&st.ID, &st.StepID, &st.StepOrder, &st.Status, &st.Capability, &sa, &fa, &ec, &st.Retryable)
+		st, e := scanStep(rows)
 		if e != nil {
 			rows.Close()
 			return nil, ErrWorkflowStorage
 		}
-		st.Status = workflowStatus(st.Status, true)
-		if st.Capability != "synthetic" && st.Capability != "x_recent" && st.Capability != "youtube_recent" && st.Capability != "bilibili_recent" && st.Capability != "youtube_live" && st.Capability != "media_download" && st.Capability != "schedule_extract" && st.Capability != "text_translate" && st.Capability != "event_reconcile" {
-			st.Capability = "capability_not_migrated"
-		}
-		st.StartedAt = nullableWorkflowString(sa)
-		st.FinishedAt = nullableWorkflowString(fa)
-		st.ErrorCode = workflowCode(ec)
 		x.Steps = append(x.Steps, st)
 	}
 	e = rows.Err()
@@ -180,4 +208,65 @@ func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, er
 		}
 	}
 	return &x, nil
+}
+
+// WorkflowRunSummaries reads a page of runs as GetWorkflowRun does, without
+// step attempts, in two queries however many runs there are. An ID without a
+// run is absent from the result.
+func (s *Store) WorkflowRunSummaries(ctx context.Context, ids []string) (map[string]*WorkflowRun, error) {
+	if err := s.requireWorkflow(); err != nil {
+		return nil, err
+	}
+	out := make(map[string]*WorkflowRun, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	in := placeholders(len(ids))
+	rows, e := s.db.QueryContext(ctx, "SELECT "+runColumns+","+s.runConfigColumns()+" FROM workflow_runs WHERE id IN ("+in+")", args...)
+	if e != nil {
+		return nil, ErrWorkflowStorage
+	}
+	for rows.Next() {
+		var lookback, windows, sync sql.NullString
+		x, e := scanRun(rows, &lookback, &windows, &sync)
+		if e == nil {
+			e = s.decodeRunConfig(&x, lookback, windows, sync)
+		}
+		if e != nil {
+			rows.Close()
+			return nil, ErrWorkflowStorage
+		}
+		x.Steps = []WorkflowStep{}
+		out[x.ID] = &x
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, ErrWorkflowStorage
+	}
+	rows, e = s.db.QueryContext(ctx, "SELECT "+s.stepColumns()+",run_id FROM workflow_run_steps WHERE run_id IN ("+in+") ORDER BY run_id,step_order", args...)
+	if e != nil {
+		return nil, ErrWorkflowStorage
+	}
+	for rows.Next() {
+		var runID string
+		st, e := scanStep(rows, &runID)
+		if e != nil {
+			rows.Close()
+			return nil, ErrWorkflowStorage
+		}
+		if x := out[runID]; x != nil && len(x.Steps) < maxRunSteps {
+			x.Steps = append(x.Steps, st)
+		}
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, ErrWorkflowStorage
+	}
+	return out, nil
 }

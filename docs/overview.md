@@ -113,10 +113,10 @@ A separate, unlinked `/admin` route presents a maintainer console organized
 around operator tasks. Its overview shows what waits for a decision, the active
 run with per-step progress, source health and recent runs. A review queue
 collects schedule images, suspected cancellations and failed post extractions;
-the schedule page curates entries with durable locks; runs and workflows start
-syncs or save step lists on a server-side timer; sources run recent or
-historical fetch windows and YouTube push; content covers posts, the featured
-video and profile media; and models & detection holds the extraction stages,
+the schedule page curates entries with durable locks; runs keeps the run
+history and starts one-off step runs; sources hold each source's server-side
+timer and Run now, recent or historical fetch windows and YouTube push;
+content covers posts, the featured video and profile media; and models & detection holds the extraction stages,
 one ordered model priority queue and a provider catalog in the style of desktop
 LLM clients (API host and key, fetched model list, capability tags). The public calendar labels
 automatic extraction and manual confirmation so visitors can distinguish their

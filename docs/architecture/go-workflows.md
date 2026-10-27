@@ -5,6 +5,9 @@ X/YouTube/media adapters, asynchronous submission, workflow CRUD, cancellation,
 retry and opt-in API timers. See
 [Go source workflows and media downloads](go-source-workflows.md) for current
 enablement, schema version 2 and validation. Production remains TypeScript.
+Saved workflows, their CRUD and their timers were later retired in favor of
+per-source timers
+([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)).
 
 ## Ownership and compatibility
 

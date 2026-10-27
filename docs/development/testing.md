@@ -82,7 +82,11 @@ Backend coverage, by package under `backend-go/internal/`:
   static caching, the admin session and origin guard, event mutations, and the
   operator console routes for workflows, jobs and source fetch windows.
 - `workflow` and `jobs`: single-flight reservation, leases, retry, recovery,
-  cancellation, timers, and the source, media and history steps.
+  cancellation, timers, and the source, media and history steps; each job
+  kind's steps and history label, and run listings that match each run's
+  detail.
+- `publicview`: the public projections over records whose operator-only
+  columns all carry a marker, which no projection may contain.
 - `source/x`, `source/youtube`, `source/history`, `mediadownload`: adapters
   against fake transports, covering budgets, pending work, account isolation,
   oversized and redirected responses, controlled error codes and resumed pages.

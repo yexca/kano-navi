@@ -3,6 +3,9 @@ package jobs
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"os"
 	"slices"
 
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
@@ -34,6 +37,16 @@ func NormalizeSteps(values []string) []string {
 type QueueManager struct {
 	Store *sqlite.Store
 	Queue *workflow.Queue
+	// Log receives problems that do not fail the call; nil is standard error.
+	Log io.Writer
+}
+
+func (m *QueueManager) logf(format string, args ...any) {
+	out := m.Log
+	if out == nil {
+		out = os.Stderr
+	}
+	fmt.Fprintf(out, "kano-go: "+format+"\n", args...)
 }
 
 func reason(value string) *string { return &value }
@@ -104,7 +117,11 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 	if err != nil {
 		return StartResult{}, err
 	}
-	_ = m.Store.LabelSyncRun(ctx, run.ID, source, triggeredBy)
+	// The run is already queued, so a missing label only changes how its
+	// history reads; the operator still gets the accepted job.
+	if labelErr := m.Store.LabelSyncRun(ctx, run.ID, source, triggeredBy); labelErr != nil {
+		m.logf("run %s history label not saved: %v", run.ID, labelErr)
+	}
 	job, err := m.Get(ctx, run.ID)
 	if err != nil {
 		return StartResult{}, err
@@ -163,7 +180,11 @@ func (m *QueueManager) Get(ctx context.Context, id string) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	return m.job(ctx, run)
+	history, err := m.Store.SyncRunForJob(ctx, run.ID)
+	if err != nil {
+		return nil, err
+	}
+	return toJob(run, history), nil
 }
 
 func (m *QueueManager) List(ctx context.Context, limit int) ([]Job, error) {
@@ -180,19 +201,7 @@ func (m *QueueManager) List(ctx context.Context, limit int) ([]Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Job, 0, len(page.Runs))
-	for _, header := range page.Runs {
-		run, err := m.Store.GetWorkflowRun(ctx, header.ID)
-		if err != nil {
-			return nil, err
-		}
-		job, err := m.job(ctx, run)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *job)
-	}
-	return out, nil
+	return m.jobs(ctx, page.Runs)
 }
 
 // Page lists jobs newest first and reports the total number of runs.
@@ -204,19 +213,37 @@ func (m *QueueManager) Page(ctx context.Context, page, pageSize int) ([]Job, int
 	if err != nil {
 		return nil, 0, err
 	}
-	out := make([]Job, 0, len(listed.Runs))
-	for _, header := range listed.Runs {
-		run, err := m.Store.GetWorkflowRun(ctx, header.ID)
-		if err != nil {
-			return nil, 0, err
-		}
-		job, err := m.job(ctx, run)
-		if err != nil {
-			return nil, 0, err
-		}
-		out = append(out, *job)
+	out, err := m.jobs(ctx, listed.Runs)
+	if err != nil {
+		return nil, 0, err
 	}
 	return out, listed.Total, nil
+}
+
+// jobs presents a listed page of runs with a fixed number of queries,
+// however long the page is.
+func (m *QueueManager) jobs(ctx context.Context, headers []sqlite.WorkflowRun) ([]Job, error) {
+	ids := make([]string, len(headers))
+	for i, header := range headers {
+		ids[i] = header.ID
+	}
+	runs, err := m.Store.WorkflowRunSummaries(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	histories, err := m.Store.SyncRunsForJobs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Job, 0, len(ids))
+	for _, id := range ids {
+		run, found := runs[id]
+		if !found {
+			return nil, sqlite.ErrWorkflowNotFound
+		}
+		out = append(out, *toJob(run, histories[id]))
+	}
+	return out, nil
 }
 
 // Cancel requests cancellation of a queued or running job.
@@ -259,11 +286,9 @@ func (m *QueueManager) Active(ctx context.Context) (*Job, error) {
 	return nil, nil
 }
 
-func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun) (*Job, error) {
-	history, err := m.Store.SyncRunForJob(ctx, run.ID)
-	if err != nil {
-		return nil, err
-	}
+// toJob presents a run and its newest history row, which may be nil. It reads
+// no step attempts, so a summary and a full run present alike.
+func toJob(run *sqlite.WorkflowRun, history *sqlite.JobRun) *Job {
 	job := &Job{
 		ID: run.ID, Kind: KindWorkflow, CreatedAt: run.CreatedAt, StartedAt: run.StartedAt, FinishedAt: run.FinishedAt,
 		TriggeredBy: "admin", Steps: []string{}, Progress: map[string]string{},
@@ -347,7 +372,7 @@ func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun) (*Job, 
 		}
 		job.Error = &code
 	}
-	return job, nil
+	return job
 }
 
 func stepProgress(step sqlite.WorkflowStep, counts map[string]any, terminalFailure bool) string {
