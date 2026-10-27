@@ -22,7 +22,7 @@ func TestYoutubeWritesPreserveLocksTombstonesAndCursorOnRollback(t *testing.T) {
 	if err = s.WriteYoutubeRecent(ctx, channel, result); err != nil {
 		t.Fatal(err)
 	}
-	testutil.Exec(t, p, `UPDATE events SET title='manual',manual_locked=1,provenance='manual',deleted_at='2026-01-01T01:00:00Z',cancellation_status='manual_confirmed',cancellation_reason='operator' WHERE id='youtube-AAAAAAAAAAA'`)
+	testutil.Exec(t, p, `UPDATE events SET title='manual',time_precision='unknown',manual_locked=1,provenance='manual',deleted_at='2026-01-01T01:00:00Z',cancellation_status='manual_confirmed',cancellation_reason='operator' WHERE id='youtube-AAAAAAAAAAA'`)
 	result.Videos[0].Title = "changed automatically"
 	result.Videos[0].ScheduledAt = "2026-01-04T00:00:00Z"
 	if err = s.WriteYoutubeRecent(ctx, channel, result); err != nil {
@@ -31,11 +31,12 @@ func TestYoutubeWritesPreserveLocksTombstonesAndCursorOnRollback(t *testing.T) {
 	db, _ := sql.Open("sqlite", p)
 	defer db.Close()
 	var title, date, deleted, cancel string
-	if err = db.QueryRow(`SELECT title,starts_on,deleted_at,cancellation_status FROM events`).Scan(&title, &date, &deleted, &cancel); err != nil {
+	var precision string
+	if err = db.QueryRow(`SELECT title,starts_on,deleted_at,cancellation_status,time_precision FROM events`).Scan(&title, &date, &deleted, &cancel, &precision); err != nil {
 		t.Fatal(err)
 	}
-	if title != "manual" || date != "2026-01-03" || deleted == "" || cancel != "manual_confirmed" {
-		t.Fatalf("manual fields changed %s %s %s %s", title, date, deleted, cancel)
+	if title != "manual" || date != "2026-01-03" || deleted == "" || cancel != "manual_confirmed" || precision != "unknown" {
+		t.Fatalf("manual fields changed %s %s %s %s %s", title, date, deleted, cancel, precision)
 	}
 	var links, evidence int
 	_ = db.QueryRow(`SELECT COUNT(*) FROM media_links`).Scan(&links)
@@ -73,6 +74,37 @@ func TestYoutubeWritesPreserveLocksTombstonesAndCursorOnRollback(t *testing.T) {
 	after, _ := s.GetDashboardRevision(ctx)
 	if after != revision {
 		t.Fatal("rolled back revision changed")
+	}
+}
+
+func TestYoutubeSyncRepairsUnknownEventTimePrecision(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	const channel = "UCAAAAAAAAAAAAAAAAAAAAAA"
+	video := ytsource.Video{
+		ID: "AAAAAAAAAAA", Title: "reservation", PublishedAt: "2026-01-01T00:00:00Z",
+		ScheduledAt: "2026-01-02T17:00:00Z", URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA",
+		Kind: "UPCOMING LIVE", IsUpcoming: true,
+	}
+	result := ytsource.Result{Videos: []ytsource.Video{video}, NextCursor: video.ID, NextCursorTime: video.PublishedAt}
+	if err = s.WriteYoutubeRecent(ctx, channel, result); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Exec(t, p, `UPDATE events SET time_precision='unknown' WHERE id='youtube-AAAAAAAAAAA'`)
+	if err = s.WriteYoutubeRecent(ctx, channel, result); err != nil {
+		t.Fatal(err)
+	}
+	var precision string
+	if err = s.DB().QueryRow(`SELECT time_precision FROM events WHERE id='youtube-AAAAAAAAAAA'`).Scan(&precision); err != nil {
+		t.Fatal(err)
+	}
+	if precision != "exact" {
+		t.Fatalf("time precision=%q, want exact", precision)
 	}
 }
 

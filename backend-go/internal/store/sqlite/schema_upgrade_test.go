@@ -200,6 +200,63 @@ func TestStandaloneReplacesGeneratedEventText(t *testing.T) {
 	}
 }
 
+func TestStandaloneBackfillsYoutubeEventTimePrecision(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "snapshot.sqlite")
+	s, err := OpenStandalone(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const stamp = "2026-03-01T00:00:00.000Z"
+	for _, statement := range []string{
+		`INSERT INTO events(id,source,title,starts_on,starts_at,time_precision,provenance,manual_locked,created_at,updated_at) VALUES('youtube-stale','youtube','stale','2026-03-02','2026-03-02T03:03:00Z','unknown','automatic',0,'` + stamp + `','` + stamp + `')`,
+		`INSERT INTO events(id,source,title,starts_on,starts_at,time_precision,provenance,manual_locked,created_at,updated_at) VALUES('youtube-locked','youtube','locked','2026-03-02','2026-03-02T03:03:00Z','unknown','manual',1,'` + stamp + `','` + stamp + `')`,
+		`INSERT INTO events(id,source,title,starts_on,starts_at,time_precision,provenance,manual_locked,created_at,updated_at) VALUES('x-stale','x','x','2026-03-02','2026-03-02T03:03:00Z','unknown','automatic',0,'` + stamp + `','` + stamp + `')`,
+	} {
+		if _, err = s.db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, err := s.GetDashboardRevision(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s, err = OpenStandalone(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for id, want := range map[string]string{"youtube-stale": "exact", "youtube-locked": "unknown", "x-stale": "unknown"} {
+		var got string
+		if err = s.db.QueryRow(`SELECT time_precision FROM events WHERE id=?`, id).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Fatalf("%s precision=%q, want %q", id, got, want)
+		}
+	}
+	after, err := s.GetDashboardRevision(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after <= before {
+		t.Fatalf("precision backfill did not advance revision: %d -> %d", before, after)
+	}
+	s.Close()
+	s, err = OpenStandalone(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	again, err := s.GetDashboardRevision(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != after {
+		t.Fatalf("idempotent precision backfill changed revision: %d -> %d", after, again)
+	}
+}
+
 func TestStandaloneMergesStageRoutesIntoOneQueue(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "snapshot.sqlite")
 	s, err := OpenStandalone(p)

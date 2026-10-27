@@ -283,6 +283,9 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 	if err := backfillEventCodes(ctx, tx); err != nil {
 		return err
 	}
+	if err := backfillYoutubeEventTimePrecision(ctx, tx); err != nil {
+		return err
+	}
 	if added["assets.period_start"] {
 		if err := exec(`UPDATE assets SET period_start=week_start,period_end=date(week_start,'+6 days') WHERE kind='schedule'`); err != nil {
 			return err
@@ -374,6 +377,27 @@ func backfillEventCodes(ctx context.Context, tx *sql.Tx) error {
 		if err := bumpRevision(ctx, tx, workflowTime(time.Now())); err != nil {
 			return fmt.Errorf("%w: upgrade backfill failed", ErrSchema)
 		}
+	}
+	return nil
+}
+
+// backfillYoutubeEventTimePrecision repairs automatic YouTube rows written by
+// older releases that retained unknown precision after a timestamp was added.
+// A timestamp supplied by the YouTube reservation path is exact; manual rows,
+// tombstones and other sources keep their operator-owned precision.
+func backfillYoutubeEventTimePrecision(ctx context.Context, tx *sql.Tx) error {
+	result, err := tx.ExecContext(ctx, `UPDATE events SET time_precision='exact'
+WHERE source='youtube' AND starts_at IS NOT NULL AND TRIM(starts_at)<>''
+  AND time_precision='unknown' AND provenance='automatic' AND manual_locked=0 AND deleted_at IS NULL`)
+	if err != nil {
+		return fmt.Errorf("%w: upgrade backfill failed", ErrSchema)
+	}
+	changed, _ := result.RowsAffected()
+	if changed == 0 {
+		return nil
+	}
+	if err = bumpRevision(ctx, tx, workflowTime(time.Now())); err != nil {
+		return fmt.Errorf("%w: upgrade backfill failed", ErrSchema)
 	}
 	return nil
 }
