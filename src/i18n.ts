@@ -95,6 +95,7 @@ const messages = {
     "feed.readMore": "展开全文",
     "feed.fullPost": "动态全文",
     "translation.machine": "AI 翻译",
+    "translation.machineShort": "AI",
     "translation.machineHint": "由 AI 模型自动翻译，可能有误。",
     "translation.manual": "人工翻译",
     "translation.platform.youtube": "YouTube 提供的翻译",
@@ -326,6 +327,7 @@ const messages = {
     "feed.readMore": "全文を表示",
     "feed.fullPost": "ポストの全文",
     "translation.machine": "AI 翻訳",
+    "translation.machineShort": "AI",
     "translation.machineHint":
       "AI モデルによる自動翻訳です。誤りを含む場合があります。",
     "translation.manual": "編集者による翻訳",
@@ -559,6 +561,7 @@ const messages = {
     "feed.readMore": "Read more",
     "feed.fullPost": "Full post",
     "translation.machine": "AI translation",
+    "translation.machineShort": "AI",
     "translation.machineHint":
       "Translated automatically by an AI model; it may contain mistakes.",
     "translation.manual": "Translated by the editor",

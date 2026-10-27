@@ -137,9 +137,10 @@ export function TranslatedText({
 }
 
 /**
- * A compact switch after a translated title: it names the translation (AI
- * translation, or Translated for an editor's or a platform's) and swaps in
- * the source wording. Its tooltip previews the source wording.
+ * A compact switch after a translated title: it names the translation (AI,
+ * or Translated for an editor's or a platform's) and swaps in the source
+ * wording. Its tooltip previews the source wording; screen readers hear the
+ * full origin.
  */
 export function TranslationToggle({
   state,
@@ -155,24 +156,23 @@ export function TranslationToggle({
   const label = shown
     ? t(
         shown.origin === "machine"
-          ? "translation.machine"
+          ? "translation.machineShort"
           : "translation.translated",
       )
     : t("translation.original")
+  const spoken = shown ? translationOriginLabel(shown, t) : label
   const action = shown
     ? t("translation.showOriginal")
     : t("translation.showTranslation")
   const hint = shown
-    ? `${translationOriginLabel(shown, t)} · ${t("translation.originalIs", {
-        text: original,
-      })}`
+    ? `${spoken} · ${t("translation.originalIs", { text: original })}`
     : action
   return (
     <button
       type="button"
       className={cn("translation-mark", !shown && "is-original")}
       title={hint}
-      aria-label={`${label}: ${action}`}
+      aria-label={`${spoken}: ${action}`}
       onClick={state.toggle}
     >
       <Languages aria-hidden="true" />

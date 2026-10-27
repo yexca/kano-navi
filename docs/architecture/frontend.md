@@ -90,9 +90,9 @@ chooses what a reader sees: English and Chinese readers get their locale's
 translation by default and Japanese readers always get the source. Block
 text such as a post uses `TranslatedText`, which labels the origin (AI,
 platform or editor) and offers a Show original button. A card title uses
-`TranslationToggle`, a compact switch that reads "AI translation" (or
-"Translated" for a platform's or editor's wording) and swaps in the source;
-its tooltip names the origin and holds the source. Video and schedule titles
+`TranslationToggle`, a compact switch that reads "AI" (or "Translated" for
+a platform's or editor's wording) and swaps in the source; its tooltip and
+accessible name spell out the origin, and the tooltip holds the source. Video and schedule titles
 go through `src/dashboard/components/translated-title.tsx`: `TranslatedTitle`
 for a card title (spotlight tickets, shelf tickets, cards and rows, archive
 rows, week-guide entries) and `TranslatedHeading`, with the full note, for
