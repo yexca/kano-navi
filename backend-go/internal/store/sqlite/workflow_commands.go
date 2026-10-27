@@ -178,9 +178,10 @@ func (s *Store) ClaimWorkflowRun(ctx context.Context, id, owner string, now time
 	if _, e = tx.ExecContext(ctx, `INSERT INTO workflow_leases VALUES('global',?,?,?,?,?)`, id, owner, workflowTime(now), workflowTime(lease.ExpiresAt), lease.Generation); e != nil {
 		return WorkflowLease{}, workflowSQLError(e)
 	}
-	// A source schedule plans its next run from the claim of a run its timer
-	// submitted. An operator's Run now leaves the plan alone.
-	if source, scheduled := SourceScheduleOf(workflowID); scheduled && trigger == "scheduler" {
+	// A source schedule plans its next run from the first claim of a run its
+	// timer submitted. An operator's Run now, a retry and a recovery after an
+	// expired lease (both count in recovery_count) leave the plan alone.
+	if source, scheduled := SourceScheduleOf(workflowID); scheduled && trigger == "scheduler" && generation == 0 {
 		if e = s.planSourceSchedule(ctx, tx, source, now); e != nil {
 			return WorkflowLease{}, e
 		}

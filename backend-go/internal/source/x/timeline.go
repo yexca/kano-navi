@@ -93,23 +93,46 @@ func parseTimelineStatuses(body []byte, account string) (TimelineStatuses, error
 // Gap is a stretch of an account's timeline that an incremental run could not
 // read within its cap: statuses newer than Floor that older pages still hold.
 // Cursor is the FxTwitter continuation where reading resumes; empty restarts
-// at the newest page. See docs/decisions/ADR-0002-count-based-source-sync.md.
+// at the newest page. Older is an earlier gap below Floor, read from its own
+// continuation once this one is. See
+// docs/decisions/ADR-0002-count-based-source-sync.md.
 type Gap struct {
 	Cursor string `json:"cursor,omitempty"`
 	Floor  string `json:"floor"`
+	Older  *Gap   `json:"older,omitempty"`
 }
 
 // ErrTimelineGap reports a gap the timeline ended before closing, which only
 // a date window through the API can still fill.
 const ErrTimelineGap ErrorCode = "x_timeline_gap"
 
-// withGap merges a newly opened gap into an earlier one: reading on from the
-// newer gap down to the older floor covers both.
+// maxGaps bounds the gaps an account keeps.
+const maxGaps = 4
+
+// withGap puts a newly opened gap ahead of the earlier ones, which keep their
+// continuations, so a burst that opens gap after gap does not undo what was
+// read of an older one. Earlier gaps not below the new floor are covered by
+// it. Past maxGaps the oldest ones merge into the last kept: reading on from
+// its continuation down to the oldest floor covers them all.
 func withGap(earlier *Gap, opened Gap) *Gap {
-	if earlier != nil && idAfter(opened.Floor, earlier.Floor) {
-		opened.Floor = earlier.Floor
+	for earlier != nil && !idAfter(opened.Floor, earlier.Floor) {
+		earlier = earlier.Older
 	}
-	return &opened
+	head := &opened
+	tail := head
+	for n := 1; earlier != nil; n++ {
+		if n == maxGaps {
+			for floor := earlier; floor != nil; floor = floor.Older {
+				tail.Floor = floor.Floor
+			}
+			break
+		}
+		next := *earlier
+		tail.Older = &next
+		tail, earlier = &next, earlier.Older
+	}
+	tail.Older = nil
+	return head
 }
 
 // discovery is what one run read from the timeline. posts holds the statuses
@@ -231,7 +254,6 @@ func (a *Adapter) discoverTimeline(ctx context.Context, account string, opts Opt
 	if gap == nil {
 		return found, nil
 	}
-	above := func(id string) bool { return idAfter(id, gap.Floor) }
 	cursor, read = gap.Cursor, 0
 	restarted := false
 	for read < pages && !full() {
@@ -244,29 +266,47 @@ func (a *Adapter) discoverTimeline(ctx context.Context, account string, opts Opt
 			// the newest page, now or in the next run.
 			if cursor != "" && !restarted {
 				restarted, cursor = true, ""
-				found.gap = &Gap{Floor: gap.Floor}
+				gap = &Gap{Floor: gap.Floor, Older: gap.Older}
+				found.gap = gap
 				continue
 			}
 			found.notes = append(found.notes, "timeline gap: "+safeCode(err))
 			return found, nil
 		}
-		rest := take(page.IDs, above)
+		// The newest page can lead with a pinned post out of order, so the
+		// floor is reached only by a status that no status above it follows.
+		last := -1
+		inGap := []string{}
+		for i, id := range page.IDs {
+			if idAfter(id, gap.Floor) {
+				last = i
+				inGap = append(inGap, id)
+			}
+		}
+		rest := take(inGap, all)
 		switch {
-		case len(rest) > 0 && !above(rest[0]):
-			// The floor is reached: the gap is read.
-			found.gap = nil
-			return found, nil
 		case len(rest) > 0:
 			// The cap ends the run inside this page, so the next one reads it again.
-			found.gap = &Gap{Cursor: cursor, Floor: gap.Floor}
+			found.gap = &Gap{Cursor: cursor, Floor: gap.Floor, Older: gap.Older}
 			return found, nil
+		case last < len(page.IDs)-1:
+			// The floor is reached: the gap is read, and an older one goes on
+			// from its own continuation.
+			if gap = gap.Older; gap == nil {
+				found.gap = nil
+				return found, nil
+			}
+			found.gap, cursor, restarted = gap, gap.Cursor, false
+			continue
 		case page.Next == "" || page.Next == cursor:
+			// Older gaps lie further back still.
 			found.gap = nil
 			found.notes = append(found.notes, string(ErrTimelineGap)+"; the timeline ends before the stored cursor")
 			return found, nil
 		}
 		cursor = page.Next
-		found.gap = &Gap{Cursor: cursor, Floor: gap.Floor}
+		gap = &Gap{Cursor: cursor, Floor: gap.Floor, Older: gap.Older}
+		found.gap = gap
 	}
 	return found, nil
 }

@@ -14,7 +14,8 @@
 - Source timers no longer run on a fixed period. Each planned run moves by
   a random offset of up to ±10% of its interval, kept within the interval
   bounds; Bilibili only runs later (up to +10%), never sooner than
-  `BILIBILI_MIN_INTERVAL_MINUTES`.
+  `BILIBILI_MIN_INTERVAL_MINUTES`. Retrying a timed run, or recovering it
+  after an expired lease, keeps the timer's planned next run.
 - **Upgrade:** saved workflows and their timers are removed; enable the
   source timers on the Sources page. Nothing is migrated. Older runs of
   saved workflows stay in the run history as retired workflows, and the

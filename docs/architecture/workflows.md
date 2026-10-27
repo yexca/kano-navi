@@ -132,8 +132,10 @@ playlist at one quota unit per 50 uploads. Full syncs (console, MCP,
 
 Enabling a schedule or changing its interval plans the next run one interval
 later, never immediately; a sync change alone keeps the plan. Claiming a run
-the timer submitted plans the next one an interval after the claim; Run now
-does not move it.
+the timer submitted plans the next one an interval after the claim. Only the
+first claim plans: claiming it again after a retry or after recovery from an
+expired lease (both counted in `recovery_count`) keeps the plan, and Run now
+does not move it either.
 
 Each plan adds a random offset of whole seconds, uniform in ±10% of the
 interval (a 30-minute X timer runs 27–33 minutes apart), so timed reads do

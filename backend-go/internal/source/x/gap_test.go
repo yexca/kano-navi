@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -93,9 +94,63 @@ func TestCapCountsOnlyUnstoredStatusesAndRereadsAPartlyTakenPage(t *testing.T) {
 func TestGapsMergeRestartStaleCursorsAndReportATimelineEnd(t *testing.T) {
 	at := func(h int) string { return statusAt(timelineNow.Add(-time.Duration(h) * time.Hour)) }
 	t.Run("merge", func(t *testing.T) {
+		// The earlier gap keeps its continuation behind the new one.
 		got := withGap(&Gap{Cursor: "old", Floor: at(100)}, Gap{Cursor: "new", Floor: at(10)})
-		if got.Cursor != "new" || got.Floor != at(100) {
-			t.Fatalf("gap=%v", got)
+		if got.Cursor != "new" || got.Floor != at(10) || got.Older == nil || *got.Older != (Gap{Cursor: "old", Floor: at(100)}) {
+			t.Fatalf("gap=%+v", got)
+		}
+		// A gap at or above the new floor is covered by the new one.
+		got = withGap(&Gap{Cursor: "covered", Floor: at(5), Older: &Gap{Cursor: "old", Floor: at(100)}}, Gap{Cursor: "new", Floor: at(10)})
+		if got.Older == nil || got.Older.Cursor != "old" || got.Older.Older != nil {
+			t.Fatalf("gap=%+v", got)
+		}
+		// Past maxGaps the oldest merge into the last kept one.
+		var chain *Gap
+		for h := 100; h >= 20; h -= 20 {
+			chain = withGap(chain, Gap{Cursor: "c" + strconv.Itoa(h), Floor: at(h)})
+		}
+		n, last := 0, chain
+		for g := chain; g != nil; g = g.Older {
+			n, last = n+1, g
+		}
+		if n != maxGaps || chain.Cursor != "c20" || last.Cursor != "c80" || last.Floor != at(100) {
+			t.Fatalf("gaps=%d newest=%+v oldest=%+v", n, chain, last)
+		}
+	})
+	t.Run("older continuation", func(t *testing.T) {
+		s := gapTimeline(at)
+		a := s.adapter(Options{BootstrapDays: 7, DiscoveryLimit: 50})
+		known := map[string]bool{at(1): true, at(4): true, at(5): true, at(6): true, at(100): true}
+		gap := &Gap{Cursor: "page-2", Floor: at(4), Older: &Gap{Cursor: "page-4", Floor: at(100)}}
+		result, err := a.FetchRecent(context.Background(), "kano", Options{BootstrapDays: 7, DiscoveryLimit: 50, CursorID: at(1), KnownIDs: known, Gap: gap})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The newer gap ends on page 2; the older goes on from page 4, so
+		// page 3, read before, is not read again.
+		if strings.Join(s.cursors, ",") != ",page-2,page-4" || result.Gap != nil || !slices.Contains(result.PendingIDs, at(3)) {
+			t.Fatalf("cursors=%q gap=%+v queue=%v", s.cursors, result.Gap, result.PendingIDs)
+		}
+	})
+	t.Run("pinned post", func(t *testing.T) {
+		// The newest page leads with an old pinned post below the floor.
+		s := gapTimeline(at)
+		s.bodies[""] = timelineBody("page-2", at(200)+"@kano", at(1)+"@kano", at(2)+"@kano")
+		a := s.adapter(Options{BootstrapDays: 7, DiscoveryLimit: 50})
+		known := map[string]bool{at(1): true, at(100): true, at(200): true}
+		result, err := a.FetchRecent(context.Background(), "kano", Options{BootstrapDays: 7, DiscoveryLimit: 50, CursorID: at(1), KnownIDs: known, Gap: &Gap{Floor: at(100)}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The gap is read through page 3 to the floor on page 4, within its
+		// budget of three pages, instead of closing on the pinned post.
+		for _, id := range []string{at(3), at(4), at(5), at(6)} {
+			if !slices.Contains(result.PendingIDs, id) {
+				t.Fatalf("missing %s: cursors=%q gap=%+v queue=%v", id, s.cursors, result.Gap, result.PendingIDs)
+			}
+		}
+		if strings.Join(s.cursors, ",") != ",,page-2,page-3" || result.Gap == nil || result.Gap.Cursor != "page-4" {
+			t.Fatalf("cursors=%q gap=%+v", s.cursors, result.Gap)
 		}
 	})
 	t.Run("stale cursor", func(t *testing.T) {

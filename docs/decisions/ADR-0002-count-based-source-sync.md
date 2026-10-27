@@ -58,12 +58,15 @@ Credentials no longer turn a scheduled run into a date search:
 **Caps leave no gaps.** When an X account already has a cursor and the
 incremental head cannot reach a stored status within the cap, page budget
 or page failures, the run records a continuation in
-`sync_state.metadata_json.timelineGap` as `{cursor, floor}`. `floor` is the
+`sync_state.metadata_json.timelineGap` as `{cursor, floor, older}`. `floor` is the
 cursor the run started from, and `cursor` is the FxTwitter continuation
 (empty restarts at the newest page). Later runs read the gap after the
-head, within the same cap, until a status at or below `floor` appears.
-Two gaps merge by keeping the older floor. A stale continuation restarts at
-the newest page. A timeline that ends before reaching the floor closes the
+head, within the same cap, until a status at or below `floor` appears that
+no status above `floor` follows on the page (an old pinned post can lead the
+newest page). A newer gap is read first and keeps the earlier one, with its
+continuation, as `older`, so a burst of capped runs does not undo what was
+read of it; past four gaps the oldest merge by keeping the older floor. A
+stale continuation restarts at the newest page. A timeline that ends before reaching the floor closes the
 gap with `x_timeline_gap`, so the operator knows to backfill with a range
 window. The bootstrap age limit (`X_BOOTSTRAP_DAYS`) applies only while an
 account has no cursor.

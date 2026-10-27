@@ -20,13 +20,19 @@ account and run. A failed later page keeps the newer pages already read.
 
 A run that stops short of the stored cursor, because of the cap, the page
 budget, a failed later page or a profile fallback, records the unread stretch
-in `sync_state.metadata_json.timelineGap` as `{cursor, floor}`: the FxTwitter
+in `sync_state.metadata_json.timelineGap` as `{cursor, floor, older}`: the FxTwitter
 continuation (empty for the newest page) and the cursor the run started from.
 Later runs read the newest pages first and, when those reach a stored post,
 continue the gap with a page budget of their own until a status at or below
-`floor` appears. A second gap merges into the first by keeping the older
-floor; a failed continuation restarts at the newest page. A timeline that ends
-before the floor closes the gap and reports `x_timeline_gap`, so an operator
+`floor` appears with no status above `floor` after it on the page, so an old
+pinned post leading the newest page does not close the gap. A second gap is
+read first and keeps the earlier one, with its own continuation, as `older`;
+once the newer gap reaches its floor, reading goes on from where the older one
+stopped. An account keeps at most four gaps; past that the oldest merge into
+the last kept one, which then reads on to the oldest floor. A failed
+continuation restarts at the newest page. A timeline that ends
+before the floor closes the gap and every older one and reports
+`x_timeline_gap`, so an operator
 can fill it with a date window through the API. The step result counts
 accounts with an open gap as `timelineGaps`
 ([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)).

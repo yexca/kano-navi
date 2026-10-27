@@ -304,3 +304,54 @@ func TestRunNowLeavesTheSchedulePlanAlone(t *testing.T) {
 		t.Fatalf("run now moved the plan: %+v %+v", got, got.LastRun)
 	}
 }
+
+func TestRetriedOrRecoveredTimedRunKeepsTheSchedulePlan(t *testing.T) {
+	s := openScheduleStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
+	x := scheduleOf(t, s, "x", 180)
+	x.Enabled = true
+	if _, err := s.SaveSourceSchedule(ctx, x, 180, now); err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.CreateWorkflowRun(ctx, WorkflowDefinition{ID: SourceScheduleWorkflow("x"), Steps: []string{"x"}}, "scheduler", "", map[string]bool{"x": true}, now.Add(31*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ClaimWorkflowRun(ctx, run.ID, "test", now.Add(31*time.Minute), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	const planned = "2026-03-02T04:01:00.000Z"
+	if got := scheduleOf(t, s, "x", 180); *got.NextRunAt != planned {
+		t.Fatalf("claimed=%v", *got.NextRunAt)
+	}
+	// The lease expires and the run is recovered and claimed again.
+	if n, err := s.RecoverWorkflowRuns(ctx, now.Add(40*time.Minute)); err != nil || n != 1 {
+		t.Fatalf("recovered=%d %v", n, err)
+	}
+	if _, err = s.ClaimWorkflowRun(ctx, run.ID, "test", now.Add(41*time.Minute), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if got := scheduleOf(t, s, "x", 180); *got.NextRunAt != planned {
+		t.Fatalf("recovery moved the plan to %v", *got.NextRunAt)
+	}
+	// It fails with a retryable step and the operator retries it later.
+	for _, stmt := range []string{
+		`UPDATE workflow_run_steps SET status='failed',retryable=1,error_code='timeout' WHERE run_id=?`,
+		`UPDATE workflow_runs SET status='failed',error_code='timeout' WHERE id=?`,
+		`DELETE FROM workflow_leases WHERE run_id=?`,
+	} {
+		if _, err = s.db.Exec(stmt, run.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = s.RetryWorkflowRun(ctx, run.ID, now.Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ClaimWorkflowRun(ctx, run.ID, "test", now.Add(2*time.Hour), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if got := scheduleOf(t, s, "x", 180); *got.NextRunAt != planned {
+		t.Fatalf("retry moved the plan to %v", *got.NextRunAt)
+	}
+}
