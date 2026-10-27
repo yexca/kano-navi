@@ -101,7 +101,7 @@ source changes require `docker compose -f docker-compose.dev.yml restart`,
 which rebuilds the binary. The existing `./data`
 directory persists SQLite and media. A local `.env` is optional and is read
 by the server when present; the Compose file sets development mode and disables
-workflow timers.
+the source timers.
 
 ```bash
 docker compose -f docker-compose.dev.yml logs -f

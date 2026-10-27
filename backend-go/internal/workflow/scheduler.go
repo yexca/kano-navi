@@ -20,8 +20,7 @@ var SourceChains = map[string][]string{
 	"bilibili": {"bilibili", "media", "translate"},
 }
 
-// Scheduler starts timed saved workflows and due source schedules through
-// the single-flight queue.
+// Scheduler starts due source schedules through the single-flight queue.
 type Scheduler struct {
 	Store    *sqlite.Store
 	Executor *Executor
@@ -56,8 +55,8 @@ func (s *Scheduler) Start() {
 		for {
 			select {
 			case <-t.C:
-				// A workflow or source stays due until it runs, so a failed
-				// lookup or submission is retried on the next tick.
+				// A source stays due until it runs, so a failed lookup or
+				// submission is retried on the next tick.
 				_, _ = s.Tick(ctx)
 			case <-ctx.Done():
 				return
@@ -80,9 +79,9 @@ func (s *Scheduler) Status() map[string]any {
 	return map[string]any{"running": s.cancel != nil, "enabled": s.Enabled, "tickSeconds": int(interval / time.Second)}
 }
 
-// Tick submits the due saved workflow or source schedule with the earliest
-// next run, so a frequent source cannot starve another. A busy queue leaves
-// it due for the next tick.
+// Tick submits the due source schedule with the earliest next run, so a
+// frequent source cannot starve another. A busy queue leaves it due for the
+// next tick.
 func (s *Scheduler) Tick(ctx context.Context) (*Run, error) {
 	if !s.Enabled || s.Store == nil || (s.Executor == nil && s.Queue == nil) {
 		return nil, nil
@@ -91,40 +90,11 @@ func (s *Scheduler) Tick(ctx context.Context) (*Run, error) {
 	if s.Now != nil {
 		now = s.Now()
 	}
-	due, e := s.Store.ListDueWorkflows(ctx, now)
-	if e != nil {
-		return nil, e
-	}
 	source, e := s.Store.DueSourceSchedule(ctx, now, s.SkipSources, s.BilibiliFloor)
-	if e != nil {
+	if e != nil || source == nil {
 		return nil, e
 	}
-	if source != nil && (len(due) == 0 || earlier(source.NextRunAt, due[0].NextRunAt)) {
-		return s.submitSource(ctx, *source)
-	}
-	if len(due) == 0 {
-		return nil, nil
-	}
-	w := due[0]
-	key := "scheduler:" + w.ID + ":" + now.UTC().Format("2006-01-02T15:04")
-	if s.Queue != nil {
-		return s.Queue.Submit(ctx, w.ID, TriggerScheduler, key, nil)
-	}
-	return s.Executor.Run(ctx, w.ID, TriggerScheduler, key)
-}
-
-// earlier reports whether planned run a comes strictly before b; on a tie
-// the saved workflow goes first.
-func earlier(a, b *string) bool {
-	if a == nil || b == nil {
-		return b == nil
-	}
-	x, ex := time.Parse(time.RFC3339Nano, *a)
-	y, ey := time.Parse(time.RFC3339Nano, *b)
-	if ex != nil || ey != nil {
-		return *a < *b
-	}
-	return x.Before(y)
+	return s.submitSource(ctx, *source)
 }
 
 // submitSource queues a source's fixed chain with its sync setting frozen on

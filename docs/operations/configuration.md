@@ -19,7 +19,7 @@
 | `SCHEDULE_KEYWORDS`             | `schedule,...`       | Comma-separated schedule candidate keywords                       |
 | `TRANSLATION_SCAN_LIMIT`        | `20`                 | Posts and titles the translate step sends to a model per run      |
 | `TRANSLATION_LOOKBACK_DAYS`     | `30`                 | Days of posts and videos the translate step covers unrequested    |
-| `WORKFLOW_SCHEDULER_ENABLED`    | `1`                  | Start source timers and timed workflows in the server process     |
+| `WORKFLOW_SCHEDULER_ENABLED`    | `1`                  | Start the source timers in the server process                     |
 | `MCP_ENABLED`                   | `1`                  | Expose the stateless `/mcp` endpoint                              |
 | `MCP_CONTROL_TOKEN`             | Empty                | Bearer token for MCP mutation tools                               |
 | `X_HANDLES`                     | `kano_2525,_Kanotic` | Comma-separated public X account names                            |
@@ -71,13 +71,14 @@ or logs. `OPENAI_API_KEY` is accepted only by the one-time migration command.
 
 Configure local values in the ignored .env or deployment environment. Changes
 to environment-only credentials require a server restart. Provider hosts,
-models, encrypted keys, routes, source accounts, and workflow source sync
-settings are operator settings managed through /admin. How much a run reads
-and the timer interval are independent. A saved workflow's incremental cap
-replaces `X_DISCOVERY_LIMIT` for its runs; full syncs (`kano-go sync`, the
-console's Sync everything, MCP) keep the variable for X and read 50 YouTube
-uploads at most. Saved workflows no longer turn `X_API_BEARER_TOKEN` or
-`YOUTUBE_API_KEY` into date searches
+models, encrypted keys, routes, source accounts, and each source schedule's
+sync setting are operator settings managed through /admin. How much a run
+reads and the timer interval are independent. A source schedule's
+incremental cap replaces `X_DISCOVERY_LIMIT` for every run that reads X with
+it (timer, Run now, YouTube push, one-off step run); full syncs
+(`kano-go sync`, the console's Sync everything, MCP) keep the variable for X
+and read 50 YouTube uploads at most. These runs never turn
+`X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY` into date searches
 ([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)).
 
 The backend (`kano-go`) reads `.env` from its working directory; variables
@@ -100,18 +101,21 @@ For example, generate a value locally with
 `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`
 and save it only in the ignored environment file or deployment secret store.
 
-## Workflow timers
+## Source timers
 
 `kano-go serve` starts the timer process unless
-`WORKFLOW_SCHEDULER_ENABLED=0`. Page requests and admin reads never start a
+`WORKFLOW_SCHEDULER_ENABLED=0`, which stops the source schedules and the
+live-status probe; the variable keeps its name so existing deployments keep
+working. Manual runs from /admin, including each source's Run now, still
+work. Page requests and admin reads never start a
 timer or a run. Each source's timer is an operator setting, not an
 environment variable: `/admin` → Sources turns it on or off and sets its
 interval and read mode, stored in the `source_schedules` table (X 30 minutes
 and YouTube 60 by default, 15 minutes through seven days; Bilibili 180 by
 default, never below `BILIBILI_MIN_INTERVAL_MINUTES`). `SKIP_X`,
-`SKIP_YOUTUBE` and `SKIP_BILIBILI` keep that source's timer from running. A
-saved workflow can keep a timer (15 minutes through seven days) only when it
-contains no source step. See
+`SKIP_YOUTUBE` and `SKIP_BILIBILI` keep that source's timer from running.
+Saved workflows and their timers are removed
+([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)). See
 [Workflows](../architecture/workflows.md#source-schedules).
 
 The YouTube live-status probe is an operator setting, not an environment
@@ -120,7 +124,7 @@ its interval (default 15 minutes, 5–360), stored in `app_settings` as
 `youtube_live_probe_enabled` and `youtube_live_probe_interval_minutes`. The
 interval paces streams on air and waiting rooms that stay closed past their
 start; around the start itself the probe checks every 3 minutes. It
-uses the workflow timer process, so `WORKFLOW_SCHEDULER_ENABLED=0` or
+uses the same timer process, so `WORKFLOW_SCHEDULER_ENABLED=0` or
 `SKIP_YOUTUBE=1` stops it. See
 [Workflows](../architecture/workflows.md#live-status-probe).
 

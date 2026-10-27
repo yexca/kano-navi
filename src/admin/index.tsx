@@ -36,6 +36,7 @@ import { ReviewView } from "@/admin/views/review"
 import { RunsView } from "@/admin/views/runs"
 import { ScheduleView } from "@/admin/views/schedule"
 import { SourcesView } from "@/admin/views/sources"
+import { runTitle } from "@/admin/views/run-parts"
 import { VideosView } from "@/admin/views/videos"
 import { cn } from "@/lib/utils"
 import "./admin.css"
@@ -179,7 +180,7 @@ function ActiveRun({
     <button type="button" className="adm-run-pill" onClick={onOpen}>
       <Spinner />
       <span>
-        {run.workflowName || t(`admin.run.kind.${run.kind}`)}
+        {runTitle(run, t)}
         {current ? ` · ${t(`admin.step.${current}`)}` : ""}
       </span>
       <small>
@@ -331,7 +332,7 @@ export function AdminApp() {
               />
               {scheduler?.running
                 ? t("admin.sidebar.schedulerOn", {
-                    count: overview?.workflows.scheduled ?? 0,
+                    count: overview?.timers.scheduled ?? 0,
                   })
                 : t("admin.sidebar.schedulerOff")}
             </p>

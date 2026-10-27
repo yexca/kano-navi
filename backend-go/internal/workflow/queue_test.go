@@ -66,6 +66,10 @@ func waitRun(t *testing.T, s *sqlite.Store, id string, statuses ...string) *Run 
 		}
 	}
 }
+
+// xRecent is a one-off run of the X step.
+var xRecent = sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: []string{"x"}}
+
 func TestQueueReturnsBeforeWorkSurvivesRequestAndAllowsNextRefresh(t *testing.T) {
 	p := testutil.NewSnapshot(t)
 	s, err := sqlite.OpenWorkflowCore(p, true)
@@ -73,29 +77,27 @@ func TestQueueReturnsBeforeWorkSurvivesRequestAndAllowsNextRefresh(t *testing.T)
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if err = s.EnsureXRecentWorkflow(context.Background()); err != nil {
-		t.Fatal(err)
-	}
 	step := &blockingStep{entered: make(chan StepInput, 2), release: make(chan struct{})}
 	tracked := &heartbeatStore{Store: s, renewed: make(chan struct{})}
 	tracked.clock.Store(time.Now().UnixMilli())
 	q := &Queue{Store: s, Executor: &Executor{Store: tracked, Steps: step, Clock: func() time.Time { return time.UnixMilli(tracked.clock.Load()) }, LeaseTTL: 300 * time.Millisecond, SyntheticSteps: map[string]bool{"x": true}}}
 	defer q.Close()
 	ctx, cancel := context.WithCancel(context.Background())
-	run, err := q.Submit(ctx, "x-recent", TriggerOperator, "", map[string]int{"x": 3})
+	sync := sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 20}
+	run, err := q.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: []string{"x"}, SourceSync: map[string]sqlite.SourceSync{"x": sync}}, TriggerOperator, map[string]int{"x": 3})
 	if err != nil || run.Status != "queued" {
 		t.Fatalf("run=%#v err=%v", run, err)
 	}
 	cancel()
 	select {
 	case in := <-step.entered:
-		if in.LookbackDays != 3 || in.Sync != (sqlite.SourceSync{Mode: sqlite.SyncIncremental, Max: sqlite.DefaultSyncMax}) {
+		if in.LookbackDays != 3 || in.Sync != sync {
 			t.Fatalf("window=%d sync=%+v", in.LookbackDays, in.Sync)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("work did not start")
 	}
-	if _, err = q.Submit(context.Background(), "x-recent", TriggerOperator, "", nil); !errors.Is(err, sqlite.ErrWorkflowBusy) {
+	if _, err = q.SubmitDefinition(context.Background(), xRecent, TriggerOperator, nil); !errors.Is(err, sqlite.ErrWorkflowBusy) {
 		t.Fatalf("concurrent submission err=%v", err)
 	}
 	// Advance a controlled clock past the original lease, one renewal at a
@@ -110,7 +112,7 @@ func TestQueueReturnsBeforeWorkSurvivesRequestAndAllowsNextRefresh(t *testing.T)
 	if finished.SourceLookbackDays["x"] != 3 || len(finished.Steps[0].Attempts) != 1 {
 		t.Fatalf("finished=%#v", finished)
 	}
-	next, err := q.Submit(context.Background(), "x-recent", TriggerOperator, "", map[string]int{"x": 7})
+	next, err := q.SubmitDefinition(context.Background(), xRecent, TriggerOperator, map[string]int{"x": 7})
 	if err != nil || next.ID == run.ID {
 		t.Fatalf("refresh was reused %#v %v", next, err)
 	}
@@ -123,11 +125,10 @@ func TestQueueCancelStopsInFlightWorkAndPersistsCancelled(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	_ = s.EnsureXRecentWorkflow(context.Background())
 	step := &blockingStep{entered: make(chan StepInput, 1), release: make(chan struct{})}
 	q := &Queue{Store: s, Executor: &Executor{Store: s, Steps: step}}
 	defer q.Close()
-	r, err := q.Submit(context.Background(), "x-recent", TriggerOperator, "", nil)
+	r, err := q.SubmitDefinition(context.Background(), xRecent, TriggerOperator, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

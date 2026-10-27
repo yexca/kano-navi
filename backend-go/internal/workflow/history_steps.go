@@ -25,7 +25,7 @@ type HistorySource struct {
 }
 
 // Available reports whether a source's official API can search past windows.
-// Saved workflows turn their lookback into a recent window only then.
+// Operator recent windows search dates only then.
 func (h *HistorySource) Available(source string) bool {
 	if h == nil || h.Fetcher == nil || h.Store == nil {
 		return false

@@ -17,7 +17,7 @@ These run `kano-go seed` and `kano-go sync`. In a container deployment use
 `docker compose run --rm kano seed` (or `sync`, `migrate-llm`), which runs the
 command against the mounted `./data`. Normal operation does not need them:
 the service seeds at startup, and synchronization is started from `/admin`,
-MCP or a workflow timer. A one-shot `sync` shares the service's single-flight
+MCP or a source timer. A one-shot `sync` shares the service's single-flight
 reservation and reports a busy queue while the service is synchronizing.
 
 Synchronization accesses the network and is therefore not part of the default
@@ -48,7 +48,7 @@ directory. Preserve SQLite and any WAL/SHM sidecars, media, and profile files
 together. Keep the environment-only LLM_SECRETS_KEY in an access-controlled
 secret backup so encrypted provider keys remain usable. Never commit backups.
 Restore into a stopped deployment and verify health and the public snapshot
-before enabling workflow timers. Avoid simultaneous Windows/Linux access to
+before enabling source timers. Avoid simultaneous Windows/Linux access to
 the same SQLite file.
 
 Use additive schema upgrades in

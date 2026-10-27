@@ -53,9 +53,10 @@ export interface Run {
   startedAt: string | null
   finishedAt: string | null
   triggeredBy: string
+  /** The retired saved workflow an older run belongs to; new runs have none. */
   workflowId: string | null
-  workflowName: string | null
-  /** The source whose timer submitted the run. */
+  /** The source whose chain the run is: its timer (triggeredBy
+   * "source-schedule") or the operator's Run now. */
   sourceSchedule: ScheduleSource | null
   steps: string[]
   progress: Record<string, StepProgress>
@@ -84,7 +85,8 @@ export interface Overview {
   activeRun: Run | null
   recentRuns: Run[]
   scheduler: { enabled: boolean; running: boolean; tickSeconds: number | null }
-  workflows: { total: number; scheduled: number; nextRunAt: string | null }
+  /** The enabled source schedules this process runs. */
+  timers: { scheduled: number; nextRunAt: string | null }
   sources: { x: SourceHealth; youtube: SourceHealth }
   review: {
     pendingImages: number
@@ -100,22 +102,10 @@ export interface Overview {
   }
 }
 
-export interface Workflow {
-  id: string
-  name: string
-  steps: string[]
-  scheduleEnabled: boolean
-  intervalMinutes: number
-  lastRunAt: string | null
-  lastJobId: string | null
-  lastStatus: string | null
-  nextRunAt: string | null
-}
-
-export interface WorkflowCatalog {
-  items: Workflow[]
+/** The steps a one-off step run can pick, in execution order. */
+export interface StepCatalog {
   steps: { id: string; group: "source" | "process" }[]
-  limits: { minIntervalMinutes: number; maxIntervalMinutes: number }
+  /** Steps disabled through SKIP_* in this process. */
   skippedSteps: string[]
 }
 

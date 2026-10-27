@@ -14,20 +14,17 @@ func fixture(t *testing.T) (*Store, string) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	s.Close()
-	now := workflowTime(time.Now())
-	testutil.Exec(t, p, `INSERT INTO workflows(id,name,steps_json,source_lookback_json,created_at,updated_at) VALUES ('fixture','Fixture','["x","schedule"]','{}',?,?)`, now, now)
-	s, e = OpenWorkflowCore(p, true)
-	if e != nil {
-		t.Fatal(e)
-	}
 	return s, p
 }
+
+// fixtureDefinition is an ad hoc step run; no saved definition is read.
+var fixtureDefinition = &WorkflowDefinition{ID: AdhocFetchWorkflow, Steps: []string{"x", "schedule"}}
+
 func TestWorkflowMigrationAndLeaseSingleFlight(t *testing.T) {
 	s, _ := fixture(t)
 	defer s.Close()
 	ctx := context.Background()
-	def, _ := s.GetWorkflow(ctx, "fixture")
+	def := fixtureDefinition
 	r, e := s.CreateWorkflowRun(ctx, *def, "operator", "key", map[string]bool{"x": true, "schedule": true}, time.Now())
 	if e != nil {
 		t.Fatal(e)
@@ -61,7 +58,7 @@ func TestWorkflowMigrationAndLeaseSingleFlight(t *testing.T) {
 func TestWorkflowRecoveryMarksExpiredRunningState(t *testing.T) {
 	s, p := fixture(t)
 	ctx := context.Background()
-	def, _ := s.GetWorkflow(ctx, "fixture")
+	def := fixtureDefinition
 	r, e := s.CreateWorkflowRun(ctx, *def, "operator", "", nil, time.Now())
 	if e != nil {
 		t.Fatal(e)

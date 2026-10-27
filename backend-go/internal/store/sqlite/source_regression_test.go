@@ -21,8 +21,7 @@ func TestExpiredSourceLeaseCannotCommitPostsOrRevision(t *testing.T) {
 	}
 	defer s.Close()
 	ctx := context.Background()
-	_ = s.EnsureXRecentWorkflow(ctx)
-	def, _ := s.GetWorkflow(ctx, "x-recent")
+	def := &WorkflowDefinition{ID: AdhocFetchWorkflow, Steps: []string{"x"}}
 	r, err := s.CreateWorkflowRun(ctx, *def, "operator", "", map[string]bool{"x": false}, time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -91,8 +90,8 @@ func TestWorkflowV1UpgradeRetainsRunsAttemptsAndFrozenInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	_ = s.EnsureXRecentWorkflow(ctx)
-	def, _ := s.GetWorkflow(ctx, "x-recent")
+	// An older run of a retired saved workflow keeps its ID.
+	def := &WorkflowDefinition{ID: "x-recent", Steps: []string{"x"}}
 	r, err := s.CreateWorkflowRun(ctx, *def, "operator", "fixture-key", map[string]bool{"x": true}, time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -120,15 +119,10 @@ func TestWorkflowV1UpgradeRetainsRunsAttemptsAndFrozenInputs(t *testing.T) {
 	if err != nil || got.Status != "succeeded" || len(got.Steps[0].Attempts) != 1 {
 		t.Fatalf("v1 read=%#v %v", got, err)
 	}
-	// Without the column a definition still reads; sync settings come from
-	// the source schedules, which read as their defaults without a table.
+	// Sync settings come from the source schedules, which read as their
+	// defaults without a table.
 	if old, err = OpenReadOnly(p); err != nil {
 		t.Fatal(err)
-	}
-	legacy, err := old.GetWorkflow(ctx, "x-recent")
-	if err != nil || legacy.Steps[0] != "x" {
-		old.Close()
-		t.Fatalf("legacy definition=%#v %v", legacy, err)
 	}
 	settings, err := old.SourceScheduleSync(ctx)
 	old.Close()
@@ -141,20 +135,19 @@ func TestWorkflowV1UpgradeRetainsRunsAttemptsAndFrozenInputs(t *testing.T) {
 	}
 	defer s.Close()
 	got, err = s.GetWorkflowRun(ctx, r.ID)
-	if err != nil || got.Status != "succeeded" || len(got.Steps[0].Attempts) != 1 {
+	if err != nil || got.Status != "succeeded" || got.WorkflowID != "x-recent" || len(got.Steps[0].Attempts) != 1 {
 		t.Fatalf("upgraded=%#v %v", got, err)
+	}
+	// The retired workflows table stays in the schema, with its columns.
+	var columns int
+	if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('workflows') WHERE name IN ('steps_json','schedule_enabled','source_sync_json')`).Scan(&columns); err != nil || columns != 3 {
+		t.Fatalf("workflows columns=%d %v", columns, err)
 	}
 	def.SourceSync = map[string]SourceSync{"x": {Mode: SyncCount, Count: 3}}
 	def.SourceLookbackDays = map[string]int{"x": 3}
 	newRun, err := s.CreateWorkflowRun(ctx, *def, "operator", "fresh", map[string]bool{"x": false}, time.Now())
 	if err != nil {
 		t.Fatal(err)
-	}
-	// Editing the definition leaves the frozen run inputs alone.
-	def.SourceSync = map[string]SourceSync{"x": {Mode: SyncIncremental, Max: 7}}
-	saved, err := s.SaveWorkflow(ctx, *def, false)
-	if err != nil || saved.SourceSync != nil {
-		t.Fatalf("saved=%#v %v", saved, err)
 	}
 	read, err := s.GetWorkflowRun(ctx, newRun.ID)
 	if err != nil || read.SourceSync["x"] != (SourceSync{Mode: SyncCount, Count: 3}) || read.SourceLookbackDays["x"] != 3 || read.Steps[0].Capability != "x_recent" {

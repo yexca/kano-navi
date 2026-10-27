@@ -22,9 +22,6 @@ func TestXRecentExecutorPersistsWorkflowAttempt(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if err = s.EnsureXRecentWorkflow(context.Background()); err != nil {
-		t.Fatal(err)
-	}
 	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
 		body := `status/111111111111`
 		if r.URL.Host == "api.vxtwitter.com" {
@@ -34,7 +31,7 @@ func TestXRecentExecutorPersistsWorkflowAttempt(t *testing.T) {
 	})
 	a := xsource.NewAdapter(xsource.NewClient(&http.Client{Transport: rt}), xsource.Options{Handles: []string{"kano"}, DiscoveryLimit: 1, MaxDetailRequests: 1, BootstrapDays: 7})
 	ex := &XRecentExecutor{Store: s, Adapter: a, Options: a.Options}
-	run, err := (&Executor{Store: s, Steps: ex, SyntheticSteps: map[string]bool{"x": false}}).Run(context.Background(), "x-recent", TriggerOperator, "test-x")
+	run, err := (&Executor{Store: s, Steps: ex, SyntheticSteps: map[string]bool{"x": false}}).Run(context.Background(), sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: []string{"x"}}, TriggerOperator, "test-x")
 	if err != nil {
 		t.Fatal(err)
 	}

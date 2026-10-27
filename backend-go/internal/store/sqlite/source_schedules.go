@@ -24,7 +24,8 @@ type SourceSchedule struct {
 	LastRun   *SourceScheduleRun `json:"lastRun"`
 }
 
-// SourceScheduleRun is the newest run a source schedule submitted.
+// SourceScheduleRun is the newest run of a source's chain, from its timer
+// or Run now.
 type SourceScheduleRun struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
@@ -33,14 +34,13 @@ type SourceScheduleRun struct {
 
 const (
 	// SourceScheduleMinMinutes and SourceScheduleMaxMinutes bound every
-	// source interval, as they bound workflow timers. Bilibili's lower bound
-	// is BILIBILI_MIN_INTERVAL_MINUTES instead.
+	// source interval. Bilibili's lower bound is BILIBILI_MIN_INTERVAL_MINUTES
+	// instead.
 	SourceScheduleMinMinutes = 15
 	SourceScheduleMaxMinutes = 7 * 24 * 60
-	// sourceSchedulePrefix names the ad hoc runs of source schedules.
+	// sourceSchedulePrefix names the ad hoc runs of a source's chain, from
+	// its timer or the operator's Run now.
 	sourceSchedulePrefix = "@source-"
-	// sourceSchedulesMigrated guards the one-time move of workflow timers.
-	sourceSchedulesMigrated = "source_schedules_migrated"
 )
 
 // ScheduleSources are the sources with a schedule, in catalog order.
@@ -269,8 +269,8 @@ func (s *Store) DueSourceSchedule(ctx context.Context, now time.Time, skip map[s
 	return nil, nil
 }
 
-// SourceScheduleSync is how each source schedule reads X and YouTube, which a
-// manual run of a saved workflow and a push run read with as well.
+// SourceScheduleSync is how each source schedule reads X and YouTube, which
+// every run with a source step reads with, except a full sync.
 func (s *Store) SourceScheduleSync(ctx context.Context) (map[string]SourceSync, error) {
 	schedules, err := s.SourceSchedules(ctx, SourceScheduleMinMinutes)
 	if err != nil {
@@ -307,103 +307,21 @@ func planSourceSchedule(ctx context.Context, tx *sql.Tx, source string, now time
 }
 
 // PrepareSourceSchedules runs at every start of the process that owns the
-// timers. floor is BILIBILI_MIN_INTERVAL_MINUTES. Once per database it moves
-// the timers of saved workflows that read a source to the source schedules:
-// each such source is enabled with the smallest interval among them (raised
-// to the floor) and the sourceSync of that workflow, then those workflow
-// timers are disabled. Workflows without a source step keep their timers.
-// On every start a Bilibili interval below a raised floor is raised to it.
+// timers. floor is BILIBILI_MIN_INTERVAL_MINUTES: a stored Bilibili interval
+// below a raised floor is raised to it. Saved workflows are retired without a
+// migration (ADR-0003), so nothing else is moved.
 func (s *Store) PrepareSourceSchedules(ctx context.Context, floor int, now time.Time) error {
 	tx, err := s.workflowTx(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	var migrated int
-	if tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM app_settings WHERE key=?`, sourceSchedulesMigrated).Scan(&migrated) != nil {
-		return ErrWorkflowStorage
-	}
-	if migrated == 0 {
-		if err = migrateWorkflowTimers(ctx, tx, floor, now); err != nil {
-			return err
-		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO app_settings(key,value,updated_at) VALUES(?,'1',?)`, sourceSchedulesMigrated, workflowTime(now)); err != nil {
-			return ErrWorkflowStorage
-		}
-	}
 	low, _ := SourceScheduleBounds("bilibili", floor)
 	if _, err = tx.ExecContext(ctx, `UPDATE source_schedules SET interval_minutes=?,updated_at=? WHERE source='bilibili' AND interval_minutes<?`, low, workflowTime(now), low); err != nil {
 		return ErrWorkflowStorage
 	}
 	if tx.Commit() != nil {
 		return ErrWorkflowStorage
-	}
-	return nil
-}
-
-func migrateWorkflowTimers(ctx context.Context, tx *sql.Tx, floor int, now time.Time) error {
-	// The retired source_sync_json is read here once, to carry it over.
-	rows, err := tx.QueryContext(ctx, `SELECT id,steps_json,interval_minutes,source_sync_json FROM workflows WHERE schedule_enabled=1 ORDER BY created_at,id`)
-	if err != nil {
-		return ErrWorkflowStorage
-	}
-	schedules := map[string]*SourceSchedule{}
-	moved := []string{}
-	for rows.Next() {
-		var id, steps, sync string
-		var interval int
-		if rows.Scan(&id, &steps, &interval, &sync) != nil {
-			rows.Close()
-			return ErrWorkflowStorage
-		}
-		var selected []string
-		if json.Unmarshal([]byte(steps), &selected) != nil {
-			continue
-		}
-		settings := readSourceSync(sync)
-		reads := false
-		for _, source := range ScheduleSources {
-			if !slices.Contains(selected, source) {
-				continue
-			}
-			reads = true
-			low, high := SourceScheduleBounds(source, floor)
-			minutes := min(max(interval, low), high)
-			if current := schedules[source]; current != nil && current.IntervalMinutes <= minutes {
-				continue
-			}
-			schedule := defaultSourceSchedule(source, floor)
-			schedule.Enabled = true
-			schedule.IntervalMinutes = minutes
-			if schedule.Sync != nil {
-				setting := settings[source]
-				schedule.Sync = &setting
-			}
-			schedules[source] = &schedule
-		}
-		if reads {
-			moved = append(moved, id)
-		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return ErrWorkflowStorage
-	}
-	for _, source := range ScheduleSources {
-		schedule := schedules[source]
-		if schedule == nil {
-			continue
-		}
-		next := workflowTime(now.Add(time.Duration(schedule.IntervalMinutes) * time.Minute))
-		if err = upsertSourceSchedule(ctx, tx, *schedule, &next, now); err != nil {
-			return err
-		}
-	}
-	for _, id := range moved {
-		if _, err = tx.ExecContext(ctx, `UPDATE workflows SET schedule_enabled=0,next_run_at=NULL,updated_at=? WHERE id=?`, workflowTime(now), id); err != nil {
-			return ErrWorkflowStorage
-		}
 	}
 	return nil
 }

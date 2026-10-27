@@ -80,7 +80,6 @@ func (SyntheticStepExecutor) Execute(_ context.Context, in StepInput) (AttemptRe
 }
 
 type Persistence interface {
-	GetWorkflow(context.Context, string) (*sqlite.WorkflowDefinition, error)
 	CreateWorkflowRun(context.Context, sqlite.WorkflowDefinition, string, string, map[string]bool, time.Time) (*sqlite.WorkflowRun, error)
 	ClaimWorkflowRun(context.Context, string, string, time.Time, time.Duration) (sqlite.WorkflowLease, error)
 	StartWorkflowStep(context.Context, sqlite.WorkflowLease, int64, time.Time) (int, error)
@@ -104,12 +103,6 @@ type Executor struct {
 	// one unavailable source must not stop the other source or post-processing.
 	TolerateFailure map[string]bool
 	initMu          sync.Mutex
-}
-
-// SourceSyncReader is an optional Persistence capability that supplies the
-// source schedules' sync settings to manual runs of saved workflows.
-type SourceSyncReader interface {
-	SourceScheduleSync(context.Context) (map[string]sqlite.SourceSync, error)
 }
 
 // ResultRecorder is an optional Persistence capability that keeps each step's
@@ -153,43 +146,20 @@ func (e *Executor) defaults() {
 		e.Clock = time.Now
 	}
 }
-func (e *Executor) Run(ctx context.Context, workflowID string, trigger TriggerSource, key string) (*Run, error) {
-	run, err := e.Prepare(ctx, workflowID, trigger, key, nil)
+
+// Run reserves and executes one definition in the calling goroutine.
+func (e *Executor) Run(ctx context.Context, definition sqlite.WorkflowDefinition, trigger TriggerSource, key string) (*Run, error) {
+	run, err := e.PrepareDefinition(ctx, definition, trigger, key, nil)
 	if err != nil || run.Status != "queued" {
 		return run, err
 	}
 	return e.ExecuteRun(ctx, run)
 }
 
-// Prepare reserves the durable single-flight slot before returning to HTTP.
-// Source parameters are frozen on the run so recovery never changes its window.
-func (e *Executor) Prepare(ctx context.Context, workflowID string, trigger TriggerSource, key string, lookback map[string]int) (*Run, error) {
-	e.defaults()
-	if e.Store == nil {
-		return nil, errors.New("workflow store is required")
-	}
-	def, err := e.Store.GetWorkflow(ctx, workflowID)
-	if err != nil {
-		return nil, err
-	}
-	// A saved workflow reads each source as that source's schedule does.
-	if reader, ok := e.Store.(SourceSyncReader); ok {
-		settings, err := reader.SourceScheduleSync(ctx)
-		if err != nil {
-			return nil, err
-		}
-		def.SourceSync = map[string]sqlite.SourceSync{}
-		for _, step := range def.Steps {
-			if setting, configured := settings[step]; configured {
-				def.SourceSync[step] = setting
-			}
-		}
-	}
-	return e.PrepareDefinition(ctx, *def, trigger, key, lookback)
-}
-
-// PrepareDefinition reserves a run for a definition that need not be saved,
-// such as an operator's full sync, scan or single-source fetch.
+// PrepareDefinition reserves the durable single-flight slot for a
+// definition before returning to HTTP, such as a source chain, an
+// operator's full sync, scan or single-source fetch. Source parameters are
+// frozen on the run so recovery never changes its window.
 func (e *Executor) PrepareDefinition(ctx context.Context, definition sqlite.WorkflowDefinition, trigger TriggerSource, key string, lookback map[string]int) (*Run, error) {
 	e.defaults()
 	if e.Store == nil {
@@ -221,7 +191,7 @@ func (e *Executor) PrepareDefinition(ctx context.Context, definition sqlite.Work
 
 // withReconcile appends duplicate reconciliation to a run whose steps write
 // events or videos, so every timed, manual, push or MCP run leaves merges
-// current without editing saved workflows.
+// current.
 func withReconcile(steps []string) []string {
 	writes := false
 	for _, step := range steps {

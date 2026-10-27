@@ -16,11 +16,6 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
-const (
-	workflowMinIntervalMinutes = 15
-	workflowMaxIntervalMinutes = 7 * 24 * 60
-)
-
 // workflowSteps is the step catalog in execution order.
 var workflowSteps = []map[string]string{
 	{"id": "x", "group": "source"},
@@ -57,8 +52,18 @@ func (a *api) getRun(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"run": run})
 }
 
+// stepCatalog lists the steps a one-off step run can pick, and those SKIP_*
+// disables in this process.
+func (a *api) stepCatalog(w http.ResponseWriter, _ *http.Request) {
+	skipped := a.SkippedSteps
+	if skipped == nil {
+		skipped = []string{}
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"steps": workflowSteps, "skippedSteps": skipped})
+}
+
 // startRun accepts exactly one kind of work: a full sync, the schedule scan,
-// a saved workflow or one source window.
+// translation, a one-off step run or one source window.
 func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 	body, err := httpx.Body(w, r)
 	if err != nil {
@@ -70,7 +75,11 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, httpx.Invalid("kind must be sync, scan, translate, workflow or fetch"))
 		return
 	}
-	allowed := map[string][]string{"sync": {"kind"}, "scan": {"kind"}, "translate": {"kind"}, "workflow": {"kind", "workflowId"}, "fetch": {"kind", "source", "window"}}
+	if _, saved := body["workflowId"]; saved {
+		httpx.WriteError(w, httpx.Invalid("saved workflows are removed; send the steps to run once, or use a source's Run now"))
+		return
+	}
+	allowed := map[string][]string{"sync": {"kind"}, "scan": {"kind"}, "translate": {"kind"}, "workflow": {"kind", "steps"}, "fetch": {"kind", "source", "window"}}
 	fields, known := allowed[kind]
 	if !known {
 		httpx.WriteError(w, httpx.Invalid("kind must be sync, scan, translate, workflow or fetch"))
@@ -91,10 +100,12 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 		jobKind = jobs.KindTranslate
 	case "workflow":
 		jobKind = jobs.KindWorkflow
-		if json.Unmarshal(body["workflowId"], &options.WorkflowID) != nil || strings.TrimSpace(options.WorkflowID) == "" {
-			httpx.WriteError(w, httpx.Invalid("workflowId is required"))
+		steps, stepsErr := catalogSteps(body["steps"])
+		if stepsErr != nil {
+			httpx.WriteError(w, stepsErr)
 			return
 		}
+		options.Steps = steps
 	case "fetch":
 		jobKind = jobs.KindWorkflow
 		var source string
@@ -126,20 +137,43 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := a.Runs.Start(r.Context(), jobKind, "admin", options)
 	if err != nil {
-		workflowError(w, err, "workflow_not_found")
+		workflowError(w, err, "run_not_found")
 		return
 	}
 	writeStart(w, result)
+}
+
+// catalogSteps reads a one-off step run's steps: distinct catalog IDs, run
+// in catalog order.
+func catalogSteps(raw json.RawMessage) ([]string, error) {
+	var values []string
+	if jsonNull(raw) || json.Unmarshal(raw, &values) != nil {
+		return nil, httpx.Invalid("steps must be an array of step ids")
+	}
+	distinct := map[string]bool{}
+	for _, value := range values {
+		distinct[strings.ToLower(strings.TrimSpace(value))] = true
+	}
+	names := make([]string, 0, len(distinct))
+	for name := range distinct {
+		names = append(names, name)
+	}
+	steps := jobs.NormalizeSteps(names)
+	if len(steps) != len(distinct) {
+		return nil, httpx.Invalid("steps contains an unsupported value")
+	}
+	if len(steps) == 0 {
+		return nil, httpx.Invalid("steps must not be empty")
+	}
+	return steps, nil
 }
 
 func writeStart(w http.ResponseWriter, result jobs.StartResult) {
 	switch {
 	case result.Accepted:
 		httpx.WriteJSON(w, http.StatusAccepted, map[string]any{"run": result.Job})
-	case result.Reason != nil && *result.Reason == jobs.ReasonWorkflowNotFound:
-		httpx.WriteCode(w, http.StatusNotFound, "workflow_not_found")
 	case result.Reason != nil && *result.Reason == jobs.ReasonNoSteps:
-		httpx.WriteError(w, httpx.Invalid("the workflow has no steps"))
+		httpx.WriteError(w, httpx.Invalid("the run has no steps"))
 	default:
 		httpx.WriteJSON(w, http.StatusConflict, map[string]any{"error": "busy", "run": result.Job})
 	}
@@ -172,151 +206,6 @@ func (a *api) retryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusAccepted, map[string]any{"run": run})
-}
-
-// --- workflows --------------------------------------------------------------
-
-func (a *api) listWorkflows(w http.ResponseWriter, r *http.Request) {
-	page, err := a.Store.ListWorkflows(r.Context(), 1, 100)
-	if err != nil {
-		workflowError(w, err, "workflow_not_found")
-		return
-	}
-	skipped := a.SkippedSteps
-	if skipped == nil {
-		skipped = []string{}
-	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"items":        page.Workflows,
-		"steps":        workflowSteps,
-		"limits":       map[string]int{"minIntervalMinutes": workflowMinIntervalMinutes, "maxIntervalMinutes": workflowMaxIntervalMinutes},
-		"skippedSteps": skipped,
-	})
-}
-
-func (a *api) createWorkflow(w http.ResponseWriter, r *http.Request) {
-	a.saveWorkflow(w, r, "")
-}
-
-func (a *api) updateWorkflow(w http.ResponseWriter, r *http.Request) {
-	a.saveWorkflow(w, r, r.PathValue("id"))
-}
-
-func (a *api) saveWorkflow(w http.ResponseWriter, r *http.Request, id string) {
-	create := id == ""
-	input := sqlite.WorkflowDefinition{IntervalMinutes: 60}
-	var existing *sqlite.WorkflowDefinition
-	if !create {
-		found, err := a.Store.GetWorkflow(r.Context(), id)
-		if err == nil && found == nil {
-			err = sqlite.ErrWorkflowNotFound
-		}
-		if err != nil {
-			workflowError(w, err, "workflow_not_found")
-			return
-		}
-		existing = found
-		input = *found
-	}
-	body, err := httpx.Body(w, r)
-	if err != nil {
-		httpx.WriteError(w, err)
-		return
-	}
-	if err = workflowInput(body, existing, &input); err != nil {
-		httpx.WriteError(w, err)
-		return
-	}
-	saved, err := a.Store.SaveWorkflow(r.Context(), input, create)
-	if errors.Is(err, sqlite.ErrWorkflowValidation) {
-		httpx.WriteError(w, httpx.Invalid("workflow is invalid"))
-		return
-	}
-	if err != nil {
-		workflowError(w, err, "workflow_not_found")
-		return
-	}
-	status := http.StatusOK
-	if create {
-		status = http.StatusCreated
-	}
-	httpx.WriteJSON(w, status, map[string]any{"workflow": saved})
-}
-
-func (a *api) deleteWorkflow(w http.ResponseWriter, r *http.Request) {
-	if err := a.Store.DeleteWorkflow(r.Context(), r.PathValue("id")); err != nil {
-		workflowError(w, err, "workflow_not_found")
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-var workflowFields = []string{"name", "steps", "scheduleEnabled", "intervalMinutes"}
-
-func workflowInput(body map[string]json.RawMessage, existing *sqlite.WorkflowDefinition, input *sqlite.WorkflowDefinition) error {
-	for key := range body {
-		if key == "sourceSync" {
-			return httpx.Invalid("sourceSync is set on each source schedule, not on a workflow")
-		}
-		if !slices.Contains(workflowFields, key) {
-			return httpx.Invalid("%s is not a workflow field", key)
-		}
-	}
-	if raw, ok := body["name"]; ok && !jsonNull(raw) {
-		var name string
-		if json.Unmarshal(raw, &name) != nil {
-			return httpx.Invalid("name must be a string")
-		}
-		input.Name = strings.TrimSpace(name)
-	}
-	if input.Name == "" {
-		return httpx.Invalid("name is required")
-	}
-	if len([]rune(input.Name)) > 80 {
-		return httpx.Invalid("name is too long")
-	}
-	if raw, ok := body["steps"]; ok && !jsonNull(raw) {
-		var values []string
-		if json.Unmarshal(raw, &values) != nil {
-			return httpx.Invalid("steps must be an array of step ids")
-		}
-		distinct := map[string]bool{}
-		for _, value := range values {
-			distinct[strings.ToLower(strings.TrimSpace(value))] = true
-		}
-		names := make([]string, 0, len(distinct))
-		for name := range distinct {
-			names = append(names, name)
-		}
-		steps := jobs.NormalizeSteps(names)
-		if len(steps) != len(distinct) {
-			return httpx.Invalid("steps contains an unsupported value")
-		}
-		input.Steps = steps
-	} else if existing == nil {
-		return httpx.Invalid("steps must be an array of step ids")
-	}
-	if len(input.Steps) == 0 {
-		return httpx.Invalid("steps must not be empty")
-	}
-	if raw, ok := body["scheduleEnabled"]; ok && !jsonNull(raw) {
-		if json.Unmarshal(raw, &input.ScheduleEnabled) != nil {
-			return httpx.Invalid("scheduleEnabled must be a boolean")
-		}
-	}
-	if raw, ok := body["intervalMinutes"]; ok && !jsonNull(raw) {
-		minutes, err := integer(raw, "intervalMinutes", workflowMinIntervalMinutes, workflowMaxIntervalMinutes)
-		if err != nil {
-			return err
-		}
-		input.IntervalMinutes = minutes
-	}
-	// Sources run on their own schedules (ADR-0003), so a workflow that
-	// reads one keeps no timer.
-	if sources := sourceStepsOf(input.Steps); input.ScheduleEnabled && len(sources) > 0 {
-		return timerRefusal(sources)
-	}
-	return nil
 }
 
 // sourceSync validates a source schedule's sync, {mode: "incremental", max}
@@ -521,32 +410,22 @@ func (a *api) overview(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
-	workflows := map[string]any{"total": 0, "scheduled": 0, "nextRunAt": nil}
-	if page, listErr := a.Store.ListWorkflows(ctx, 1, 100); listErr == nil {
+	// The timers are the source schedules (ADR-0003); those SKIP_* disables
+	// never run here.
+	timers := map[string]any{"scheduled": 0, "nextRunAt": nil}
+	if schedules, scheduleErr := a.Store.SourceSchedules(ctx, a.bilibiliFloor()); scheduleErr == nil {
 		scheduled := 0
 		var next *string
-		for _, workflow := range page.Workflows {
-			if !workflow.ScheduleEnabled {
+		for _, schedule := range schedules {
+			if !schedule.Enabled || a.skipped(schedule.Source) {
 				continue
 			}
 			scheduled++
-			if workflow.NextRunAt != nil && (next == nil || *workflow.NextRunAt < *next) {
-				next = workflow.NextRunAt
+			if schedule.NextRunAt != nil && (next == nil || *schedule.NextRunAt < *next) {
+				next = schedule.NextRunAt
 			}
 		}
-		// Enabled source schedules are timers as well.
-		if schedules, scheduleErr := a.Store.SourceSchedules(ctx, a.bilibiliFloor()); scheduleErr == nil {
-			for _, schedule := range schedules {
-				if !schedule.Enabled || a.skipped(schedule.Source) {
-					continue
-				}
-				scheduled++
-				if schedule.NextRunAt != nil && (next == nil || *schedule.NextRunAt < *next) {
-					next = schedule.NextRunAt
-				}
-			}
-		}
-		workflows = map[string]any{"total": page.Total, "scheduled": scheduled, "nextRunAt": next}
+		timers = map[string]any{"scheduled": scheduled, "nextRunAt": next}
 	}
 	var active *jobs.Job
 	recent := []jobs.Job{}
@@ -570,7 +449,7 @@ func (a *api) overview(w http.ResponseWriter, r *http.Request) {
 		"activeRun":  active,
 		"recentRuns": recent[:min(len(recent), 6)],
 		"scheduler":  scheduler,
-		"workflows":  workflows,
+		"timers":     timers,
 		"sources":    map[string]any{"x": source("x"), "youtube": youtube},
 		"review": map[string]int{
 			"pendingImages":          counts.PendingImages,

@@ -9,6 +9,7 @@ import {
   CalendarClock,
   Download,
   KeyRound,
+  Play,
   Radio,
   RadioTower,
   RotateCw,
@@ -197,7 +198,8 @@ const sameSync = (a: SourceSync | null, b: SourceSync | null) =>
   JSON.stringify(a) === JSON.stringify(b)
 
 /** A source's own timer: on or off, its interval and, for X and YouTube, how
- * much each run reads. */
+ * much each run reads. Run now submits the same chain once without moving
+ * the next timed run. */
 function SchedulePanel({
   schedule,
   facts,
@@ -208,7 +210,7 @@ function SchedulePanel({
   onChange: (schedule: SourceSchedule) => void
 }) {
   const { t, locale } = useAppSettings()
-  const { api, act, overview } = useAdmin()
+  const { api, act, start, overview } = useAdmin()
   const [minutes, setMinutes] = useState(schedule.intervalMinutes)
   const [sync, setSync] = useState(schedule.sync)
   const [busy, setBusy] = useState("")
@@ -243,6 +245,11 @@ function SchedulePanel({
   const limit = sync ? (sync.mode === "count" ? sync.count : sync.max) : 0
   const dirty =
     minutes !== schedule.intervalMinutes || !sameSync(sync, schedule.sync)
+  const runNow = async () => {
+    setBusy("run")
+    await start({ kind: "source", source })
+    setBusy("")
+  }
   const when = (value: string | null | undefined) =>
     value
       ? `${formatDateTime(value, locale)} · ${formatRelative(value, locale)}`
@@ -344,6 +351,18 @@ function SchedulePanel({
           </div>
         ) : null}
         <div className="adm-form-actions">
+          <Button
+            size="sm"
+            icon={Play}
+            busy={busy === "run"}
+            disabled={
+              schedule.skipped || busy !== "" || Boolean(overview?.activeRun)
+            }
+            onClick={runNow}
+            title={t("admin.timer.runNowHint")}
+          >
+            {t("admin.timer.runNow")}
+          </Button>
           <Button
             type="submit"
             size="sm"

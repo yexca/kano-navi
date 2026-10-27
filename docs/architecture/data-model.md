@@ -37,7 +37,7 @@ belong to the TypeScript initializer. See
 | `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)  |
 | `llm_route_targets`      | The ordered provider + model failover queue (`route = 'schedule'`) shared by every extraction stage    |
 | `llm_route_providers`    | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                |
-| `workflows`              | Saved step selections, per-source sync settings, timer settings, and last/next run metadata            |
+| `workflows`              | Retired saved workflows (ADR-0003): kept in the schema, created empty, never read or written           |
 | `translations`           | Manual, platform, and machine translations of post text and video titles per target locale             |
 | `translation_states`     | Per-post/video machine translation state: source hash and language, last attempt, operator request     |
 
@@ -51,18 +51,22 @@ atomic additive upgrades. Schema version 2 freezes a run's source windows in
 `source_lookback_json` and records real adapters in `adapter_capability` while
 preserving the v1 capability column and all prior attempts. `workflow_runs.source_sync_json` freezes how a run's source steps read
 ([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)); `{}` reads as
-each step's incremental default. `workflows.source_sync_json` held a saved
-workflow's setting before source schedules; it stays in the schema, is read
-once by the timer migration and is otherwise no longer read. The additive
+each step's incremental default. Saved workflows are retired
+([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)): the
+`workflows` table and its columns, including `source_sync_json` and
+`source_lookback_json`, stay in the schema and a fresh installation creates
+the table empty, but nothing reads or writes it. Runs keep their
+`workflow_id`; an older run whose ID named a saved workflow shows in the
+history with that ID as a retired workflow, without joining `workflows`.
+The additive
 `source_schedules` table holds each source's timer
 ([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)): `source`
 (`x`, `youtube` or `bilibili`, the primary key), `enabled`,
 `interval_minutes`, `sync_json` (`{"x": SourceSync}` or `{"youtube":
 SourceSync}`; `{}` for Bilibili and as the default), `next_run_at` and
-`updated_at`. A missing row reads as that source's disabled default. The
-`app_settings` key `source_schedules_migrated` records the one-time move of
-workflow timers to it (see [Workflows](workflows.md#upgrade-from-workflow-timers)).
-These columns and the table are added without a version bump, so earlier Go
+`updated_at`. A missing row reads as that source's disabled default. No
+migration moves workflow timers to it (see
+[Workflows](workflows.md#saved-workflows-are-retired)). These columns and the table are added without a version bump, so earlier Go
 releases still open the database. These tables are
 optional for ordinary TypeScript snapshots and Go public reads. See
 [Go source workflows and media downloads](go-source-workflows.md) for ownership,

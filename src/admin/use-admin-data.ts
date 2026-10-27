@@ -42,6 +42,7 @@ import type {
   Session,
   SourceSchedule,
   Sources,
+  StepCatalog,
   TranslationLocale,
   TranslationOwner,
   TranslationRequestResult,
@@ -50,8 +51,6 @@ import type {
   VideoCorrection,
   VideoHistory,
   VideoMergeSuggestion,
-  Workflow,
-  WorkflowCatalog,
 } from "@/admin/types"
 
 type Runner = <T>(
@@ -80,8 +79,12 @@ function query(values: Record<string, any>) {
 
 export type StartRun =
   | { kind: "sync" | "scan" }
-  | { kind: "workflow"; workflowId: string }
+  /** A one-off step run: the picked steps once, nothing saved. */
+  | { kind: "workflow"; steps: string[] }
   | { kind: "fetch"; source: "x" | "youtube"; window: FetchWindow }
+
+/** A run start, or a source's Run now: its fixed chain once. */
+export type StartWork = StartRun | { kind: "source"; source: ScheduleSource }
 
 /**
  * Every /api/admin endpoint the console calls. Reads are keyed by path so a
@@ -109,14 +112,7 @@ function createClient(run: Runner, slow: Runner) {
       send<{ run: Run }>("POST", `/runs/${enc(id)}/cancel`),
     retryRun: (id: string) =>
       send<{ run: Run }>("POST", `/runs/${enc(id)}/retry`),
-
-    workflows: () => get<WorkflowCatalog>("/workflows"),
-    createWorkflow: (body: Partial<Workflow>) =>
-      send<{ workflow: Workflow }>("POST", "/workflows", body),
-    updateWorkflow: (id: string, body: Partial<Workflow>) =>
-      send<{ workflow: Workflow }>("PUT", `/workflows/${enc(id)}`, body),
-    deleteWorkflow: (id: string) =>
-      send<null>("DELETE", `/workflows/${enc(id)}`),
+    stepCatalog: () => get<StepCatalog>("/runs/steps"),
 
     sources: () => get<Sources>("/sources"),
     updateSourceSchedule: (
@@ -125,6 +121,8 @@ function createClient(run: Runner, slow: Runner) {
         Pick<SourceSchedule, "enabled" | "intervalMinutes" | "sync">
       >,
     ) => send<SourceSchedule>("PUT", `/sources/${enc(source)}/schedule`, body),
+    runSource: (source: ScheduleSource) =>
+      send<{ run: Run }>("POST", `/sources/${enc(source)}/run`),
     updatePush: (body: { enabled?: boolean; callbackUrl?: string | null }) =>
       send<Sources["youtube"]["push"]>("PUT", "/sources/youtube/push", body),
     updateLiveProbe: (body: { enabled?: boolean; intervalMinutes?: number }) =>
@@ -482,9 +480,11 @@ export function useAdminData() {
 
   /** Start a run; a busy queue reports the run that holds it. */
   const start = useCallback(
-    async (body: StartRun) => {
+    async (body: StartWork) => {
       try {
-        const { run } = await api.startRun(body)
+        const { run } = await (body.kind === "source"
+          ? api.runSource(body.source)
+          : api.startRun(body))
         notify("admin.notice.runQueued")
         activeRef.current = run.id
         void refreshOverview().catch(() => {})

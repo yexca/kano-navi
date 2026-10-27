@@ -75,14 +75,12 @@ does the same with the built bundle. Restart after changing Go source.
 5. The selected avatar and banner are reconciled with the files on disk
    (`active_sha256`, `active_mime_type`), bumping the dashboard revision only
    when something changed.
-6. A new installation receives the two unscheduled starting workflows
-   (`full-refresh`, `sources-only`) once; deleting them does not recreate them.
-7. Interrupted workflow runs are recovered. Once per database, the timers of
-   saved workflows that read a source move to the source schedules, and on
-   every start a Bilibili interval below `BILIBILI_MIN_INTERVAL_MINUTES` is
-   raised to it (see [Workflows](workflows.md#upgrade-from-workflow-timers)).
-8. The timer starts unless `WORKFLOW_SCHEDULER_ENABLED=0`. It submits due
-   saved workflows and due source schedules, earliest first.
+6. Interrupted workflow runs are recovered, and a stored Bilibili interval
+   below `BILIBILI_MIN_INTERVAL_MINUTES` is raised to it. No workflows are
+   seeded and saved workflows are not migrated: they are retired (see
+   [Workflows](workflows.md#saved-workflows-are-retired)).
+7. The timer starts unless `WORKFLOW_SCHEDULER_ENABLED=0`. It submits due
+   source schedules, earliest first.
 
 ## Route ownership
 
@@ -91,7 +89,7 @@ does the same with the built bundle. Restart after changing Go source.
 | Public reads, media, health                    | `internal/httpapi`, `publicview`                                |
 | Session, login, origin guard                   | `internal/adminauth`                                            |
 | Admin route table, overview, events, lists     | `internal/adminapi` + `store/sqlite`                            |
-| Runs, workflows, source fetch                  | `internal/adminapi`, `internal/jobs`, `internal/workflow`       |
+| Runs, source schedules, source fetch           | `internal/adminapi`, `internal/jobs`, `internal/workflow`       |
 | Historical source windows                      | `internal/source/history`, `internal/workflow/history_steps.go` |
 | Extraction, providers, models, routes          | `internal/llmadmin`                                             |
 | Profile media, schedule images, post reprocess | `internal/contentadmin`                                         |
@@ -107,10 +105,11 @@ handler runs.
 
 ## Jobs and workflows
 
-The console's job list is a projection of durable workflow runs. A saved
-workflow runs under its own ID. A full sync, an automatic scan and a
-single-source fetch run from unsaved definitions with the reserved IDs
-`@sync`, `@scan` and `@fetch`; they never appear among saved workflows. All of
+The console's job list is a projection of durable workflow runs. Every run
+is ad hoc and names its kind of work with a reserved ID: `@sync`, `@scan`,
+`@fetch` (fetch windows and one-off step runs), `@translate`, `@live` and
+`@source-<source>` (a source's chain, from its timer or Run now). Saved
+workflows are retired; an older run keeps its saved workflow's ID. All of
 them share the SQLite single-flight reservation, so a second start answers
 `409` with `busy` and the active run.
 
@@ -141,8 +140,8 @@ is rejected with a validation message. With the credential, a `recent` window
 is also served by the API (YouTube still reads the feed to refresh
 reservations); without it, an X `recent` window pages the timeline back to its
 start and a YouTube one reads the feed.
-Source schedules, YouTube pushes and saved workflows carry no window: their
-runs read X and YouTube by the source schedule's frozen sync (incremental
+Source schedules, Run now, YouTube pushes and one-off step runs carry no
+window: their runs read X and YouTube by the source schedule's frozen sync (incremental
 with a cap, or the newest `count`), whatever the credentials
 ([Workflows](workflows.md#source-schedules)). A full sync or scan (console,
 MCP or `kano-go sync`) carries neither and stays incremental.
@@ -175,11 +174,10 @@ identity representation.
 The last TypeScript release image (`yexca/kano-navi:0.1.3`) runs on the same
 `data/` directory; its source is the `v0.1.3` tag. Stop the Go process first:
 only one process may own a snapshot, since both write SQLite and both would
-start timed workflows. That release ignores `source_schedules`: workflows
-whose timers moved there stay untimed until an operator enables them again.
+start timers. That release ignores `source_schedules` and reads the retired
+`workflows` table, which this release leaves as it found it, so its saved
+workflows and their timers run again.
 
 The additive `workflow_*` tables and columns are ignored by that release, and
-provider secrets use the same encryption format in both directions. Saved
-workflows keep their definitions; their last status may read as an unknown
-value until the next run. A legacy `events` table that was rebuilt on upgrade
+provider secrets use the same encryption format in both directions. A legacy `events` table that was rebuilt on upgrade
 is already in the layout 0.1.3 expects.

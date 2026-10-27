@@ -130,9 +130,11 @@ func main() {
 
 	var queue *workflow.Queue
 	if enableSources {
-		if err = store.EnsureSourceWorkflows(context.Background(), cfg.EnableXSync, cfg.EnableYoutubeSync, cfg.EnableMediaDownloads); err != nil {
-			fmt.Fprintln(os.Stderr, "kano-go: workflow unavailable")
-			os.Exit(1)
+		if cfg.EnableXSync || cfg.EnableMediaDownloads {
+			if err = store.RepairLegacyXMedia(context.Background()); err != nil {
+				fmt.Fprintln(os.Stderr, "kano-go: workflow unavailable")
+				os.Exit(1)
+			}
 		}
 		steps := &workflow.SourceSteps{Store: store}
 		capabilities := map[string]bool{"reconcile": false}

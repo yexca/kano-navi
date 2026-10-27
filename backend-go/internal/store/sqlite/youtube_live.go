@@ -17,7 +17,7 @@ const AdhocLiveWorkflow = "@live"
 
 // The live-status probe interval is an operator setting: how often a stream
 // on air, or a waiting room past its starting window, is checked. It may be
-// shorter than a saved workflow's (15 minutes) because a run requests at most
+// shorter than a source schedule's (15 minutes) because a run requests at most
 // ytsource.MaxLiveProbes watch pages and is skipped while nothing is due.
 const (
 	LiveProbeDefaultMinutes = 15

@@ -44,7 +44,7 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 	if s.Skip[in.StepID] {
 		return AttemptResult{Status: "succeeded", Result: map[string]any{"skipped": true, "reason": "environment"}}, nil
 	}
-	// Saved workflows, full syncs and scans carry no window and read each
+	// Source chains, step runs, full syncs and scans carry no window and read each
 	// source by its sync setting (ADR-0002), whatever credentials are set;
 	// only operator windows search dates.
 	switch in.StepID {
@@ -248,7 +248,7 @@ func tallyCodes(codes []string) []string {
 }
 
 // bilibiliRecent reads the account's newest uploads at most once per
-// interval and never during a backoff, so a workflow timer cannot drive
+// interval and never during a backoff, so no timer or manual run can drive
 // Bilibili's captcha. A failed read is recorded, not retried: the next run
 // after the interval or backoff asks again.
 func (s *SourceSteps) bilibiliRecent(ctx context.Context) (AttemptResult, error) {

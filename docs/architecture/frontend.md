@@ -40,7 +40,7 @@ length from `durationSeconds` when known. Its styles are in
 in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`
 registers the views (Overview, Review queue, Schedule, Posts, Videos, Profile
-images, Runs & workflows, Sources, Models & detection) and renders the shell
+images, Runs, Sources, Models & detection) and renders the shell
 with hash routing (`#view/tab`; older `#content/<tab>` links open the matching
 view); `use-admin-data.ts` owns every
 [Admin API](admin-api.md) call, the session and the overview poll that tracks

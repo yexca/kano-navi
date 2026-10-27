@@ -24,7 +24,7 @@ const (
 	StepTranslate = "translate"
 
 	// StepLive is the probe's only step. It is not part of StepOrder, so
-	// saved workflows and full synchronizations never select it.
+	// step runs and full synchronizations never select it.
 	StepLive = "live"
 	// TriggeredByLiveProbe labels probe runs in the run history.
 	TriggeredByLiveProbe = "live-probe"
@@ -34,26 +34,27 @@ const (
 	StatusCompleted = "completed"
 	StatusFailed    = "failed"
 
-	ReasonAlreadyRunning   = "already_running"
-	ReasonNoSteps          = "no_steps"
-	ReasonWorkflowNotFound = "workflow_not_found"
+	ReasonAlreadyRunning = "already_running"
+	ReasonNoSteps        = "no_steps"
 )
 
 // Job is one single-flight unit of work. Progress maps each step to pending,
 // running, completed, partial, failed, skipped or cancelled.
 type Job struct {
-	ID           string         `json:"id"`
-	Kind         string         `json:"kind"`
-	Status       string         `json:"status"`
-	CreatedAt    string         `json:"createdAt"`
-	StartedAt    *string        `json:"startedAt"`
-	FinishedAt   *string        `json:"finishedAt"`
-	TriggeredBy  string         `json:"triggeredBy"`
+	ID          string  `json:"id"`
+	Kind        string  `json:"kind"`
+	Status      string  `json:"status"`
+	CreatedAt   string  `json:"createdAt"`
+	StartedAt   *string `json:"startedAt"`
+	FinishedAt  *string `json:"finishedAt"`
+	TriggeredBy string  `json:"triggeredBy"`
+	// WorkflowID names the retired saved workflow an older run belongs to;
+	// every new run has none (ADR-0003).
 	WorkflowID   *string        `json:"workflowId"`
-	WorkflowName *string        `json:"workflowName"`
 	Steps        []string       `json:"steps"`
 	FetchWindows map[string]any `json:"fetchWindows"`
-	// SourceSchedule names the source whose schedule submitted the run.
+	// SourceSchedule names the source whose chain the run is, from its timer
+	// (triggeredBy "source-schedule") or the operator's Run now.
 	SourceSchedule *string           `json:"sourceSchedule"`
 	Progress       map[string]string `json:"progress"`
 	Error          *string           `json:"error"`
@@ -69,14 +70,15 @@ type StartResult struct {
 	Job      *Job    `json:"job"`
 }
 
-// Options narrows a workflow job. Steps, FetchWindows and SourceSync are
-// ignored for the sync and scan kinds.
+// Options narrows a workflow job. Source, Steps, FetchWindows and SourceSync
+// are ignored for the other kinds.
 type Options struct {
-	WorkflowID   string
+	// Source runs that source's fixed chain once (Run now) instead of Steps.
+	Source       string
 	Steps        []string
 	FetchWindows map[string]history.Window
-	// SourceSync freezes source schedule settings on an ad hoc run, as a
-	// YouTube push does.
+	// SourceSync freezes sync settings on the run. Source steps it leaves
+	// out, and that have no window, read as their source schedule does.
 	SourceSync map[string]sqlite.SourceSync
 }
 

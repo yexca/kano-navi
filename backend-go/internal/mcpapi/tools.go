@@ -677,7 +677,6 @@ type controlJob struct {
 	FinishedAt   *string           `json:"finishedAt"`
 	TriggeredBy  string            `json:"triggeredBy"`
 	WorkflowID   *string           `json:"workflowId"`
-	WorkflowName *string           `json:"workflowName"`
 	Steps        []string          `json:"steps"`
 	FetchWindows map[string]any    `json:"fetchWindows"`
 	Progress     map[string]string `json:"progress"`
@@ -708,7 +707,7 @@ func (h *handler) startJob(ctx context.Context, kind string) (any, error) {
 		result.Job = &controlJob{
 			ID: job.ID, Kind: job.Kind, Status: job.Status, CreatedAt: job.CreatedAt,
 			StartedAt: job.StartedAt, FinishedAt: job.FinishedAt, TriggeredBy: job.TriggeredBy,
-			WorkflowID: job.WorkflowID, WorkflowName: job.WorkflowName, Steps: job.Steps,
+			WorkflowID: job.WorkflowID, Steps: job.Steps,
 			FetchWindows: job.FetchWindows, Progress: job.Progress,
 		}
 	}

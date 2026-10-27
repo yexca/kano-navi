@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
-// Ad-hoc workflow IDs name operator jobs that are not saved definitions.
-// Saved workflow IDs match ^[a-z0-9][a-z0-9_-]*$, so the prefix cannot collide.
+// Ad-hoc workflow IDs name the kind of work a run does. Every new run is ad
+// hoc; older runs of retired saved workflows keep IDs that match
+// ^[a-z0-9][a-z0-9_-]*$, so the prefix cannot collide.
 const (
 	AdhocSyncWorkflow  = "@sync"
 	AdhocScanWorkflow  = "@scan"
@@ -104,30 +105,6 @@ func (s *Store) SyncRunForJob(ctx context.Context, jobID string) (*JobRun, error
 	run.JobID = nullString(job)
 	run.Counts = sanitizeCounts(counts.String)
 	return &run, nil
-}
-
-// WorkflowNames resolves saved workflow display names for a job list.
-func (s *Store) WorkflowNames(ctx context.Context) (map[string]string, error) {
-	if s == nil || s.db == nil {
-		return nil, ErrUnavailable
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id,name FROM workflows`)
-	if err != nil {
-		return nil, ErrWorkflowStorage
-	}
-	defer rows.Close()
-	names := map[string]string{}
-	for rows.Next() {
-		var id, name string
-		if rows.Scan(&id, &name) != nil {
-			return nil, ErrWorkflowStorage
-		}
-		names[id] = name
-	}
-	if rows.Err() != nil {
-		return nil, ErrWorkflowStorage
-	}
-	return names, nil
 }
 
 // OldestSourceTimestamp is the earliest stored record for a source, which is

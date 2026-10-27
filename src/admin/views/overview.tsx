@@ -5,7 +5,6 @@ import {
   CircleSlash,
   FileWarning,
   ImageOff,
-  Play,
   RefreshCw,
   Sparkles,
   Square,
@@ -81,7 +80,7 @@ export function OverviewView({ navigate }: ViewProps) {
   const { overview, start, act, api, refreshOverview } = useAdmin()
   if (!overview) return <Loading />
 
-  const { review, counts, activeRun, workflows } = overview
+  const { review, counts, activeRun, timers } = overview
   const attention = [
     {
       key: "images",
@@ -213,20 +212,20 @@ export function OverviewView({ navigate }: ViewProps) {
                 <Badge tone="neutral">{t("admin.overview.idle")}</Badge>
               </p>
               <p className="adm-muted">
-                {workflows.scheduled && workflows.nextRunAt
+                {timers.scheduled && timers.nextRunAt
                   ? t("admin.overview.nextRun", {
-                      time: formatDateTime(workflows.nextRunAt, locale),
-                      relative: formatRelative(workflows.nextRunAt, locale),
+                      time: formatDateTime(timers.nextRunAt, locale),
+                      relative: formatRelative(timers.nextRunAt, locale),
                     })
                   : t("admin.overview.noSchedule")}
               </p>
               <Button
                 size="sm"
                 variant="ghost"
-                icon={Play}
-                onClick={() => navigate("runs")}
+                icon={CalendarClock}
+                onClick={() => navigate("sources")}
               >
-                {t("admin.overview.openWorkflows")}
+                {t("admin.overview.openTimers")}
               </Button>
             </div>
           )}

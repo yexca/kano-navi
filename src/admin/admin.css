@@ -1432,46 +1432,9 @@ button.adm-run-line:hover,
   overflow-wrap: anywhere;
 }
 
-.adm-workflow-list {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.adm-workflow {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 0.7fr) auto;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 0;
-}
-
-.adm-workflow + .adm-workflow {
-  border-top: 1px solid var(--adm-line);
-}
-
-.adm-workflow-main {
-  display: grid;
-  gap: 6px;
-}
-
-.adm-workflow-schedule,
-.adm-workflow-last {
-  display: grid;
-  justify-items: start;
-  gap: 4px;
-}
-
-.adm-workflow-schedule small,
-.adm-workflow-last small {
-  color: var(--adm-muted);
-  font-size: 12px;
-}
-
 .adm-step-picker {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
 }
 
@@ -3098,22 +3061,6 @@ button.adm-run-line:hover,
 /* ------------------------------------------------------------- responsive */
 
 @media (max-width: 1080px) {
-  .adm-workflow {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .adm-workflow-schedule,
-  .adm-workflow-last {
-    grid-column: 1;
-  }
-
-  .adm-workflow .adm-row-actions {
-    grid-column: 2;
-    grid-row: 1 / span 3;
-    flex-direction: column;
-    align-items: flex-end;
-  }
-
   .adm-stage-grid {
     grid-template-columns: minmax(0, 1fr);
   }

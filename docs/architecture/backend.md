@@ -17,8 +17,8 @@ Ready runtime media is served only through the opaque-ID `/media/:id` route.
 
 The [Admin API](admin-api.md) (`internal/adminapi`, with routes contributed by
 `internal/llmadmin`, `internal/contentadmin` and the YouTube `websub` package)
-exposes the session, the console overview, runs and saved workflows, source
-windows, events, schedule images, posts, videos, profile media, extraction
+exposes the session, the console overview, runs, source timers and their
+Run now, source windows, events, schedule images, posts, videos, profile media, extraction
 settings, providers, the model catalog and the model queue. Mutating requests reject
 cross-site Fetch Metadata. Browser `Sec-Fetch-Site: same-origin` requests remain
 valid when a reverse proxy rewrites Host or terminates HTTPS; other requests

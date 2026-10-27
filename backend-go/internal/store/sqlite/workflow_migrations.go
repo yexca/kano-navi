@@ -21,6 +21,8 @@ func migrateWorkflowSchema(ctx context.Context, db *sql.DB) error {
 	defer tx.Rollback()
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS workflow_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL, result TEXT NOT NULL CHECK(result='applied'))`,
+		// Saved workflows are retired (ADR-0003). The table stays, unread
+		// and unwritten, so older binaries and run history keep their schema.
 		`CREATE TABLE IF NOT EXISTS workflows(id TEXT PRIMARY KEY, name TEXT NOT NULL, steps_json TEXT NOT NULL,
  source_lookback_json TEXT NOT NULL DEFAULT '{}', source_sync_json TEXT NOT NULL DEFAULT '{}', schedule_enabled INTEGER NOT NULL DEFAULT 0,
  interval_minutes INTEGER NOT NULL DEFAULT 60, last_run_at TEXT,last_job_id TEXT,last_status TEXT,
@@ -100,9 +102,10 @@ func migrateWorkflowSchema(ctx context.Context, db *sql.DB) error {
 		{"workflow_run_steps", "adapter_capability", `ALTER TABLE workflow_run_steps ADD COLUMN adapter_capability TEXT`},
 		// Version 3 freezes an operator's source windows on the run.
 		{"workflow_runs", "fetch_windows_json", `ALTER TABLE workflow_runs ADD COLUMN fetch_windows_json TEXT`},
-		// A saved workflow's per-source sync (ADR-0002), on the definition and
-		// frozen on its runs. Added without a version so v3 binaries still open
-		// the database; reads check for the column instead.
+		// A per-source sync (ADR-0002), frozen on runs. The workflows column
+		// is retired with saved workflows (ADR-0003) and kept unread. Added
+		// without a version so v3 binaries still open the database; reads
+		// check for the column instead.
 		{"workflows", "source_sync_json", `ALTER TABLE workflows ADD COLUMN source_sync_json TEXT NOT NULL DEFAULT '{}'`},
 		{"workflow_runs", "source_sync_json", `ALTER TABLE workflow_runs ADD COLUMN source_sync_json TEXT NOT NULL DEFAULT '{}'`},
 	} {

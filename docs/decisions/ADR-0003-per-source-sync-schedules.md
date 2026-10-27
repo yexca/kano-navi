@@ -6,10 +6,10 @@
 
 ## Context
 
-Saved workflows are the only timed way to read sources. Each workflow picks
-steps and one timer, so an operator who wants X every 30 minutes and Bilibili
-every few hours has to keep several workflows in step. The pace of each
-source is also split across four places:
+Saved workflows were the only timed way to read sources. Each workflow picked
+steps and one timer, so an operator who wanted X every 30 minutes and Bilibili
+every few hours had to keep several workflows in step. The pace of each
+source was also split across four places:
 
 - workflow timers (15 minutes to 7 days);
 - `BILIBILI_MIN_INTERVAL_MINUTES`, which skips Bilibili reads inside a
@@ -26,6 +26,9 @@ The execution engine is not the problem. Ad hoc runs (`@live`, WebSub, the
 operator's `[youtube, media]` refresh) already show that a trigger can submit
 a fixed step list to the single-flight queue without a saved workflow.
 
+The board has a single operator, so no existing installation needs a
+migration path.
+
 ## Decision
 
 ### Source schedules
@@ -41,8 +44,8 @@ key), `enabled`, `interval_minutes`, `sync_json`, `next_run_at` and
 | `youtube`  | 60 min, 15 min – 7 days                           | `incremental` (`max`) or `count`, as in ADR-0002 | WebSub push and live-status probe (existing) |
 | `bilibili` | 180 min, `BILIBILI_MIN_INTERVAL_MINUTES` – 7 days | none (one upload list page)                      | none                                         |
 
-- A fresh installation keeps every schedule disabled, as seeded workflows
-  have no timers today.
+- Every schedule starts disabled. The operator enables the timers on the
+  Sources page.
 - The Bilibili interval cannot go below the environment floor. The
   adapter's own interval and backoff checks stay as the safety net.
 - The WebSub and live-probe settings keep their storage and endpoints. The
@@ -69,45 +72,57 @@ empty, so failed extractions, pending image reviews, retried downloads and
 operator translation requests keep moving even while a source is quiet.
 
 The run freezes the source's `sync_json` into `workflow_runs.source_sync_json`,
-which ADR-0002 introduced.
+which ADR-0002 introduced. Any other run with a source step reads that source
+with its schedule's sync settings. This covers a WebSub push, a one-off step
+run and a source's "run now". Full syncs keep the environment's incremental
+options.
 
-### Where sync settings live
+### Saved workflows are removed
 
-`sourceSync` moves from saved workflows to source schedules. The setting
-from ADR-0002 is unreleased, so the workflow API stops accepting it now and
-rejects it with `400 invalid_input`, as it does `sourceLookbackDays`. A
-manual run of a saved workflow reads each source with that source's
-schedule settings. The column `workflows.source_sync_json` stays in the
-schema and is no longer read. Columns are never dropped.
+Saved workflow definitions are removed, together with their timers. That
+includes:
 
-### Saved workflows
+- the `/api/admin/workflows` endpoints;
+- `POST /api/admin/runs` with a `workflowId`, which now answers
+  `400 invalid_input`;
+- the workflow editor;
+- the seeded `full-refresh` and `sources-only` presets.
 
-Saved workflows remain as operator presets for manual runs and custom
-combinations, such as a translate-only sweep, and they keep their timers.
-To avoid reading the same source twice, an upgrade runs one migration,
-guarded by the `app_settings` key `source_schedules_migrated`:
+No migration is written. The operator sets the source timers again.
 
-- For each timed workflow that contains a source step, enable that source's
-  schedule. Use the smallest interval among such workflows, raised to the
-  Bilibili floor where it applies. Copy the workflow's stored `sourceSync`,
-  or the default.
-- Then disable that workflow's timer. Its steps and history stay untouched.
-- Timed workflows without a source step keep their timers.
+The `workflows` table, including the `source_sync_json` column ADR-0002
+added, stays in the schema. Nothing reads or writes it. Tables and columns
+are never dropped. Fresh installations still create the table, empty.
 
-After the migration, the API refuses to enable a timer on a workflow that
-contains a source step. It answers `400 invalid_input` and names the source
-schedule to use instead.
+The execution engine stays as it is. Every run is an ad hoc run on it:
+source timers, WebSub, the live probe, fetch windows, full sync, scan,
+translate and MCP. That engine includes `workflow_runs`, steps, attempts,
+leases, retries, recovery, the single-flight queue and run history. Older
+runs whose `workflow_id` named a saved workflow stay in history. The console
+shows that ID with a "retired workflow" label, without reading `workflows`.
+Retrying a failed run no longer looks up a saved definition: every run keeps
+its steps, sync settings and windows, so any failed run with a retryable
+failed step can be retried.
+
+Manual runs replace the saved presets:
+
+- **Run now** on each source section submits that source's chain once,
+  triggered by the operator. It does not move the schedule's `next_run_at`.
+- A **one-off step run** on the Runs page picks steps from the catalog and
+  runs them once without saving. The API already accepts this as
+  `kind: "workflow"` with `steps`.
+- Full sync, schedule scan, translate and fetch windows are unchanged.
 
 ### Scheduler
 
-The existing scheduler ticks every 30 seconds over due workflows and due
-source schedules together. It submits the item with the earliest
-`next_run_at`, so a frequent source cannot starve another. The single-flight
-queue is unchanged, and a busy queue leaves the item due for the next tick.
-Enabling a schedule or changing its interval plans the next run one interval
-later, never immediately, matching workflow timers.
+The scheduler ticks every 30 seconds over due source schedules only, and
+submits the one with the earliest `next_run_at`, so a frequent source cannot
+starve another. The single-flight queue is unchanged, and a busy queue leaves
+the schedule due for the next tick. Enabling a schedule or changing its
+interval plans the next run one interval later, never immediately.
 
-- `WORKFLOW_SCHEDULER_ENABLED=0` stops source schedules as well.
+- `WORKFLOW_SCHEDULER_ENABLED=0` stops the source schedules. The name stays
+  so existing deployments keep working. Only its description changes.
 - `SKIP_X`, `SKIP_YOUTUBE` and `SKIP_BILIBILI` disable that source's
   schedule, which reports `{ skipped: true, reason: "environment" }`.
 - `kano-go sync` and MCP sync are unchanged: they run every step with the
@@ -120,26 +135,36 @@ later, never immediately, matching workflow timers.
   last run's id, status and time.
 - `PUT /api/admin/sources/{source}/schedule` takes any subset of
   `{enabled, intervalMinutes, sync}`.
-- The Sources page gets one section per source with the timer, the
-  interval, the sync mode (X and YouTube), the next run and the last run.
-  The YouTube section also holds WebSub and the live-status probe.
-- On the Runs & workflows page, workflows lose the source sync editor.
-  Their timer control is disabled, with an explanation, when they contain a
-  source step.
-- Run history labels these runs by source.
+- `POST /api/admin/sources/{source}/run` starts **Run now**. It answers
+  `202` with the run, or `409 busy` while the queue is occupied, and
+  `400 invalid_input` while `SKIP_*` disables the source. Its run uses the
+  same `@source-<source>` ID, so it shows as the schedule's last run.
+- `GET /api/admin/runs/steps` lists the step catalog and the steps `SKIP_*`
+  disables, for the one-off step run.
+- The Sources page gets one section per source. Each has the timer, the
+  interval, the sync mode (X and YouTube), **Run now**, the next run and the
+  last run. The YouTube section also holds WebSub and the live-status probe.
+- The Runs page drops the workflow list and editor. It keeps run history,
+  the one-off step run and the existing run actions.
+- The overview's "next timed run" counts source schedules only. Its API
+  field becomes `timers: {scheduled, nextRunAt}`, replacing `workflows`,
+  and runs no longer carry `workflowName`.
+- Run history labels source runs by source ("X timer", "X · run now").
 
 ## Consequences
 
 - Each source is configured in one place, with a pace that fits it. Bilibili
   no longer appears as a skipped step in frequent runs.
+- The console loses a whole concept. The operator chooses how often each
+  source is read, and can run any combination once.
 - Runs are smaller and more frequent, and they still share one queue. A
   long X run (schedule extraction with LLM calls) can still delay the live
-  probe or a WebSub run. This is unchanged from today, but it may happen
+  probe or a WebSub run. This is unchanged from before, but it may happen
   more often.
 - Translation runs after every source chain. With an empty queue it costs
   only a query.
-- Saved workflows remain for manual work. Operators who used them as timers
-  are migrated once and see the change in the console.
+- An installation upgraded from v0.3.x loses its saved workflows and their
+  timers. The release note asks the operator to enable the source timers.
 
 ## Out of Scope
 
@@ -152,9 +177,13 @@ later, never immediately, matching workflow timers.
 
 ## Alternatives Considered
 
+- Keeping saved workflows next to source schedules, with a one-time
+  migration of their timers. This was the first version of this decision.
+  It kept two timer concepts and migration code for a single operator who
+  can simply set the timers again.
 - Keeping workflows as the only timer and documenting a two-workflow setup.
-  It is possible today, but the pace of each source would still be spread
-  across workflows, environment variables and probe settings.
+  The pace of each source would still be spread across workflows,
+  environment variables and probe settings.
 - Running follow-up steps only when the source wrote something. This saves
   little, because empty queues are already cheap. It would stall retries and
   operator requests while a source is quiet.

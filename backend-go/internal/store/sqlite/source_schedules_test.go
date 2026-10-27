@@ -27,72 +27,37 @@ func scheduleOf(t *testing.T, s *Store, source string, floor int) SourceSchedule
 	return schedule
 }
 
-func TestPrepareSourceSchedulesMovesWorkflowTimersOnce(t *testing.T) {
+func TestPrepareSourceSchedulesLeavesRetiredWorkflowsAlone(t *testing.T) {
 	s := openScheduleStore(t)
 	ctx := context.Background()
 	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
-	for _, statement := range []string{
-		// Timed workflows that read sources, as an earlier release kept them.
-		`INSERT INTO workflows(id,name,steps_json,source_sync_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES('wf-frequent','Frequent','["x","youtube","media"]','{"x":{"mode":"count","count":30}}',1,20,'2026-03-02T03:10:00.000Z','2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`,
-		`INSERT INTO workflows(id,name,steps_json,source_sync_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES('wf-slow','Slow','["x","bilibili","media"]','{"x":{"mode":"incremental","max":10}}',1,60,'2026-03-02T03:30:00.000Z','2026-03-01T00:00:01.000Z','2026-03-01T00:00:01.000Z')`,
-		// A timed sweep without a source and a manual source workflow stay as they are.
-		`INSERT INTO workflows(id,name,steps_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES('wf-sweep','Sweep','["translate"]',1,45,'2026-03-02T04:00:00.000Z','2026-03-01T00:00:02.000Z','2026-03-01T00:00:02.000Z')`,
-		`INSERT INTO workflows(id,name,steps_json,schedule_enabled,interval_minutes,created_at,updated_at) VALUES('wf-manual','Manual','["youtube"]',0,15,'2026-03-01T00:00:03.000Z','2026-03-01T00:00:03.000Z')`,
-	} {
-		if _, err := s.db.Exec(statement); err != nil {
-			t.Fatalf("%s: %v", statement, err)
-		}
+	// A timed workflow that reads sources, as an earlier release kept it.
+	// Saved workflows are retired without a migration (ADR-0003).
+	const row = `wf-frequent|Frequent|["x","youtube","media"]|1|20|2026-03-02T03:10:00.000Z`
+	if _, err := s.db.Exec(`INSERT INTO workflows(id,name,steps_json,source_sync_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES('wf-frequent','Frequent','["x","youtube","media"]','{"x":{"mode":"count","count":30}}',1,20,'2026-03-02T03:10:00.000Z','2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`); err != nil {
+		t.Fatal(err)
 	}
 	if err := s.PrepareSourceSchedules(ctx, 240, now); err != nil {
 		t.Fatal(err)
 	}
-	x, youtube, bilibili := scheduleOf(t, s, "x", 240), scheduleOf(t, s, "youtube", 240), scheduleOf(t, s, "bilibili", 240)
-	if !x.Enabled || x.IntervalMinutes != 20 || *x.Sync != (SourceSync{Mode: SyncCount, Count: 30}) || *x.NextRunAt != "2026-03-02T03:20:00.000Z" {
-		t.Fatalf("x took the smallest interval and its workflow's sync: %+v %+v", x, x.Sync)
-	}
-	if !youtube.Enabled || youtube.IntervalMinutes != 20 || *youtube.Sync != (SourceSync{Mode: SyncIncremental, Max: DefaultSyncMax}) {
-		t.Fatalf("youtube=%+v %+v", youtube, youtube.Sync)
-	}
-	if !bilibili.Enabled || bilibili.IntervalMinutes != 240 || bilibili.Sync != nil {
-		t.Fatalf("bilibili was not raised to the floor: %+v", bilibili)
-	}
-	workflowState := func(id string) string {
-		t.Helper()
-		var enabled int
-		var next *string
-		if err := s.db.QueryRow(`SELECT schedule_enabled,next_run_at FROM workflows WHERE id=?`, id).Scan(&enabled, &next); err != nil {
-			t.Fatal(err)
-		}
-		if next == nil {
-			return map[int]string{0: "off", 1: "on"}[enabled]
-		}
-		return map[int]string{0: "off", 1: "on"}[enabled] + " " + *next
-	}
-	for id, want := range map[string]string{"wf-frequent": "off", "wf-slow": "off", "wf-sweep": "on 2026-03-02T04:00:00.000Z", "wf-manual": "off"} {
-		if got := workflowState(id); got != want {
-			t.Fatalf("%s timer=%q, want %q", id, got, want)
+	for _, source := range ScheduleSources {
+		if schedule := scheduleOf(t, s, source, 240); schedule.Enabled || schedule.NextRunAt != nil {
+			t.Fatalf("%s took over a workflow timer: %+v", source, schedule)
 		}
 	}
-	var steps string
-	if err := s.db.QueryRow(`SELECT steps_json FROM workflows WHERE id='wf-slow'`).Scan(&steps); err != nil || steps != `["x","bilibili","media"]` {
-		t.Fatalf("steps changed: %s %v", steps, err)
+	var got string
+	if err := s.db.QueryRow(`SELECT id||'|'||name||'|'||steps_json||'|'||schedule_enabled||'|'||interval_minutes||'|'||next_run_at FROM workflows`).Scan(&got); err != nil || got != row {
+		t.Fatalf("workflow row=%q %v", got, err)
 	}
-	// The migration runs once: a timer the operator turns back on and a
-	// schedule they turn off stay that way on the next start.
-	if _, err := s.db.Exec(`UPDATE workflows SET schedule_enabled=1,next_run_at='2026-03-02T05:00:00.000Z' WHERE id='wf-slow'`); err != nil {
-		t.Fatal(err)
-	}
-	x.Enabled = false
-	if _, err := s.SaveSourceSchedule(ctx, x, 240, now); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.PrepareSourceSchedules(ctx, 240, now.Add(time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-	if scheduleOf(t, s, "x", 240).Enabled || workflowState("wf-slow") != "on 2026-03-02T05:00:00.000Z" {
-		t.Fatal("a second start repeated the migration")
+	var markers int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM app_settings WHERE key='source_schedules_migrated'`).Scan(&markers); err != nil || markers != 0 {
+		t.Fatalf("migration marker=%d %v", markers, err)
 	}
 	// Every start raises a Bilibili interval below a raised floor.
+	bilibili := scheduleOf(t, s, "bilibili", 240)
+	if _, err := s.SaveSourceSchedule(ctx, bilibili, 240, now); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.PrepareSourceSchedules(ctx, 300, now); err != nil {
 		t.Fatal(err)
 	}
@@ -120,10 +85,6 @@ func TestPrepareSourceSchedulesKeepsAFreshInstallationDisabled(t *testing.T) {
 		if got.Source != want.source || got.Enabled || got.IntervalMinutes != want.interval || (got.Sync != nil) != want.sync || got.NextRunAt != nil || got.LastRun != nil {
 			t.Fatalf("default %s=%+v", want.source, got)
 		}
-	}
-	var migrated string
-	if err = s.db.QueryRow(`SELECT value FROM app_settings WHERE key='source_schedules_migrated'`).Scan(&migrated); err != nil || migrated != "1" {
-		t.Fatalf("migration marker=%q %v", migrated, err)
 	}
 }
 
@@ -197,5 +158,28 @@ func TestSourceSchedulePlansItsNextRun(t *testing.T) {
 	claimed.Enabled = false
 	if saved, err = s.SaveSourceSchedule(ctx, claimed, 180, now); err != nil || saved.NextRunAt != nil {
 		t.Fatalf("disable=%+v %v", saved, err)
+	}
+}
+
+func TestRunNowLeavesTheSchedulePlanAlone(t *testing.T) {
+	s := openScheduleStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
+	x := scheduleOf(t, s, "x", 180)
+	x.Enabled = true
+	if _, err := s.SaveSourceSchedule(ctx, x, 180, now); err != nil {
+		t.Fatal(err)
+	}
+	// The operator's Run now is the same chain, triggered by the operator.
+	run, err := s.CreateWorkflowRun(ctx, WorkflowDefinition{ID: SourceScheduleWorkflow("x"), Steps: []string{"x"}}, "operator", "", map[string]bool{"x": true}, now.Add(5*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ClaimWorkflowRun(ctx, run.ID, "test", now.Add(6*time.Minute), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	got := scheduleOf(t, s, "x", 180)
+	if got.NextRunAt == nil || *got.NextRunAt != "2026-03-02T03:30:00.000Z" || got.LastRun == nil || got.LastRun.ID != run.ID {
+		t.Fatalf("run now moved the plan: %+v %+v", got, got.LastRun)
 	}
 }

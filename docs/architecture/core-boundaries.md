@@ -26,7 +26,7 @@ kano-go serve     -- dashboard, admin API, health, /media/<id>, and /mcp
           +--> src/admin/ -- hidden operator console
           |
           +--> internal/jobs, internal/workflow -- single-flight durable jobs
-          +--> internal/workflow (Scheduler)    -- timed saved workflows
+          +--> internal/workflow (Scheduler)    -- due source schedules
 ```
 
 Synchronization and page reads are separate paths. The browser reads the local

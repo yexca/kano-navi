@@ -66,8 +66,8 @@ passwords are rejected before the runtime database is opened or seeded.
 All modes also require a non-blank `LLM_SECRETS_KEY` before SQLite opens.
 See [Configuration](../operations/configuration.md) for generating and retaining
 the encryption key.
-The console opens on Workflows: pick modules, run them now, or enable a timer
-for a saved workflow. LLM providers are configured once (API host, format, and
+The console opens on Overview. Sources holds each source's timer and its
+**Run now**; Runs picks any steps and runs them once. LLM providers are configured once (API host, format, and
 key), their model list is fetched from `<baseUrl>/models`, and each model is
 tagged (`text`/`image` drive routing; `reasoning`/`tools`/`embedding` are
 labels). Detection settings then order provider + model targets in one
@@ -75,12 +75,13 @@ priority queue; each stage skips targets without the capability it needs, and
 each target follows the fixed three-request failover policy. Content & media covers
 the Featured video and profile media. Provider URLs that resolve to loopback or
 private ranges are rejected, so local mock endpoints cannot be configured.
-Set `WORKFLOW_SCHEDULER_ENABLED=0` to keep source timers and timed workflows
-from firing while developing.
+Set `WORKFLOW_SCHEDULER_ENABLED=0` to keep the source timers from firing
+while developing.
 
-Workflow source lookback settings control recent days separately from the timer
-interval (X defaults to 7 days; YouTube to 14). Post management and Content & media
-also offer older-record backfill and date ranges. Without keys, X recent,
+Each source timer's sync setting controls how much a run reads, separately
+from its interval (incremental with a cap of 50 by default). The Sources page
+and the Posts and Videos pages also offer recent windows, older-record
+backfill and date ranges. Without keys, X recent,
 date-range and latest-count fetches page the public FxTwitter timeline, and
 YouTube recent fetches keep the finite RSS coverage and report that limitation.
 For backfills and YouTube history, optionally configure environment-only

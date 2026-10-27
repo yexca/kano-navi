@@ -1,314 +1,105 @@
 import { useState, type SubmitEvent } from "react"
 import {
-  CalendarClock,
-  Pencil,
+  ListChecks,
   Play,
-  Plus,
   RefreshCw,
   RotateCcw,
   Sparkles,
   Square,
-  Trash2,
-  Workflow as WorkflowIcon,
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
-import { formatDateTime, formatInterval, formatRelative } from "@/admin/format"
-import type { Run, Workflow, WorkflowCatalog } from "@/admin/types"
+import { formatDateTime } from "@/admin/format"
+import type { Run } from "@/admin/types"
 import {
-  Badge,
   Button,
   ConfirmButton,
   Empty,
   Facts,
-  Field,
-  IconButton,
   Loading,
-  Modal,
   PageHeader,
   Pager,
   Panel,
   StatusBadge,
-  Switch,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { RunLine, stepIcons } from "@/admin/views/run-parts"
 
-const intervals = [15, 30, 60, 120, 180, 360, 720, 1440]
-
-// Sources run on their own timers (ADR-0003), so a workflow that reads one
-// runs only by hand.
-const sourceSteps = ["x", "youtube", "bilibili"]
-
-function WorkflowDialog({
-  workflow,
-  catalog,
-  onClose,
-}: {
-  workflow: Workflow | null
-  catalog: WorkflowCatalog
-  onClose: (saved?: boolean) => void
-}) {
+/** Pick steps from the catalog and run them once; nothing is saved. Sources
+ * also run on their own timers on the Sources page (ADR-0003). */
+function StepRunPanel() {
   const { t } = useAppSettings()
-  const { api, act } = useAdmin()
-  const [name, setName] = useState(workflow?.name || "")
-  const [steps, setSteps] = useState<string[]>(
-    workflow?.steps || [
-      "x",
-      "youtube",
-      "media",
-      "schedule",
-      "translate",
-      "reconcile",
-    ],
-  )
-  const [scheduled, setScheduled] = useState(workflow?.scheduleEnabled ?? false)
-  const [interval, setInterval] = useState(workflow?.intervalMinutes || 60)
+  const { api, start, overview } = useAdmin()
+  const catalog = useResource(() => api.stepCatalog(), [])
+  const skipped = catalog.data?.skippedSteps || []
+  const [steps, setSteps] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
-  const readsSource = steps.some((step) => sourceSteps.includes(step))
-  const timed = scheduled && !readsSource
-  const options = intervals.includes(interval)
-    ? intervals
-    : [...intervals, interval].sort((a, b) => a - b)
-  const save = async (event: SubmitEvent<HTMLFormElement>) => {
+  const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
-    const body = {
-      name,
-      steps,
-      scheduleEnabled: timed,
-      intervalMinutes: interval,
-    }
-    const result = await act(
-      () =>
-        workflow
-          ? api.updateWorkflow(workflow.id, body)
-          : api.createWorkflow(body),
-      "admin.notice.workflowSaved",
-    )
+    if (await start({ kind: "workflow", steps })) setSteps([])
     setBusy(false)
-    if (result) onClose(true)
   }
   return (
-    <Modal
-      open
-      title={
-        workflow ? t("admin.runs.editWorkflow") : t("admin.runs.newWorkflow")
-      }
-      onClose={() => onClose()}
-    >
-      <form className="adm-form" onSubmit={save}>
-        <Field label={t("admin.runs.field.name")}>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={80}
-            required
-            autoFocus
-          />
-        </Field>
-        <fieldset className="adm-fieldset">
-          <legend>{t("admin.runs.field.steps")}</legend>
-          <div className="adm-step-picker">
-            {catalog.steps.map((step) => {
-              const Icon = stepIcons[step.id]
-              const checked = steps.includes(step.id)
-              const skipped = catalog.skippedSteps.includes(step.id)
-              return (
-                <label
-                  key={step.id}
-                  className={checked ? "is-checked" : undefined}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(event) =>
-                      setSteps((current) =>
-                        event.target.checked
-                          ? [...current, step.id]
-                          : current.filter((id) => id !== step.id),
-                      )
-                    }
-                  />
-                  {Icon ? <Icon aria-hidden /> : null}
-                  <span>
-                    <strong>{t(`admin.step.${step.id}`)}</strong>
-                    <small>
-                      {skipped
-                        ? t("admin.runs.skippedStep")
-                        : t(`admin.step.${step.id}.hint`)}
-                    </small>
-                  </span>
-                </label>
-              )
-            })}
-          </div>
-        </fieldset>
-        <Switch
-          checked={timed}
-          disabled={readsSource}
-          onChange={setScheduled}
-          label={t("admin.runs.field.scheduled")}
-          description={t(
-            readsSource
-              ? "admin.runs.field.scheduledSource"
-              : "admin.runs.field.scheduledHint",
-          )}
-        />
-        {timed ? (
-          <Field label={t("admin.runs.field.interval")}>
-            <select
-              value={interval}
-              onChange={(e) => setInterval(Number(e.target.value))}
-            >
-              {options
-                .filter(
-                  (value) =>
-                    value >= catalog.limits.minIntervalMinutes &&
-                    value <= catalog.limits.maxIntervalMinutes,
-                )
-                .map((value) => (
-                  <option key={value} value={value}>
-                    {formatInterval(value, t)}
-                  </option>
-                ))}
-            </select>
-          </Field>
-        ) : null}
-        <div className="adm-form-actions">
-          <Button onClick={() => onClose()}>{t("admin.action.cancel")}</Button>
-          <Button
-            type="submit"
-            variant="primary"
-            busy={busy}
-            disabled={!steps.length}
-          >
-            {t("admin.action.save")}
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  )
-}
-
-function WorkflowsPanel() {
-  const { t, locale } = useAppSettings()
-  const { api, act, start, overview } = useAdmin()
-  const catalog = useResource(() => api.workflows(), [])
-  const [editing, setEditing] = useState<Workflow | null | undefined>(undefined)
-  const busy = Boolean(overview?.activeRun)
-  return (
     <Panel
-      title={t("admin.runs.workflows")}
-      description={t("admin.runs.workflowsHint")}
-      icon={WorkflowIcon}
-      actions={
-        <Button
-          size="sm"
-          icon={Plus}
-          onClick={() => setEditing(null)}
-          disabled={!catalog.data}
-        >
-          {t("admin.runs.newWorkflow")}
-        </Button>
-      }
+      title={t("admin.runs.stepRun")}
+      description={t("admin.runs.stepRunHint")}
+      icon={ListChecks}
     >
       {!catalog.data ? (
         <Loading />
-      ) : catalog.data.items.length ? (
-        <ul className="adm-workflow-list">
-          {catalog.data.items.map((workflow) => (
-            <li key={workflow.id} className="adm-workflow">
-              <div className="adm-workflow-main">
-                <strong>{workflow.name}</strong>
-                <span className="adm-chip-row">
-                  {workflow.steps.map((step) => {
-                    const Icon = stepIcons[step]
-                    return (
-                      <Badge key={step} icon={Icon}>
-                        {t(`admin.step.${step}`)}
-                      </Badge>
-                    )
-                  })}
-                </span>
-              </div>
-              <div className="adm-workflow-schedule">
-                {workflow.scheduleEnabled ? (
-                  <>
-                    <Badge tone="leaf" icon={CalendarClock}>
-                      {t("admin.runs.every", {
-                        interval: formatInterval(workflow.intervalMinutes, t),
-                      })}
-                    </Badge>
-                    {workflow.nextRunAt ? (
-                      <small title={formatDateTime(workflow.nextRunAt, locale)}>
-                        {t("admin.runs.next", {
-                          relative: formatRelative(workflow.nextRunAt, locale),
-                        })}
-                      </small>
-                    ) : null}
-                  </>
-                ) : (
-                  <Badge>{t("admin.runs.manualOnly")}</Badge>
-                )}
-              </div>
-              <div className="adm-workflow-last">
-                {workflow.lastStatus ? (
-                  <StatusBadge status={workflow.lastStatus} />
-                ) : null}
-                {workflow.lastRunAt ? (
-                  <small>{formatRelative(workflow.lastRunAt, locale)}</small>
-                ) : null}
-              </div>
-              <div className="adm-row-actions">
-                <Button
-                  size="sm"
-                  icon={Play}
-                  disabled={busy}
-                  onClick={() =>
-                    start({ kind: "workflow", workflowId: workflow.id })
-                  }
-                >
-                  {t("admin.runs.runNow")}
-                </Button>
-                <IconButton
-                  icon={Pencil}
-                  label={t("admin.runs.editWorkflow")}
-                  onClick={() => setEditing(workflow)}
-                />
-                <ConfirmButton
-                  size="sm"
-                  variant="ghost"
-                  icon={Trash2}
-                  aria-label={t("admin.runs.deleteWorkflow")}
-                  onConfirm={async () => {
-                    const result = await act(
-                      () => api.deleteWorkflow(workflow.id),
-                      "admin.notice.workflowDeleted",
-                    )
-                    if (result !== undefined) void catalog.reload()
-                  }}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
       ) : (
-        <Empty icon={WorkflowIcon} title={t("admin.runs.noWorkflows")}>
-          {t("admin.runs.noWorkflowsHint")}
-        </Empty>
+        <form className="adm-form" onSubmit={submit}>
+          <fieldset className="adm-fieldset">
+            <legend>{t("admin.runs.field.steps")}</legend>
+            <div className="adm-step-picker">
+              {catalog.data.steps.map((step) => {
+                const Icon = stepIcons[step.id]
+                const checked = steps.includes(step.id)
+                return (
+                  <label
+                    key={step.id}
+                    className={checked ? "is-checked" : undefined}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) =>
+                        setSteps((current) =>
+                          event.target.checked
+                            ? [...current, step.id]
+                            : current.filter((id) => id !== step.id),
+                        )
+                      }
+                    />
+                    {Icon ? <Icon aria-hidden /> : null}
+                    <span>
+                      <strong>{t(`admin.step.${step.id}`)}</strong>
+                      <small>
+                        {skipped.includes(step.id)
+                          ? t("admin.runs.skippedStep")
+                          : t(`admin.step.${step.id}.hint`)}
+                      </small>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
+          <div className="adm-form-actions">
+            <Button
+              type="submit"
+              variant="primary"
+              icon={Play}
+              busy={busy}
+              disabled={!steps.length || Boolean(overview?.activeRun)}
+            >
+              {t("admin.runs.runOnce")}
+            </Button>
+          </div>
+        </form>
       )}
-      {editing !== undefined && catalog.data ? (
-        <WorkflowDialog
-          workflow={editing}
-          catalog={catalog.data}
-          onClose={(saved) => {
-            setEditing(undefined)
-            if (saved) void catalog.reload()
-          }}
-        />
-      ) : null}
     </Panel>
   )
 }
@@ -503,7 +294,7 @@ export function RunsView(_: ViewProps) {
           </>
         }
       />
-      <WorkflowsPanel />
+      <StepRunPanel />
       <HistoryPanel />
     </div>
   )

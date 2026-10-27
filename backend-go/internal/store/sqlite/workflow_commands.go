@@ -169,34 +169,18 @@ func (s *Store) ClaimWorkflowRun(ctx context.Context, id, owner string, now time
 	if e = affected(result, nil); e != nil {
 		return WorkflowLease{}, ErrWorkflowBusy
 	}
-	var workflowID string
+	var workflowID, trigger string
 	var generation int
-	if e = tx.QueryRowContext(ctx, `SELECT workflow_id,recovery_count FROM workflow_runs WHERE id=?`, id).Scan(&workflowID, &generation); e != nil {
+	if e = tx.QueryRowContext(ctx, `SELECT workflow_id,trigger_source,recovery_count FROM workflow_runs WHERE id=?`, id).Scan(&workflowID, &trigger, &generation); e != nil {
 		return WorkflowLease{}, ErrWorkflowStorage
 	}
 	lease := WorkflowLease{id, owner, generation + 1, now.Add(ttl)}
 	if _, e = tx.ExecContext(ctx, `INSERT INTO workflow_leases VALUES('global',?,?,?,?,?)`, id, owner, workflowTime(now), workflowTime(lease.ExpiresAt), lease.Generation); e != nil {
 		return WorkflowLease{}, workflowSQLError(e)
 	}
-	var interval, enabled int
-	e = tx.QueryRowContext(ctx, `SELECT interval_minutes,schedule_enabled FROM workflows WHERE id=?`, workflowID).Scan(&interval, &enabled)
-	// Operator jobs (full sync, scan, one-source fetch) run from an unsaved
-	// definition, so there is no saved workflow row to plan or annotate.
-	if e != nil && !(errors.Is(e, sql.ErrNoRows) && IsAdhocWorkflow(workflowID)) {
-		return WorkflowLease{}, ErrWorkflowStorage
-	}
-	if e == nil {
-		var next any
-		if enabled != 0 {
-			next = workflowTime(now.Add(time.Duration(clampInterval(interval)) * time.Minute))
-		}
-		if _, e = tx.ExecContext(ctx, `UPDATE workflows SET last_run_at=?,last_job_id=?,last_status='running',next_run_at=?,updated_at=? WHERE id=?`, workflowTime(now), id, next, workflowTime(now), workflowID); e != nil {
-			return WorkflowLease{}, ErrWorkflowStorage
-		}
-	}
-	// A source schedule plans its next run from the claim, as a saved
-	// workflow timer does.
-	if source, scheduled := SourceScheduleOf(workflowID); scheduled {
+	// A source schedule plans its next run from the claim of a run its timer
+	// submitted. An operator's Run now leaves the plan alone.
+	if source, scheduled := SourceScheduleOf(workflowID); scheduled && trigger == "scheduler" {
 		if e = planSourceSchedule(ctx, tx, source, now); e != nil {
 			return WorkflowLease{}, e
 		}
@@ -334,9 +318,6 @@ func (s *Store) FinishWorkflowRun(ctx context.Context, l WorkflowLease, status, 
 		return ErrWorkflowStorage
 	}
 	if e = bumpRevision(ctx, tx, workflowTime(now)); e != nil {
-		return ErrWorkflowStorage
-	}
-	if _, e = tx.ExecContext(ctx, `UPDATE workflows SET last_status=?,updated_at=? WHERE last_job_id=?`, status, workflowTime(now), l.RunID); e != nil {
 		return ErrWorkflowStorage
 	}
 	if _, e = tx.ExecContext(ctx, `DELETE FROM workflow_leases WHERE run_id=? AND owner_id=? AND generation=?`, l.RunID, l.OwnerID, l.Generation); e != nil {

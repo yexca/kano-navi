@@ -93,7 +93,7 @@ func Parse(args []string) (Config, error) {
 	flags.BoolVar(&c.EnableXSync, "enable-x-sync", false, "enable development-only X recent source writes")
 	flags.BoolVar(&c.EnableYoutubeSync, "enable-youtube-sync", false, "enable development-only YouTube recent source writes")
 	flags.BoolVar(&c.EnableMediaDownloads, "enable-media-downloads", false, "enable development-only bounded media downloads")
-	flags.BoolVar(&c.EnableScheduler, "enable-scheduler", false, "enable development-only Go workflow timers")
+	flags.BoolVar(&c.EnableScheduler, "enable-scheduler", false, "enable development-only Go source schedule timers")
 	flags.BoolVar(&c.Initialize, "initialize", false, "initialize and seed a development snapshot with Go")
 	flags.BoolVar(&c.Standalone, "standalone", false, "serve the whole site from this process (API, admin, workflows, MCP, frontend)")
 	flags.StringVar(&c.StaticDirectory, "static", DefaultStaticDirectory, "built frontend directory served in standalone mode")

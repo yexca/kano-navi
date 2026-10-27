@@ -757,7 +757,7 @@ func TestControlToolsStartSingleFlightJobs(t *testing.T) {
 		t.Fatalf("accepted = %v", accepted)
 	}
 	job := accepted["job"].(map[string]any)
-	wantKeys := []string{"createdAt", "error", "fetchWindows", "finishedAt", "id", "kind", "progress", "result", "run", "startedAt", "status", "steps", "triggeredBy", "workflowId", "workflowName"}
+	wantKeys := []string{"createdAt", "error", "fetchWindows", "finishedAt", "id", "kind", "progress", "result", "run", "startedAt", "status", "steps", "triggeredBy", "workflowId"}
 	if got := keys(job); !reflect.DeepEqual(got, wantKeys) {
 		t.Fatalf("job keys = %v", got)
 	}

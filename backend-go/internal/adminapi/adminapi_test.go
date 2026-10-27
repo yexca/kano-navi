@@ -53,6 +53,7 @@ type console struct {
 	handler http.Handler
 	steps   *gatedSteps
 	store   *sqlite.Store
+	runs    *jobs.QueueManager
 	cookie  string
 }
 
@@ -84,10 +85,11 @@ func newConsole(t *testing.T, mode, password string, steps *gatedSteps) *console
 	}
 	queue := &workflow.Queue{Store: store, Executor: executor}
 	t.Cleanup(queue.Close)
+	runs := &jobs.QueueManager{Store: store, Queue: queue}
 	handler := New(Options{
 		Store:            store,
 		Auth:             newAuth(t, mode, password),
-		Runs:             &jobs.QueueManager{Store: store, Queue: queue},
+		Runs:             runs,
 		Modules:          []httpx.AdminModule{pingModule{}},
 		Scheduler:        func() map[string]any { return map[string]any{"enabled": true, "running": true, "tickSeconds": 30} },
 		SkippedSteps:     []string{"media"},
@@ -103,7 +105,7 @@ func newConsole(t *testing.T, mode, password string, steps *gatedSteps) *console
 		},
 		Now: func() time.Time { return time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC) },
 	})
-	return &console{handler: handler, steps: steps, store: store}
+	return &console{handler: handler, steps: steps, store: store, runs: runs}
 }
 
 func (c *console) call(t *testing.T, method, path, body string, headers ...string) (int, map[string]any) {
@@ -183,7 +185,7 @@ func runID(t *testing.T, payload map[string]any) string {
 
 func TestSessionGuardsEveryRoute(t *testing.T) {
 	c := newConsole(t, "production", "synthetic-password", &gatedSteps{})
-	for _, path := range []string{"/api/admin/overview", "/api/admin/runs", "/api/admin/workflows", "/api/admin/ping", "/api/admin/events", "/api/admin/unknown"} {
+	for _, path := range []string{"/api/admin/overview", "/api/admin/runs", "/api/admin/runs/steps", "/api/admin/ping", "/api/admin/events", "/api/admin/unknown"} {
 		if code, payload := c.call(t, "GET", path, ""); code != 401 || payload["error"] != "admin_auth_required" {
 			t.Fatalf("%s=%d %v", path, code, payload)
 		}
@@ -209,7 +211,7 @@ func TestSessionGuardsEveryRoute(t *testing.T) {
 	if code, payload := c.call(t, "GET", "/api/admin/unknown", ""); code != 404 || payload["error"] != "not_found" {
 		t.Fatalf("unknown=%d %v", code, payload)
 	}
-	if code, payload := c.call(t, "PATCH", "/api/admin/workflows", ""); code != 405 || payload["error"] != "method_not_allowed" {
+	if code, payload := c.call(t, "PATCH", "/api/admin/runs", ""); code != 405 || payload["error"] != "method_not_allowed" {
 		t.Fatalf("method=%d %v", code, payload)
 	}
 	if code, payload := c.call(t, "POST", "/api/admin/runs", `{"kind":"sync"}`, "Sec-Fetch-Site", "cross-site"); code != 403 || payload["error"] != "csrf_origin_mismatch" {
@@ -223,92 +225,66 @@ func TestSessionGuardsEveryRoute(t *testing.T) {
 	}
 }
 
-func TestWorkflowLifecycle(t *testing.T) {
+func TestOneOffStepRunsReplaceSavedWorkflows(t *testing.T) {
 	c := newConsole(t, "development", "", &gatedSteps{})
-	code, payload := c.call(t, "GET", "/api/admin/workflows", "")
-	if code != 200 || len(payload["items"].([]any)) != 0 || len(payload["steps"].([]any)) != 7 {
-		t.Fatalf("empty=%d %v", code, payload)
-	}
-	if limits := payload["limits"].(map[string]any); limits["minIntervalMinutes"] != float64(15) || limits["maxIntervalMinutes"] != float64(10080) {
-		t.Fatalf("limits=%v", limits)
+	code, payload := c.call(t, "GET", "/api/admin/runs/steps", "")
+	if code != 200 || len(payload["steps"].([]any)) != 7 {
+		t.Fatalf("catalog=%d %v", code, payload)
 	}
 	if skipped := payload["skippedSteps"].([]any); len(skipped) != 1 || skipped[0] != "media" {
 		t.Fatalf("skipped=%v", skipped)
 	}
+	// Saved workflows are removed (ADR-0003): their endpoints are gone and a
+	// workflowId is refused.
+	for _, route := range [][2]string{{"GET", "/api/admin/workflows"}, {"POST", "/api/admin/workflows"}, {"PUT", "/api/admin/workflows/full-refresh"}, {"DELETE", "/api/admin/workflows/full-refresh"}} {
+		if code, payload := c.call(t, route[0], route[1], `{"name":"Flow","steps":["x"]}`); code != 404 || payload["error"] != "not_found" {
+			t.Fatalf("%s %s=%d %v", route[0], route[1], code, payload)
+		}
+	}
+	const removed = "saved workflows are removed; send the steps to run once, or use a source's Run now"
 	for body, message := range map[string]string{
-		`{"steps":["x"]}`:                                                             "name is required",
-		`{"name":"Flow"}`:                                                             "steps must be an array of step ids",
-		`{"name":"Flow","steps":["x","unknown"]}`:                                     "steps contains an unsupported value",
-		`{"name":"Flow","steps":[]}`:                                                  "steps must not be empty",
-		`{"name":"Flow","steps":["x"],"intervalMinutes":5}`:                           "intervalMinutes must be an integer from 15 to 10080",
-		`{"name":"Flow","steps":["x"],"scheduleEnabled":"sometimes"}`:                 "scheduleEnabled must be a boolean",
-		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"count","count":5}}}`: "sourceSync is set on each source schedule, not on a workflow",
-		`{"name":"Flow","steps":["x"],"sourceLookbackDays":{"x":7}}`:                  "sourceLookbackDays is not a workflow field",
-		`{"name":"Flow","steps":["x"],"arbitrary":"data"}`:                            "arbitrary is not a workflow field",
-		`{"name":"Flow","steps":["x","media"],"scheduleEnabled":true}`:                "a workflow with a source step runs manually; enable the x source schedule on the Sources page instead",
-		`{"name":"Flow","steps":["youtube","bilibili"],"scheduleEnabled":true}`:       "a workflow with a source step runs manually; enable the youtube and bilibili source schedules on the Sources page instead",
+		`{"kind":"workflow","workflowId":"full-refresh"}`:               removed,
+		`{"kind":"workflow","workflowId":"full-refresh","steps":["x"]}`: removed,
+		`{"kind":"workflow"}`:                             "steps must be an array of step ids",
+		`{"kind":"workflow","steps":"x"}`:                 "steps must be an array of step ids",
+		`{"kind":"workflow","steps":["x","unknown"]}`:     "steps contains an unsupported value",
+		`{"kind":"workflow","steps":["live"]}`:            "steps contains an unsupported value",
+		`{"kind":"workflow","steps":[]}`:                  "steps must not be empty",
+		`{"kind":"workflow","steps":["x"],"name":"Flow"}`: "name is not supported for workflow",
 	} {
-		if code, payload := c.call(t, "POST", "/api/admin/workflows", body); code != 400 || payload["error"] != "invalid_input" || payload["message"] != message {
+		if code, payload := c.call(t, "POST", "/api/admin/runs", body); code != 400 || payload["error"] != "invalid_input" || payload["message"] != message {
 			t.Fatalf("%s => %d %v", body, code, payload)
 		}
 	}
-	code, payload = c.call(t, "POST", "/api/admin/workflows", `{"name":" Evening ","steps":["media","x","x"],"intervalMinutes":30}`)
-	if code != 201 {
-		t.Fatalf("create=%d %v", code, payload)
-	}
-	created := payload["workflow"].(map[string]any)
-	id := created["id"].(string)
-	steps := created["steps"].([]any)
-	if created["name"] != "Evening" || len(steps) != 2 || steps[0] != "x" || steps[1] != "media" || created["scheduleEnabled"] != false || created["nextRunAt"] != nil {
-		t.Fatalf("created=%v", created)
-	}
-	if _, listed := created["sourceSync"]; listed {
-		t.Fatalf("a workflow must not carry sourceSync: %v", created)
-	}
-	// Enabling a timer later is refused as well; a rename keeps working.
-	if code, payload = c.call(t, "PUT", "/api/admin/workflows/"+id, `{"scheduleEnabled":true}`); code != 400 || payload["error"] != "invalid_input" {
-		t.Fatalf("timer on a source workflow=%d %v", code, payload)
-	}
-	code, payload = c.call(t, "PUT", "/api/admin/workflows/"+id, `{"name":"Evening"}`)
-	if updated := payload["workflow"].(map[string]any); code != 200 || updated["scheduleEnabled"] != false || updated["name"] != "Evening" {
-		t.Fatalf("update=%d %v", code, payload)
-	}
-	// Workflows without a source step keep their timers.
-	code, payload = c.call(t, "POST", "/api/admin/workflows", `{"name":"Sweep","steps":["translate"],"scheduleEnabled":true,"intervalMinutes":30}`)
-	if sweep := payload["workflow"].(map[string]any); code != 201 || sweep["scheduleEnabled"] != true || sweep["nextRunAt"] == nil {
-		t.Fatalf("timed sweep=%d %v", code, payload)
-	}
-	// A manual run reads X as the X schedule does.
+	// A one-off step run runs in catalog order and reads X as the X schedule
+	// does.
 	if code, payload = c.call(t, "PUT", "/api/admin/sources/x/schedule", `{"sync":{"mode":"count","count":30}}`); code != 200 {
 		t.Fatalf("x schedule=%d %v", code, payload)
 	}
-	if code, payload = c.call(t, "PUT", "/api/admin/workflows/missing", `{"name":"x"}`); code != 404 || payload["error"] != "workflow_not_found" {
-		t.Fatalf("missing update=%d %v", code, payload)
-	}
-	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"workflow","workflowId":"`+id+`"}`)
+	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"workflow","steps":["media"," X ","x"]}`)
 	if code != 202 {
 		t.Fatalf("run=%d %v", code, payload)
 	}
 	run := c.waitForRun(t, runID(t, payload), "completed")
-	if run["kind"] != "workflow" || run["workflowId"] != id || run["workflowName"] != "Evening" || run["triggeredBy"] != "admin" {
+	if run["kind"] != "workflow" || run["workflowId"] != nil || run["sourceSchedule"] != nil || run["triggeredBy"] != "admin" || fmt.Sprint(run["steps"]) != "[x media reconcile]" {
 		t.Fatalf("run=%v", run)
 	}
-	// The run shows the frozen sync setting of its source steps.
+	if _, named := run["workflowName"]; named {
+		t.Fatalf("a run carries no workflow name: %v", run)
+	}
 	if windows := run["fetchWindows"].(map[string]any); windows["x"].(map[string]any)["count"] != float64(30) || windows["youtube"] != nil {
 		t.Fatalf("windows=%v", windows)
 	}
-	_, payload = c.call(t, "GET", "/api/admin/workflows", "")
-	if listed := payload["items"].([]any)[0].(map[string]any); listed["lastStatus"] != "succeeded" || listed["lastJobId"] != run["id"] {
-		t.Fatalf("listed=%v", listed)
+	// An older run of a retired saved workflow stays in the history with its
+	// ID; the retired definition is not read.
+	c.exec(t, `INSERT INTO workflows(id,name,steps_json,created_at,updated_at) VALUES('evening','Evening','["x"]','2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`)
+	c.exec(t, `INSERT INTO workflow_runs(id,workflow_id,status,trigger_source,execution_source,created_at,started_at,finished_at) VALUES('retired-run','evening','succeeded','scheduler','scheduler','2026-03-01T00:00:00.000Z','2026-03-01T00:00:01.000Z','2026-03-01T00:00:02.000Z')`)
+	code, payload = c.call(t, "GET", "/api/admin/runs/retired-run", "")
+	if retired := payload["run"].(map[string]any); code != 200 || retired["workflowId"] != "evening" || retired["kind"] != "workflow" || retired["sourceSchedule"] != nil || retired["status"] != "completed" {
+		t.Fatalf("retired=%d %v", code, payload)
 	}
-	if code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"workflow","workflowId":"missing"}`); code != 404 || payload["error"] != "workflow_not_found" {
-		t.Fatalf("missing run=%d %v", code, payload)
-	}
-	if code, _ = c.call(t, "DELETE", "/api/admin/workflows/"+id, ""); code != 204 {
-		t.Fatalf("delete=%d", code)
-	}
-	if code, _ = c.call(t, "DELETE", "/api/admin/workflows/"+id, ""); code != 404 {
-		t.Fatalf("second delete=%d", code)
+	if code, payload = c.call(t, "GET", "/api/admin/runs?pageSize=5", ""); code != 200 || payload["total"] != float64(2) {
+		t.Fatalf("history=%d %v", code, payload)
 	}
 }
 
@@ -319,7 +295,7 @@ func TestRunsAreSingleFlightAndSurviveOneFailedSource(t *testing.T) {
 		`{}`:                              "kind must be sync, scan, translate, workflow or fetch",
 		`{"kind":"party"}`:                "kind must be sync, scan, translate, workflow or fetch",
 		`{"kind":"sync","source":"x"}`:    "source is not supported for sync",
-		`{"kind":"workflow"}`:             "workflowId is required",
+		`{"kind":"workflow"}`:             "steps must be an array of step ids",
 		`{"kind":"fetch","source":"rss"}`: "source must be x or youtube",
 	} {
 		if code, payload := c.call(t, "POST", "/api/admin/runs", body); code != 400 || payload["message"] != message {
@@ -434,10 +410,6 @@ func TestSourceFetchWindows(t *testing.T) {
 	steps := run["steps"].([]any)
 	if run["kind"] != "workflow" || run["workflowId"] != nil || fmt.Sprint(steps) != "[youtube media reconcile]" {
 		t.Fatalf("run=%v", run)
-	}
-	// An unsaved fetch never appears as a saved workflow.
-	if _, payload = c.call(t, "GET", "/api/admin/workflows", ""); len(payload["items"].([]any)) != 0 {
-		t.Fatalf("workflows=%v", payload["items"])
 	}
 }
 

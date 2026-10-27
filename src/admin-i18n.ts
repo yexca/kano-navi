@@ -24,7 +24,7 @@ export const adminMessages = {
     "admin.nav.posts": "Posts",
     "admin.nav.videos": "Videos",
     "admin.nav.profile": "Profile images",
-    "admin.nav.runs": "Runs & workflows",
+    "admin.nav.runs": "Runs",
     "admin.nav.sources": "Sources",
     "admin.nav.models": "Models & detection",
     "admin.sidebar.schedulerOn": "Timer on · {count} scheduled",
@@ -90,11 +90,13 @@ export const adminMessages = {
 
     "admin.run.kind.sync": "Full sync",
     "admin.run.kind.scan": "Schedule scan",
-    "admin.run.kind.workflow": "Workflow",
+    "admin.run.kind.workflow": "Step run",
     "admin.run.kind.live": "Live-status probe",
     "admin.run.kind.translate": "Translation",
     "admin.run.fetchTitle": "Fetch {sources}",
     "admin.run.sourceTitle": "{source} timer",
+    "admin.run.sourceRunNow": "{source} · run now",
+    "admin.run.retiredWorkflow": "Retired workflow · {id}",
     "admin.run.by.admin": "Started here",
     "admin.run.by.scheduler": "Timer",
     "admin.run.by.websub": "YouTube push",
@@ -131,7 +133,7 @@ export const adminMessages = {
     "admin.overview.startedAt": "Started {time} JST",
     "admin.overview.nextRun": "Next timed run {relative} ({time} JST)",
     "admin.overview.noSchedule": "Nothing runs on a timer.",
-    "admin.overview.openWorkflows": "Open workflows",
+    "admin.overview.openTimers": "Source timers",
     "admin.overview.sources": "Sources",
     "admin.overview.manageSources": "Fetch & push",
     "admin.overview.lastSuccess": "Last successful read {time}",
@@ -148,7 +150,7 @@ export const adminMessages = {
     "admin.overview.allRuns": "All runs",
     "admin.overview.noRunsYet": "No runs yet",
     "admin.overview.noRunsHint":
-      "Start a sync or a workflow to read the sources.",
+      "Start a sync or turn on a source timer to read the sources.",
 
     "admin.review.title": "Review queue",
     "admin.review.description":
@@ -463,31 +465,15 @@ export const adminMessages = {
     "admin.profile.source.youtube": "YouTube",
     "admin.profile.source.upload": "Upload",
 
-    "admin.runs.title": "Runs & workflows",
+    "admin.runs.title": "Runs",
     "admin.runs.description":
       "Every run shares one queue: only one runs at a time and a busy queue refuses new work.",
-    "admin.runs.workflows": "Saved workflows",
-    "admin.runs.workflowsHint":
-      "Reusable step lists for manual runs. Sources run on their own timers on the Sources page.",
-    "admin.runs.newWorkflow": "New workflow",
-    "admin.runs.editWorkflow": "Edit workflow",
-    "admin.runs.deleteWorkflow": "Delete workflow",
-    "admin.runs.noWorkflows": "No saved workflows",
-    "admin.runs.noWorkflowsHint":
-      "Create one for a combination of steps you run by hand, or use Sync everything for a one-off run.",
-    "admin.runs.every": "Every {interval}",
-    "admin.runs.next": "next {relative}",
-    "admin.runs.manualOnly": "Manual only",
-    "admin.runs.runNow": "Run now",
+    "admin.runs.stepRun": "Run steps once",
+    "admin.runs.stepRunHint":
+      "Pick any steps and run them once; nothing is saved. Sources also run on their own timers on the Sources page.",
+    "admin.runs.runOnce": "Run once",
     "admin.runs.skippedStep": "Disabled in this process",
-    "admin.runs.field.name": "Name",
     "admin.runs.field.steps": "Steps",
-    "admin.runs.field.scheduled": "Run on a timer",
-    "admin.runs.field.scheduledHint":
-      "For steps that read no source, such as a translation sweep.",
-    "admin.runs.field.scheduledSource":
-      "Workflows with a source step run manually. Each source has its own timer on the Sources page.",
-    "admin.runs.field.interval": "Interval",
     "admin.runs.history": "Run history",
     "admin.runs.historyHint": "Select a run for its steps and counts.",
     "admin.runs.created": "Queued",
@@ -614,7 +600,10 @@ export const adminMessages = {
     "admin.timer.syncLimitHint.youtube":
       "1 to 200. Without YOUTUBE_API_KEY the RSS feed lists 15.",
     "admin.timer.nextRun": "Next run",
-    "admin.timer.lastRun": "Last timer run",
+    "admin.timer.lastRun": "Last run",
+    "admin.timer.runNow": "Run now",
+    "admin.timer.runNowHint":
+      "Run this source's steps once. The next timed run stays as planned.",
     "admin.timer.never": "Never",
     "admin.fetch.title": "Fetch a window",
     "admin.fetch.description":
@@ -747,8 +736,6 @@ export const adminMessages = {
     "admin.notice.runQueued": "Run queued",
     "admin.notice.busy": "Another run is in progress",
     "admin.notice.cancelRequested": "Cancellation requested",
-    "admin.notice.workflowSaved": "Workflow saved",
-    "admin.notice.workflowDeleted": "Workflow deleted",
     "admin.notice.eventCreated": "Entry created and locked",
     "admin.notice.eventSaved": "Entry saved and locked",
     "admin.notice.eventConfirmed": "Entry confirmed and locked",
@@ -877,7 +864,7 @@ export const adminMessages = {
     "admin.nav.posts": "贴文",
     "admin.nav.videos": "视频",
     "admin.nav.profile": "头像与横幅",
-    "admin.nav.runs": "运行与工作流",
+    "admin.nav.runs": "运行",
     "admin.nav.sources": "来源",
     "admin.nav.models": "模型与识别",
     "admin.sidebar.schedulerOn": "定时器运行中 · {count} 个定时",
@@ -940,11 +927,13 @@ export const adminMessages = {
 
     "admin.run.kind.sync": "完整同步",
     "admin.run.kind.scan": "日程扫描",
-    "admin.run.kind.workflow": "工作流",
+    "admin.run.kind.workflow": "步骤运行",
     "admin.run.kind.live": "直播状态探测",
     "admin.run.kind.translate": "翻译",
     "admin.run.fetchTitle": "抓取 {sources}",
     "admin.run.sourceTitle": "{source} 定时读取",
+    "admin.run.sourceRunNow": "{source} · 立即运行",
+    "admin.run.retiredWorkflow": "已停用的工作流 · {id}",
     "admin.run.by.admin": "后台发起",
     "admin.run.by.scheduler": "定时器",
     "admin.run.by.websub": "YouTube 推送",
@@ -976,7 +965,7 @@ export const adminMessages = {
     "admin.overview.startedAt": "开始于 {time}（日本时间）",
     "admin.overview.nextRun": "下次定时运行 {relative}（{time} 日本时间）",
     "admin.overview.noSchedule": "没有任何定时运行。",
-    "admin.overview.openWorkflows": "打开工作流",
+    "admin.overview.openTimers": "来源定时器",
     "admin.overview.sources": "来源",
     "admin.overview.manageSources": "抓取与推送",
     "admin.overview.lastSuccess": "最近一次成功读取 {time}",
@@ -992,7 +981,7 @@ export const adminMessages = {
     "admin.overview.recent": "最近运行",
     "admin.overview.allRuns": "全部运行",
     "admin.overview.noRunsYet": "还没有运行记录",
-    "admin.overview.noRunsHint": "启动一次同步或工作流来读取来源。",
+    "admin.overview.noRunsHint": "启动一次同步，或开启来源定时器来读取来源。",
 
     "admin.review.title": "待审核",
     "admin.review.description":
@@ -1295,30 +1284,15 @@ export const adminMessages = {
     "admin.profile.source.youtube": "YouTube",
     "admin.profile.source.upload": "上传",
 
-    "admin.runs.title": "运行与工作流",
+    "admin.runs.title": "运行",
     "admin.runs.description":
       "所有运行共用一个队列：同时只运行一个，队列忙时会拒绝新任务。",
-    "admin.runs.workflows": "已保存的工作流",
-    "admin.runs.workflowsHint":
-      "供手动运行的可复用步骤列表。来源在“来源”页按各自的定时器运行。",
-    "admin.runs.newWorkflow": "新建工作流",
-    "admin.runs.editWorkflow": "编辑工作流",
-    "admin.runs.deleteWorkflow": "删除工作流",
-    "admin.runs.noWorkflows": "还没有工作流",
-    "admin.runs.noWorkflowsHint":
-      "新建一个常用的步骤组合以便手动运行，或使用“全部同步”运行一次。",
-    "admin.runs.every": "每 {interval}",
-    "admin.runs.next": "下次 {relative}",
-    "admin.runs.manualOnly": "仅手动",
-    "admin.runs.runNow": "立即运行",
+    "admin.runs.stepRun": "单次运行步骤",
+    "admin.runs.stepRunHint":
+      "任选步骤运行一次，不会保存。来源也会在“来源”页按各自的定时器运行。",
+    "admin.runs.runOnce": "运行一次",
     "admin.runs.skippedStep": "本进程已停用",
-    "admin.runs.field.name": "名称",
     "admin.runs.field.steps": "步骤",
-    "admin.runs.field.scheduled": "定时运行",
-    "admin.runs.field.scheduledHint": "适用于不读取来源的步骤，例如补翻译。",
-    "admin.runs.field.scheduledSource":
-      "包含来源步骤的工作流只能手动运行。每个来源在“来源”页有自己的定时器。",
-    "admin.runs.field.interval": "间隔",
     "admin.runs.history": "运行记录",
     "admin.runs.historyHint": "选择一次运行查看步骤和数量。",
     "admin.runs.created": "排队",
@@ -1437,7 +1411,10 @@ export const adminMessages = {
     "admin.timer.syncLimitHint.youtube":
       "1 到 200。没有 YOUTUBE_API_KEY 时 RSS 只列出 15 个。",
     "admin.timer.nextRun": "下次运行",
-    "admin.timer.lastRun": "上次定时运行",
+    "admin.timer.lastRun": "上次运行",
+    "admin.timer.runNow": "立即运行",
+    "admin.timer.runNowHint":
+      "立即运行此来源的步骤一次，下次定时运行的时间不变。",
     "admin.timer.never": "从未",
     "admin.fetch.title": "抓取时间窗口",
     "admin.fetch.description":
@@ -1563,8 +1540,6 @@ export const adminMessages = {
     "admin.notice.runQueued": "已加入队列",
     "admin.notice.busy": "已有其他运行在进行",
     "admin.notice.cancelRequested": "已请求取消",
-    "admin.notice.workflowSaved": "工作流已保存",
-    "admin.notice.workflowDeleted": "工作流已删除",
     "admin.notice.eventCreated": "条目已创建并锁定",
     "admin.notice.eventSaved": "条目已保存并锁定",
     "admin.notice.eventConfirmed": "条目已确认并锁定",

@@ -81,8 +81,8 @@ For a pinned release, GHCR images, custom ports, or a reverse proxy, see
 The profile, milestones, resource links, and history images are available immediately.
 X posts, YouTube videos, schedules, and AI providers start empty.
 
-- Open `/admin` and run a workflow with X, YouTube, and media cache steps to populate the board.
-- Enable a timer on a saved workflow if you want regular updates.
+- Open `/admin` → Sources and use **Run now** on X and YouTube (or Sync everything) to populate the board.
+- Turn on each source's timer on the Sources page if you want regular updates.
 - For optional AI schedule extraction, add OpenAI-compatible or Anthropic
   providers, models, and detection routes in the console. API hosts can omit
   `/v1`. See [configuration](docs/operations/configuration.md) for setup.
@@ -112,7 +112,7 @@ cp .env.example .env
 ```
 
 For local development, set `APP_MODE=development` in `.env` to enable password-free
-admin access, and `WORKFLOW_SCHEDULER_ENABLED=0` to disable source timers and timed workflows.
+admin access, and `WORKFLOW_SCHEDULER_ENABLED=0` to disable the source timers.
 Set a non-blank `LLM_SECRETS_KEY` before starting; development and preview also
 require it. Then run:
 

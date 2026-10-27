@@ -15,7 +15,7 @@ Enable only the desired flags:
 - `-enable-x-sync`: X recent reads and snapshot writes.
 - `-enable-youtube-sync`: RSS, stream discovery and watch details.
 - `-enable-media-downloads`: pending X/YouTube image downloads.
-- `-enable-scheduler`: saved workflow timers in this API process.
+- `-enable-scheduler`: source schedule timers in this API process.
 - `-enable-admin-writes`: manual events, also alongside source flags.
 
 `-initialize` compiles the canonical fresh SQL schema and public profile,
@@ -36,22 +36,20 @@ scratch image includes a CA bundle for verified HTTPS and no Node or shell.
 
 Admin authentication and origin protection apply to every mutation:
 
-| Route                                   | Behavior                                      |
-| --------------------------------------- | --------------------------------------------- |
-| `POST /api/admin/sources/x/fetch`       | Recent X window, 1..365 days                  |
-| `POST /api/admin/sources/youtube/fetch` | Recent YouTube window, 1..365 days            |
-| `POST /api/admin/workflows`             | Create a definition                           |
-| `PUT /api/admin/workflows/:id`          | Edit, preserving omitted fields               |
-| `DELETE /api/admin/workflows/:id`       | Delete an inactive definition, retain history |
-| `POST /api/admin/workflows/:id/run`     | Submit through the durable queue              |
-| `POST /api/admin/runs/:id/cancel`       | Cancel queued or active work                  |
-| `POST /api/admin/runs/:id/retry`        | Retry eligible failed steps, retain attempts  |
-| `GET /api/admin/runs/:id`               | Read durable steps, attempts and status       |
+| Route                                   | Behavior                                     |
+| --------------------------------------- | -------------------------------------------- |
+| `POST /api/admin/sources/x/fetch`       | Recent X window, 1..365 days                 |
+| `POST /api/admin/sources/youtube/fetch` | Recent YouTube window, 1..365 days           |
+| `POST /api/admin/runs`                  | Run picked steps once (`kind: "workflow"`)   |
+| `POST /api/admin/runs/:id/cancel`       | Cancel queued or active work                 |
+| `POST /api/admin/runs/:id/retry`        | Retry eligible failed steps, retain attempts |
+| `GET /api/admin/runs/:id`               | Read durable steps, attempts and status      |
 
 Source bodies are `{ "window": { "mode": "recent", "days": 7 } }`. Duplicate
 keys, trailing content, unknown fields and invalid types are rejected. History
-modes remain unsupported. Source endpoints run only their source; include
-`media` in a saved workflow or run `media-download` to download pending images.
+modes remain unsupported. Source endpoints run only their source; pick
+`media` in a one-off step run to download pending images. Saved workflows
+are retired ([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)).
 
 ## Execution and storage
 

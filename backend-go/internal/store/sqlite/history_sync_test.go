@@ -183,21 +183,15 @@ func TestHistoryVideosKeepReservationStateAndRestartAfterSearchLimit(t *testing.
 	}
 }
 
-func TestStandaloneSeedsDefaultWorkflowsOnceAndRestoresStaticWording(t *testing.T) {
+func TestStandaloneSeedsNoWorkflowsAndRestoresStaticWording(t *testing.T) {
 	s, query := openHistoryStore(t)
 	ctx := context.Background()
-	if got := query(`SELECT group_concat(id||':'||name||':'||schedule_enabled||':'||interval_minutes,',') FROM (SELECT * FROM workflows ORDER BY id)`); got != "full-refresh:Full refresh:0:60,sources-only:Sources only:0:30" {
+	// Saved workflows are retired (ADR-0003): the table stays, empty.
+	if got := query(`SELECT COUNT(*) FROM workflows`); got != "0" {
 		t.Fatalf("workflows=%s", got)
 	}
-	// A deleted starting workflow is the operator's decision and stays deleted.
-	if _, err := s.db.Exec(`DELETE FROM workflows; UPDATE resources SET title='edited' WHERE id=9`); err != nil {
+	if _, err := s.db.Exec(`UPDATE resources SET title='edited' WHERE id=9`); err != nil {
 		t.Fatal(err)
-	}
-	if err := s.seedDefaultWorkflows(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if got := query(`SELECT COUNT(*) FROM workflows`); got != "0" {
-		t.Fatalf("reseeded workflows=%s", got)
 	}
 	if err := s.SeedStatic(ctx, false); err != nil {
 		t.Fatal(err)

@@ -20,24 +20,8 @@ type Queue struct {
 	recoveryCancel context.CancelFunc
 }
 
-func (q *Queue) Submit(ctx context.Context, id string, trigger TriggerSource, key string, days map[string]int) (*Run, error) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if q.closed || q.Executor == nil {
-		return nil, sqlite.ErrWorkflowUnavailable
-	}
-	run, err := q.Executor.Prepare(ctx, id, trigger, key, days)
-	if err != nil {
-		return nil, err
-	}
-	if run.Status == "queued" {
-		q.dispatch(run)
-	}
-	return run, nil
-}
-
-// SubmitDefinition queues an unsaved definition through the same durable
-// single-flight reservation as saved workflows.
+// SubmitDefinition queues a definition through the durable single-flight
+// reservation shared with timers and recovery.
 func (q *Queue) SubmitDefinition(ctx context.Context, definition sqlite.WorkflowDefinition, trigger TriggerSource, days map[string]int) (*Run, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -145,11 +129,9 @@ func (q *Queue) Retry(ctx context.Context, id string) (*Run, error) {
 	if q.closed {
 		return nil, sqlite.ErrWorkflowUnavailable
 	}
-	existing, lookupErr := q.Store.GetWorkflowRun(ctx, id)
-	if lookupErr != nil {
-		return nil, lookupErr
-	}
-	if _, lookupErr = q.Store.GetWorkflow(ctx, existing.WorkflowID); lookupErr != nil {
+	// The run keeps its own steps, sync and windows, so retrying it needs no
+	// saved definition.
+	if _, lookupErr := q.Store.GetWorkflowRun(ctx, id); lookupErr != nil {
 		return nil, lookupErr
 	}
 	if err := q.Store.RetryWorkflowRun(ctx, id, time.Now()); err != nil {

@@ -52,7 +52,7 @@ external work:
   "activeRun": Run | null,
   "recentRuns": [Run],            // newest 6
   "scheduler": {"enabled", "running", "tickSeconds"},
-  "workflows": {"total", "scheduled", "nextRunAt"},
+  "timers": {"scheduled", "nextRunAt"},
   "sources": {
     "x":       {"skipped", "lastSuccessAt", "lastStep"},
     "youtube": {"skipped", "lastSuccessAt", "lastStep", "push": {"enabled", "verified"}}
@@ -67,6 +67,10 @@ external work:
 }
 ```
 
+`timers` counts the enabled [source schedules](#sources) this process runs
+(not those disabled by `SKIP_*`) and the earliest planned run among them.
+Retired saved workflows are not counted.
+
 `lastSuccessAt` is the newest successful incremental read of the source
 (`sync_state.last_success_at`). `lastStep` is `{runId, status, finishedAt}` of
 the source's step in the newest finished run among the last 20 that included
@@ -77,16 +81,22 @@ it, or `null`.
 A run is one single-flight unit of work on the durable workflow queue. Its
 shape is the `jobs.Job` projection shared with MCP control tools:
 `{id, kind, status, createdAt, startedAt, finishedAt, triggeredBy, workflowId,
-workflowName, steps, progress, fetchWindows, result, error, run}` where
+sourceSchedule, steps, progress, fetchWindows, result, error, run}` where
 `kind` is `sync`, `scan`, `translate`, `workflow` or `live` (the YouTube
 live-status probe, started only by its timer with `triggeredBy:
 "live-probe"` and the one step `live`), `status` is `queued`, `running`,
 `completed` or `failed`, and `progress` maps each step to `pending`,
 `running`, `completed`, `partial`, `failed`, `skipped` or `cancelled`.
+`sourceSchedule` names the source whose chain the run is: its timer
+(`triggeredBy: "source-schedule"`) or the operator's Run now
+(`triggeredBy: "admin"`); it is null for other runs. `workflowId` is null
+for every new run. An older run of a retired saved workflow keeps that
+workflow's ID there; its name is not read.
 
 | Method and path          | Body / query              | Result                                 |
 | ------------------------ | ------------------------- | -------------------------------------- |
 | `GET /runs`              | `page`, `pageSize` (≤ 50) | list of runs, newest first             |
+| `GET /runs/steps`        |                           | `{steps, skippedSteps}`                |
 | `GET /runs/{id}`         |                           | `{run}`; `404 run_not_found`           |
 | `POST /runs`             | see below                 | `202 {run}`; `409 {error:"busy", run}` |
 | `POST /runs/{id}/cancel` |                           | `202 {run}`                            |
@@ -97,8 +107,10 @@ live-status probe, started only by its timer with `triggeredBy:
 - `{"kind": "sync"}`: every source, media, schedule and translate step.
 - `{"kind": "scan"}`: the automatic schedule extraction only.
 - `{"kind": "translate"}`: the translate step only.
-- `{"kind": "workflow", "workflowId": "..."}`: a saved workflow;
-  `404 workflow_not_found`.
+- `{"kind": "workflow", "steps": ["x", "translate"]}`: a one-off step run.
+  Known catalog steps run once in catalog order; an empty list or another
+  value is `400 invalid_input`. Source steps read as their
+  [source schedule](#sources) does.
 - `{"kind": "fetch", "source": "x" | "youtube", "window": Window}`: one
   source plus media for a [history window](workflows.md#fetch-windows-and-historical-backfill).
   `Window` is `{mode: "recent" | "before", days}`, `{mode: "range",
@@ -109,32 +121,18 @@ startDate, endDate}` or `{mode: "count", count}` (1–200 per X account or
   page the public timeline and a YouTube `count` window reads the uploads
   listing.
 
-A busy queue answers `409` with the active run.
+A busy queue answers `409` with the active run. Saved workflows are removed
+([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)): a
+`workflowId` in the body answers `400 invalid_input`, and the
+`/workflows` endpoints answer `404 not_found`.
 
-## Workflows
+`GET /runs/steps` is the step catalog `[{id, group}]` in execution order
+(`x`, `youtube`, `bilibili` are `source`; `media`, `schedule`,
+`translate`, `reconcile` are `process`), and `skippedSteps` lists the
+steps disabled through `SKIP_*`.
 
-| Method and path          | Body                                              | Result                                 |
-| ------------------------ | ------------------------------------------------- | -------------------------------------- |
-| `GET /workflows`         |                                                   | `{items, steps, limits, skippedSteps}` |
-| `POST /workflows`        | `{name, steps, scheduleEnabled, intervalMinutes}` | `201 {workflow}`                       |
-| `PUT /workflows/{id}`    | any subset of the above                           | `{workflow}`                           |
-| `DELETE /workflows/{id}` |                                                   | `204`; `409 busy` while it runs        |
-
-`steps` is the catalog `[{id, group}]` (`x`, `youtube` are `source`; `media`,
-`schedule` are `process`), `limits` is `{minIntervalMinutes,
-maxIntervalMinutes}` and `skippedSteps` lists steps disabled through `SKIP_*`.
-Each workflow carries `lastRunAt`, `lastStatus` (durable run status) and
-`nextRunAt`.
-
-Sync settings belong to the [source schedules](#sources): `sourceSync` and
-other fields, including the retired `sourceLookbackDays`, are rejected with
-`400 invalid_input`. A manual run of a saved workflow reads X and YouTube as
-their schedules do, and its `fetchWindows` shows the setting its source steps
-froze. `scheduleEnabled: true` on a workflow that contains `x`, `youtube` or
-`bilibili` (including a timed workflow whose steps gain one) is rejected with
-`400 invalid_input` naming the source schedule to use instead, for example
-"a workflow with a source step runs manually; enable the x source schedule on
-the Sources page instead". Workflows without a source step keep their timers.
+A failed run with a retryable failed step can be retried. The run keeps its
+steps, sync settings and windows, so no saved definition is needed.
 
 ## Sources
 
@@ -142,6 +140,7 @@ the Sources page instead". Workflows without a source step keep their timers.
 | ------------------------------------------ | ---------------------------------- | ------------------------- |
 | `GET /sources`                             |                                    | per-source status (below) |
 | `PUT /sources/{source}/schedule`           | `{enabled, intervalMinutes, sync}` | `SourceSchedule`          |
+| `POST /sources/{source}/run`               |                                    | `202 {run}`; `409 busy`   |
 | `GET /sources/youtube/push`                |                                    | push status               |
 | `PUT /sources/youtube/push`                | `{enabled, callbackUrl}`           | push status               |
 | `POST /sources/youtube/push/rotate-secret` |                                    | push status               |
@@ -166,7 +165,8 @@ fetch window modes the source can run now, such as `["recent", "range",
 enabled, intervalMinutes, minIntervalMinutes, maxIntervalMinutes, sync,
 nextRunAt, lastRun, skipped}`, plus `reason: "environment"` while `SKIP_*`
 disables the source. `sync` is `{mode: "incremental", max}` (default, `max` 50) or `{mode: "count", count}`, each 1–200, and null for Bilibili.
-`lastRun` is `{id, status, at}` of the newest run the schedule submitted
+`lastRun` is `{id, status, at}` of the newest run of the source's chain, from
+its timer or Run now
 (durable run status; `at` is when it finished, started or was queued), or
 null. The Bilibili `minIntervalMinutes` is `BILIBILI_MIN_INTERVAL_MINUTES`.
 `PUT /sources/{source}/schedule` takes any subset of `{enabled,
@@ -174,11 +174,14 @@ intervalMinutes, sync}` and keeps omitted fields. It answers `404 not_found`
 for another source and `400 invalid_input` for other fields, an interval
 outside the bounds, an invalid `sync` or a `sync` for Bilibili. Enabling a
 schedule or changing its interval plans the next run one interval later; a
-sync change alone keeps the plan. The overview's `workflows.scheduled` and
-`nextRunAt` count enabled source schedules (not those disabled by `SKIP_*`)
-along with timed workflows. A run a schedule submitted has
-`sourceSchedule` set to its source and `triggeredBy: "source-schedule"`;
-other runs have `sourceSchedule: null`.
+sync change alone keeps the plan.
+
+`POST /sources/{source}/run` is **Run now**: it submits the source's fixed
+chain once, triggered by the operator and read with the schedule's sync
+setting, and answers `202 {run}` or `409 {error: "busy", run}` while the
+queue is occupied. It does not move the schedule's `nextRunAt`. It answers
+`404 not_found` for another source and `400 invalid_input` while `SKIP_*`
+disables the source.
 
 `PushStatus` is `{available, enabled, callbackUrl, callbackPath,
 secretConfigured, verified, leaseExpiresAt, nextRenewalAt, pending,

@@ -40,7 +40,7 @@ type Options struct {
 	Auth    *adminauth.Auth
 	Runs    RunManager
 	Modules []httpx.AdminModule
-	// Scheduler reports the in-process workflow timer.
+	// Scheduler reports the in-process source schedule timer.
 	Scheduler func() map[string]any
 	// YoutubePush reports the WebSub settings and subscription.
 	YoutubePush func() map[string]any
@@ -105,17 +105,14 @@ func (a *api) routes() []httpx.Route {
 
 		{Method: http.MethodGet, Path: "/runs", Handler: a.needRuns(a.listRuns)},
 		{Method: http.MethodPost, Path: "/runs", Handler: a.needRuns(a.startRun)},
+		{Method: http.MethodGet, Path: "/runs/steps", Handler: a.stepCatalog},
 		{Method: http.MethodGet, Path: "/runs/{id}", Handler: a.needRuns(a.getRun)},
 		{Method: http.MethodPost, Path: "/runs/{id}/cancel", Handler: a.needRuns(a.cancelRun)},
 		{Method: http.MethodPost, Path: "/runs/{id}/retry", Handler: a.needRuns(a.retryRun)},
 
-		{Method: http.MethodGet, Path: "/workflows", Handler: a.listWorkflows},
-		{Method: http.MethodPost, Path: "/workflows", Handler: a.createWorkflow},
-		{Method: http.MethodPut, Path: "/workflows/{id}", Handler: a.updateWorkflow},
-		{Method: http.MethodDelete, Path: "/workflows/{id}", Handler: a.deleteWorkflow},
-
 		{Method: http.MethodGet, Path: "/sources", Handler: a.sources},
 		{Method: http.MethodPut, Path: "/sources/{source}/schedule", Handler: a.updateSourceSchedule},
+		{Method: http.MethodPost, Path: "/sources/{source}/run", Handler: a.needRuns(a.runSource)},
 		{Method: http.MethodGet, Path: "/sources/youtube/live-probe", Handler: a.liveProbe},
 		{Method: http.MethodPut, Path: "/sources/youtube/live-probe", Handler: a.updateLiveProbe},
 

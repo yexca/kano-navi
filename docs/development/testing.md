@@ -134,7 +134,7 @@ in `backend-go/`; see [Performance measurements](performance.md) for the
 recorded history.
 
 Production smoke creates a disposable container from the built image, uses
-synthetic production authentication, disables workflow timers, and publishes a
+synthetic production authentication, disables the source timers, and publishes a
 random loopback-only port. Its anonymous data volume is removed in cleanup.
 It validates the image's `kano-go serve` entry point, fresh SQLite, public API,
 SPA page routes, and the protected admin API. It does not mount host data or pass host secrets.

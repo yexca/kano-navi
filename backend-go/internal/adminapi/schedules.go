@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/yexca/kano-navi/backend-go/internal/jobs"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
@@ -113,24 +113,23 @@ func (a *api) updateSourceSchedule(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, a.scheduleEntry(saved))
 }
 
-// sourceStepsOf lists the source steps of a workflow, whose timers belong to
-// the source schedules.
-func sourceStepsOf(steps []string) []string {
-	out := []string{}
-	for _, step := range steps {
-		if slices.Contains(sqlite.ScheduleSources, step) {
-			out = append(out, step)
-		}
+// runSource starts Run now: the source's fixed chain once, triggered by the
+// operator and read with its schedule's sync setting. It does not move the
+// schedule's next run.
+func (a *api) runSource(w http.ResponseWriter, r *http.Request) {
+	source := r.PathValue("source")
+	if !slices.Contains(sqlite.ScheduleSources, source) {
+		httpx.WriteCode(w, http.StatusNotFound, "not_found")
+		return
 	}
-	return out
-}
-
-// timerRefusal is the validation error for a timer on a workflow that reads
-// a source: the source schedule runs it instead.
-func timerRefusal(sources []string) error {
-	noun := "schedule"
-	if len(sources) > 1 {
-		noun = "schedules"
+	if a.skipped(source) {
+		httpx.WriteError(w, httpx.Invalid("the %s source is disabled for this process", source))
+		return
 	}
-	return httpx.Invalid("a workflow with a source step runs manually; enable the %s source %s on the Sources page instead", strings.Join(sources, " and "), noun)
+	result, err := a.Runs.Start(r.Context(), jobs.KindWorkflow, "admin", jobs.Options{Source: source})
+	if err != nil {
+		workflowError(w, err, "not_found")
+		return
+	}
+	writeStart(w, result)
 }

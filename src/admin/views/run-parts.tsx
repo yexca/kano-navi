@@ -58,13 +58,24 @@ export function RunSteps({ run }: { run: Run }) {
   )
 }
 
+/** Steps a run may hold and still read as a fetch of its sources. */
+const fetchSteps = ["x", "youtube", "bilibili", "media", "reconcile"]
+
 export function runTitle(run: Run, t: Translator) {
-  if (run.workflowName) return run.workflowName
-  if (run.sourceSchedule)
-    return t("admin.run.sourceTitle", {
-      source: t(`admin.step.${run.sourceSchedule}`),
-    })
-  if (run.kind === "workflow" && run.fetchWindows) {
+  if (run.sourceSchedule) {
+    const source = t(`admin.step.${run.sourceSchedule}`)
+    return run.triggeredBy === "source-schedule"
+      ? t("admin.run.sourceTitle", { source })
+      : t("admin.run.sourceRunNow", { source })
+  }
+  // An older run of a saved workflow, retired by ADR-0003.
+  if (run.workflowId)
+    return t("admin.run.retiredWorkflow", { id: run.workflowId })
+  if (
+    run.kind === "workflow" &&
+    run.fetchWindows &&
+    run.steps.every((step) => fetchSteps.includes(step))
+  ) {
     const sources = Object.keys(run.fetchWindows)
     return t("admin.run.fetchTitle", {
       sources: sources.map((source) => t(`admin.step.${source}`)).join(" + "),

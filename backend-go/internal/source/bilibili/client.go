@@ -199,7 +199,7 @@ func (c *Client) Video(ctx context.Context, bvid string, session Session) (Video
 type Options struct {
 	// Account is the uploader's numeric mid.
 	Account string
-	// MinInterval spaces list reads, whatever the workflow timer.
+	// MinInterval spaces list reads, whatever the source schedule.
 	MinInterval time.Duration
 	PageSize    int
 	// SESSDATA is an operator's Bilibili login cookie from BILIBILI_SESSDATA.

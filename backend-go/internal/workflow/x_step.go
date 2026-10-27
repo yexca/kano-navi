@@ -24,7 +24,7 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	if in.LookbackDays > 0 {
 		opts.BootstrapDays = in.LookbackDays
 	}
-	// A saved workflow's incremental cap replaces X_DISCOVERY_LIMIT.
+	// A source schedule's incremental cap replaces X_DISCOVERY_LIMIT.
 	if in.Sync.Mode == sqlite.SyncIncremental && in.Sync.Max > 0 {
 		opts.DiscoveryLimit = in.Sync.Max
 	}

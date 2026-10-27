@@ -27,10 +27,7 @@ func TestGoSourceWorkflowProducesPostsReservationsAndReadableMedia(t *testing.T)
 	defer s.Close()
 	testutil.Exec(t, p, `CREATE UNIQUE INDEX IF NOT EXISTS media_assets_source_url_idx ON media_assets(source_url)`)
 	testutil.Exec(t, p, `CREATE UNIQUE INDEX IF NOT EXISTS media_links_owner_position_idx ON media_links(owner_type,owner_id,role,position)`)
-	def, err := s.SaveWorkflow(context.Background(), sqlite.WorkflowDefinition{Name: "Sources", Steps: []string{"x", "youtube", "media"}, IntervalMinutes: 60}, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+	def := sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: []string{"x", "youtube", "media"}}
 	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
 		body, mime := "", "text/html"
 		switch r.URL.Host {
@@ -67,7 +64,7 @@ func TestGoSourceWorkflowProducesPostsReservationsAndReadableMedia(t *testing.T)
 	steps := &SourceSteps{Store: s, X: &XRecentExecutor{Store: s, Adapter: x, Options: xopts}, Youtube: yt, Media: mediadownload.NewClient(&http.Client{Transport: rt})}
 	q := &Queue{Store: s, Executor: &Executor{Store: s, Steps: steps, SyntheticSteps: map[string]bool{"x": false, "youtube": false, "media": false}}}
 	defer q.Close()
-	run, err := q.Submit(context.Background(), def.ID, TriggerOperator, "", nil)
+	run, err := q.SubmitDefinition(context.Background(), def, TriggerOperator, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

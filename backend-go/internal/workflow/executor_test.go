@@ -19,12 +19,6 @@ func (x *retryOnce) Execute(_ context.Context, in StepInput) (AttemptResult, err
 }
 func TestExecutorPersistsOrderedSyntheticRunAndRetry(t *testing.T) {
 	path := testutil.NewSnapshot(t)
-	bootstrap, err := sqlite.OpenWorkflowCore(path, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bootstrap.Close()
-	testutil.Exec(t, path, `INSERT INTO workflows(id,name,steps_json,source_lookback_json,created_at,updated_at) VALUES ('w','Workflow','["x","schedule"]','{}','2026-10-12T00:00:00Z','2026-10-12T00:00:00Z')`)
 	store, err := sqlite.OpenWorkflowCore(path, true)
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +26,7 @@ func TestExecutorPersistsOrderedSyntheticRunAndRetry(t *testing.T) {
 	defer store.Close()
 	x := &retryOnce{}
 	ex := &Executor{Store: store, Steps: x, OwnerID: "test", MaxAttempts: 2}
-	run, err := ex.Run(context.Background(), "w", TriggerOperator, "idem")
+	run, err := ex.Run(context.Background(), sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: []string{"x", "schedule"}}, TriggerOperator, "idem")
 	if err != nil {
 		t.Fatal(err)
 	}

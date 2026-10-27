@@ -414,6 +414,72 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
         }
       },
     )
+
+    await t.test(
+      "Run now and one-off step runs post to their own paths, and saved workflows are gone",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          await fixture.respond(fixture.open("/session"), signedIn)
+          await fixture.respond(fixture.open("/overview"), overview())
+          const { api, start } = fixture.current()
+          assert.equal("workflows" in api, false)
+          assert.equal("createWorkflow" in api, false)
+
+          const catalog = api.stepCatalog()
+          const steps = {
+            steps: [
+              { id: "x", group: "source" },
+              { id: "translate", group: "process" },
+            ],
+            skippedSteps: [],
+          }
+          await fixture.respond(fixture.open("/runs/steps"), steps)
+          assert.deepEqual(await catalog, steps)
+
+          // Run now: the source's chain, posted without a body.
+          let started: Promise<unknown> | undefined
+          await act(async () => {
+            started = start({ kind: "source", source: "bilibili" })
+          })
+          const now = fixture.open("/sources/bilibili/run", "POST")
+          assert.equal(now.body, undefined)
+          await fixture.respond(now, { run: run("run-synthetic-now") }, 202)
+          assert.equal(
+            ((await started) as { id: string }).id,
+            "run-synthetic-now",
+          )
+          assert.equal(fixture.all("/runs", "POST").length, 0)
+          assert.deepEqual(fixture.current().toasts.at(-1).message, {
+            key: "admin.notice.runQueued",
+            values: {},
+          })
+
+          // A one-off step run sends the picked steps; a busy queue is a
+          // notice, not an error.
+          await act(async () => {
+            started = start({ kind: "workflow", steps: ["x", "translate"] })
+          })
+          const post = fixture.open("/runs", "POST")
+          assert.deepEqual(post.body, {
+            kind: "workflow",
+            steps: ["x", "translate"],
+          })
+          await fixture.respond(
+            post,
+            { error: "busy", run: run("run-synthetic-now") },
+            409,
+          )
+          assert.equal(await started, undefined)
+          assert.deepEqual(fixture.current().toasts.at(-1).message, {
+            key: "admin.notice.busy",
+            values: {},
+          })
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
   } finally {
     await vite.close()
   }

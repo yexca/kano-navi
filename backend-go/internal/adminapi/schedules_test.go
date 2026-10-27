@@ -3,6 +3,7 @@ package adminapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -89,10 +90,15 @@ func TestSourceSchedulesAPI(t *testing.T) {
 	if code, payload = c.call(t, "PUT", "/api/admin/sources/bilibili/schedule", `{"enabled":true}`); code != 200 || payload["nextRunAt"] != "2026-03-02T06:00:00.000Z" {
 		t.Fatalf("bilibili=%d %v", code, payload)
 	}
-	// Enabled source schedules count as timers on the overview.
+	// Enabled source schedules are the overview's timers; a retired timed
+	// workflow is not counted.
+	c.exec(t, `INSERT INTO workflows(id,name,steps_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES('sweep','Sweep','["translate"]',1,15,'2026-03-02T03:05:00.000Z','2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`)
 	_, payload = c.call(t, "GET", "/api/admin/overview", "")
-	if workflows := payload["workflows"].(map[string]any); workflows["scheduled"] != float64(2) || workflows["nextRunAt"] != "2026-03-02T03:20:00.000Z" {
-		t.Fatalf("overview workflows=%v", workflows)
+	if timers := payload["timers"].(map[string]any); timers["scheduled"] != float64(2) || timers["nextRunAt"] != "2026-03-02T03:20:00.000Z" {
+		t.Fatalf("overview timers=%v", timers)
+	}
+	if _, listed := payload["workflows"]; listed {
+		t.Fatalf("the overview lists no workflows: %v", payload)
 	}
 	_, payload = c.call(t, "GET", "/api/admin/sources", "")
 	if x = scheduleBySource(t, payload, "x"); x["enabled"] != true || x["nextRunAt"] != "2026-03-02T03:20:00.000Z" {
@@ -108,8 +114,8 @@ func TestSourceSchedulesAPI(t *testing.T) {
 		t.Fatalf("skipped bilibili=%v", bilibili)
 	}
 	_, payload = skipped.call(t, "GET", "/api/admin/overview", "")
-	if workflows := payload["workflows"].(map[string]any); workflows["scheduled"] != float64(1) {
-		t.Fatalf("a skipped schedule is not a timer: %v", workflows)
+	if timers := payload["timers"].(map[string]any); timers["scheduled"] != float64(1) {
+		t.Fatalf("a skipped schedule is not a timer: %v", timers)
 	}
 	// A schedule's run is labelled by its source and shows its frozen sync.
 	ctx := context.Background()
@@ -130,5 +136,60 @@ func TestSourceSchedulesAPI(t *testing.T) {
 	_, payload = c.call(t, "GET", "/api/admin/sources", "")
 	if last := scheduleBySource(t, payload, "x")["lastRun"].(map[string]any); last["id"] != run.ID || last["status"] != "queued" || last["at"] == nil {
 		t.Fatalf("last run=%v", last)
+	}
+}
+
+func TestRunNowSubmitsTheSourceChainOnce(t *testing.T) {
+	steps := &gatedSteps{gate: make(chan struct{})}
+	c := newConsole(t, "development", "", steps)
+	if code, payload := c.call(t, "PUT", "/api/admin/sources/x/schedule", `{"enabled":true,"sync":{"mode":"count","count":40}}`); code != 200 || payload["nextRunAt"] != "2026-03-02T03:30:00.000Z" {
+		t.Fatalf("x schedule=%d %v", code, payload)
+	}
+	if code, payload := c.call(t, "POST", "/api/admin/sources/mastodon/run", ""); code != 404 || payload["error"] != "not_found" {
+		t.Fatalf("unknown source=%d %v", code, payload)
+	}
+	code, payload := c.call(t, "POST", "/api/admin/sources/x/run", "")
+	if code != 202 {
+		t.Fatalf("run now=%d %v", code, payload)
+	}
+	id := runID(t, payload)
+	<-steps.seen
+	// One run at a time: a second Run now finds the queue busy.
+	code, payload = c.call(t, "POST", "/api/admin/sources/bilibili/run", "")
+	if code != 409 || payload["error"] != "busy" || runID(t, payload) != id {
+		t.Fatalf("busy=%d %v", code, payload)
+	}
+	close(steps.gate)
+	run := c.waitForRun(t, id, "completed")
+	if run["kind"] != "workflow" || run["sourceSchedule"] != "x" || run["triggeredBy"] != "admin" || run["workflowId"] != nil ||
+		fmt.Sprint(run["steps"]) != "[x media schedule translate reconcile]" {
+		t.Fatalf("run=%v", run)
+	}
+	// The chain reads X with the schedule's sync, frozen on the run.
+	if window := run["fetchWindows"].(map[string]any)["x"].(map[string]any); window["mode"] != "count" || window["count"] != float64(40) {
+		t.Fatalf("sync=%v", window)
+	}
+	// Run now leaves the timer's plan alone and shows as the last run.
+	_, payload = c.call(t, "GET", "/api/admin/sources", "")
+	x := scheduleBySource(t, payload, "x")
+	if x["nextRunAt"] != "2026-03-02T03:30:00.000Z" || x["lastRun"].(map[string]any)["id"] != id {
+		t.Fatalf("x schedule=%v", x)
+	}
+	// Bilibili's chain has no sync setting.
+	code, payload = c.call(t, "POST", "/api/admin/sources/bilibili/run", "")
+	if code != 202 {
+		t.Fatalf("bilibili=%d %v", code, payload)
+	}
+	bilibili := c.waitForRun(t, runID(t, payload), "completed")
+	if bilibili["sourceSchedule"] != "bilibili" || fmt.Sprint(bilibili["steps"]) != "[bilibili media translate reconcile]" || bilibili["fetchWindows"] != nil {
+		t.Fatalf("bilibili run=%v", bilibili)
+	}
+	// SKIP_* refuses Run now for that source.
+	skipped := &console{store: c.store, handler: New(Options{
+		Store: c.store, Auth: newAuth(t, "development", ""), Runs: c.runs, SkippedSteps: []string{"youtube"},
+		Now: func() time.Time { return time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC) },
+	})}
+	if code, payload = skipped.call(t, "POST", "/api/admin/sources/youtube/run", ""); code != 400 || payload["message"] != "the youtube source is disabled for this process" {
+		t.Fatalf("skipped=%d %v", code, payload)
 	}
 }

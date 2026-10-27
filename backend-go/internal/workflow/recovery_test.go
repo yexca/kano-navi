@@ -47,24 +47,12 @@ func TestRetryUsesFrozenWindowAndSkipsCompletedStep(t *testing.T) {
 	}
 	defer s.Close()
 	ctx := context.Background()
-	def, err := s.SaveWorkflow(ctx, sqlite.WorkflowDefinition{Name: "Retry", Steps: []string{"x", "youtube"}, IntervalMinutes: 60}, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// A manual run reads each source as its schedule does.
-	saveSync := func(source string, setting sqlite.SourceSync) {
-		t.Helper()
-		schedule, err := s.SourceScheduleFor(ctx, source, 180)
-		if err != nil {
-			t.Fatal(err)
-		}
-		schedule.Sync = &setting
-		if _, err = s.SaveSourceSchedule(ctx, schedule, 180, time.Now()); err != nil {
-			t.Fatal(err)
-		}
-	}
-	saveSync("x", sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 3})
-	saveSync("youtube", sqlite.SourceSync{Mode: sqlite.SyncIncremental, Max: 5})
+	// A one-off step run freezes how each source reads; no saved definition
+	// is needed to retry it.
+	def := sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: []string{"x", "youtube"}, SourceSync: map[string]sqlite.SourceSync{
+		"x":       {Mode: sqlite.SyncCount, Count: 3},
+		"youtube": {Mode: sqlite.SyncIncremental, Max: 5},
+	}}
 	steps := &failThenRecover{}
 	paused := &pausedTerminalRead{Store: s, published: make(chan struct{}), release: make(chan struct{})}
 	q := &Queue{Store: s, Executor: &Executor{Store: paused, Steps: steps, MaxAttempts: 1}}
@@ -76,7 +64,7 @@ func TestRetryUsesFrozenWindowAndSkipsCompletedStep(t *testing.T) {
 			close(paused.release)
 		}
 	}()
-	run, err := q.Submit(ctx, def.ID, TriggerOperator, "", nil)
+	run, err := q.SubmitDefinition(ctx, def, TriggerOperator, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +74,6 @@ func TestRetryUsesFrozenWindowAndSkipsCompletedStep(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("terminal read was not held")
 	}
-	saveSync("x", sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 7})
 	retry, err := q.Retry(ctx, run.ID)
 	if err != nil || retry.ID != run.ID {
 		t.Fatalf("retry=%#v err=%v", retry, err)
@@ -104,8 +91,7 @@ func TestRestartRecoversExpiredRunWithOriginalAttempts(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	_ = s.EnsureXRecentWorkflow(ctx)
-	def, _ := s.GetWorkflow(ctx, "x-recent")
+	def := &sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: []string{"x"}}
 	def.SourceSync = map[string]sqlite.SourceSync{"x": {Mode: sqlite.SyncIncremental, Max: 4}}
 	run, err := s.CreateWorkflowRun(ctx, *def, "operator", "", map[string]bool{"x": true}, time.Now())
 	if err != nil {

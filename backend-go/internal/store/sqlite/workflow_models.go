@@ -18,28 +18,21 @@ var (
 	ErrWorkflowStorage     = errors.New("workflow storage unavailable")
 )
 
+// WorkflowDefinition is what one run executes. Every run is ad hoc: its ID
+// names the kind of work (AdhocSyncWorkflow, SourceScheduleWorkflow, ...)
+// and nothing is saved apart from the run. Saved workflows are retired
+// (ADR-0003); their table stays in the schema, unread.
 type WorkflowDefinition struct {
-	ID    string   `json:"id"`
-	Name  string   `json:"name"`
-	Steps []string `json:"steps"`
+	ID    string
+	Steps []string
 	// SourceSync is how each source step of a run reads, from the source
-	// schedules (ADR-0003). It is frozen on the run, never saved with a
-	// definition.
-	SourceSync      map[string]SourceSync `json:"-"`
-	ScheduleEnabled bool                  `json:"scheduleEnabled"`
-	IntervalMinutes int                   `json:"intervalMinutes"`
-	LastRunAt       *string               `json:"lastRunAt"`
-	LastJobID       *string               `json:"lastJobId"`
-	LastStatus      *string               `json:"lastStatus"`
-	NextRunAt       *string               `json:"nextRunAt"`
-	CreatedAt       string                `json:"createdAt"`
-	UpdatedAt       string                `json:"updatedAt"`
+	// schedules (ADR-0003). It is frozen on the run.
+	SourceSync map[string]SourceSync
 	// SourceLookbackDays are the days of an operator's recent fetch windows.
-	// Saved definitions no longer use them.
-	SourceLookbackDays map[string]int `json:"-"`
-	// FetchWindows are operator-selected source windows of an unsaved fetch.
-	// They are frozen on the run and never stored with a saved definition.
-	FetchWindows map[string]history.Window `json:"-"`
+	SourceLookbackDays map[string]int
+	// FetchWindows are operator-selected source windows of a fetch. They are
+	// frozen on the run.
+	FetchWindows map[string]history.Window
 }
 type WorkflowAttempt struct {
 	AttemptNumber int     `json:"attemptNumber"`
@@ -78,14 +71,6 @@ type WorkflowRun struct {
 	SourceSync              map[string]SourceSync     `json:"sourceSync,omitempty"`
 	FetchWindows            map[string]history.Window `json:"fetchWindows,omitempty"`
 	Steps                   []WorkflowStep            `json:"steps,omitempty"`
-}
-type WorkflowPage struct {
-	Workflows  []WorkflowDefinition `json:"workflows"`
-	Page       int                  `json:"page"`
-	PageSize   int                  `json:"pageSize"`
-	Total      int                  `json:"total"`
-	TotalPages int                  `json:"totalPages"`
-	HasNext    bool                 `json:"hasNext"`
 }
 type WorkflowRunPage struct {
 	Runs       []WorkflowRun `json:"runs"`

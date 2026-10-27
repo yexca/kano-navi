@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
@@ -57,33 +58,39 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 	source := "workflow"
 	var run *sqlite.WorkflowRun
 	var err error
-	switch {
-	case kind == KindWorkflow && options.WorkflowID != "":
-		run, err = m.Queue.Submit(ctx, options.WorkflowID, trigger, "", nil)
-		if errors.Is(err, sqlite.ErrWorkflowNotFound) {
-			return StartResult{Reason: reason(ReasonWorkflowNotFound)}, nil
+	switch kind {
+	case KindWorkflow:
+		definition := sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: NormalizeSteps(options.Steps), FetchWindows: map[string]history.Window{}}
+		if options.Source != "" {
+			// Run now: the source's chain, as its timer submits it.
+			chain, known := workflow.SourceChains[options.Source]
+			if !known {
+				return StartResult{}, sqlite.ErrWorkflowValidation
+			}
+			definition.ID, definition.Steps = sqlite.SourceScheduleWorkflow(options.Source), append([]string{}, chain...)
 		}
-	case kind == KindWorkflow:
-		steps := NormalizeSteps(options.Steps)
-		if len(steps) == 0 {
+		if len(definition.Steps) == 0 {
 			return StartResult{Reason: reason(ReasonNoSteps)}, nil
 		}
-		windows := map[string]history.Window{}
 		for source, window := range options.FetchWindows {
 			normalized, windowErr := window.Normalize()
 			if windowErr != nil || (source != "x" && source != "youtube") {
 				return StartResult{}, sqlite.ErrWorkflowValidation
 			}
-			windows[source] = normalized
+			definition.FetchWindows[source] = normalized
 		}
-		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: steps, FetchWindows: windows, SourceSync: options.SourceSync}, trigger, recentDays(windows))
-	case kind == KindLive:
+		definition.SourceSync, err = m.sourceSync(ctx, definition, options.SourceSync)
+		if err != nil {
+			return StartResult{}, err
+		}
+		run, err = m.Queue.SubmitDefinition(ctx, definition, trigger, recentDays(definition.FetchWindows))
+	case KindLive:
 		source = "youtube-live"
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocLiveWorkflow, Steps: []string{StepLive}}, trigger, nil)
-	case kind == KindTranslate:
+	case KindTranslate:
 		source = "translate"
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocTranslateWorkflow, Steps: []string{StepTranslate}}, trigger, nil)
-	case kind == KindScan:
+	case KindScan:
 		source = "schedule"
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocScanWorkflow, Steps: []string{"schedule"}}, trigger, nil)
 	default:
@@ -103,6 +110,34 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 		return StartResult{}, err
 	}
 	return StartResult{Accepted: true, Job: job}, nil
+}
+
+// sourceSync freezes how each source step without a window reads: as given,
+// or else as its source schedule reads (ADR-0003). Full syncs, scans and
+// the other kinds never get here and keep the environment's incremental
+// options.
+func (m *QueueManager) sourceSync(ctx context.Context, definition sqlite.WorkflowDefinition, given map[string]sqlite.SourceSync) (map[string]sqlite.SourceSync, error) {
+	var schedules map[string]sqlite.SourceSync
+	out := map[string]sqlite.SourceSync{}
+	for _, step := range definition.Steps {
+		if _, windowed := definition.FetchWindows[step]; windowed || !slices.Contains(sqlite.SyncSources, step) {
+			continue
+		}
+		if setting, ok := given[step]; ok {
+			out[step] = setting
+			continue
+		}
+		if schedules == nil {
+			var err error
+			if schedules, err = m.Store.SourceScheduleSync(ctx); err != nil {
+				return nil, err
+			}
+		}
+		if setting, ok := schedules[step]; ok {
+			out[step] = setting
+		}
+	}
+	return out, nil
 }
 
 // recentDays gives the incremental synchronization the lookback of a recent
@@ -128,11 +163,7 @@ func (m *QueueManager) Get(ctx context.Context, id string) (*Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	names, err := m.Store.WorkflowNames(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return m.job(ctx, run, names)
+	return m.job(ctx, run)
 }
 
 func (m *QueueManager) List(ctx context.Context, limit int) ([]Job, error) {
@@ -149,17 +180,13 @@ func (m *QueueManager) List(ctx context.Context, limit int) ([]Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	names, err := m.Store.WorkflowNames(ctx)
-	if err != nil {
-		return nil, err
-	}
 	out := make([]Job, 0, len(page.Runs))
 	for _, header := range page.Runs {
 		run, err := m.Store.GetWorkflowRun(ctx, header.ID)
 		if err != nil {
 			return nil, err
 		}
-		job, err := m.job(ctx, run, names)
+		job, err := m.job(ctx, run)
 		if err != nil {
 			return nil, err
 		}
@@ -177,17 +204,13 @@ func (m *QueueManager) Page(ctx context.Context, page, pageSize int) ([]Job, int
 	if err != nil {
 		return nil, 0, err
 	}
-	names, err := m.Store.WorkflowNames(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
 	out := make([]Job, 0, len(listed.Runs))
 	for _, header := range listed.Runs {
 		run, err := m.Store.GetWorkflowRun(ctx, header.ID)
 		if err != nil {
 			return nil, 0, err
 		}
-		job, err := m.job(ctx, run, names)
+		job, err := m.job(ctx, run)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -236,7 +259,7 @@ func (m *QueueManager) Active(ctx context.Context) (*Job, error) {
 	return nil, nil
 }
 
-func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun, names map[string]string) (*Job, error) {
+func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun) (*Job, error) {
 	history, err := m.Store.SyncRunForJob(ctx, run.ID)
 	if err != nil {
 		return nil, err
@@ -258,12 +281,11 @@ func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun, names m
 	if source, scheduled := sqlite.SourceScheduleOf(run.WorkflowID); scheduled {
 		job.SourceSchedule = &source
 	}
+	// An older run of a retired saved workflow keeps its ID; its name is
+	// not read (ADR-0003).
 	if !sqlite.IsAdhocWorkflow(run.WorkflowID) {
 		id := run.WorkflowID
 		job.WorkflowID = &id
-		if name, ok := names[id]; ok {
-			job.WorkflowName = &name
-		}
 	}
 	if run.TriggerSource == "scheduler" {
 		job.TriggeredBy = "scheduler"
@@ -296,7 +318,8 @@ func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun, names m
 			} else if sync, ok := run.SourceSync[step]; ok {
 				windows[step] = sync
 			} else if days, ok := run.SourceLookbackDays[step]; ok {
-				// A saved workflow's run from before sourceSync replaced its days.
+				// An older run of a retired saved workflow, from before
+				// sourceSync replaced its days.
 				windows[step] = map[string]any{"mode": "recent", "days": days}
 			}
 		}
