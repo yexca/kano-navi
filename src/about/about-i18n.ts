@@ -72,7 +72,7 @@ export const aboutMessages = {
     "about.fullLicense": "ライセンス全文を読む",
   },
   en: {
-    "about.label": "About this site",
+    "about.label": "About",
     "about.metaTitle": "About · What’s Kano Up To?",
     "about.metaDescription":
       "Project overview, AI development credits, technology stack, and license for What’s Kano Up To?",

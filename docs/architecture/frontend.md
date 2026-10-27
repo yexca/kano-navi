@@ -9,7 +9,9 @@ static; verified fixed images ship in `public/assets/history/` and `dist/`.
 archive without network requests.
 See [History and visual archive](../product/history.md). The three public
 pages share `src/site/`: `site-shell.tsx` (header with page navigation and
-Japan clock, footer, skip link, section title, empty and loading states),
+Japan clock, footer, skip link, section title, empty and loading states;
+narrow screens show the site name and fold the page links into a menu behind
+the `kano-seal.tsx` deer seal),
 `media-dialog.tsx` (the native modal image viewer), `links.tsx` (external
 links and platform marks), and `site.css` (shell, controls, tone classes and
 the dialog). The board lives in `src/dashboard/`: `use-dashboard.ts` owns the
