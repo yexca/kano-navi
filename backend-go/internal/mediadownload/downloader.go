@@ -188,7 +188,12 @@ func (c *Client) fetchAsset(ctx context.Context, asset sqlite.PendingMedia) (Dow
 	return d, err
 }
 
-type Summary struct{ Attempted, Ready, Unchanged, Missing, Failed int }
+// Measured counts ready files cached before dimension probing whose width and
+// height were filled by this run.
+type Summary struct{ Attempted, Ready, Unchanged, Missing, Failed, Measured int }
+
+// measureBatch bounds how many older files one media step measures.
+const measureBatch = 50
 
 func (c *Client) DownloadPending(ctx context.Context, store *sqlite.Store, limit int) (Summary, error) {
 	out := Summary{}
@@ -234,5 +239,10 @@ func (c *Client) DownloadPending(ctx context.Context, store *sqlite.Store, limit
 			out.Failed++
 		}
 	}
+	measured, err := store.MeasureMediaDimensions(ctx, measureBatch)
+	if err != nil {
+		return out, err
+	}
+	out.Measured = measured
 	return out, nil
 }

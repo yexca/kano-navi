@@ -28,11 +28,11 @@ func TestStaticSiteServesBuildWithFallbackAndContainment(t *testing.T) {
 	if err := os.WriteFile(outside, []byte("outside"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	site := NewStaticSite(root)
+	site := NewStaticSite(root, "")
 	if site == nil {
 		t.Fatal("static site unavailable")
 	}
-	if NewStaticSite(t.TempDir()) != nil || NewStaticSite("") != nil {
+	if NewStaticSite(t.TempDir(), "") != nil || NewStaticSite("", "") != nil {
 		t.Fatal("a directory without index.html must not become a site")
 	}
 	get := func(method, path string) *httptest.ResponseRecorder {
@@ -65,5 +65,37 @@ func TestStaticSiteServesBuildWithFallbackAndContainment(t *testing.T) {
 	}
 	if w := get("HEAD", "/"); w.Code != 200 || w.Body.Len() != 0 {
 		t.Fatalf("head=%d %d", w.Code, w.Body.Len())
+	}
+}
+
+func TestStaticSiteMakesShareTagsAbsoluteWithPublicOrigin(t *testing.T) {
+	root := t.TempDir()
+	page := `<meta property="og:image" content="/assets/kano-banner.jpg" /><meta property="og:url" content="/" /><a href="/about">about</a>`
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte(page), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "other.html"), []byte(page), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	site := NewStaticSite(root, "https://kano.example.invalid")
+	for _, path := range []string{"/", "/history"} {
+		w := httptest.NewRecorder()
+		site.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		body := w.Body.String()
+		if w.Code != 200 || !strings.Contains(body, `content="https://kano.example.invalid/assets/kano-banner.jpg"`) ||
+			!strings.Contains(body, `content="https://kano.example.invalid/"`) || !strings.Contains(body, `href="/about"`) {
+			t.Fatalf("%s => %d %s", path, w.Code, body)
+		}
+	}
+	// Only index.html is rewritten; other files are served as stored.
+	w := httptest.NewRecorder()
+	site.ServeHTTP(w, httptest.NewRequest("GET", "/other.html", nil))
+	if w.Body.String() != page {
+		t.Fatalf("other file rewritten: %s", w.Body.String())
+	}
+	plain := httptest.NewRecorder()
+	NewStaticSite(root, "").ServeHTTP(plain, httptest.NewRequest("GET", "/", nil))
+	if plain.Body.String() != page {
+		t.Fatalf("rewritten without an origin: %s", plain.Body.String())
 	}
 }

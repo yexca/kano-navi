@@ -264,6 +264,10 @@
     {
       "host": "4.bp.blogspot.com",
       "reason": "Original image-file URL preserved for the third-party first-album cover; the browser displays the packaged local file."
+    },
+    {
+      "host": "www.w3.org",
+      "reason": "Atom 1.0 XML namespace identifier written into the public feed; it names the format and is never fetched."
     }
   ]
 }

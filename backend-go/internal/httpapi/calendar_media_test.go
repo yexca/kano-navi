@@ -154,6 +154,17 @@ func TestMediaAndProfileMediaContainmentAndHeaders(t *testing.T) {
 	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "image/png" || response.Header().Get("ETag") != `"`+hash+`"` || response.Body.String() != string(body) {
 		t.Fatalf("media response status=%d headers=%v body=%x", response.Code, response.Header(), response.Body.Bytes())
 	}
+	// A width the original cannot shrink to serves the original; only the
+	// fixed variant widths are accepted.
+	variant := request(t, handler, http.MethodGet, "/media/"+id+"?v="+hash+"&w=320")
+	if variant.Code != http.StatusOK || variant.Body.String() != string(body) || variant.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
+		t.Fatalf("variant fallback status=%d headers=%v", variant.Code, variant.Header())
+	}
+	for _, width := range []string{"321", "", "abc", "320&w=640"} {
+		if rejected := request(t, handler, http.MethodGet, "/media/"+id+"?v="+hash+"&w="+width); rejected.Code != http.StatusNotFound {
+			t.Fatalf("width %q accepted: %d", width, rejected.Code)
+		}
+	}
 	for _, tc := range []struct {
 		name, value string
 		status      int

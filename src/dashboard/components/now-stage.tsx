@@ -10,6 +10,7 @@ import {
 
 import { ExternalLink, followCardLink, XLogo, YouTubeLogo } from "@/site/links"
 import { eventDetailText } from "@/lib/event-text"
+import { mediaSrcSet } from "@/lib/media"
 import {
   confirmedLiveStatus,
   countdownParts,
@@ -200,7 +201,12 @@ function FullTicket({
     >
       <span className="ticket-art" aria-hidden="true">
         {item.thumbnailUrl ? (
-          <img src={item.thumbnailUrl} alt="" />
+          <img
+            src={item.thumbnailUrl}
+            srcSet={mediaSrcSet(item.thumbnailUrl)}
+            sizes="(max-width: 960px) 100vw, 60vw"
+            alt=""
+          />
         ) : (
           <span className="ticket-art-fallback" />
         )}
@@ -334,7 +340,13 @@ function LatestCard({
     <div className="latest-card link-card" onClick={followCardLink}>
       <span className="latest-card-art" aria-hidden="true">
         {companion.thumbnailUrl ? (
-          <img src={companion.thumbnailUrl} alt="" loading="lazy" />
+          <img
+            src={companion.thumbnailUrl}
+            srcSet={mediaSrcSet(companion.thumbnailUrl)}
+            sizes="(max-width: 640px) 40vw, 240px"
+            alt=""
+            loading="lazy"
+          />
         ) : (
           <span className="ticket-art-fallback" />
         )}

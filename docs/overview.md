@@ -54,7 +54,8 @@ snapshot health dot.
    events, more-event pagination, and the week's schedule image from X. A
    Month view dialog shows a month grid (compact entries, dots on phones) with
    month navigation; picking a date lists that day's entries and can show its
-   week on the board.
+   week on the board. A Subscribe menu offers the schedule as a calendar
+   subscription; videos also have an Atom feed.
 3. Posts on X: roughly three days of posts from both accounts in an aligned
    grid (two rows only; a long post shows six lines and Read more
    opens it whole in a dialog) with an account filter, an image viewer, and
@@ -139,8 +140,9 @@ automation; confirmation and other human-only actions remain in `/admin`.
   MCP control uses a separate environment token and does not inherit the admin
   session.
 - Media registration, bounded download, persistent retry backoff, and YouTube
-  thumbnail revalidation are implemented. Image dimension probing and garbage
-  collection remain follow-up work; unready media is shown as unavailable.
+  thumbnail revalidation are implemented, as are dimension probing and resized
+  copies for the board. Cached files are kept deliberately rather than
+  garbage-collected; unready media is shown as unavailable.
 
 ## Maintainer Decision Rule
 

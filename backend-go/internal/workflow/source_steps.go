@@ -101,7 +101,7 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 		if result.Failed > 0 || result.Missing > 0 {
 			status = "partial"
 		}
-		return AttemptResult{Status: status, Result: map[string]any{"attempted": result.Attempted, "ready": result.Ready, "unchanged": result.Unchanged, "failed": result.Failed}}, nil
+		return AttemptResult{Status: status, Result: map[string]any{"attempted": result.Attempted, "ready": result.Ready, "unchanged": result.Unchanged, "failed": result.Failed, "measured": result.Measured}}, nil
 	case "schedule", "translate":
 		var status string
 		var counts map[string]any

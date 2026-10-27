@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -40,6 +41,9 @@ type Config struct {
 	// snapshot, full operator console, workflows, MCP and the built frontend.
 	Standalone      bool
 	StaticDirectory string
+	// PublicOrigin is the site's public origin from PUBLIC_ORIGIN. It only
+	// makes the share tags in index.html absolute; empty leaves them relative.
+	PublicOrigin string
 	// HealthCheck probes a running standalone process and exits; the scratch
 	// image has no shell or HTTP client for a container health check.
 	HealthCheck bool
@@ -119,8 +123,28 @@ func Parse(args []string) (Config, error) {
 			c.WriteTimeout = 150 * time.Second
 		}
 	}
+	origin, err := PublicOrigin(os.Getenv("PUBLIC_ORIGIN"))
+	if err != nil {
+		return Config{}, err
+	}
+	c.PublicOrigin = origin
 	if err := c.Validate(); err != nil {
 		return Config{}, err
 	}
 	return c, nil
+}
+
+// PublicOrigin normalizes PUBLIC_ORIGIN to scheme://host. An empty value is
+// allowed; anything that is not an HTTP(S) origin fails startup.
+func PublicOrigin(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil ||
+		(parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("PUBLIC_ORIGIN must be an http or https origin")
+	}
+	return parsed.Scheme + "://" + parsed.Host, nil
 }

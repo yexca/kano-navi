@@ -44,18 +44,27 @@ import {
   type VideoLink,
   type VideoPhase,
 } from "../video-groups"
+import { mediaSrcSet } from "@/lib/media"
 import { ArchiveMore, ArchiveState } from "./archive-dialog"
 import { PlatformBadge, PlatformLinks } from "./platform-links"
 import { TranslatedHeading, TranslatedTitle } from "./translated-title"
 
+// Rendered widths for srcset: the lead card spans most of the section, the
+// grid and rail cards a column of it.
+const LEAD_THUMB_SIZES = "(max-width: 960px) 100vw, 60vw"
+const CARD_THUMB_SIZES =
+  "(max-width: 640px) 80vw, (max-width: 1200px) 40vw, 360px"
+
 function Thumb({
   url,
+  sizes = CARD_THUMB_SIZES,
   badge = null,
   seconds,
   links = [],
   t,
 }: {
   url: string | null
+  sizes?: string
   badge?: "play" | "upcoming" | null
   seconds?: number | null
   /** The video's platforms; two or more mark the cover. */
@@ -66,7 +75,13 @@ function Thumb({
   return (
     <span className="video-thumb">
       {url ? (
-        <img src={url} alt="" loading="lazy" />
+        <img
+          src={url}
+          srcSet={mediaSrcSet(url)}
+          sizes={sizes}
+          alt=""
+          loading="lazy"
+        />
       ) : (
         <span className="video-thumb-missing">
           <ImageOff aria-hidden="true" />
@@ -196,6 +211,7 @@ function LeadCard({
       >
         <Thumb
           url={thumbnail}
+          sizes={LEAD_THUMB_SIZES}
           badge={phase === "upcoming" ? "upcoming" : "play"}
           links={links}
           t={t}

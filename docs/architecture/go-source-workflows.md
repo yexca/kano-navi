@@ -102,8 +102,8 @@ image magic bytes and supported declared MIME must agree. Rooted filesystem
 operations confine atomic content-addressed writes to `data/x/sha256/` or
 `data/youtube/sha256/`. Metadata stores relative paths and safe error codes.
 Failed redownloads retain ready snapshots. Versioned public reads never fetch
-media. Automatic failed-media retry, dimension probing and GC remain future
-work, as in the existing media contract.
+media. Retry backoff, dimension probing and resized copies are described in
+the [media contract](media-cache.md); cached files are not garbage-collected.
 
 ## Validation and remaining migration
 

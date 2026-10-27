@@ -107,6 +107,14 @@ carries its `lang` attribute. The console's
 completeness chips and translation editor are in
 `src/admin/views/translation-parts.tsx`, shared by posts and videos.
 
+Board images from the media cache load through `srcset`: `src/lib/media.ts`
+lists the server's [resized copies](media-cache.md#resized-copies) below an
+image's known width, and each card passes a `sizes` hint for its layout. The
+full-image viewer, profile media and bundled assets keep their single URL.
+The schedule header's Subscribe menu (`calendar-subscribe.tsx`) offers the
+[calendar feed](backend.md#public-feeds) as a `webcal:` link and a copyable
+`https` address built by `src/lib/feeds.ts` from the page's origin.
+
 SQLite stores one text per seeded timeline and link row. The board translates
 that text through src/dashboard/seed-copy.ts, keyed by the exact seed wording
 in static-seed.json, so a row whose text was changed shows as stored. Update

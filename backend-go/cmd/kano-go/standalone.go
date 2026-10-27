@@ -116,7 +116,7 @@ func runStandalone(cfg config.Config) int {
 			HistoryAvailable: run.steps.History.Available,
 			WindowAvailable:  run.steps.History.WindowAvailable,
 		}),
-		Static: httpapi.NewStaticSite(cfg.StaticDirectory),
+		Static: httpapi.NewStaticSite(cfg.StaticDirectory, cfg.PublicOrigin),
 		MCP:    standaloneMCP(store, manager),
 		WebSub: push,
 	})

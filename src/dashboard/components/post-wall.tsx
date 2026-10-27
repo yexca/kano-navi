@@ -23,6 +23,7 @@ import {
 } from "@/components/translated-text"
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
 import { ExternalLink, XLogo } from "@/site/links"
+import { mediaSrcSet } from "@/lib/media"
 import {
   formatCompact,
   formatJapanDay,
@@ -31,6 +32,11 @@ import {
   formatStamp,
 } from "../format"
 import { ArchiveMore, ArchiveState } from "./archive-dialog"
+
+// A post's images fill a card of the post grid or the archive's masonry
+// wall; a lone image can take the whole card.
+const POST_MEDIA_SIZES =
+  "(max-width: 640px) 100vw, (max-width: 1200px) 34vw, 420px"
 
 /** Ready local media can open in the viewer; anything else stays labelled. */
 export function postMedia(post: Post): MediaItem[] {
@@ -206,7 +212,15 @@ function PostNote({
             onClick={() => onOpenMedia(ready, ready.indexOf(item))}
             aria-label={`${t("feed.openMedia")} ${index + 1}`}
           >
-            <img src={item.url} alt={item.alt || ""} loading="lazy" />
+            <img
+              src={item.url}
+              srcSet={mediaSrcSet(item.url, item.width)}
+              sizes={POST_MEDIA_SIZES}
+              width={item.width ?? undefined}
+              height={item.height ?? undefined}
+              alt={item.alt || ""}
+              loading="lazy"
+            />
           </button>
         ) : (
           <span key={item.id || index} className="post-note-missing">

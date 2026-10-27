@@ -651,7 +651,7 @@ func (s *Store) mapPost(ctx context.Context, r postRow) (Post, error) {
 	return p, nil
 }
 func (s *Store) queryPostMedia(ctx context.Context, id string) ([]PostMedia, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT ml.media_id,ml.position,ml.alt,ma.source_url,ma.cache_path,ma.mime_type,ma.byte_size,ma.sha256,ma.width,ma.height,ma.status FROM media_links ml LEFT JOIN media_assets ma ON ma.id=ml.media_id WHERE ml.owner_type='post' AND ml.owner_id=? AND ml.role='post-image' ORDER BY ml.position ASC`, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT ml.media_id,ml.position,ml.alt,ma.source_url,ma.cache_path,ma.mime_type,ma.byte_size,ma.sha256,NULLIF(ma.width,0),NULLIF(ma.height,0),ma.status FROM media_links ml LEFT JOIN media_assets ma ON ma.id=ml.media_id WHERE ml.owner_type='post' AND ml.owner_id=? AND ml.role='post-image' ORDER BY ml.position ASC`, id)
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -1288,7 +1288,7 @@ func (s *Store) resolveMedia(ctx context.Context, source *string) (*mediaReferen
 	var a mediaAsset
 	var cp, mime, sha sql.NullString
 	var bs, w, h sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT id,source_url,cache_path,mime_type,byte_size,sha256,width,height,status FROM media_assets WHERE source_url=?`, norm).Scan(&a.ID, &a.SourceURL, &cp, &mime, &bs, &sha, &w, &h, &a.Status)
+	err := s.db.QueryRowContext(ctx, `SELECT id,source_url,cache_path,mime_type,byte_size,sha256,NULLIF(width,0),NULLIF(height,0),status FROM media_assets WHERE source_url=?`, norm).Scan(&a.ID, &a.SourceURL, &cp, &mime, &bs, &sha, &w, &h, &a.Status)
 	if errors.Is(err, sql.ErrNoRows) {
 		id := sha256Hex(norm)
 		return &mediaReference{ID: &id, Status: "pending", SourceURL: &norm}, nil
@@ -1505,4 +1505,10 @@ func cancelledStatus(v *string) bool {
 	}
 	x := strings.ToLower(strings.TrimSpace(*v))
 	return x == "cancelled" || x == "canceled" || x == "cancel" || x == "取消" || x == "已取消" || x == "中止" || x == "キャンセル" || strings.HasPrefix(x, "cancel")
+}
+
+// Cancelled reports a definitive cancellation: a cancelled status or an
+// operator's confirmation. A model's suspicion alone is not one.
+func (e DashboardEvent) Cancelled() bool {
+	return cancelledStatus(e.Status) || e.CancellationStatus == "manual_confirmed"
 }

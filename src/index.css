@@ -217,4 +217,25 @@
     font-size: 13px;
     font-weight: 600;
   }
+
+  .subscribe-menu {
+    min-width: 220px;
+    border-radius: 14px;
+    box-shadow: var(--shadow-md);
+  }
+
+  .subscribe-address {
+    max-width: 260px;
+    margin: 4px 8px 6px;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    user-select: all;
+  }
+
+  .subscribe-menu [role="menuitem"] {
+    cursor: pointer;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+  }
 }

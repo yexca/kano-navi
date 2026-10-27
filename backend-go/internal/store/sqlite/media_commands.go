@@ -181,7 +181,8 @@ func (s *Store) SaveMediaDownload(ctx context.Context, asset PendingMedia, conte
 				return ErrSourceWrite
 			}
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE media_assets SET status='ready',cache_path=?,mime_type=?,byte_size=?,sha256=?,etag=?,last_modified=?,last_error=NULL,retry_attempts=0,next_retry_at=NULL,fetched_at=?,last_checked_at=?,updated_at=? WHERE id=? AND source_url=?`, relative, mime, len(content), hash, nullable(etag), nullable(lastModified), now, now, now, asset.ID, asset.SourceURL)
+		width, height := probedDimensions(content)
+		_, err = tx.ExecContext(ctx, `UPDATE media_assets SET status='ready',cache_path=?,mime_type=?,byte_size=?,sha256=?,width=?,height=?,etag=?,last_modified=?,last_error=NULL,retry_attempts=0,next_retry_at=NULL,fetched_at=?,last_checked_at=?,updated_at=? WHERE id=? AND source_url=?`, relative, mime, len(content), hash, width, height, nullable(etag), nullable(lastModified), now, now, now, asset.ID, asset.SourceURL)
 		if err == nil && previous != hash {
 			err = bumpRevision(ctx, tx, now)
 		}
@@ -211,6 +212,80 @@ func (s *Store) MarkMediaUnchanged(ctx context.Context, asset PendingMedia) erro
 		return ErrSourceWrite
 	}
 	return nil
+}
+
+// probedDimensions reads the image header. A header that cannot be read
+// stores 0×0, so the backfill does not try it again; reads treat 0 as unknown.
+func probedDimensions(content []byte) (int, int) {
+	width, height, ok := mediaformat.Dimensions(content)
+	if !ok {
+		return 0, 0
+	}
+	return width, height
+}
+
+// MeasureMediaDimensions fills width and height for ready files cached before
+// dimensions were probed, a bounded batch per call. It reads each contained
+// file's header only and returns how many rows it measured.
+func (s *Store) MeasureMediaDimensions(ctx context.Context, limit int) (int, error) {
+	if s == nil || !s.workflowWritable || limit < 1 || limit > 200 {
+		return 0, ErrSourceWrite
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id,cache_path,sha256 FROM media_assets WHERE status='ready' AND width IS NULL AND cache_path IS NOT NULL AND sha256 IS NOT NULL ORDER BY updated_at DESC,id LIMIT ?`, limit)
+	if err != nil {
+		return 0, ErrSourceWrite
+	}
+	type unmeasured struct{ id, path, hash string }
+	pending := []unmeasured{}
+	for rows.Next() {
+		var item unmeasured
+		if rows.Scan(&item.id, &item.path, &item.hash) != nil {
+			rows.Close()
+			return 0, ErrSourceWrite
+		}
+		pending = append(pending, item)
+	}
+	rows.Close()
+	if rows.Err() != nil || len(pending) == 0 {
+		return 0, nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, ErrSourceWrite
+	}
+	defer tx.Rollback()
+	if err = fenceSourceWrite(ctx, tx); err != nil {
+		return 0, err
+	}
+	now := workflowTime(time.Now())
+	measured := 0
+	for _, item := range pending {
+		width, height := 0, 0
+		// A file that is missing or replaced keeps 0×0 like an unreadable
+		// header; the dashboard already reports such files as missing.
+		if path, pathErr := s.resolveMediaPath(item.path); pathErr == nil {
+			if content, _, readErr := readContainedFile(path, maxCachedMediaBytes); readErr == nil {
+				if sum := sha256.Sum256(content); hex.EncodeToString(sum[:]) == item.hash {
+					width, height = probedDimensions(content)
+				}
+			}
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE media_assets SET width=?,height=? WHERE id=? AND sha256=? AND width IS NULL`, width, height, item.id, item.hash); err != nil {
+			return 0, ErrSourceWrite
+		}
+		if width > 0 {
+			measured++
+		}
+	}
+	if measured > 0 {
+		if err = bumpRevision(ctx, tx, now); err != nil {
+			return 0, ErrSourceWrite
+		}
+	}
+	if tx.Commit() != nil {
+		return 0, ErrSourceWrite
+	}
+	return measured, nil
 }
 
 // Unsafe destinations, invalid images and oversized responses are not retried.

@@ -27,6 +27,8 @@ data/
     <temporary-file>.part
   cache/media/
     sha256/<first-two>/<content-sha256>.<extension>
+  cache/variants/
+    <first-two>/<content-sha256>-<width>.<jpg|png|orig>
 ```
 
 The whole `data/` directory is ignored by Git. It is created on demand by the
@@ -51,7 +53,9 @@ packaging and provenance details.
 - `cache_path`: a path relative to the runtime `data/` directory, normally
   `x/`, `youtube/`, or the legacy `cache/media/` namespace; never an absolute
   path;
-- `mime_type`, `extension`, `byte_size`, `sha256`, `width`, and `height`;
+- `mime_type`, `extension`, `byte_size`, `sha256`, `width`, and `height`
+  (read from the image header; `0×0` marks a header that could not be read,
+  such as AVIF, and reads report it as unknown);
 - fetch/check/seen timestamps, validators (`etag`, `last_modified`), and the
   last error for maintainer diagnosis.
 - `retry_attempts` and `next_retry_at`: persisted failure backoff, added to
@@ -85,7 +89,10 @@ served as active same-origin content.
    downloads with a timeout and byte limit, verifies the image magic bytes and
    declared MIME type, writes a temporary file, atomically renames it into the
    source namespace's `sha256/` directory, and calls `upsertMediaAsset` with
-   `status = ready`.
+   `status = ready` and the width and height its header declares. The same
+   step measures up to 50 ready files cached before dimensions were probed,
+   reading each contained, hash-checked file's header only, and reports them
+   as `measured`; a run that measures any advances the dashboard revision.
 4. A failed or unavailable request updates the row to `failed` or `missing`.
    Existing ready files are retained; a failed synchronization never clears a
    known snapshot. Transient failures (`media_timeout`, `media_unavailable`,
@@ -124,9 +131,9 @@ subdomain boundary; lookalike hosts and the bare parent domains are rejected.
 The host policy is kept in code because this is also an SSRF boundary; the
 broader privacy allowlist is not a download permission list. The cache still
 accepts image MIME types only, so X video URLs may be recognized as official
-media while remaining unavailable to the image cache. Image dimension probing
-and garbage collection, including of versions a revalidation replaced, remain
-follow-up work.
+media while remaining unavailable to the image cache. Cached files, including
+versions a revalidation replaced, are kept deliberately; there is no garbage
+collection.
 
 Content-addressed paths are deliberately preferred over layouts such as
 `pics/x/<timestamp>` or `pics/youtube/<video-id>`. Ownership already lives in
@@ -175,6 +182,31 @@ version parameter changes whenever bytes change, so versioned responses can be
 cached as immutable even though the source identity is stable. A bare media ID
 is revalidated, and an unready remote URL is represented by `null`, so the
 browser does not silently fall back to a CDN.
+
+## Resized Copies
+
+`GET /media/<id>?v=<hash>&w=<width>` serves a smaller copy of a ready asset.
+`w` must be one of 320, 640, 960, 1280 or 1920; any other value, or a
+repeated `w`, answers 404. The first request decodes the original (JPEG, PNG
+or WebP no larger than 40 megapixels, at most two at a time), scales it to
+that width with Catmull-Rom filtering, encodes JPEG at quality 82 (or PNG when
+the image has transparency) and stores it atomically in
+`data/cache/variants/<first-two>/<hash>-<width>.<jpg|png>`. When the original
+is no wider than the request, is a GIF (possibly animated) or AVIF, cannot be
+decoded, or the copy would not be smaller, an empty `.orig` marker records
+that the original is served for that width, so it is not decoded again.
+
+The response is always an image: a copy, or the original whenever a copy
+cannot be made or stored (a read-only data directory only means the copy is
+made again next time). It uses the same headers, range and conditional
+handling as the original, with the copy's own hash as its ETag, and is
+immutable when `v` is given. Originals are never changed; the variant
+directory is a derived cache that may be deleted at any time.
+
+The board requests copies through `srcset` with the widths below an image's
+known width (every width when it is unknown) plus the original; the full-image
+viewer keeps loading the original. Profile media and bundled `/assets/` files
+have no copies.
 
 ## Verification
 

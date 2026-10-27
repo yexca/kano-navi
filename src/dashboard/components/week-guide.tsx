@@ -20,6 +20,7 @@ import {
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
 import { ExternalLink, followCardLink } from "@/site/links"
 import { eventDetailText } from "@/lib/event-text"
+import { mediaSrcSet } from "@/lib/media"
 import { pickTranslation } from "@/components/translated-text"
 import {
   addDays,
@@ -39,6 +40,7 @@ import {
 } from "../format"
 import { archiveRange } from "../use-dashboard"
 import { ArchiveMore, ArchiveState } from "./archive-dialog"
+import { CalendarSubscribe } from "./calendar-subscribe"
 import { TranslatedTitle } from "./translated-title"
 
 function keyToDate(key: string) {
@@ -631,6 +633,7 @@ export function WeekGuide({
           <CalendarDays aria-hidden="true" />
           {t("schedule.openMonth")}
         </button>
+        <CalendarSubscribe t={t} />
         <div className="guide-nav" role="group" aria-label={label}>
           <button
             type="button"
@@ -725,6 +728,8 @@ export function WeekGuide({
             >
               <img
                 src={scheduleImage.url ?? undefined}
+                srcSet={mediaSrcSet(scheduleImage.url)}
+                sizes="240px"
                 alt={scheduleImage.alt || t("schedule.imageAlt")}
                 loading="lazy"
               />

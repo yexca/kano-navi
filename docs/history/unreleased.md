@@ -95,3 +95,25 @@
   pages. `GET /api/admin/posts` adds `llmRetryAt` and `llmRetryStopped`.
 
 </details>
+
+<details>
+<summary><strong>Public board and feeds</strong></summary>
+
+- The schedule has a Subscribe menu: `GET /api/calendar.ics` is an
+  iCalendar subscription of the events 30 days before to 90 days after
+  today (Japan dates, at most 500), with all-day entries for undated events
+  and `CANCELLED` only for a definitive cancellation. `GET /api/feed.xml` is
+  an Atom feed of the latest 50 YouTube videos and reservations. Both are
+  built from the stored snapshot, cached for 10 minutes and answer
+  conditional requests by revision.
+- `index.html` has Open Graph and Twitter card tags and feed discovery
+  links. The new optional `PUBLIC_ORIGIN` makes the preview URLs absolute.
+- Board images load smaller copies: `/media/<id>?v=…&w=<width>` (320, 640,
+  960, 1280 or 1920) serves a JPEG or PNG resized once and kept in
+  `data/cache/variants/`, or the original when it cannot shrink. Originals
+  are unchanged and the full-image viewer still opens them.
+- The media step stores each downloaded image's width and height and
+  measures up to 50 older files per run (`measured` in the step result), so
+  post media now reports its dimensions.
+
+</details>

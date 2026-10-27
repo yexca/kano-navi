@@ -50,7 +50,22 @@ func allowedMediaMIME(value string) (string, bool) {
 	}
 }
 
+// mediaRecord locates a ready asset's file, or an earlier version a
+// revalidation replaced, before its bytes are read.
+type mediaRecord struct {
+	cachePath, mime, hash string
+	fetchedAt             sql.NullString
+}
+
 func (s *Store) ReadMedia(ctx context.Context, id, version string) (*MediaFile, error) {
+	record, err := s.lookupMedia(ctx, id, version)
+	if err != nil {
+		return nil, err
+	}
+	return s.readMediaRecord(record)
+}
+
+func (s *Store) lookupMedia(ctx context.Context, id, version string) (*mediaRecord, error) {
 	if s == nil || s.db == nil {
 		return nil, ErrUnavailable
 	}
@@ -88,7 +103,11 @@ func (s *Store) ReadMedia(ctx context.Context, id, version string) (*MediaFile, 
 	if !ok {
 		return nil, ErrMediaNotFound
 	}
-	path, err := s.resolveMediaPath(cachePath.String)
+	return &mediaRecord{cachePath: cachePath.String, mime: mime, hash: contentHash.String, fetchedAt: fetchedAt}, nil
+}
+
+func (s *Store) readMediaRecord(record *mediaRecord) (*MediaFile, error) {
+	path, err := s.resolveMediaPath(record.cachePath)
 	if err != nil {
 		return nil, ErrMediaNotFound
 	}
@@ -98,16 +117,19 @@ func (s *Store) ReadMedia(ctx context.Context, id, version string) (*MediaFile, 
 	}
 	actual := sha256.Sum256(content)
 	actualHash := hex.EncodeToString(actual[:])
-	if actualHash != contentHash.String {
+	if actualHash != record.hash {
 		return nil, ErrMediaNotFound
 	}
-	lastModified := modTime
-	if fetchedAt.Valid {
-		if parsed, parseErr := time.Parse(time.RFC3339Nano, fetchedAt.String); parseErr == nil {
-			lastModified = parsed
+	return &MediaFile{Content: content, MIMEType: record.mime, SHA256: record.hash, Size: int64(len(content)), LastModified: record.lastModified(modTime)}, nil
+}
+
+func (r *mediaRecord) lastModified(fallback time.Time) time.Time {
+	if r.fetchedAt.Valid {
+		if parsed, err := time.Parse(time.RFC3339Nano, r.fetchedAt.String); err == nil {
+			return parsed
 		}
 	}
-	return &MediaFile{Content: content, MIMEType: mime, SHA256: contentHash.String, Size: int64(len(content)), LastModified: lastModified}, nil
+	return fallback
 }
 
 func (s *Store) ReadProfileMedia(ctx context.Context, slot, version string) (*ProfileMediaFile, error) {

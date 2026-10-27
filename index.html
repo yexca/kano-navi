@@ -17,6 +17,39 @@
       name="description"
       content="An unofficial Kano Mahoro status board: X posts, stream schedule, YouTube, and public links at a glance."
     />
+    <!--
+      Link previews. Root-relative content="/..." URLs become absolute when
+      the server knows PUBLIC_ORIGIN (backend-go/internal/httpapi/static.go).
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="What’s Kano Up To?" />
+    <meta property="og:title" content="What’s Kano Up To?" />
+    <meta
+      property="og:description"
+      content="An unofficial Kano Mahoro status board: X posts, stream schedule, YouTube, and public links at a glance."
+    />
+    <meta property="og:url" content="/" />
+    <meta property="og:image" content="/assets/kano-banner.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1500" />
+    <meta property="og:image:height" content="500" />
+    <meta property="og:image:alt" content="Kano Mahoro’s banner" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="ja_JP" />
+    <meta property="og:locale:alternate" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link
+      rel="alternate"
+      type="application/atom+xml"
+      title="What’s Kano Up To? — videos"
+      href="/api/feed.xml"
+    />
+    <link
+      rel="alternate"
+      type="text/calendar"
+      title="What’s Kano Up To? — schedule"
+      href="/api/calendar.ics"
+    />
     <link rel="icon" href="/assets/kano-avatar.jpg" />
     <title>What’s Kano Up To?</title>
   </head>

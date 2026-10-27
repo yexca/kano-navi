@@ -121,6 +121,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.calendar(w, r)
+	case "/api/calendar.ics":
+		h.calendarFeed(w, r)
+	case "/api/feed.xml":
+		h.atomFeed(w, r)
 	case "/api/posts":
 		if r.Method != http.MethodGet {
 			writeMethodNotAllowed(w, http.MethodGet)

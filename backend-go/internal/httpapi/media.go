@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yexca/kano-navi/backend-go/internal/mediavariant"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
@@ -17,7 +18,18 @@ func (h *Handler) media(w http.ResponseWriter, r *http.Request, id string) {
 		h.writeMediaError(w, sqlite.ErrMediaVersionNotFound, false, r.Method == http.MethodHead)
 		return
 	}
-	file, err := h.store.ReadMedia(r.Context(), id, version)
+	width, widthPresent, widthValid := requestedWidth(r)
+	if widthPresent && !widthValid {
+		h.writeMediaError(w, sqlite.ErrMediaNotFound, false, r.Method == http.MethodHead)
+		return
+	}
+	var file *sqlite.MediaFile
+	var err error
+	if widthPresent {
+		file, err = h.store.ReadMediaVariant(r.Context(), id, version, width)
+	} else {
+		file, err = h.store.ReadMedia(r.Context(), id, version)
+	}
 	if err != nil {
 		h.writeMediaError(w, err, false, r.Method == http.MethodHead)
 		return
@@ -91,6 +103,22 @@ func requestedVersion(r *http.Request) (string, bool, bool) {
 		return "", true, false
 	}
 	return values[0], true, true
+}
+
+// requestedWidth reads w, which must name one of the fixed variant widths.
+func requestedWidth(r *http.Request) (int, bool, bool) {
+	values, present := r.URL.Query()["w"]
+	if !present {
+		return 0, false, true
+	}
+	if len(values) != 1 {
+		return 0, true, false
+	}
+	width, err := strconv.Atoi(values[0])
+	if err != nil || !mediavariant.ValidWidth(width) {
+		return 0, true, false
+	}
+	return width, true, true
 }
 
 func (h *Handler) writeMediaError(w http.ResponseWriter, err error, profile, head bool) {

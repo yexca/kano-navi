@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -9,6 +11,9 @@ import (
 	"regexp"
 	"strings"
 )
+
+// maxIndexBytes bounds the index.html read for share-tag rewriting.
+const maxIndexBytes = 1 << 20
 
 var hashedBuildFile = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$`)
 
@@ -19,11 +24,15 @@ var hashedBuildFile = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js
 type staticSite struct {
 	root       string
 	buildFiles map[string]bool
+	// publicOrigin, when set, makes index.html's root-relative share-tag
+	// URLs (content="/...") absolute, as link previews require.
+	publicOrigin string
 }
 
 // NewStaticSite returns nil when the directory has no index.html, so an API-only
-// process answers unknown paths with its JSON 404 instead.
-func NewStaticSite(directory string) http.Handler {
+// process answers unknown paths with its JSON 404 instead. publicOrigin is a
+// normalized origin or empty.
+func NewStaticSite(directory, publicOrigin string) http.Handler {
 	root, err := filepath.Abs(strings.TrimSpace(directory))
 	if err != nil || strings.TrimSpace(directory) == "" {
 		return nil
@@ -31,7 +40,7 @@ func NewStaticSite(directory string) http.Handler {
 	if info, err := os.Stat(filepath.Join(root, "index.html")); err != nil || !info.Mode().IsRegular() {
 		return nil
 	}
-	site := &staticSite{root: root, buildFiles: map[string]bool{}}
+	site := &staticSite{root: root, buildFiles: map[string]bool{}, publicOrigin: publicOrigin}
 	if raw, err := os.ReadFile(filepath.Join(root, ".vite", "manifest.json")); err == nil {
 		var manifest map[string]struct {
 			File string   `json:"file"`
@@ -119,6 +128,15 @@ func (s *staticSite) serve(w http.ResponseWriter, r *http.Request, name, relativ
 	w.Header().Set("Cache-Control", cache)
 	if contentType := staticContentType(name); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
+	}
+	if relative == "index.html" && s.publicOrigin != "" && info.Size() <= maxIndexBytes {
+		if page, err := io.ReadAll(io.LimitReader(file, maxIndexBytes+1)); err == nil {
+			page = bytes.ReplaceAll(page, []byte(`content="/`), []byte(`content="`+s.publicOrigin+`/`))
+			http.ServeContent(w, r, filepath.Base(name), info.ModTime(), bytes.NewReader(page))
+			return
+		}
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
+		return
 	}
 	http.ServeContent(w, r, filepath.Base(name), info.ModTime(), file)
 }

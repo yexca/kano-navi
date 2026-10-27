@@ -179,3 +179,40 @@ adjacent dates; `accountCounts` always counts the range's posts per lowercase
 handle. An invalid range returns 400 `invalid_range` and an invalid handle
 400 `invalid_account`. Reads are `no-store`, are not compressed and never
 fetch platforms. The board's month dialogs use them with the calendar.
+
+## Public Feeds
+
+`GET /api/calendar.ics` is an iCalendar (RFC 5545) subscription of the events
+dated 30 days before to 90 days after today's Japan date, at most 500 events,
+read through the same bounded calendar pages and event projection as
+`/api/calendar`. Times are UTC; an event without a time, or of `unknown`
+precision, is an all-day entry on its Japan date. A UID is the public event ID
+with `@kano-navi`. `STATUS` is `CANCELLED` only for a cancelled status or an
+operator's confirmation (`manual_confirmed`), `TENTATIVE` for a suspected
+cancellation or a `tentative` status, and `CONFIRMED` otherwise. The
+description carries the event's detail, its provenance and its public link;
+only absolute HTTP(S) links are written. Text is escaped and lines are folded
+at 75 octets without splitting a character.
+
+`GET /api/feed.xml` is an Atom 1.0 feed of at most 50 YouTube videos and
+reservations dated 30 days before to 11 days after today, newest first. An
+entry is dated by its publication (a future time is clamped to the current
+hour), says when a reservation is scheduled, and links the video and any
+merged platform copy. Entry and feed IDs are `urn:kano-navi:` URNs; the feed
+has no self link because the server does not trust the request's `Host`.
+
+Both answer `GET` and `HEAD`, never fetch platforms or models, and send
+`Cache-Control: public, max-age=600` with an ETag made of the dashboard
+revision and the Japan date, which together decide their content; a matching
+`If-None-Match` answers 304. A database failure answers 503 without an ETag.
+The routes sit under `/api/`, so the development proxy and the read-only
+sidecar serve them unchanged.
+
+## Share Tags
+
+`index.html` carries static Open Graph and Twitter card tags (site name,
+description, the bundled banner) and `rel="alternate"` links to both feeds.
+Link previews need absolute URLs, which a static file cannot know, so the
+standalone server rewrites the page's root-relative `content="/..."` values
+to the optional `PUBLIC_ORIGIN` when it serves `index.html`. Without it the
+tags stay relative. Nothing else in the build is rewritten.
