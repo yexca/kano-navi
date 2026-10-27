@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
+	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
 const (
@@ -41,21 +42,23 @@ const (
 // Job is one single-flight unit of work. Progress maps each step to pending,
 // running, completed, partial, failed, skipped or cancelled.
 type Job struct {
-	ID           string            `json:"id"`
-	Kind         string            `json:"kind"`
-	Status       string            `json:"status"`
-	CreatedAt    string            `json:"createdAt"`
-	StartedAt    *string           `json:"startedAt"`
-	FinishedAt   *string           `json:"finishedAt"`
-	TriggeredBy  string            `json:"triggeredBy"`
-	WorkflowID   *string           `json:"workflowId"`
-	WorkflowName *string           `json:"workflowName"`
-	Steps        []string          `json:"steps"`
-	FetchWindows map[string]any    `json:"fetchWindows"`
-	Progress     map[string]string `json:"progress"`
-	Error        *string           `json:"error"`
-	Result       map[string]any    `json:"result"`
-	Run          map[string]any    `json:"run"`
+	ID           string         `json:"id"`
+	Kind         string         `json:"kind"`
+	Status       string         `json:"status"`
+	CreatedAt    string         `json:"createdAt"`
+	StartedAt    *string        `json:"startedAt"`
+	FinishedAt   *string        `json:"finishedAt"`
+	TriggeredBy  string         `json:"triggeredBy"`
+	WorkflowID   *string        `json:"workflowId"`
+	WorkflowName *string        `json:"workflowName"`
+	Steps        []string       `json:"steps"`
+	FetchWindows map[string]any `json:"fetchWindows"`
+	// SourceSchedule names the source whose schedule submitted the run.
+	SourceSchedule *string           `json:"sourceSchedule"`
+	Progress       map[string]string `json:"progress"`
+	Error          *string           `json:"error"`
+	Result         map[string]any    `json:"result"`
+	Run            map[string]any    `json:"run"`
 }
 
 // StartResult mirrors the accepted/reason/job triple returned to operators.
@@ -66,12 +69,15 @@ type StartResult struct {
 	Job      *Job    `json:"job"`
 }
 
-// Options narrows a workflow job. Steps and FetchWindows are ignored for the
-// sync and scan kinds.
+// Options narrows a workflow job. Steps, FetchWindows and SourceSync are
+// ignored for the sync and scan kinds.
 type Options struct {
 	WorkflowID   string
 	Steps        []string
 	FetchWindows map[string]history.Window
+	// SourceSync freezes source schedule settings on an ad hoc run, as a
+	// YouTube push does.
+	SourceSync map[string]sqlite.SourceSync
 }
 
 type Manager interface {

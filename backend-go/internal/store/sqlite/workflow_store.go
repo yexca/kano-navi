@@ -11,35 +11,27 @@ import (
 
 const definitionColumns = "id,name,steps_json,schedule_enabled,interval_minutes,last_run_at,last_job_id,last_status,next_run_at,created_at,updated_at"
 
-// syncColumn selects source_sync_json, or its default for a read-only
-// snapshot whose workflow tables predate the column.
-func (s *Store) syncColumn() string {
-	if s.sourceSync {
-		return "source_sync_json"
-	}
-	return "'{}'"
-}
-
 // definitionQuery selects a definition's columns in scanDefinition's order.
+// workflows.source_sync_json is no longer read: sync settings belong to the
+// source schedules (ADR-0003).
 func (s *Store) definitionQuery() string {
-	return "SELECT " + definitionColumns + "," + s.syncColumn() + " FROM workflows"
+	return "SELECT " + definitionColumns + " FROM workflows"
 }
 
 type workflowScanner interface{ Scan(...any) error }
 
 func scanDefinition(row workflowScanner) (WorkflowDefinition, error) {
 	var x WorkflowDefinition
-	var steps, sync string
+	var steps string
 	var enabled int
 	var lr, lj, ls, nr sql.NullString
-	err := row.Scan(&x.ID, &x.Name, &steps, &enabled, &x.IntervalMinutes, &lr, &lj, &ls, &nr, &x.CreatedAt, &x.UpdatedAt, &sync)
+	err := row.Scan(&x.ID, &x.Name, &steps, &enabled, &x.IntervalMinutes, &lr, &lj, &ls, &nr, &x.CreatedAt, &x.UpdatedAt)
 	if err != nil {
 		return x, err
 	}
 	if json.Unmarshal([]byte(steps), &x.Steps) != nil {
 		return x, ErrWorkflowValidation
 	}
-	x.SourceSync = readSourceSync(sync)
 	x.ScheduleEnabled = enabled != 0
 	x.IntervalMinutes = clampInterval(x.IntervalMinutes)
 	x.LastRunAt = nullableWorkflowString(lr)

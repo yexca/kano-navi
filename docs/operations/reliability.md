@@ -34,9 +34,9 @@
 
 ## Process Lifetime
 
-Saved workflow timers execute only inside the API process. The single-flight
-queue runs one job at a time; a busy queue leaves a timed workflow due for a
-later tick. Restarting the server invalidates in-memory admin sessions.
+Source schedules and saved workflow timers execute only inside the API
+process. The single-flight queue runs one job at a time; a busy queue leaves a
+due source or timed workflow due for a later tick. Restarting the server invalidates in-memory admin sessions.
 Inspect protected run details before retrying; historical source checkpoints
 persist independently of normal incremental cursors.
 

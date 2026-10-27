@@ -251,10 +251,13 @@ func (a *api) deleteWorkflow(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-var workflowFields = []string{"name", "steps", "scheduleEnabled", "intervalMinutes", "sourceSync"}
+var workflowFields = []string{"name", "steps", "scheduleEnabled", "intervalMinutes"}
 
 func workflowInput(body map[string]json.RawMessage, existing *sqlite.WorkflowDefinition, input *sqlite.WorkflowDefinition) error {
 	for key := range body {
+		if key == "sourceSync" {
+			return httpx.Invalid("sourceSync is set on each source schedule, not on a workflow")
+		}
 		if !slices.Contains(workflowFields, key) {
 			return httpx.Invalid("%s is not a workflow field", key)
 		}
@@ -308,45 +311,27 @@ func workflowInput(body map[string]json.RawMessage, existing *sqlite.WorkflowDef
 		}
 		input.IntervalMinutes = minutes
 	}
-	sync := sqlite.DefaultSourceSync()
-	for source, setting := range input.SourceSync {
-		sync[source] = setting
+	// Sources run on their own schedules (ADR-0003), so a workflow that
+	// reads one keeps no timer.
+	if sources := sourceStepsOf(input.Steps); input.ScheduleEnabled && len(sources) > 0 {
+		return timerRefusal(sources)
 	}
-	if raw, ok := body["sourceSync"]; ok && !jsonNull(raw) {
-		var settings map[string]json.RawMessage
-		if json.Unmarshal(raw, &settings) != nil {
-			return httpx.Invalid("sourceSync must contain x and/or youtube")
-		}
-		for source, value := range settings {
-			if !slices.Contains(sqlite.SyncSources, source) {
-				return httpx.Invalid("sourceSync must contain x and/or youtube")
-			}
-			if jsonNull(value) {
-				continue
-			}
-			setting, err := sourceSync(value)
-			if err != nil {
-				return err
-			}
-			sync[source] = setting
-		}
-	}
-	input.SourceSync = sync
 	return nil
 }
 
-// sourceSync validates {mode: "incremental", max} or {mode: "count", count};
+// sourceSync validates a source schedule's sync, {mode: "incremental", max}
+// or {mode: "count", count};
 // an incremental setting without max takes the default cap.
 func sourceSync(raw json.RawMessage) (sqlite.SourceSync, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil || fields == nil {
-		return sqlite.SourceSync{}, httpx.Invalid("sourceSync entries must be objects")
+		return sqlite.SourceSync{}, httpx.Invalid("sync must be an object")
 	}
 	var mode string
 	_ = json.Unmarshal(fields["mode"], &mode)
 	for key := range fields {
 		if key != "mode" && key != "max" && key != "count" {
-			return sqlite.SourceSync{}, httpx.Invalid("%s is not a sourceSync field", key)
+			return sqlite.SourceSync{}, httpx.Invalid("%s is not a sync field", key)
 		}
 	}
 	switch mode {
@@ -373,7 +358,7 @@ func sourceSync(raw json.RawMessage) (sqlite.SourceSync, error) {
 		}
 		return sqlite.SourceSync{Mode: mode, Count: number}, nil
 	}
-	return sqlite.SourceSync{}, httpx.Invalid("sourceSync mode must be incremental or count")
+	return sqlite.SourceSync{}, httpx.Invalid("sync mode must be incremental or count")
 }
 
 func jsonNull(raw json.RawMessage) bool {
@@ -416,10 +401,16 @@ func (a *api) sources(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
+	schedules, err := a.sourceSchedules(ctx)
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"x":        map[string]any{"skipped": a.skipped("x"), "historyAvailable": a.historyAvailable("x"), "windows": a.windows("x"), "accounts": accounts},
-		"youtube":  map[string]any{"skipped": a.skipped("youtube"), "historyAvailable": a.historyAvailable("youtube"), "windows": a.windows("youtube"), "oldest": oldest, "push": a.pushStatus(), "liveProbe": probe},
-		"bilibili": bilibili,
+		"schedules": schedules,
+		"x":         map[string]any{"skipped": a.skipped("x"), "historyAvailable": a.historyAvailable("x"), "windows": a.windows("x"), "accounts": accounts},
+		"youtube":   map[string]any{"skipped": a.skipped("youtube"), "historyAvailable": a.historyAvailable("youtube"), "windows": a.windows("youtube"), "oldest": oldest, "push": a.pushStatus(), "liveProbe": probe},
+		"bilibili":  bilibili,
 	})
 }
 
@@ -541,6 +532,18 @@ func (a *api) overview(w http.ResponseWriter, r *http.Request) {
 			scheduled++
 			if workflow.NextRunAt != nil && (next == nil || *workflow.NextRunAt < *next) {
 				next = workflow.NextRunAt
+			}
+		}
+		// Enabled source schedules are timers as well.
+		if schedules, scheduleErr := a.Store.SourceSchedules(ctx, a.bilibiliFloor()); scheduleErr == nil {
+			for _, schedule := range schedules {
+				if !schedule.Enabled || a.skipped(schedule.Source) {
+					continue
+				}
+				scheduled++
+				if schedule.NextRunAt != nil && (next == nil || *schedule.NextRunAt < *next) {
+					next = schedule.NextRunAt
+				}
 			}
 		}
 		workflows = map[string]any{"total": page.Total, "scheduled": scheduled, "nextRunAt": next}

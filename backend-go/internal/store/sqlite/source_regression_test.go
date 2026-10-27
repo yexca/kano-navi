@@ -120,14 +120,20 @@ func TestWorkflowV1UpgradeRetainsRunsAttemptsAndFrozenInputs(t *testing.T) {
 	if err != nil || got.Status != "succeeded" || len(got.Steps[0].Attempts) != 1 {
 		t.Fatalf("v1 read=%#v %v", got, err)
 	}
-	// Without the column a definition reads as the incremental default.
+	// Without the column a definition still reads; sync settings come from
+	// the source schedules, which read as their defaults without a table.
 	if old, err = OpenReadOnly(p); err != nil {
 		t.Fatal(err)
 	}
 	legacy, err := old.GetWorkflow(ctx, "x-recent")
-	old.Close()
-	if err != nil || legacy.SourceSync["x"] != (SourceSync{Mode: SyncIncremental, Max: DefaultSyncMax}) {
+	if err != nil || legacy.Steps[0] != "x" {
+		old.Close()
 		t.Fatalf("legacy definition=%#v %v", legacy, err)
+	}
+	settings, err := old.SourceScheduleSync(ctx)
+	old.Close()
+	if err != nil || settings["x"] != (SourceSync{Mode: SyncIncremental, Max: DefaultSyncMax}) {
+		t.Fatalf("legacy sync=%#v %v", settings, err)
 	}
 	s, err = OpenWorkflowCore(p, true)
 	if err != nil {
@@ -138,23 +144,20 @@ func TestWorkflowV1UpgradeRetainsRunsAttemptsAndFrozenInputs(t *testing.T) {
 	if err != nil || got.Status != "succeeded" || len(got.Steps[0].Attempts) != 1 {
 		t.Fatalf("upgraded=%#v %v", got, err)
 	}
-	def.SourceSync["x"] = SourceSync{Mode: SyncCount, Count: 3}
+	def.SourceSync = map[string]SourceSync{"x": {Mode: SyncCount, Count: 3}}
 	def.SourceLookbackDays = map[string]int{"x": 3}
 	newRun, err := s.CreateWorkflowRun(ctx, *def, "operator", "fresh", map[string]bool{"x": false}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	def.SourceSync["x"] = SourceSync{Mode: SyncIncremental, Max: 7}
+	// Editing the definition leaves the frozen run inputs alone.
+	def.SourceSync = map[string]SourceSync{"x": {Mode: SyncIncremental, Max: 7}}
 	saved, err := s.SaveWorkflow(ctx, *def, false)
-	if err != nil || saved.SourceSync["x"].Max != 7 {
+	if err != nil || saved.SourceSync != nil {
 		t.Fatalf("saved=%#v %v", saved, err)
 	}
 	read, err := s.GetWorkflowRun(ctx, newRun.ID)
 	if err != nil || read.SourceSync["x"] != (SourceSync{Mode: SyncCount, Count: 3}) || read.SourceLookbackDays["x"] != 3 || read.Steps[0].Capability != "x_recent" {
 		t.Fatalf("frozen inputs=%#v %v", read, err)
-	}
-	def.SourceSync["x"] = SourceSync{Mode: SyncCount, Count: MaxSyncLimit + 1}
-	if _, err = s.SaveWorkflow(ctx, *def, false); err != ErrWorkflowValidation {
-		t.Fatalf("invalid sync err=%v", err)
 	}
 }

@@ -1009,7 +1009,7 @@
   gap: 12px;
 }
 
-.adm-panel-header h2 {
+.adm-panel-header :is(h2, h3) {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1018,8 +1018,44 @@
   font-weight: 750;
 }
 
-.adm-panel-header h2 svg {
+.adm-panel-header :is(h2, h3) svg {
   color: var(--adm-accent);
+}
+
+/* One source on the Sources page: a heading over its panels. */
+.adm-source {
+  display: grid;
+  gap: 12px;
+}
+
+.adm-source-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.adm-source-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.adm-source-header h2 svg {
+  width: 20px;
+  height: 20px;
+  color: var(--adm-accent);
+}
+
+.adm-source-header p {
+  /* A max-width would let the hint share the heading line. */
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--adm-muted);
+  font-size: 13px;
 }
 
 .adm-panel-header p {

@@ -60,6 +60,10 @@ export function RunSteps({ run }: { run: Run }) {
 
 export function runTitle(run: Run, t: Translator) {
   if (run.workflowName) return run.workflowName
+  if (run.sourceSchedule)
+    return t("admin.run.sourceTitle", {
+      source: t(`admin.step.${run.sourceSchedule}`),
+    })
   if (run.kind === "workflow" && run.fetchWindows) {
     const sources = Object.keys(run.fetchWindows)
     return t("admin.run.fetchTitle", {
@@ -74,7 +78,14 @@ export function runOutcome(run: Run) {
   return run.result?.status === "partial" ? "partial" : "completed"
 }
 
-const triggers = ["admin", "scheduler", "websub", "live-probe", "mcp"]
+const triggers = [
+  "admin",
+  "scheduler",
+  "source-schedule",
+  "websub",
+  "live-probe",
+  "mcp",
+]
 
 export function RunLine({
   run,

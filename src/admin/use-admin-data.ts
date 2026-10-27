@@ -38,7 +38,9 @@ import type {
   RouteTarget,
   Run,
   ScheduleImage,
+  ScheduleSource,
   Session,
+  SourceSchedule,
   Sources,
   TranslationLocale,
   TranslationOwner,
@@ -117,6 +119,12 @@ function createClient(run: Runner, slow: Runner) {
       send<null>("DELETE", `/workflows/${enc(id)}`),
 
     sources: () => get<Sources>("/sources"),
+    updateSourceSchedule: (
+      source: ScheduleSource,
+      body: Partial<
+        Pick<SourceSchedule, "enabled" | "intervalMinutes" | "sync">
+      >,
+    ) => send<SourceSchedule>("PUT", `/sources/${enc(source)}/schedule`, body),
     updatePush: (body: { enabled?: boolean; callbackUrl?: string | null }) =>
       send<Sources["youtube"]["push"]>("PUT", "/sources/youtube/push", body),
     updateLiveProbe: (body: { enabled?: boolean; intervalMinutes?: number }) =>

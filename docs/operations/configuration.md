@@ -19,7 +19,7 @@
 | `SCHEDULE_KEYWORDS`             | `schedule,...`       | Comma-separated schedule candidate keywords                       |
 | `TRANSLATION_SCAN_LIMIT`        | `20`                 | Posts and titles the translate step sends to a model per run      |
 | `TRANSLATION_LOOKBACK_DAYS`     | `30`                 | Days of posts and videos the translate step covers unrequested    |
-| `WORKFLOW_SCHEDULER_ENABLED`    | `1`                  | Start timed saved workflows inside the server process             |
+| `WORKFLOW_SCHEDULER_ENABLED`    | `1`                  | Start source timers and timed workflows in the server process     |
 | `MCP_ENABLED`                   | `1`                  | Expose the stateless `/mcp` endpoint                              |
 | `MCP_CONTROL_TOKEN`             | Empty                | Bearer token for MCP mutation tools                               |
 | `X_HANDLES`                     | `kano_2525,_Kanotic` | Comma-separated public X account names                            |
@@ -36,15 +36,15 @@
 | `YOUTUBE_BOOTSTRAP_VIDEOS`      | `6`                  | First-run RSS entries stored                                      |
 | `YOUTUBE_MAX_DETAIL_REQUESTS`   | `12`                 | Reservation pages inspected per run                               |
 | `BILIBILI_UID`                  | Kano's account       | Bilibili account (numeric mid) whose uploads are read             |
-| `BILIBILI_MIN_INTERVAL_MINUTES` | `180`                | Minimum minutes between Bilibili list reads (60–1440)             |
+| `BILIBILI_MIN_INTERVAL_MINUTES` | `180`                | Minimum minutes between Bilibili reads and timer runs (60–1440)   |
 | `BILIBILI_SESSDATA`             | Empty                | Optional environment-only Bilibili login cookie                   |
 | `SYNC_TIMEOUT_MS`               | `7000`               | Timeout for a source network request                              |
 | `SYNC_REQUEST_DELAY_MS`         | `150`                | Delay between source detail requests                              |
 | `MEDIA_DOWNLOAD_LIMIT`          | `20`                 | Pending images attempted per run                                  |
 | `MEDIA_DOWNLOAD_TIMEOUT_MS`     | `10000`              | Timeout for an image request                                      |
 | `MEDIA_MAX_BYTES`               | `10485760`           | Maximum bytes accepted for one image                              |
-| `SKIP_X`, `SKIP_YOUTUBE`        | `0`                  | Set an individual source flag to `1` to skip it                   |
-| `SKIP_BILIBILI`                 | `0`                  | Set to `1` to skip the Bilibili step and the console's reads      |
+| `SKIP_X`, `SKIP_YOUTUBE`        | `0`                  | Set to `1` to skip that source's step and its timer               |
+| `SKIP_BILIBILI`                 | `0`                  | Set to `1` to skip the Bilibili step, timer and console reads     |
 | `SKIP_MEDIA`, `SKIP_LLM`        | `0`                  | Set a post-processing stage flag to `1` to skip it                |
 
 `SKIP_LLM=1` skips both model steps, `schedule` and `translate`. Neither
@@ -102,9 +102,17 @@ and save it only in the ignored environment file or deployment secret store.
 
 ## Workflow timers
 
-`kano-go serve` starts the workflow timer unless
+`kano-go serve` starts the timer process unless
 `WORKFLOW_SCHEDULER_ENABLED=0`. Page requests and admin reads never start a
-timer or a run. A saved workflow's interval is 15 minutes through seven days.
+timer or a run. Each source's timer is an operator setting, not an
+environment variable: `/admin` → Sources turns it on or off and sets its
+interval and read mode, stored in the `source_schedules` table (X 30 minutes
+and YouTube 60 by default, 15 minutes through seven days; Bilibili 180 by
+default, never below `BILIBILI_MIN_INTERVAL_MINUTES`). `SKIP_X`,
+`SKIP_YOUTUBE` and `SKIP_BILIBILI` keep that source's timer from running. A
+saved workflow can keep a timer (15 minutes through seven days) only when it
+contains no source step. See
+[Workflows](../architecture/workflows.md#source-schedules).
 
 The YouTube live-status probe is an operator setting, not an environment
 variable: `/admin` → Sources → Live-status probe turns it on or off and sets

@@ -47,10 +47,24 @@ func TestRetryUsesFrozenWindowAndSkipsCompletedStep(t *testing.T) {
 	}
 	defer s.Close()
 	ctx := context.Background()
-	def, err := s.SaveWorkflow(ctx, sqlite.WorkflowDefinition{Name: "Retry", Steps: []string{"x", "youtube"}, SourceSync: map[string]sqlite.SourceSync{"x": {Mode: sqlite.SyncCount, Count: 3}, "youtube": {Mode: sqlite.SyncIncremental, Max: 5}}, IntervalMinutes: 60}, true)
+	def, err := s.SaveWorkflow(ctx, sqlite.WorkflowDefinition{Name: "Retry", Steps: []string{"x", "youtube"}, IntervalMinutes: 60}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A manual run reads each source as its schedule does.
+	saveSync := func(source string, setting sqlite.SourceSync) {
+		t.Helper()
+		schedule, err := s.SourceScheduleFor(ctx, source, 180)
+		if err != nil {
+			t.Fatal(err)
+		}
+		schedule.Sync = &setting
+		if _, err = s.SaveSourceSchedule(ctx, schedule, 180, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	saveSync("x", sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 3})
+	saveSync("youtube", sqlite.SourceSync{Mode: sqlite.SyncIncremental, Max: 5})
 	steps := &failThenRecover{}
 	paused := &pausedTerminalRead{Store: s, published: make(chan struct{}), release: make(chan struct{})}
 	q := &Queue{Store: s, Executor: &Executor{Store: paused, Steps: steps, MaxAttempts: 1}}
@@ -72,18 +86,14 @@ func TestRetryUsesFrozenWindowAndSkipsCompletedStep(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("terminal read was not held")
 	}
-	def.SourceSync["x"] = sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 7}
-	_, err = s.SaveWorkflow(ctx, *def, false)
-	if err != nil {
-		t.Fatal(err)
-	}
+	saveSync("x", sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 7})
 	retry, err := q.Retry(ctx, run.ID)
 	if err != nil || retry.ID != run.ID {
 		t.Fatalf("retry=%#v err=%v", retry, err)
 	}
 	close(paused.release)
 	finished := waitRun(t, s, run.ID, "succeeded")
-	if steps.x.Load() != 1 || steps.youtube.Load() != 2 || finished.SourceSync["x"].Count != 3 || finished.ExecutionSource != "recovery" || len(finished.Steps[1].Attempts) != 2 {
+	if steps.x.Load() != 1 || steps.youtube.Load() != 2 || finished.SourceSync["x"].Count != 3 || finished.SourceSync["youtube"].Max != 5 || finished.ExecutionSource != "recovery" || len(finished.Steps[1].Attempts) != 2 {
 		t.Fatalf("retry duplicated completed work or lost input: %#v", finished)
 	}
 }
@@ -96,7 +106,7 @@ func TestRestartRecoversExpiredRunWithOriginalAttempts(t *testing.T) {
 	ctx := context.Background()
 	_ = s.EnsureXRecentWorkflow(ctx)
 	def, _ := s.GetWorkflow(ctx, "x-recent")
-	def.SourceSync["x"] = sqlite.SourceSync{Mode: sqlite.SyncIncremental, Max: 4}
+	def.SourceSync = map[string]sqlite.SourceSync{"x": {Mode: sqlite.SyncIncremental, Max: 4}}
 	run, err := s.CreateWorkflowRun(ctx, *def, "operator", "", map[string]bool{"x": true}, time.Now())
 	if err != nil {
 		t.Fatal(err)

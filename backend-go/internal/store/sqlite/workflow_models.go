@@ -22,8 +22,10 @@ type WorkflowDefinition struct {
 	ID    string   `json:"id"`
 	Name  string   `json:"name"`
 	Steps []string `json:"steps"`
-	// SourceSync is how each source step reads; see ADR-0002.
-	SourceSync      map[string]SourceSync `json:"sourceSync"`
+	// SourceSync is how each source step of a run reads, from the source
+	// schedules (ADR-0003). It is frozen on the run, never saved with a
+	// definition.
+	SourceSync      map[string]SourceSync `json:"-"`
 	ScheduleEnabled bool                  `json:"scheduleEnabled"`
 	IntervalMinutes int                   `json:"intervalMinutes"`
 	LastRunAt       *string               `json:"lastRunAt"`

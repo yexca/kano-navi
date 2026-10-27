@@ -1,6 +1,6 @@
 # ADR-0002: Count-Based Source Synchronization for Saved Workflows
 
-- Status: Accepted
+- Status: Accepted; where `sourceSync` is stored is amended by [ADR-0003](ADR-0003-per-source-sync-schedules.md)
 - Date: 2026-10-26
 
 ## Context

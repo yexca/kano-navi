@@ -63,8 +63,8 @@ type StepInput struct {
 	Attempt                   int
 	// LookbackDays are the days of an operator recent window.
 	LookbackDays int
-	// Sync is a saved workflow's setting for this source; the zero value is
-	// the step's incremental default.
+	// Sync is the source schedule's setting frozen on the run; the zero value
+	// is the step's incremental default.
 	Sync sqlite.SourceSync
 	// Window is the operator-selected source window frozen on the run, or nil
 	// for the incremental synchronization.
@@ -104,6 +104,12 @@ type Executor struct {
 	// one unavailable source must not stop the other source or post-processing.
 	TolerateFailure map[string]bool
 	initMu          sync.Mutex
+}
+
+// SourceSyncReader is an optional Persistence capability that supplies the
+// source schedules' sync settings to manual runs of saved workflows.
+type SourceSyncReader interface {
+	SourceScheduleSync(context.Context) (map[string]sqlite.SourceSync, error)
 }
 
 // ResultRecorder is an optional Persistence capability that keeps each step's
@@ -165,6 +171,19 @@ func (e *Executor) Prepare(ctx context.Context, workflowID string, trigger Trigg
 	def, err := e.Store.GetWorkflow(ctx, workflowID)
 	if err != nil {
 		return nil, err
+	}
+	// A saved workflow reads each source as that source's schedule does.
+	if reader, ok := e.Store.(SourceSyncReader); ok {
+		settings, err := reader.SourceScheduleSync(ctx)
+		if err != nil {
+			return nil, err
+		}
+		def.SourceSync = map[string]sqlite.SourceSync{}
+		for _, step := range def.Steps {
+			if setting, configured := settings[step]; configured {
+				def.SourceSync[step] = setting
+			}
+		}
 	}
 	return e.PrepareDefinition(ctx, *def, trigger, key, lookback)
 }

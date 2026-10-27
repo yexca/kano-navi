@@ -33,13 +33,13 @@ export interface FetchWindow {
 }
 
 /**
- * How a saved workflow reads a source: until a stored record, at most `max`,
- * or the newest `count` every run.
+ * How a source timer reads X or YouTube: until a stored record, at most
+ * `max`, or the newest `count` every run.
  */
 export type SourceSync =
   { mode: "incremental"; max: number } | { mode: "count"; count: number }
 
-/** A run's source window: an operator's, or a saved workflow's frozen sync. */
+/** A run's source window: an operator's, or a source timer's frozen sync. */
 export interface RunWindow extends Omit<FetchWindow, "mode"> {
   mode: FetchWindow["mode"] | SourceSync["mode"]
   max?: number
@@ -55,6 +55,8 @@ export interface Run {
   triggeredBy: string
   workflowId: string | null
   workflowName: string | null
+  /** The source whose timer submitted the run. */
+  sourceSchedule: ScheduleSource | null
   steps: string[]
   progress: Record<string, StepProgress>
   fetchWindows: Record<string, RunWindow> | null
@@ -102,7 +104,6 @@ export interface Workflow {
   id: string
   name: string
   steps: string[]
-  sourceSync: Record<"x" | "youtube", SourceSync>
   scheduleEnabled: boolean
   intervalMinutes: number
   lastRunAt: string | null
@@ -145,7 +146,26 @@ export interface LiveProbeStatus {
   maxVideos: number
 }
 
+export type ScheduleSource = "x" | "youtube" | "bilibili"
+
+/** A source's own timer (ADR-0003). */
+export interface SourceSchedule {
+  source: ScheduleSource
+  enabled: boolean
+  intervalMinutes: number
+  minIntervalMinutes: number
+  maxIntervalMinutes: number
+  /** X and YouTube only. */
+  sync: SourceSync | null
+  nextRunAt: string | null
+  lastRun: { id: string; status: string; at: string } | null
+  /** SKIP_* disables the source in this process. */
+  skipped: boolean
+  reason?: "environment"
+}
+
 export interface Sources {
+  schedules: SourceSchedule[]
   x: {
     skipped: boolean
     /** The official API credential is configured. */

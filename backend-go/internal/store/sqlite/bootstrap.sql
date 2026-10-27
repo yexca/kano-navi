@@ -284,6 +284,15 @@ CREATE TABLE schedule_extractions (
     updated_at TEXT NOT NULL
   );
 
+CREATE TABLE source_schedules (
+    source TEXT PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    interval_minutes INTEGER NOT NULL,
+    sync_json TEXT NOT NULL DEFAULT '{}',
+    next_run_at TEXT,
+    updated_at TEXT NOT NULL
+  );
+
 CREATE TABLE sync_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source TEXT NOT NULL,

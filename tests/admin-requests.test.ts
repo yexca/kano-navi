@@ -368,6 +368,52 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
         }
       },
     )
+
+    await t.test(
+      "a source timer is saved on its own path and a validation message is shown as sent",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          await fixture.respond(fixture.open("/session"), signedIn)
+          await fixture.respond(fixture.open("/overview"), overview())
+          const { api, act: perform } = fixture.current()
+          const body = {
+            intervalMinutes: 45,
+            sync: { mode: "count", count: 20 },
+          } as const
+          const saved = api.updateSourceSchedule("x", body)
+          const put = fixture.open("/sources/x/schedule", "PUT")
+          assert.deepEqual(put.body, body)
+          const schedule = { source: "x", enabled: true, intervalMinutes: 45 }
+          await fixture.respond(put, schedule)
+          assert.deepEqual(await saved, schedule)
+
+          // The server's invalid_input text reaches the operator unchanged.
+          let refused: Promise<unknown> | undefined
+          await act(async () => {
+            refused = perform(
+              () =>
+                api.updateSourceSchedule("bilibili", { intervalMinutes: 60 }),
+              "admin.notice.scheduleSaved",
+            )
+          })
+          await fixture.respond(
+            fixture.open("/sources/bilibili/schedule", "PUT"),
+            {
+              error: "invalid_input",
+              message: "intervalMinutes must be an integer from 180 to 10080",
+            },
+            400,
+          )
+          assert.equal(await refused, undefined)
+          assert.deepEqual(fixture.current().toasts.at(-1).message, {
+            text: "intervalMinutes must be an integer from 180 to 10080",
+          })
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
   } finally {
     await vite.close()
   }

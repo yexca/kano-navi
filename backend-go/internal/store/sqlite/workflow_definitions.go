@@ -30,15 +30,7 @@ func (s *Store) SaveWorkflow(ctx context.Context, input WorkflowDefinition, crea
 			input.Steps = append(input.Steps, step)
 		}
 	}
-	settings, err := normalizeSourceSync(input.SourceSync)
-	if err != nil {
-		return nil, err
-	}
-	if !s.sourceSync {
-		return nil, ErrWorkflowUnavailable
-	}
 	steps, _ := json.Marshal(input.Steps)
-	sync, _ := json.Marshal(settings)
 	input.IntervalMinutes = clampInterval(input.IntervalMinutes)
 	if create {
 		id, err := newWorkflowRunID()
@@ -59,9 +51,9 @@ func (s *Store) SaveWorkflow(ctx context.Context, input WorkflowDefinition, crea
 	}
 	defer tx.Rollback()
 	if create {
-		_, err = tx.ExecContext(ctx, `INSERT INTO workflows(id,name,steps_json,source_sync_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`, input.ID, input.Name, string(steps), string(sync), input.ScheduleEnabled, input.IntervalMinutes, next, timestamp, timestamp)
+		_, err = tx.ExecContext(ctx, `INSERT INTO workflows(id,name,steps_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, input.ID, input.Name, string(steps), input.ScheduleEnabled, input.IntervalMinutes, next, timestamp, timestamp)
 	} else {
-		res, e := tx.ExecContext(ctx, `UPDATE workflows SET name=?,steps_json=?,source_sync_json=?,schedule_enabled=?,interval_minutes=?,next_run_at=CASE WHEN ?=0 THEN NULL WHEN schedule_enabled=1 AND interval_minutes=? THEN next_run_at ELSE ? END,updated_at=? WHERE id=?`, input.Name, string(steps), string(sync), input.ScheduleEnabled, input.IntervalMinutes, input.ScheduleEnabled, input.IntervalMinutes, next, timestamp, input.ID)
+		res, e := tx.ExecContext(ctx, `UPDATE workflows SET name=?,steps_json=?,schedule_enabled=?,interval_minutes=?,next_run_at=CASE WHEN ?=0 THEN NULL WHEN schedule_enabled=1 AND interval_minutes=? THEN next_run_at ELSE ? END,updated_at=? WHERE id=?`, input.Name, string(steps), input.ScheduleEnabled, input.IntervalMinutes, input.ScheduleEnabled, input.IntervalMinutes, next, timestamp, input.ID)
 		err = e
 		if err == nil {
 			n, e := res.RowsAffected()

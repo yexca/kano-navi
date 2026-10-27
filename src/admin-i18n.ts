@@ -94,10 +94,12 @@ export const adminMessages = {
     "admin.run.kind.live": "Live-status probe",
     "admin.run.kind.translate": "Translation",
     "admin.run.fetchTitle": "Fetch {sources}",
+    "admin.run.sourceTitle": "{source} timer",
     "admin.run.by.admin": "Started here",
     "admin.run.by.scheduler": "Timer",
     "admin.run.by.websub": "YouTube push",
     "admin.run.by.live-probe": "Live probe timer",
+    "admin.run.by.source-schedule": "Source timer",
     "admin.run.by.mcp": "MCP control",
     "admin.run.by.other": "{source}",
 
@@ -128,7 +130,7 @@ export const adminMessages = {
     "admin.overview.idle": "Idle",
     "admin.overview.startedAt": "Started {time} JST",
     "admin.overview.nextRun": "Next timed run {relative} ({time} JST)",
-    "admin.overview.noSchedule": "No workflow runs on a timer.",
+    "admin.overview.noSchedule": "Nothing runs on a timer.",
     "admin.overview.openWorkflows": "Open workflows",
     "admin.overview.sources": "Sources",
     "admin.overview.manageSources": "Fetch & push",
@@ -466,13 +468,13 @@ export const adminMessages = {
       "Every run shares one queue: only one runs at a time and a busy queue refuses new work.",
     "admin.runs.workflows": "Saved workflows",
     "admin.runs.workflowsHint":
-      "Reusable step lists. A timer runs scheduled ones in this process only.",
+      "Reusable step lists for manual runs. Sources run on their own timers on the Sources page.",
     "admin.runs.newWorkflow": "New workflow",
     "admin.runs.editWorkflow": "Edit workflow",
     "admin.runs.deleteWorkflow": "Delete workflow",
     "admin.runs.noWorkflows": "No saved workflows",
     "admin.runs.noWorkflowsHint":
-      "Create one to sync on a timer, or use Sync everything for a one-off run.",
+      "Create one for a combination of steps you run by hand, or use Sync everything for a one-off run.",
     "admin.runs.every": "Every {interval}",
     "admin.runs.next": "next {relative}",
     "admin.runs.manualOnly": "Manual only",
@@ -480,21 +482,11 @@ export const adminMessages = {
     "admin.runs.skippedStep": "Disabled in this process",
     "admin.runs.field.name": "Name",
     "admin.runs.field.steps": "Steps",
-    "admin.runs.field.sync": "{source} sync",
-    "admin.runs.field.syncHint.incremental":
-      "Read newest first until a stored record. A run that reaches the limit continues where it stopped next time.",
-    "admin.runs.field.syncHint.count":
-      "Read the newest records every run, stored or not.",
-    "admin.runs.field.syncLimit.incremental.x": "Most new posts per account",
-    "admin.runs.field.syncLimit.count.x": "Newest posts per account",
-    "admin.runs.field.syncLimit.incremental.youtube": "Most new videos per run",
-    "admin.runs.field.syncLimit.count.youtube": "Newest videos per run",
-    "admin.runs.field.syncLimitHint.x": "1 to 200",
-    "admin.runs.field.syncLimitHint.youtube":
-      "1 to 200. Without YOUTUBE_API_KEY the RSS feed lists 15.",
     "admin.runs.field.scheduled": "Run on a timer",
     "admin.runs.field.scheduledHint":
-      "The interval is independent of how much each run reads.",
+      "For steps that read no source, such as a translation sweep.",
+    "admin.runs.field.scheduledSource":
+      "Workflows with a source step run manually. Each source has its own timer on the Sources page.",
     "admin.runs.field.interval": "Interval",
     "admin.runs.history": "Run history",
     "admin.runs.historyHint": "Select a run for its steps and counts.",
@@ -506,7 +498,7 @@ export const adminMessages = {
 
     "admin.sources.title": "Sources",
     "admin.sources.description":
-      "Read past or recent windows on demand and configure YouTube push notifications.",
+      "Each source runs on its own timer. Read past or recent windows on demand, and set up YouTube push and live checks.",
     "admin.sources.x.hint":
       "The public FxTwitter timeline, or the full archive with X_API_BEARER_TOKEN.",
     "admin.sources.youtube.hint":
@@ -592,6 +584,41 @@ export const adminMessages = {
     "admin.liveProbe.nextRun": "Next probe",
     "admin.liveProbe.active": "Active videos now",
     "admin.liveProbe.activeCount": "{count} (up to {max} per run)",
+    "admin.sources.bilibili.hint":
+      "The account's public upload list, read at most once per BILIBILI_MIN_INTERVAL_MINUTES.",
+    "admin.timer.title": "Timer",
+    "admin.timer.description.x":
+      "Reads X, then caches media, extracts schedules and translates. X has no push, so the timer is how new posts arrive.",
+    "admin.timer.description.youtube":
+      "Reads YouTube, then caches thumbnails and translates. Push and the live-status probe catch most changes; the timer is a fallback.",
+    "admin.timer.description.bilibili":
+      "Reads the upload list, then caches covers and translates. Bilibili limits requests, so the interval stays at {floor} or more.",
+    "admin.timer.on": "Every {interval}",
+    "admin.timer.enable": "Run on a timer",
+    "admin.timer.enableHint":
+      "The first run comes one interval after the timer is turned on. Runs share the job queue with everything else.",
+    "admin.timer.skipped": "Not running: {flag}=1 disables this source.",
+    "admin.timer.schedulerOff":
+      "Not running: timers are off (WORKFLOW_SCHEDULER_ENABLED=0).",
+    "admin.timer.interval": "Interval",
+    "admin.timer.sync": "Read mode",
+    "admin.timer.syncHint.incremental":
+      "Read newest first until a stored record. A run that reaches the limit continues where it stopped next time.",
+    "admin.timer.syncHint.count":
+      "Read the newest records every run, stored or not.",
+    "admin.timer.syncLimit.incremental.x": "Most new posts per account",
+    "admin.timer.syncLimit.count.x": "Newest posts per account",
+    "admin.timer.syncLimit.incremental.youtube": "Most new videos per run",
+    "admin.timer.syncLimit.count.youtube": "Newest videos per run",
+    "admin.timer.syncLimitHint.x": "1 to 200",
+    "admin.timer.syncLimitHint.youtube":
+      "1 to 200. Without YOUTUBE_API_KEY the RSS feed lists 15.",
+    "admin.timer.nextRun": "Next run",
+    "admin.timer.lastRun": "Last timer run",
+    "admin.timer.never": "Never",
+    "admin.fetch.title": "Fetch a window",
+    "admin.fetch.description":
+      "Read a past or recent window once. It leaves the timer's position alone.",
 
     "admin.models.title": "Models & detection",
     "admin.models.description":
@@ -748,6 +775,7 @@ export const adminMessages = {
     "admin.notice.mediaSelected": "Profile image updated",
     "admin.notice.pushSaved": "Push settings saved",
     "admin.notice.liveProbeSaved": "Live probe settings saved",
+    "admin.notice.scheduleSaved": "Timer saved",
     "admin.notice.secretRotated": "Signing secret rotated",
     "admin.notice.extractionSaved": "Detection settings saved",
     "admin.notice.queueSaved": "Queue saved",
@@ -916,10 +944,12 @@ export const adminMessages = {
     "admin.run.kind.live": "直播状态探测",
     "admin.run.kind.translate": "翻译",
     "admin.run.fetchTitle": "抓取 {sources}",
+    "admin.run.sourceTitle": "{source} 定时读取",
     "admin.run.by.admin": "后台发起",
     "admin.run.by.scheduler": "定时器",
     "admin.run.by.websub": "YouTube 推送",
     "admin.run.by.live-probe": "直播探测定时器",
+    "admin.run.by.source-schedule": "来源定时器",
     "admin.run.by.mcp": "MCP 控制",
     "admin.run.by.other": "{source}",
 
@@ -945,7 +975,7 @@ export const adminMessages = {
     "admin.overview.idle": "空闲",
     "admin.overview.startedAt": "开始于 {time}（日本时间）",
     "admin.overview.nextRun": "下次定时运行 {relative}（{time} 日本时间）",
-    "admin.overview.noSchedule": "没有定时运行的工作流。",
+    "admin.overview.noSchedule": "没有任何定时运行。",
     "admin.overview.openWorkflows": "打开工作流",
     "admin.overview.sources": "来源",
     "admin.overview.manageSources": "抓取与推送",
@@ -1270,13 +1300,13 @@ export const adminMessages = {
       "所有运行共用一个队列：同时只运行一个，队列忙时会拒绝新任务。",
     "admin.runs.workflows": "已保存的工作流",
     "admin.runs.workflowsHint":
-      "可复用的步骤列表。定时的工作流只由本进程触发。",
+      "供手动运行的可复用步骤列表。来源在“来源”页按各自的定时器运行。",
     "admin.runs.newWorkflow": "新建工作流",
     "admin.runs.editWorkflow": "编辑工作流",
     "admin.runs.deleteWorkflow": "删除工作流",
     "admin.runs.noWorkflows": "还没有工作流",
     "admin.runs.noWorkflowsHint":
-      "新建一个以定时同步，或使用“全部同步”运行一次。",
+      "新建一个常用的步骤组合以便手动运行，或使用“全部同步”运行一次。",
     "admin.runs.every": "每 {interval}",
     "admin.runs.next": "下次 {relative}",
     "admin.runs.manualOnly": "仅手动",
@@ -1284,19 +1314,10 @@ export const adminMessages = {
     "admin.runs.skippedStep": "本进程已停用",
     "admin.runs.field.name": "名称",
     "admin.runs.field.steps": "步骤",
-    "admin.runs.field.sync": "{source} 同步方式",
-    "admin.runs.field.syncHint.incremental":
-      "从最新开始读到已存的记录为止。达到上限的运行会在下次从中断处继续。",
-    "admin.runs.field.syncHint.count": "每次读取最新的若干条，无论是否已存。",
-    "admin.runs.field.syncLimit.incremental.x": "每个账号最多新贴文数",
-    "admin.runs.field.syncLimit.count.x": "每个账号最新贴文数",
-    "admin.runs.field.syncLimit.incremental.youtube": "每次最多新视频数",
-    "admin.runs.field.syncLimit.count.youtube": "每次最新视频数",
-    "admin.runs.field.syncLimitHint.x": "1 到 200",
-    "admin.runs.field.syncLimitHint.youtube":
-      "1 到 200。没有 YOUTUBE_API_KEY 时 RSS 只列出 15 个。",
     "admin.runs.field.scheduled": "定时运行",
-    "admin.runs.field.scheduledHint": "运行间隔与每次读取的数量相互独立。",
+    "admin.runs.field.scheduledHint": "适用于不读取来源的步骤，例如补翻译。",
+    "admin.runs.field.scheduledSource":
+      "包含来源步骤的工作流只能手动运行。每个来源在“来源”页有自己的定时器。",
     "admin.runs.field.interval": "间隔",
     "admin.runs.history": "运行记录",
     "admin.runs.historyHint": "选择一次运行查看步骤和数量。",
@@ -1308,7 +1329,7 @@ export const adminMessages = {
 
     "admin.sources.title": "来源",
     "admin.sources.description":
-      "按需读取过去或近期的时间窗口，并配置 YouTube 推送通知。",
+      "每个来源按自己的定时器运行。可按需读取过去或近期的时间窗口，并设置 YouTube 推送和直播检查。",
     "admin.sources.x.hint":
       "公开的 FxTwitter 时间线；配置 X_API_BEARER_TOKEN 后可检索完整历史。",
     "admin.sources.youtube.hint":
@@ -1387,6 +1408,40 @@ export const adminMessages = {
     "admin.liveProbe.nextRun": "下次探测",
     "admin.liveProbe.active": "当前活跃视频",
     "admin.liveProbe.activeCount": "{count}（每次最多 {max} 个）",
+    "admin.sources.bilibili.hint":
+      "账号的公开投稿列表，每 BILIBILI_MIN_INTERVAL_MINUTES 最多读取一次。",
+    "admin.timer.title": "定时器",
+    "admin.timer.description.x":
+      "读取 X，然后缓存媒体、提取日程并翻译。X 没有推送，新贴文只能靠定时器读取。",
+    "admin.timer.description.youtube":
+      "读取 YouTube，然后缓存缩略图并翻译。推送和直播状态探测能捕捉大多数变化，定时器只是兜底。",
+    "admin.timer.description.bilibili":
+      "读取投稿列表，然后缓存封面并翻译。哔哩哔哩限制请求频率，因此间隔不能短于 {floor}。",
+    "admin.timer.on": "每 {interval}",
+    "admin.timer.enable": "定时运行",
+    "admin.timer.enableHint":
+      "开启后过一个间隔才第一次运行。运行与其他任务共用一个队列。",
+    "admin.timer.skipped": "未运行：{flag}=1 停用了此来源。",
+    "admin.timer.schedulerOff":
+      "未运行：定时器已关闭（WORKFLOW_SCHEDULER_ENABLED=0）。",
+    "admin.timer.interval": "间隔",
+    "admin.timer.sync": "读取方式",
+    "admin.timer.syncHint.incremental":
+      "从最新开始读到已存的记录为止。达到上限的运行会在下次从中断处继续。",
+    "admin.timer.syncHint.count": "每次读取最新的若干条，无论是否已存。",
+    "admin.timer.syncLimit.incremental.x": "每个账号最多新贴文数",
+    "admin.timer.syncLimit.count.x": "每个账号最新贴文数",
+    "admin.timer.syncLimit.incremental.youtube": "每次最多新视频数",
+    "admin.timer.syncLimit.count.youtube": "每次最新视频数",
+    "admin.timer.syncLimitHint.x": "1 到 200",
+    "admin.timer.syncLimitHint.youtube":
+      "1 到 200。没有 YOUTUBE_API_KEY 时 RSS 只列出 15 个。",
+    "admin.timer.nextRun": "下次运行",
+    "admin.timer.lastRun": "上次定时运行",
+    "admin.timer.never": "从未",
+    "admin.fetch.title": "抓取时间窗口",
+    "admin.fetch.description":
+      "读取一次过去或近期的时间窗口，不会改变定时器的读取位置。",
 
     "admin.models.title": "模型与识别",
     "admin.models.description":
@@ -1536,6 +1591,7 @@ export const adminMessages = {
     "admin.notice.mediaSelected": "头像或横幅已更新",
     "admin.notice.pushSaved": "推送设置已保存",
     "admin.notice.liveProbeSaved": "直播探测设置已保存",
+    "admin.notice.scheduleSaved": "定时器已保存",
     "admin.notice.secretRotated": "签名密钥已轮换",
     "admin.notice.extractionSaved": "识别设置已保存",
     "admin.notice.queueSaved": "队列已保存",

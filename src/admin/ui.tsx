@@ -193,6 +193,7 @@ export function Panel({
   children,
   className,
   icon: IconComponent,
+  level = 2,
 }: {
   title?: ReactNode
   description?: ReactNode
@@ -200,8 +201,11 @@ export function Panel({
   children?: ReactNode
   className?: string
   icon?: Icon
+  /** 3 for a panel inside a page section that has its own heading. */
+  level?: 2 | 3
 }) {
   const id = useId()
+  const Heading = level === 3 ? "h3" : "h2"
   return (
     <section
       className={cn("adm-panel", className)}
@@ -211,10 +215,10 @@ export function Panel({
         <header className="adm-panel-header">
           <div>
             {title ? (
-              <h2 id={id}>
+              <Heading id={id}>
                 {IconComponent ? <IconComponent aria-hidden /> : null}
                 {title}
-              </h2>
+              </Heading>
             ) : null}
             {description ? <p>{description}</p> : null}
           </div>

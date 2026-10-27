@@ -70,8 +70,18 @@ func runStandalone(cfg config.Config) int {
 		return fail("workflow recovery unavailable", 1)
 	}
 	queue.StartRecovery()
-	// Saved workflows with a schedule are started by this process only.
-	scheduler := &workflow.Scheduler{Store: store, Queue: queue, Enabled: os.Getenv("WORKFLOW_SCHEDULER_ENABLED") != "0"}
+	// Source schedules take over the timers of saved workflows that read a
+	// source once, before the first tick (ADR-0003).
+	floor := int(run.steps.Bilibili.Options.MinInterval / time.Minute)
+	if err = store.PrepareSourceSchedules(context.Background(), floor, time.Now()); err != nil {
+		return fail("source schedules unavailable", 1)
+	}
+	// Saved workflows and source schedules with a timer are started by this
+	// process only.
+	scheduler := &workflow.Scheduler{
+		Store: store, Queue: queue, Enabled: os.Getenv("WORKFLOW_SCHEDULER_ENABLED") != "0",
+		SkipSources: run.steps.Skip, BilibiliFloor: floor,
+	}
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -87,7 +97,7 @@ func runStandalone(cfg config.Config) int {
 	defer probe.Stop()
 	// YouTube push is configured in /admin; it stays inactive until enabled
 	// there and while SKIP_YOUTUBE disables the source.
-	push := websub.New(ytsource.OptionsFromEnv().ChannelID, nil, youtubePushTrigger(manager))
+	push := websub.New(ytsource.OptionsFromEnv().ChannelID, nil, youtubePushTrigger(store, manager))
 	pushAdmin := websub.NewAdmin(store, push, secretsKey, os.Getenv(stepSkipFlags["youtube"]) != "1")
 	if err = pushAdmin.Load(context.Background()); err != nil {
 		return fail("YouTube push settings unavailable", 1)
@@ -245,12 +255,18 @@ func (s scheduleStep) RunSchedule(ctx context.Context) (string, map[string]any, 
 	return result.Status, result.Counts, err
 }
 
-// youtubePushTrigger queues the YouTube source and its thumbnail downloads
-// through the operator job path, so a push shares the single-flight queue and
-// is labelled "websub" in the run history. A busy queue leaves it pending.
-func youtubePushTrigger(manager *jobs.QueueManager) websub.TriggerFunc {
+// youtubePushTrigger queues the YouTube source chain, read as the YouTube
+// schedule reads, through the operator job path, so a push shares the
+// single-flight queue and is labelled "websub" in the run history. A busy
+// queue leaves it pending.
+func youtubePushTrigger(store *sqlite.Store, manager *jobs.QueueManager) websub.TriggerFunc {
 	return func(ctx context.Context) (bool, error) {
-		result, err := manager.Start(ctx, jobs.KindWorkflow, "websub", jobs.Options{Steps: []string{"youtube", "media"}})
+		settings, err := store.SourceScheduleSync(ctx)
+		if err != nil {
+			return false, err
+		}
+		options := jobs.Options{Steps: workflow.SourceChains["youtube"], SourceSync: map[string]sqlite.SourceSync{"youtube": settings["youtube"]}}
+		result, err := manager.Start(ctx, jobs.KindWorkflow, "websub", options)
 		return result.Accepted, err
 	}
 }

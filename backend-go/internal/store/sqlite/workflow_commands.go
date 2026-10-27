@@ -194,6 +194,13 @@ func (s *Store) ClaimWorkflowRun(ctx context.Context, id, owner string, now time
 			return WorkflowLease{}, ErrWorkflowStorage
 		}
 	}
+	// A source schedule plans its next run from the claim, as a saved
+	// workflow timer does.
+	if source, scheduled := SourceScheduleOf(workflowID); scheduled {
+		if e = planSourceSchedule(ctx, tx, source, now); e != nil {
+			return WorkflowLease{}, e
+		}
+	}
 	if e = tx.Commit(); e != nil {
 		return WorkflowLease{}, ErrWorkflowStorage
 	}

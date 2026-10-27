@@ -75,8 +75,8 @@ priority queue; each stage skips targets without the capability it needs, and
 each target follows the fixed three-request failover policy. Content & media covers
 the Featured video and profile media. Provider URLs that resolve to loopback or
 private ranges are rejected, so local mock endpoints cannot be configured.
-Set `WORKFLOW_SCHEDULER_ENABLED=0` to keep timed workflows from firing while
-developing.
+Set `WORKFLOW_SCHEDULER_ENABLED=0` to keep source timers and timed workflows
+from firing while developing.
 
 Workflow source lookback settings control recent days separately from the timer
 interval (X defaults to 7 days; YouTube to 14). Post management and Content & media

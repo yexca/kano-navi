@@ -76,7 +76,7 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 			}
 			windows[source] = normalized
 		}
-		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: steps, FetchWindows: windows}, trigger, recentDays(windows))
+		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: steps, FetchWindows: windows, SourceSync: options.SourceSync}, trigger, recentDays(windows))
 	case kind == KindLive:
 		source = "youtube-live"
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocLiveWorkflow, Steps: []string{StepLive}}, trigger, nil)
@@ -254,6 +254,9 @@ func (m *QueueManager) job(ctx context.Context, run *sqlite.WorkflowRun, names m
 		job.Kind = KindLive
 	case sqlite.AdhocTranslateWorkflow:
 		job.Kind = KindTranslate
+	}
+	if source, scheduled := sqlite.SourceScheduleOf(run.WorkflowID); scheduled {
+		job.SourceSchedule = &source
 	}
 	if !sqlite.IsAdhocWorkflow(run.WorkflowID) {
 		id := run.WorkflowID

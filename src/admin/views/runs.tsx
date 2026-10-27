@@ -15,7 +15,7 @@ import {
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import { formatDateTime, formatInterval, formatRelative } from "@/admin/format"
-import type { Run, SourceSync, Workflow, WorkflowCatalog } from "@/admin/types"
+import type { Run, Workflow, WorkflowCatalog } from "@/admin/types"
 import {
   Badge,
   Button,
@@ -37,10 +37,9 @@ import { RunLine, stepIcons } from "@/admin/views/run-parts"
 
 const intervals = [15, 30, 60, 120, 180, 360, 720, 1440]
 
-const syncSources = ["x", "youtube"] as const
-type SyncSource = (typeof syncSources)[number]
-// Workflows saved before sourceSync read as this default too.
-const defaultSync: SourceSync = { mode: "incremental", max: 50 }
+// Sources run on their own timers (ADR-0003), so a workflow that reads one
+// runs only by hand.
+const sourceSteps = ["x", "youtube", "bilibili"]
 
 function WorkflowDialog({
   workflow,
@@ -64,13 +63,11 @@ function WorkflowDialog({
       "reconcile",
     ],
   )
-  const [scheduled, setScheduled] = useState(workflow?.scheduleEnabled ?? true)
+  const [scheduled, setScheduled] = useState(workflow?.scheduleEnabled ?? false)
   const [interval, setInterval] = useState(workflow?.intervalMinutes || 60)
-  const [sync, setSync] = useState<Record<SyncSource, SourceSync>>({
-    x: workflow?.sourceSync?.x ?? defaultSync,
-    youtube: workflow?.sourceSync?.youtube ?? defaultSync,
-  })
   const [busy, setBusy] = useState(false)
+  const readsSource = steps.some((step) => sourceSteps.includes(step))
+  const timed = scheduled && !readsSource
   const options = intervals.includes(interval)
     ? intervals
     : [...intervals, interval].sort((a, b) => a - b)
@@ -80,9 +77,8 @@ function WorkflowDialog({
     const body = {
       name,
       steps,
-      scheduleEnabled: scheduled,
+      scheduleEnabled: timed,
       intervalMinutes: interval,
-      sourceSync: sync,
     }
     const result = await act(
       () =>
@@ -149,70 +145,18 @@ function WorkflowDialog({
             })}
           </div>
         </fieldset>
-        {syncSources.map((source) => {
-          if (!steps.includes(source)) return null
-          const setting = sync[source]
-          const limit = setting.mode === "count" ? setting.count : setting.max
-          return (
-            <div key={source} className="adm-form-row is-top">
-              <Field
-                label={t("admin.runs.field.sync", {
-                  source: t(`admin.step.${source}`),
-                })}
-                hint={t(`admin.runs.field.syncHint.${setting.mode}`)}
-              >
-                <select
-                  value={setting.mode}
-                  onChange={(e) =>
-                    setSync((current) => ({
-                      ...current,
-                      [source]:
-                        e.target.value === "count"
-                          ? { mode: "count", count: limit }
-                          : { mode: "incremental", max: limit },
-                    }))
-                  }
-                >
-                  <option value="incremental">
-                    {t("admin.fetch.mode.incremental")}
-                  </option>
-                  <option value="count">{t("admin.fetch.mode.count")}</option>
-                </select>
-              </Field>
-              <Field
-                label={t(
-                  `admin.runs.field.syncLimit.${setting.mode}.${source}`,
-                )}
-                hint={t(`admin.runs.field.syncLimitHint.${source}`)}
-              >
-                <input
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={limit}
-                  onChange={(e) => {
-                    const value = Number(e.target.value)
-                    setSync((current) => ({
-                      ...current,
-                      [source]:
-                        setting.mode === "count"
-                          ? { mode: "count", count: value }
-                          : { mode: "incremental", max: value },
-                    }))
-                  }}
-                  required
-                />
-              </Field>
-            </div>
-          )
-        })}
         <Switch
-          checked={scheduled}
+          checked={timed}
+          disabled={readsSource}
           onChange={setScheduled}
           label={t("admin.runs.field.scheduled")}
-          description={t("admin.runs.field.scheduledHint")}
+          description={t(
+            readsSource
+              ? "admin.runs.field.scheduledSource"
+              : "admin.runs.field.scheduledHint",
+          )}
         />
-        {scheduled ? (
+        {timed ? (
           <Field label={t("admin.runs.field.interval")}>
             <select
               value={interval}

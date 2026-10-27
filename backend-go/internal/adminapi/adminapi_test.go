@@ -236,45 +236,51 @@ func TestWorkflowLifecycle(t *testing.T) {
 		t.Fatalf("skipped=%v", skipped)
 	}
 	for body, message := range map[string]string{
-		`{"steps":["x"]}`:                                             "name is required",
-		`{"name":"Flow"}`:                                             "steps must be an array of step ids",
-		`{"name":"Flow","steps":["x","unknown"]}`:                     "steps contains an unsupported value",
-		`{"name":"Flow","steps":[]}`:                                  "steps must not be empty",
-		`{"name":"Flow","steps":["x"],"intervalMinutes":5}`:           "intervalMinutes must be an integer from 15 to 10080",
-		`{"name":"Flow","steps":["x"],"scheduleEnabled":"sometimes"}`: "scheduleEnabled must be a boolean",
-		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"incremental","max":0}}}`: "max must be an integer from 1 to 200",
-		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"count"}}}`:               "count must be an integer from 1 to 200",
-		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"days","days":7}}}`:       "days is not a sourceSync field",
-		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"recent"}}}`:              "sourceSync mode must be incremental or count",
-		`{"name":"Flow","steps":["x"],"sourceSync":{"bilibili":{"mode":"count"}}}`:        "sourceSync must contain x and/or youtube",
-		`{"name":"Flow","steps":["x"],"sourceLookbackDays":{"x":7}}`:                      "sourceLookbackDays is not a workflow field",
-		`{"name":"Flow","steps":["x"],"arbitrary":"data"}`:                                "arbitrary is not a workflow field",
+		`{"steps":["x"]}`:                                                             "name is required",
+		`{"name":"Flow"}`:                                                             "steps must be an array of step ids",
+		`{"name":"Flow","steps":["x","unknown"]}`:                                     "steps contains an unsupported value",
+		`{"name":"Flow","steps":[]}`:                                                  "steps must not be empty",
+		`{"name":"Flow","steps":["x"],"intervalMinutes":5}`:                           "intervalMinutes must be an integer from 15 to 10080",
+		`{"name":"Flow","steps":["x"],"scheduleEnabled":"sometimes"}`:                 "scheduleEnabled must be a boolean",
+		`{"name":"Flow","steps":["x"],"sourceSync":{"x":{"mode":"count","count":5}}}`: "sourceSync is set on each source schedule, not on a workflow",
+		`{"name":"Flow","steps":["x"],"sourceLookbackDays":{"x":7}}`:                  "sourceLookbackDays is not a workflow field",
+		`{"name":"Flow","steps":["x"],"arbitrary":"data"}`:                            "arbitrary is not a workflow field",
+		`{"name":"Flow","steps":["x","media"],"scheduleEnabled":true}`:                "a workflow with a source step runs manually; enable the x source schedule on the Sources page instead",
+		`{"name":"Flow","steps":["youtube","bilibili"],"scheduleEnabled":true}`:       "a workflow with a source step runs manually; enable the youtube and bilibili source schedules on the Sources page instead",
 	} {
 		if code, payload := c.call(t, "POST", "/api/admin/workflows", body); code != 400 || payload["error"] != "invalid_input" || payload["message"] != message {
 			t.Fatalf("%s => %d %v", body, code, payload)
 		}
 	}
-	code, payload = c.call(t, "POST", "/api/admin/workflows", `{"name":" Evening ","steps":["media","x","x"],"scheduleEnabled":true,"intervalMinutes":30,"sourceSync":{"x":{"mode":"count","count":30}}}`)
+	code, payload = c.call(t, "POST", "/api/admin/workflows", `{"name":" Evening ","steps":["media","x","x"],"intervalMinutes":30}`)
 	if code != 201 {
 		t.Fatalf("create=%d %v", code, payload)
 	}
 	created := payload["workflow"].(map[string]any)
 	id := created["id"].(string)
 	steps := created["steps"].([]any)
-	if created["name"] != "Evening" || len(steps) != 2 || steps[0] != "x" || steps[1] != "media" || created["scheduleEnabled"] != true || created["nextRunAt"] == nil {
+	if created["name"] != "Evening" || len(steps) != 2 || steps[0] != "x" || steps[1] != "media" || created["scheduleEnabled"] != false || created["nextRunAt"] != nil {
 		t.Fatalf("created=%v", created)
 	}
-	syncOf := func(workflow map[string]any, source string) string {
-		raw, _ := json.Marshal(workflow["sourceSync"].(map[string]any)[source])
-		return string(raw)
+	if _, listed := created["sourceSync"]; listed {
+		t.Fatalf("a workflow must not carry sourceSync: %v", created)
 	}
-	if syncOf(created, "x") != `{"count":30,"mode":"count"}` || syncOf(created, "youtube") != `{"max":50,"mode":"incremental"}` {
-		t.Fatalf("sourceSync=%v", created["sourceSync"])
+	// Enabling a timer later is refused as well; a rename keeps working.
+	if code, payload = c.call(t, "PUT", "/api/admin/workflows/"+id, `{"scheduleEnabled":true}`); code != 400 || payload["error"] != "invalid_input" {
+		t.Fatalf("timer on a source workflow=%d %v", code, payload)
 	}
-	code, payload = c.call(t, "PUT", "/api/admin/workflows/"+id, `{"scheduleEnabled":false,"sourceSync":{"youtube":{"mode":"incremental","max":5}}}`)
-	if updated := payload["workflow"].(map[string]any); code != 200 || updated["scheduleEnabled"] != false || updated["nextRunAt"] != nil || updated["name"] != "Evening" ||
-		syncOf(updated, "x") != `{"count":30,"mode":"count"}` || syncOf(updated, "youtube") != `{"max":5,"mode":"incremental"}` {
+	code, payload = c.call(t, "PUT", "/api/admin/workflows/"+id, `{"name":"Evening"}`)
+	if updated := payload["workflow"].(map[string]any); code != 200 || updated["scheduleEnabled"] != false || updated["name"] != "Evening" {
 		t.Fatalf("update=%d %v", code, payload)
+	}
+	// Workflows without a source step keep their timers.
+	code, payload = c.call(t, "POST", "/api/admin/workflows", `{"name":"Sweep","steps":["translate"],"scheduleEnabled":true,"intervalMinutes":30}`)
+	if sweep := payload["workflow"].(map[string]any); code != 201 || sweep["scheduleEnabled"] != true || sweep["nextRunAt"] == nil {
+		t.Fatalf("timed sweep=%d %v", code, payload)
+	}
+	// A manual run reads X as the X schedule does.
+	if code, payload = c.call(t, "PUT", "/api/admin/sources/x/schedule", `{"sync":{"mode":"count","count":30}}`); code != 200 {
+		t.Fatalf("x schedule=%d %v", code, payload)
 	}
 	if code, payload = c.call(t, "PUT", "/api/admin/workflows/missing", `{"name":"x"}`); code != 404 || payload["error"] != "workflow_not_found" {
 		t.Fatalf("missing update=%d %v", code, payload)

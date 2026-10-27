@@ -115,6 +115,7 @@ func (a *api) routes() []httpx.Route {
 		{Method: http.MethodDelete, Path: "/workflows/{id}", Handler: a.deleteWorkflow},
 
 		{Method: http.MethodGet, Path: "/sources", Handler: a.sources},
+		{Method: http.MethodPut, Path: "/sources/{source}/schedule", Handler: a.updateSourceSchedule},
 		{Method: http.MethodGet, Path: "/sources/youtube/live-probe", Handler: a.liveProbe},
 		{Method: http.MethodPut, Path: "/sources/youtube/live-probe", Handler: a.updateLiveProbe},
 

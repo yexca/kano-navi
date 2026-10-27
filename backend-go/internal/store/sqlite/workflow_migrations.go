@@ -45,6 +45,10 @@ func migrateWorkflowSchema(ctx context.Context, db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS workflow_leases(scope TEXT PRIMARY KEY CHECK(scope='global'),
  run_id TEXT NOT NULL UNIQUE REFERENCES workflow_runs(id),owner_id TEXT NOT NULL,
  acquired_at TEXT NOT NULL,expires_at TEXT NOT NULL,generation INTEGER NOT NULL)`,
+		// Each source's timer (ADR-0003). Like source_sync_json it has no
+		// version, so v3 binaries still open the database.
+		`CREATE TABLE IF NOT EXISTS source_schedules(source TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0,
+ interval_minutes INTEGER NOT NULL, sync_json TEXT NOT NULL DEFAULT '{}', next_run_at TEXT, updated_at TEXT NOT NULL)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS workflow_active_idx ON workflow_runs((1)) WHERE status IN ('queued','running')`,
 		`CREATE INDEX IF NOT EXISTS workflow_runs_created_idx ON workflow_runs(created_at DESC,id DESC)`,
 		`CREATE INDEX IF NOT EXISTS workflow_steps_run_idx ON workflow_run_steps(run_id,step_order)`,

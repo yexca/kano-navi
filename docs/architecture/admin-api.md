@@ -113,12 +113,12 @@ A busy queue answers `409` with the active run.
 
 ## Workflows
 
-| Method and path          | Body                                                          | Result                                 |
-| ------------------------ | ------------------------------------------------------------- | -------------------------------------- |
-| `GET /workflows`         |                                                               | `{items, steps, limits, skippedSteps}` |
-| `POST /workflows`        | `{name, steps, scheduleEnabled, intervalMinutes, sourceSync}` | `201 {workflow}`                       |
-| `PUT /workflows/{id}`    | any subset of the above                                       | `{workflow}`                           |
-| `DELETE /workflows/{id}` |                                                               | `204`; `409 busy` while it runs        |
+| Method and path          | Body                                              | Result                                 |
+| ------------------------ | ------------------------------------------------- | -------------------------------------- |
+| `GET /workflows`         |                                                   | `{items, steps, limits, skippedSteps}` |
+| `POST /workflows`        | `{name, steps, scheduleEnabled, intervalMinutes}` | `201 {workflow}`                       |
+| `PUT /workflows/{id}`    | any subset of the above                           | `{workflow}`                           |
+| `DELETE /workflows/{id}` |                                                   | `204`; `409 busy` while it runs        |
 
 `steps` is the catalog `[{id, group}]` (`x`, `youtube` are `source`; `media`,
 `schedule` are `process`), `limits` is `{minIntervalMinutes,
@@ -126,28 +126,31 @@ maxIntervalMinutes}` and `skippedSteps` lists steps disabled through `SKIP_*`.
 Each workflow carries `lastRunAt`, `lastStatus` (durable run status) and
 `nextRunAt`.
 
-`sourceSync` sets how the `x` and `youtube` steps read, per source:
-`{mode: "incremental", max}` (default, `max` 50) or `{mode: "count",
-count}`, each 1–200 (see
-[saved workflows](workflows.md#saved-workflow-source-sync)). A request names
-one or both sources; the other keeps its stored or default setting. Other
-fields, including the retired `sourceLookbackDays`, are rejected with
-`400 invalid_input`. A workflow run's `fetchWindows` shows the setting its
-source steps froze.
+Sync settings belong to the [source schedules](#sources): `sourceSync` and
+other fields, including the retired `sourceLookbackDays`, are rejected with
+`400 invalid_input`. A manual run of a saved workflow reads X and YouTube as
+their schedules do, and its `fetchWindows` shows the setting its source steps
+froze. `scheduleEnabled: true` on a workflow that contains `x`, `youtube` or
+`bilibili` (including a timed workflow whose steps gain one) is rejected with
+`400 invalid_input` naming the source schedule to use instead, for example
+"a workflow with a source step runs manually; enable the x source schedule on
+the Sources page instead". Workflows without a source step keep their timers.
 
 ## Sources
 
-| Method and path                            | Body                         | Result                    |
-| ------------------------------------------ | ---------------------------- | ------------------------- |
-| `GET /sources`                             |                              | per-source status (below) |
-| `GET /sources/youtube/push`                |                              | push status               |
-| `PUT /sources/youtube/push`                | `{enabled, callbackUrl}`     | push status               |
-| `POST /sources/youtube/push/rotate-secret` |                              | push status               |
-| `GET /sources/youtube/live-probe`          |                              | live probe status         |
-| `PUT /sources/youtube/live-probe`          | `{enabled, intervalMinutes}` | live probe status         |
+| Method and path                            | Body                               | Result                    |
+| ------------------------------------------ | ---------------------------------- | ------------------------- |
+| `GET /sources`                             |                                    | per-source status (below) |
+| `PUT /sources/{source}/schedule`           | `{enabled, intervalMinutes, sync}` | `SourceSchedule`          |
+| `GET /sources/youtube/push`                |                                    | push status               |
+| `PUT /sources/youtube/push`                | `{enabled, callbackUrl}`           | push status               |
+| `POST /sources/youtube/push/rotate-secret` |                                    | push status               |
+| `GET /sources/youtube/live-probe`          |                                    | live probe status         |
+| `PUT /sources/youtube/live-probe`          | `{enabled, intervalMinutes}`       | live probe status         |
 
 ```json
 {
+  "schedules": [SourceSchedule],
   "x":       {"skipped", "historyAvailable", "windows", "accounts": [{"account", "oldest"}]},
   "youtube": {"skipped", "historyAvailable", "windows", "oldest", "push": PushStatus, "liveProbe": LiveProbeStatus},
   "bilibili": {"available", "skipped", "account", "videos", "signedIn", "minIntervalMinutes", "lastAttemptAt", "lastSuccessAt", "blockedUntil", "lastError"}
@@ -157,6 +160,25 @@ source steps froze.
 `historyAvailable` reports the official API credential; `windows` lists the
 fetch window modes the source can run now, such as `["recent", "range",
 "count"]` for X without `X_API_BEARER_TOKEN`.
+
+`schedules` lists the [source schedules](workflows.md#source-schedules) of
+`x`, `youtube` and `bilibili`, in that order. `SourceSchedule` is `{source,
+enabled, intervalMinutes, minIntervalMinutes, maxIntervalMinutes, sync,
+nextRunAt, lastRun, skipped}`, plus `reason: "environment"` while `SKIP_*`
+disables the source. `sync` is `{mode: "incremental", max}` (default, `max` 50) or `{mode: "count", count}`, each 1–200, and null for Bilibili.
+`lastRun` is `{id, status, at}` of the newest run the schedule submitted
+(durable run status; `at` is when it finished, started or was queued), or
+null. The Bilibili `minIntervalMinutes` is `BILIBILI_MIN_INTERVAL_MINUTES`.
+`PUT /sources/{source}/schedule` takes any subset of `{enabled,
+intervalMinutes, sync}` and keeps omitted fields. It answers `404 not_found`
+for another source and `400 invalid_input` for other fields, an interval
+outside the bounds, an invalid `sync` or a `sync` for Bilibili. Enabling a
+schedule or changing its interval plans the next run one interval later; a
+sync change alone keeps the plan. The overview's `workflows.scheduled` and
+`nextRunAt` count enabled source schedules (not those disabled by `SKIP_*`)
+along with timed workflows. A run a schedule submitted has
+`sourceSchedule` set to its source and `triggeredBy: "source-schedule"`;
+other runs have `sourceSchedule: null`.
 
 `PushStatus` is `{available, enabled, callbackUrl, callbackPath,
 secretConfigured, verified, leaseExpiresAt, nextRenewalAt, pending,

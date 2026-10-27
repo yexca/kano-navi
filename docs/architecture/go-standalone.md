@@ -77,8 +77,12 @@ does the same with the built bundle. Restart after changing Go source.
    when something changed.
 6. A new installation receives the two unscheduled starting workflows
    (`full-refresh`, `sources-only`) once; deleting them does not recreate them.
-7. Interrupted workflow runs are recovered, then the timer starts unless
-   `WORKFLOW_SCHEDULER_ENABLED=0`.
+7. Interrupted workflow runs are recovered. Once per database, the timers of
+   saved workflows that read a source move to the source schedules, and on
+   every start a Bilibili interval below `BILIBILI_MIN_INTERVAL_MINUTES` is
+   raised to it (see [Workflows](workflows.md#upgrade-from-workflow-timers)).
+8. The timer starts unless `WORKFLOW_SCHEDULER_ENABLED=0`. It submits due
+   saved workflows and due source schedules, earliest first.
 
 ## Route ownership
 
@@ -137,11 +141,11 @@ is rejected with a validation message. With the credential, a `recent` window
 is also served by the API (YouTube still reads the feed to refresh
 reservations); without it, an X `recent` window pages the timeline back to its
 start and a YouTube one reads the feed.
-Saved workflows carry no window: their runs read each source by their frozen
-`sourceSync` (incremental with a cap, or the newest `count`), whatever the
-credentials ([Workflows](workflows.md#saved-workflow-source-sync)). A full
-sync or scan (console, MCP or `kano-go sync`) carries neither and stays
-incremental.
+Source schedules, YouTube pushes and saved workflows carry no window: their
+runs read X and YouTube by the source schedule's frozen sync (incremental
+with a cap, or the newest `count`), whatever the credentials
+([Workflows](workflows.md#source-schedules)). A full sync or scan (console,
+MCP or `kano-go sync`) carries neither and stays incremental.
 
 `internal/source/history` calls only `api.x.com/2/tweets/search/all` and
 `www.googleapis.com/youtube/v3/search`, plus the FxTwitter timeline through the
@@ -171,7 +175,8 @@ identity representation.
 The last TypeScript release image (`yexca/kano-navi:0.1.3`) runs on the same
 `data/` directory; its source is the `v0.1.3` tag. Stop the Go process first:
 only one process may own a snapshot, since both write SQLite and both would
-start timed workflows.
+start timed workflows. That release ignores `source_schedules`: workflows
+whose timers moved there stay untimed until an operator enables them again.
 
 The additive `workflow_*` tables and columns are ignored by that release, and
 provider secrets use the same encryption format in both directions. Saved

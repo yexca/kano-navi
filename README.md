@@ -112,7 +112,7 @@ cp .env.example .env
 ```
 
 For local development, set `APP_MODE=development` in `.env` to enable password-free
-admin access, and `WORKFLOW_SCHEDULER_ENABLED=0` to disable timed workflows.
+admin access, and `WORKFLOW_SCHEDULER_ENABLED=0` to disable source timers and timed workflows.
 Set a non-blank `LLM_SECRETS_KEY` before starting; development and preview also
 require it. Then run:
 

@@ -78,12 +78,37 @@ Each official API response has a fixed 4 MiB byte limit. The adapter checks
 `Content-Length` and counts streamed bytes, cancelling an oversized body before
 parsing or writing its page. Timeouts and redirect blocking apply throughout.
 
-### Saved workflow source sync
+### Source schedules
 
-Saved workflows read each source by count, not by days
-([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)). `sourceSync`
-holds one setting per source in the additive `workflows.source_sync_json`
-column, and each run freezes it in `workflow_runs.source_sync_json`:
+Each source has its own timer
+([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)), stored in
+the additive `source_schedules` table and edited on the console's Sources
+page. A fresh installation keeps all three disabled.
+
+| Source     | Interval (default, bounds)                        | Fixed chain                           |
+| ---------- | ------------------------------------------------- | ------------------------------------- |
+| `x`        | 30 min, 15 min – 7 days                           | `x`, `media`, `schedule`, `translate` |
+| `youtube`  | 60 min, 15 min – 7 days                           | `youtube`, `media`, `translate`       |
+| `bilibili` | 180 min, `BILIBILI_MIN_INTERVAL_MINUTES` – 7 days | `bilibili`, `media`, `translate`      |
+
+When a schedule is due, the server process submits its chain as the ad hoc
+run `@source-<source>` (`reconcile` is appended as for every run with a
+source step), labelled `source-schedule` in the run history. The follow-up
+steps always run, even when the source wrote nothing: each works from its
+own queue and makes no provider call while that queue is empty, so failed
+extractions, pending image reviews, download retries and operator
+translation requests keep moving while a source is quiet. YouTube pushes
+submit the `youtube` chain as well (labelled `websub`). The operator's
+single-video refresh keeps its own steps, and the
+[live-status probe](#live-status-probe) is unchanged. X has no push, so its
+timer is how new posts arrive; YouTube push and the probe catch most
+YouTube changes and its timer is a fallback; the Bilibili interval cannot go
+below the environment floor, and the adapter's own interval and backoff
+checks stay as the safety net.
+
+X and YouTube schedules carry a sync setting that says how much a run reads
+([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)). Each run
+freezes it in `workflow_runs.source_sync_json`:
 
 - `{ "mode": "incremental", "max": 50 }`, the default: read newest first until
   a stored record, at most `max` (1–200) records that are not stored yet, per
@@ -94,16 +119,38 @@ column, and each run freezes it in `workflow_runs.source_sync_json`:
   leaves the incremental cursor and pending queue alone. YouTube reads the
   uploads listing.
 
-Workflows saved before the column existed read as incremental with the
-default cap, with no change to their steps, timers or snapshots. The retired
-`sourceLookbackDays` stays in `source_lookback_json` and is no longer read for
-saved workflows. Manual and scheduled runs behave alike, and the editor saves
-the setting independently of the timer interval. Credentials never turn a
-saved workflow into a date search: X always reads the public timeline (the
-token serves operator `before` and `range` windows), and YouTube with a key
-pages the uploads playlist at one quota unit per 50 uploads. Full syncs
-(console, MCP, `kano-go sync`) carry no setting and run incrementally with
+YouTube pushes and manual runs of saved workflows read X and YouTube with
+these settings too. Credentials never turn a scheduled read into a date
+search: X always reads the public timeline (the token serves operator
+`before` and `range` windows), and YouTube with a key pages the uploads
+playlist at one quota unit per 50 uploads. Full syncs (console, MCP,
+`kano-go sync`) carry no setting and run incrementally with
 `X_DISCOVERY_LIMIT` for X and 50 uploads for YouTube.
+
+Enabling a schedule or changing its interval plans the next run one interval
+later, never immediately; a sync change alone keeps the plan. Claiming a
+schedule's run plans the next one an interval after the claim.
+`WORKFLOW_SCHEDULER_ENABLED=0` stops source schedules as well, and `SKIP_X`,
+`SKIP_YOUTUBE` and `SKIP_BILIBILI` disable that source's schedule, which the
+console reports as `{ skipped: true, reason: "environment" }`.
+
+#### Upgrade from workflow timers
+
+Before this, saved workflows were the only timers. On the first start of an
+upgraded database, `kano-go serve` runs one migration, guarded by the
+`app_settings` key `source_schedules_migrated`:
+
+- For each timed workflow that contains a source step, that source's
+  schedule is enabled with the smallest interval among such workflows,
+  raised to the Bilibili floor where it applies, and the stored `sourceSync`
+  of that workflow (or the default).
+- That workflow's timer is then disabled. Its steps and history stay.
+- Timed workflows without a source step keep their timers.
+
+Every start also raises a stored Bilibili interval below a raised
+`BILIBILI_MIN_INTERVAL_MINUTES` to the new floor. `workflows.source_sync_json`
+stays in the schema and is no longer read; the retired `sourceLookbackDays`
+stays in `source_lookback_json` and is no longer read for saved workflows.
 
 ## Modular Steps and Timers
 
@@ -111,24 +158,24 @@ Synchronization is split into modular steps declared in
 `backend-go/internal/jobs` (`StepOrder`), executed in this order: `x`,
 `youtube`, `bilibili`, `media`, `schedule`, `translate`, `reconcile`. `kano-go sync` (`make sync`) runs every step
 and records the ones disabled by `SKIP_*` as skipped.
-A saved workflow chooses a subset; its run records `sync_runs.source =
-workflow` and exposes per-step progress (`pending`, `running`, `completed`,
+A saved workflow chooses a subset for manual runs; its run records
+`sync_runs.source = workflow` and exposes per-step progress (`pending`, `running`, `completed`,
 `partial`, `failed`, `skipped`) through `/api/admin/runs`. When a selected
 step is disabled by `SKIP_*`, its result records `{ skipped: true, reason:
 "environment" }` instead of silently disappearing.
 
 `bilibili` paces itself: it reads the account's upload list at most once per
 `BILIBILI_MIN_INTERVAL_MINUTES` and never during a captcha backoff, so it is
-safe in a frequent workflow (see [Bilibili](sources.md#bilibili)). New
-installations include it in both starting workflows; existing workflows keep
-their step lists, so an operator adds it on the Runs & workflows page.
+safe in a manual workflow run soon after its timer (see
+[Bilibili](sources.md#bilibili)). New installations include it in both
+starting workflows; existing workflows keep their step lists.
 
 `reconcile` applies the deterministic duplicate-merge rules in
 [Duplicate merging](data-model.md#duplicate-merging) to the Japan dates from
 30 days ago to 60 days ahead, then the
 [video merging](data-model.md#video-merging) rule to every Bilibili upload.
 Every run that includes `x`, `youtube`, `bilibili` or `schedule` (sync, scan,
-fetch windows, WebSub pushes, MCP and timed workflows) appends it as its last
+fetch windows, source schedules, WebSub pushes, MCP and saved workflows) appends it as its last
 step, so saved workflows need no edit; it can also be selected alone. Its
 result counts `considered`, `merged`, `retargeted`, `released`, `kept` and
 `ambiguous` events, and `videosConsidered`, `videosMerged`, `videosReleased`,
@@ -143,14 +190,20 @@ only the translation queue and records a disabled result while that queue
 is empty. `POST /api/admin/translations/request` starts it alone as a
 `translate` run after queueing operator requests.
 
-A workflow timer is 15 minutes to 7 days. Enabling a timer (or changing its
-interval) plans the next run one interval later; it never fires immediately.
-The server process checks due workflows every 30 seconds and starts one
-through the same single-flight queue as manual and MCP jobs; a due workflow
-that finds the queue busy is retried on the next tick. Two workflows are seeded
-once (`full-refresh` "Full refresh", which also translates on a new
-installation, and `sources-only` "Sources only") without timers; deleting them does not recreate them, and seeding never renames an
-existing workflow. Set `WORKFLOW_SCHEDULER_ENABLED=0` to disable timers.
+Saved workflows are presets for manual runs and custom combinations, such
+as a translate-only sweep. A workflow timer is 15 minutes to 7 days and is
+available only to workflows without a source step: the API refuses a timer
+on a workflow that reads a source and names the source schedule to use
+instead. Enabling a timer (or changing its interval) plans the next run one
+interval later; it never fires immediately. The server process checks due
+workflows and due source schedules together every 30 seconds and submits
+the one with the earliest planned run, so a frequent source cannot starve
+another, through the same single-flight queue as manual and MCP jobs; an
+item that finds the queue busy stays due for the next tick. Two workflows
+are seeded once (`full-refresh` "Full refresh", which also translates on a
+new installation, and `sources-only` "Sources only") without timers;
+deleting them does not recreate them, and seeding never renames an existing
+workflow. Set `WORKFLOW_SCHEDULER_ENABLED=0` to disable all timers.
 
 ### Live-status probe
 
@@ -183,7 +236,7 @@ in `sync_runs` and `/api/admin/runs` with `active`, `candidates` (the due
 videos), `requested`, `inspected`, `live`, `changed` and fixed error codes; a
 run whose pages all fail is `failed`, a mixed one `partial`.
 
-The probe may run more often than a saved workflow (15 minutes) because one
+The probe may run more often than a source schedule (15 minutes) because one
 run requests at most five watch pages and runs only while something is due.
 One stream that starts on time costs a check before the start, a few in the
 starting window and four an hour on air at the default interval; a waiting
@@ -209,7 +262,8 @@ its failure status, and always release the single-flight queue after settlement.
 backend-go/internal/jobs owns the ordered step catalog and presents durable
 workflow runs as operator jobs. internal/workflow maps steps to their adapters
 (`SourceSteps`), executes runs with leases, retries and recovery, and owns the
-single-flight queue and the timer that starts due saved workflows through it.
+single-flight queue, and the timer that starts due saved workflows and source
+schedules (`SourceChains`) through it.
 A new module needs one catalog entry and one step adapter; the console reads
 the catalog rather than maintaining another step list. See
 [Go backend](go-standalone.md#jobs-and-workflows).

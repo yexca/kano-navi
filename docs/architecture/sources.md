@@ -13,8 +13,8 @@ than the account's stored cursor, so posts published between runs are found
 even when several arrive at once. Before an account has a cursor, statuses
 older than `X_BOOTSTRAP_DAYS` (seven by default) also end the first run.
 Reposts carry another author and are skipped. The cap, `X_DISCOVERY_LIMIT` or
-a saved workflow's incremental `max` (see
-[saved workflows](workflows.md#saved-workflow-source-sync)), counts the
+the X schedule's incremental `max` (see
+[source schedules](workflows.md#source-schedules)), counts the
 statuses that are not stored yet and sets the pages of 20 (at most 10) per
 account and run. A failed later page keeps the newer pages already read.
 
@@ -97,9 +97,9 @@ post that has fallen out of the discovered status list.
 The script reads the RSS feed for `YOUTUBE_CHANNEL_ID` (the current main channel
 by default), or with `YOUTUBE_API_KEY` the Data API's uploads playlist (see
 [Data API](#data-api)). It takes the newest listed uploads, at most the
-saved workflow's `max` or `count` (50 by default and for full syncs; the
+YouTube schedule's `max` or `count` (50 by default and for full syncs; the
 feed lists 15), and stores the ones not stored yet; see
-[saved workflows](workflows.md#saved-workflow-source-sync). An operator
+[source schedules](workflows.md#source-schedules). An operator
 `recent` window takes the listed uploads of its days instead, and a `count`
 window the newest `count`. Without a key, a `count` above the feed's 15 is
 partial and reports `youtube_count_limited`. The cursor is the newest listed
@@ -372,13 +372,15 @@ string | null }`; omitted fields keep their value. The callback must be an
 - A verified notification for a valid video ID only marks a sync as pending.
   After one quiet minute (which also lets the public RSS list the entry), and at
   least two minutes after the previous push-triggered run, it starts the
-  `youtube` and `media` steps through the operator job path. The run is labelled
+  YouTube schedule's chain (`youtube`, `media`, `translate`, then
+  `reconcile`), read with that schedule's sync setting, through the operator
+  job path. The run is labelled
   `websub` and shares the single-flight queue; a busy queue keeps it pending and
   retries every 30 seconds.
 
 The notification never writes snapshots; the RSS and stream-page reads above
 do. Live start/end and reservation-time changes are not reliably pushed, so
-reservation rechecks still depend on saved workflow timers, and live start/end
+reservation rechecks still depend on the YouTube schedule, and live start/end
 on the [live-status probe](#live-status-probe). Runtime state is in
 memory: a restart subscribes again, and a missed push is caught by the next
 poll.
@@ -403,8 +405,8 @@ and `-412`. The client never retries and reports these as
 `bilibili_risk_control` (`-799`/`-509`/429 as `bilibili_rate_limited`). The
 adapter then waits 6 hours, doubled for each consecutive block up to a day,
 and the step makes no request until then; independently, list reads are at
-least `BILIBILI_MIN_INTERVAL_MINUTES` (180 by default) apart whatever the
-workflow timer. A skipped read records `{ skipped: true, reason: "interval" |
+least `BILIBILI_MIN_INTERVAL_MINUTES` (180 by default) apart, which is also
+the shortest Bilibili schedule interval. A skipped read records `{ skipped: true, reason: "interval" |
 "blocked" }`; a failed one records its code as a failed step without a retry,
 keeps every stored upload, and lets the rest of the run continue.
 

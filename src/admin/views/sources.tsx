@@ -1,20 +1,36 @@
-import { useEffect, useState, type SubmitEvent } from "react"
 import {
+  useEffect,
+  useId,
+  useState,
+  type ReactNode,
+  type SubmitEvent,
+} from "react"
+import {
+  CalendarClock,
   Download,
   KeyRound,
   Radio,
   RadioTower,
   RotateCw,
   Save,
+  Tv,
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
-import { formatDateTime, formatRelative, japanToday } from "@/admin/format"
+import {
+  formatDateTime,
+  formatInterval,
+  formatRelative,
+  japanToday,
+} from "@/admin/format"
 import type {
   FetchWindow,
   LiveProbeStatus,
   PushStatus,
+  ScheduleSource,
+  SourceSchedule,
+  SourceSync,
   Sources,
 } from "@/admin/types"
 import {
@@ -27,6 +43,7 @@ import {
   PageHeader,
   Panel,
   Segmented,
+  StatusBadge,
   Switch,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
@@ -168,7 +185,236 @@ function FetchForm({
   )
 }
 
-function SourcePanel({
+const intervals = [15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080]
+
+const skipFlags: Record<ScheduleSource, string> = {
+  x: "SKIP_X",
+  youtube: "SKIP_YOUTUBE",
+  bilibili: "SKIP_BILIBILI",
+}
+
+const sameSync = (a: SourceSync | null, b: SourceSync | null) =>
+  JSON.stringify(a) === JSON.stringify(b)
+
+/** A source's own timer: on or off, its interval and, for X and YouTube, how
+ * much each run reads. */
+function SchedulePanel({
+  schedule,
+  facts,
+  onChange,
+}: {
+  schedule: SourceSchedule
+  facts: [ReactNode, ReactNode][]
+  onChange: (schedule: SourceSchedule) => void
+}) {
+  const { t, locale } = useAppSettings()
+  const { api, act, overview } = useAdmin()
+  const [minutes, setMinutes] = useState(schedule.intervalMinutes)
+  const [sync, setSync] = useState(schedule.sync)
+  const [busy, setBusy] = useState("")
+  const syncKey = JSON.stringify(schedule.sync)
+  useEffect(
+    () => setMinutes(schedule.intervalMinutes),
+    [schedule.intervalMinutes],
+  )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setSync(schedule.sync), [syncKey])
+  const source = schedule.source
+  const timersOff = overview ? !overview.scheduler.enabled : false
+  const running = schedule.enabled && !schedule.skipped && !timersOff
+  const save = async (body: Parameters<typeof api.updateSourceSchedule>[1]) => {
+    setBusy(body.enabled === undefined ? "save" : "toggle")
+    const next = await act(
+      () => api.updateSourceSchedule(source, body),
+      "admin.notice.scheduleSaved",
+    )
+    setBusy("")
+    if (next) onChange(next)
+  }
+  const options = [...new Set([...intervals, minutes])]
+    .filter(
+      (value) =>
+        value >= schedule.minIntervalMinutes &&
+        value <= schedule.maxIntervalMinutes,
+    )
+    .sort((a, b) => a - b)
+  if (!options.includes(schedule.minIntervalMinutes))
+    options.unshift(schedule.minIntervalMinutes)
+  const limit = sync ? (sync.mode === "count" ? sync.count : sync.max) : 0
+  const dirty =
+    minutes !== schedule.intervalMinutes || !sameSync(sync, schedule.sync)
+  const when = (value: string | null | undefined) =>
+    value
+      ? `${formatDateTime(value, locale)} · ${formatRelative(value, locale)}`
+      : null
+  return (
+    <Panel
+      level={3}
+      icon={CalendarClock}
+      title={t("admin.timer.title")}
+      description={t(`admin.timer.description.${source}`, {
+        floor: formatInterval(schedule.minIntervalMinutes, t),
+      })}
+      actions={
+        running ? (
+          <Badge tone="leaf">
+            {t("admin.timer.on", {
+              interval: formatInterval(schedule.intervalMinutes, t),
+            })}
+          </Badge>
+        ) : (
+          <Badge>{t("admin.push.off")}</Badge>
+        )
+      }
+    >
+      <form
+        className="adm-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          save({ intervalMinutes: minutes, ...(sync ? { sync } : {}) })
+        }}
+      >
+        <Switch
+          checked={schedule.enabled}
+          disabled={schedule.skipped || busy !== ""}
+          onChange={(enabled) => save({ enabled })}
+          label={t("admin.timer.enable")}
+          description={
+            schedule.skipped
+              ? t("admin.timer.skipped", { flag: skipFlags[source] })
+              : timersOff
+                ? t("admin.timer.schedulerOff")
+                : t("admin.timer.enableHint")
+          }
+        />
+        <Field label={t("admin.timer.interval")}>
+          <select
+            value={minutes}
+            onChange={(e) => setMinutes(Number(e.target.value))}
+          >
+            {options.map((value) => (
+              <option key={value} value={value}>
+                {formatInterval(value, t)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {sync ? (
+          <div className="adm-form-row is-top">
+            <Field
+              label={t("admin.timer.sync")}
+              hint={t(`admin.timer.syncHint.${sync.mode}`)}
+            >
+              <select
+                value={sync.mode}
+                onChange={(e) =>
+                  setSync(
+                    e.target.value === "count"
+                      ? { mode: "count", count: limit }
+                      : { mode: "incremental", max: limit },
+                  )
+                }
+              >
+                <option value="incremental">
+                  {t("admin.fetch.mode.incremental")}
+                </option>
+                <option value="count">{t("admin.fetch.mode.count")}</option>
+              </select>
+            </Field>
+            <Field
+              label={t(`admin.timer.syncLimit.${sync.mode}.${source}`)}
+              hint={t(`admin.timer.syncLimitHint.${source}`)}
+            >
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={limit}
+                onChange={(e) => {
+                  const value = Number(e.target.value)
+                  setSync(
+                    sync.mode === "count"
+                      ? { mode: "count", count: value }
+                      : { mode: "incremental", max: value },
+                  )
+                }}
+                required
+              />
+            </Field>
+          </div>
+        ) : null}
+        <div className="adm-form-actions">
+          <Button
+            type="submit"
+            size="sm"
+            icon={Save}
+            busy={busy === "save"}
+            disabled={!dirty || busy !== ""}
+          >
+            {t("admin.action.save")}
+          </Button>
+        </div>
+        <Facts
+          items={[
+            [
+              t("admin.timer.nextRun"),
+              running ? when(schedule.nextRunAt) : null,
+            ],
+            [
+              t("admin.timer.lastRun"),
+              schedule.lastRun ? (
+                <span className="adm-chip-row">
+                  <StatusBadge status={schedule.lastRun.status} />
+                  <time
+                    dateTime={schedule.lastRun.at}
+                    title={formatDateTime(schedule.lastRun.at, locale)}
+                  >
+                    {formatRelative(schedule.lastRun.at, locale)}
+                  </time>
+                </span>
+              ) : (
+                t("admin.timer.never")
+              ),
+            ],
+            ...facts,
+          ]}
+        />
+      </form>
+    </Panel>
+  )
+}
+
+/** One source: its heading, then its panels side by side. */
+function SourceSection({
+  source,
+  hint,
+  chips,
+  children,
+}: {
+  source: ScheduleSource
+  hint: string
+  chips?: ReactNode
+  children: ReactNode
+}) {
+  const { t } = useAppSettings()
+  const id = useId()
+  const Icon = stepIcons[source] || Tv
+  return (
+    <section className="adm-source" aria-labelledby={id}>
+      <header className="adm-source-header">
+        <h2 id={id}>
+          <Icon aria-hidden />
+          {t(`admin.step.${source}`)}
+        </h2>
+        {chips ? <span className="adm-chip-row">{chips}</span> : null}
+        <p>{hint}</p>
+      </header>
+      <div className="adm-grid is-two">{children}</div>
+    </section>
+  )
+}
+
+function FetchPanel({
   source,
   sources,
 }: {
@@ -178,8 +424,6 @@ function SourcePanel({
   const { t, locale } = useAppSettings()
   const { overview } = useAdmin()
   const state = sources[source]
-  const Icon = stepIcons[source]
-  const health = overview?.sources[source]
   const oldest =
     source === "x"
       ? sources.x.accounts.map(
@@ -188,24 +432,14 @@ function SourcePanel({
       : [[t("admin.sources.channel"), sources.youtube.oldest] as const]
   return (
     <Panel
-      icon={Icon}
-      title={t(`admin.step.${source}`)}
-      description={t(`admin.sources.${source}.hint`)}
-      actions={
-        <span className="adm-chip-row">
-          {state.skipped ? <Badge>{t("admin.overview.skipped")}</Badge> : null}
-          <WindowBadge state={state} />
-        </span>
-      }
+      level={3}
+      icon={Download}
+      title={t("admin.fetch.title")}
+      description={t("admin.fetch.description")}
+      actions={<WindowBadge state={state} />}
     >
       <Facts
         items={[
-          [
-            t("admin.sources.lastSuccess"),
-            health?.lastSuccessAt
-              ? `${formatDateTime(health.lastSuccessAt, locale)} · ${formatRelative(health.lastSuccessAt, locale)}`
-              : null,
-          ],
           ...oldest.map(
             ([label, time]) =>
               [
@@ -248,6 +482,7 @@ function PushPanel({
   }
   return (
     <Panel
+      level={3}
       icon={Radio}
       title={t("admin.push.title")}
       description={t("admin.push.description")}
@@ -377,6 +612,7 @@ function LiveProbePanel({
   const running = probe.enabled && probe.available
   return (
     <Panel
+      level={3}
       icon={RadioTower}
       title={t("admin.liveProbe.title")}
       description={t("admin.liveProbe.description", { max: probe.maxVideos })}
@@ -463,10 +699,62 @@ function LiveProbePanel({
 }
 
 export function SourcesView(_: ViewProps) {
-  const { t } = useAppSettings()
-  const { api } = useAdmin()
+  const { t, locale } = useAppSettings()
+  const { api, overview } = useAdmin()
   const sources = useResource(() => api.sources(), [])
   const data = sources.data
+  const when = (value: string | null | undefined) =>
+    value
+      ? `${formatDateTime(value, locale)} · ${formatRelative(value, locale)}`
+      : null
+  const schedule = (source: ScheduleSource) => {
+    const found = data?.schedules.find((entry) => entry.source === source)
+    return found ? (
+      <SchedulePanel
+        schedule={found}
+        facts={
+          source === "bilibili"
+            ? [
+                [
+                  t("admin.bilibili.lastSuccess"),
+                  when(data?.bilibili.lastSuccessAt),
+                ],
+                [
+                  t("admin.bilibili.backoff"),
+                  data?.bilibili.blockedUntil &&
+                  Date.parse(data.bilibili.blockedUntil) > Date.now()
+                    ? t("admin.bilibili.blockedUntil", {
+                        time: formatDateTime(
+                          data.bilibili.blockedUntil,
+                          locale,
+                        ),
+                      })
+                    : t("admin.bilibili.notBlocked"),
+                ],
+              ]
+            : [
+                [
+                  t("admin.sources.lastSuccess"),
+                  when(overview?.sources[source].lastSuccessAt),
+                ],
+              ]
+        }
+        onChange={(next) =>
+          data &&
+          sources.setData({
+            ...data,
+            schedules: data.schedules.map((entry) =>
+              entry.source === next.source ? next : entry,
+            ),
+          })
+        }
+      />
+    ) : null
+  }
+  const skipped = (source: ScheduleSource) =>
+    data?.schedules.find((entry) => entry.source === source)?.skipped ? (
+      <Badge>{t("admin.overview.skipped")}</Badge>
+    ) : null
   return (
     <div className="adm-view">
       <PageHeader
@@ -477,11 +765,21 @@ export function SourcesView(_: ViewProps) {
         <Loading />
       ) : (
         <>
-          <div className="adm-grid is-two">
-            <SourcePanel source="x" sources={data} />
-            <SourcePanel source="youtube" sources={data} />
-          </div>
-          <div className="adm-grid is-two">
+          <SourceSection
+            source="x"
+            hint={t("admin.sources.x.hint")}
+            chips={skipped("x")}
+          >
+            {schedule("x")}
+            <FetchPanel source="x" sources={data} />
+          </SourceSection>
+          <SourceSection
+            source="youtube"
+            hint={t("admin.sources.youtube.hint")}
+            chips={skipped("youtube")}
+          >
+            {schedule("youtube")}
+            <FetchPanel source="youtube" sources={data} />
             <PushPanel
               push={data.youtube.push}
               onChange={(push) =>
@@ -497,7 +795,14 @@ export function SourcesView(_: ViewProps) {
                 })
               }
             />
-          </div>
+          </SourceSection>
+          <SourceSection
+            source="bilibili"
+            hint={t("admin.sources.bilibili.hint")}
+            chips={skipped("bilibili")}
+          >
+            {schedule("bilibili")}
+          </SourceSection>
         </>
       )}
     </div>
