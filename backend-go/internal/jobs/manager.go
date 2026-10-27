@@ -274,7 +274,10 @@ func (m *QueueManager) Active(ctx context.Context) (*Job, error) {
 	if m == nil || m.Store == nil {
 		return nil, sqlite.ErrWorkflowUnavailable
 	}
-	for _, status := range []string{"running", "queued"} {
+	// The queue holds at most one active run, and it only moves from queued
+	// to running, so reading queued first cannot miss a run claimed between
+	// the two reads.
+	for _, status := range []string{"queued", "running"} {
 		page, err := m.Store.ListWorkflowRuns(ctx, 1, 1, status, "")
 		if err != nil {
 			return nil, err
