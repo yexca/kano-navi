@@ -124,6 +124,11 @@ The Makefile is the canonical validation entry point for local work and Actions.
 - Agents create commits, amend/rebase, push, or rewrite history only when the user
   explicitly requests it. Follow [Commit and release](docs/development/commit-and-release.md)
   for the exact Conventional Commit format and publication rules.
+- When merging into main, judge whether the branch's commits are worth
+  keeping: squash merge when they are not (the usual case, and when unsure),
+  and create a merge commit only when each commit is a focused, passing step
+  worth reading or reverting on its own. See
+  [Merging into Main](docs/development/commit-and-release.md#merging-into-main).
 
 ## Documentation Maintenance
 

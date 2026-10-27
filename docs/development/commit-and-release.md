@@ -19,6 +19,26 @@ Never stage runtime state, secrets, or unrelated user changes. Agents create
 commits and push only on an explicit user request. Keep the configured signing
 path when committing; do not disable signing to work around a missing signer.
 
+## Merging into Main
+
+Before merging a branch into `main`, judge whether its commits are worth
+keeping, and choose the merge method from that judgement. Agents merge only on
+an explicit user request, and the checks above apply to the result on `main`.
+
+- **Squash merge** (`git merge --squash`, then one commit) when the history has
+  no value of its own: a single commit, work-in-progress or fixup commits,
+  review rounds, reverted attempts, or subjects that do not follow the commit
+  convention. The squashed commit follows the convention and describes the
+  branch's change as a whole.
+- **Merge commit** (`git merge --no-ff`) only when every commit is a focused,
+  conventional step that builds and passes the checks on its own, and a reader
+  would want to read, bisect or revert those steps separately, for example a
+  schema upgrade followed by the code that uses it. Its subject also follows
+  the convention, such as `feat(sync): merge per-source schedules`.
+
+When unsure, squash. Do not rewrite a branch's commits to make them worth
+keeping unless the user asks for it.
+
 ## Version Source
 
 package.json owns the application version as `<major>.<minor>.<patch>`; keep
