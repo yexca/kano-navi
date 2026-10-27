@@ -1,17 +1,17 @@
 # Testing and CI
 
-The shipped backend is Go. `make go-test` runs its contracts and vet without
-Docker. `make ci-backend` runs golangci-lint with `scripts/golangci-lint.yml`,
-vet, and the contracts again under the race detector (`make go-race`, which
-needs cgo and a C compiler). `make go-check` also validates formatting, CGO-free operation,
-Linux/Windows builds and disposable read-only/development containers. Source
-tests, including the historical-window API adapter, use fake transports and
-synthetic credentials; no check synchronizes live sources. See
-[Go backend](../architecture/go-standalone.md).
+The backend is Go. `make go-test` runs its contracts and vet without Docker.
+`make ci-backend` runs golangci-lint with `scripts/golangci-lint.yml`, vet,
+and the contracts again under the race detector (`make go-race`, which needs
+cgo and a C compiler). `make go-check` also validates formatting, CGO-free
+operation, Linux/Windows builds and disposable read-only/development
+containers. Source tests, including the historical-window API adapter, use
+fake transports and synthetic credentials; no check synchronizes live
+sources. See [Backend](../architecture/backend.md).
 
-`make test-frontend` runs the frontend tests in `tests/`: the dashboard
-request hook, the month archive reads, polling, and the history catalog and
-packaging.
+`make test-frontend` runs the frontend tests in `tests/`: the dashboard and
+admin request hooks, the month archive reads, polling, the pure view and
+filter helpers, `robots.txt`, and the history catalog and packaging.
 
 The Makefile is the canonical validation entry point. GitHub Actions invokes
 its targets so local and hosted checks protect the same contracts. Use the
@@ -47,7 +47,8 @@ DOCKER_BUILD, DOCKER_BUILD_ARGS, or DOCKER_IMAGE for the corresponding toolchain
 GOLANGCI_LINT_VERSION, ACTIONLINT_VERSION and GOVULNCHECK_VERSION pin the Go
 tools that `go run` builds; Dependabot does not update them.
 DOCKER is an executable path/name for the smoke helper, not a shell command.
-Existing check-docs, check-sensitive, and privacy-check aliases remain supported.
+check-docs, check-sensitive, and privacy-check are aliases of docs-check and
+sensitive-check.
 npm run check is the Node-only formatting/test/privacy/docs/build sequence; use
 make check to include the Go tests and API smoke as well.
 
@@ -134,8 +135,7 @@ isolated instance: run `kano-go serve` from a temporary directory with
 it with `KANO_API_PORT`. Do not exercise a development build against the
 operator's `data/` directory. The synthetic 10,000-record benchmark is
 `go test ./internal/store/sqlite -run '^$' -bench BenchmarkDashboardSynthetic10k`
-in `backend-go/`; see [Performance measurements](performance.md) for the
-recorded history.
+in `backend-go/`; see [Performance measurements](performance.md).
 
 Production smoke creates a disposable container from the built image, uses
 synthetic production authentication, disables the source timers, and publishes a
@@ -179,8 +179,8 @@ No source files are excluded with `@ts-nocheck`.
 
 Validate always evaluates every job result and fails on failure,
 cancellation, or a skipped job. There is no path-based job selection; even
-documentation-only changes run the complete sequence. The existing Validate
-and Docker image check names are preserved. Release calls this workflow rather
+documentation-only changes run the complete sequence. Keep the Validate and
+Docker image check names stable. Release calls this workflow rather
 than maintaining another list of check commands, then grants write permissions
 only to publication jobs. Only normal CI runs cancel superseded runs; release
 publication is serialized per tag.

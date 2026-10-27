@@ -2,20 +2,22 @@
 
 ## External Request Rules
 
-- Keep all external requests in the reviewed synchronization path under
-  `scripts/` and its server-side helpers, with fixed HTTP(S) destinations,
+- Keep all external requests in the reviewed server-side packages under
+  `backend-go/internal/` (`source/`, `mediadownload/`, and the provider
+  clients of `schedule/` and `llmadmin/`), with fixed HTTP(S) destinations,
   timeouts, limits, and failure handling.
 - Never embed usernames, passwords, tokens, or cookies in a URL. Do not write credentials from a response into `raw_json`, logs, or the UI.
 - Register a new source host and its purpose in `scripts/privacy-allowlist.json` first. The allowlist is a reviewable source record, not a comment-based way to bypass secret detection.
-- An inbound push endpoint (currently only the YouTube WebSub callback) must
+- An inbound push endpoint (the YouTube WebSub callback is the only one) must
   verify a shared-secret signature in constant time, bound its body, coalesce
   bursts, and only enqueue existing workflow steps rather than write data.
 - Extract only the fields needed from external HTML/JSON. Filter stack traces, absolute paths, and raw responses before displaying anything.
-  The HTTP error handler uses an allowlisted event/code/status log shape. Never
-  log a caught error object or its message/stack: body-parser and downstream clients
-  can attach original JSON bodies, headers, passwords and provider secrets. Invalid
-  JSON and oversized bodies are tested as 400/413 with simulated credentials in
-  captured logs; unexpected errors use the same restricted boundary.
+  The request log records only a normalized route, method, status, duration
+  and response size. Never log an error value, request body or header:
+  upstream and parser errors can carry original JSON bodies, headers,
+  passwords and provider secrets. Request bodies are bounded before parsing;
+  invalid JSON and oversized bodies return 400/413 with a controlled error
+  code.
 
 The model boundary is opt-in. Matching public schedule-post text and ready
 cached post images are sent only to the ordered, administrator-configured

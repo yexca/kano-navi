@@ -26,7 +26,8 @@ name; the about page shows it beside the version.
 ## Non-goals
 
 - Do not become a full X/YouTube client, comment system, or account-login surface.
-- Do not promise push-level real-time updates; freshness depends on how often the synchronization script runs.
+- Do not promise push-level real-time updates; freshness depends on how often
+  the source timers or manual synchronization run.
 - Do not bypass login walls, CAPTCHAs, access restrictions, or platform API permissions in the browser.
 - Do not present fan-maintained material as an official announcement; the original platform page is always authoritative.
 
@@ -134,7 +135,9 @@ automation; confirmation and other human-only actions remain in `/admin`.
 
 - The page and API run locally. Static profile, milestones, resource links, and
   history images ship with the code; source snapshots and LLM providers start empty.
-- X profile structure, the public status endpoint, and YouTube page structure may change. The synchronization script records warnings and retains the old snapshot; a failed fetch must not be interpreted as no update.
+- X profile structure, the public status endpoint, and YouTube page structure
+  may change. Synchronization records warnings and retains the old snapshot; a
+  failed fetch must not be interpreted as no update.
 - Activity times are displayed in the Japan time zone. Schedule-board candidates
   and heuristic single-message candidates can be classified and parsed through
   compatible LLM providers with cached image input. `uncertain` results are
@@ -144,9 +147,9 @@ automation; confirmation and other human-only actions remain in `/admin`.
   maintainer surface, in-memory sessions, and no multi-user permission model.
   MCP control uses a separate environment token and does not inherit the admin
   session.
-- Media registration, bounded download, persistent retry backoff, and YouTube
-  thumbnail revalidation are implemented, as are dimension probing and resized
-  copies for the board. Cached files are kept deliberately rather than
+- Media registration, bounded download, persistent retry backoff, YouTube
+  thumbnail revalidation, dimension probing and resized copies for the board
+  run server-side. Cached files are kept deliberately rather than
   garbage-collected; unready media is shown as unavailable.
 
 ## Maintainer Decision Rule

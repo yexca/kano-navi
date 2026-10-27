@@ -65,8 +65,7 @@ result counts them as `timelinePosts`. A stored post that a page lists again
 keeps the text, media and schedule candidate it has, as in a fetch window.
 Successful posts are stored with `account_handle` and returned as one
 time-ordered feed. Image-only posts are retained as candidates as long as they
-have a publication time and a media URL. `X_HANDLE` remains a single-account
-compatibility fallback.
+have a publication time and a media URL.
 
 Both paths store the same values for one status, so a post first stored from
 the timeline and refreshed through a detail request later keeps its
@@ -77,10 +76,9 @@ lists a video's or GIF's file in `mediaURLs`; the adapter reads its
 `media_extended` instead and keeps the thumbnail, as the timeline does, and
 rewrites `raw_json.mediaURLs` to match. A timeline post's `raw_json` lists its
 own images (not a quoted status's) as `mediaURLs` too, because schedule
-extraction declares a post's images from that field. Photo-only posts already
-stored from detail answers keep identical values; a stored video or GIF post
-changes once, on its next refresh, from a file that could not be cached to
-its thumbnail. A quoted status is read into the same
+extraction declares a post's images from that field. A stored video or GIF
+post that still names its file takes the thumbnail on its next refresh. A
+quoted status is read into the same
 [quote projection](#quoted-posts) on both paths.
 
 Operator fetch windows read the same timeline differently (see
@@ -145,7 +143,7 @@ post that has fallen out of the discovered status list.
 
 ### YouTube
 
-The script reads the RSS feed for `YOUTUBE_CHANNEL_ID` (the current main channel
+The `youtube` step reads the RSS feed for `YOUTUBE_CHANNEL_ID` (the current main channel
 by default), or with `YOUTUBE_API_KEY` the Data API's uploads playlist (see
 [Data API](#data-api)). It takes the newest listed uploads and stores the ones
 not stored yet; see [source schedules](workflows.md#source-schedules). An
@@ -161,7 +159,7 @@ playlist page, keeps the cursor, so later runs take the rest while the
 listing still reaches it; without a cursor the first run is bounded on
 purpose. It separately inspects the streams page and keeps rechecking active or
 recent reservations for `scheduledStartTime`, writing them to both `videos` and
-`events`. When no schedule time is available, the script does not invent one. RSS insertion
+`events`. When no schedule time is available, the step does not invent one. RSS insertion
 does not count as a reservation detail check, but RSS lists waiting rooms and
 premieres like ordinary uploads, so the uploads a run takes are detail
 candidates as well, after stream-page discoveries. A watch
@@ -251,9 +249,9 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   until the broadcast ends. An ended broadcast is classified from its stored
   row only when an earlier detail check gave it a start time and a stored
   `is_premiere` verdict; the kind cannot tell, since a premiere keeps its
-  title kind, which may be a live one. Otherwise, as for rows stored before
-  the verdict was kept, an untitled video or an upcoming one without a start,
-  its watch page decides.
+  title kind, which may be a live one. Otherwise, as for a row without a
+  stored verdict, an untitled video or an upcoming one without a start, its
+  watch page decides.
 - When that watch page fails for an ended broadcast the API gave a start
   (`ytsource.Video.Unclassified`), the API answer is used anyway rather than
   leaving the video unchecked, since some hosts never get a readable page. It
@@ -328,9 +326,8 @@ new or old, after the video upsert; a verdict for a video the snapshot does
 not hold adds no row, and a changed value advances the dashboard revision.
 The stored `url` stays the canonical watch page. Watch pages, the live probe,
 historical windows and Bilibili never write `is_short`, so a later detail check
-cannot clear it. Rows the feed never listed with such a link, including every
-video stored before this column existed, stay `NULL` (unknown); the length is
-never used to guess. The step result's `shorts` counts the feed entries
+cannot clear it. Rows the feed never listed with such a link stay `NULL`
+(unknown); the length is never used to guess. The step result's `shorts` counts the feed entries
 linked as Shorts in that run, so a feed that stops naming the format shows as
 zero. When the Data API supplies the listing, the feed is still read for
 these verdicts alone; if it fails, that run records none and reports the
@@ -345,8 +342,7 @@ again 1 hour, 1 day, 3 days and 7 days after its anchor
 (`ytsource.FollowUpOffsets`): the broadcast end the linked event records, or
 otherwise its start or publication. A video is due when the newest passed
 offset has no successful check (`live_checked_at`) at or after it; anchors
-older than eight days are left alone, so an upgrade does not reread the
-history. The YouTube step adds at most ten due videos per run behind the
+older than eight days are left alone, so older videos are not reread. The YouTube step adds at most ten due videos per run behind the
 active reservations, so they never starve new discoveries, and uses the same
 detail budget, completeness checks and rotating queue.
 
@@ -420,7 +416,7 @@ quota unit whatever the number of due videos, and nothing while nothing is
 due; the probe's worst case of 30 runs an hour is 720 units a day, and
 together with a regular YouTube step every 15 minutes (two units per run)
 stays under a tenth of the default 10,000. Without a key the probe reads
-watch pages only, as before.
+watch pages only.
 
 The store writes `videos.live_status` and `live_checked_at`, the actual start,
 `is_upcoming`, `ends_at` once reported and the status text through the same
@@ -547,8 +543,7 @@ list only YouTube videos, so one cover is never listed twice. The `reconcile`
 step merges an upload into the YouTube video of the same work, which then
 lists it in `alternates` and shows its title as the video's Chinese platform
 translation; operators confirm, add or undo merges in `/admin` (see
-[Video merging](data-model.md#video-merging)). Showing those links and the
-unmatched uploads on the board belongs to a later redesign. Operators can
+[Video merging](data-model.md#video-merging)). Operators can
 add an upload by BV ID or `bilibili.com` video link and read one again at
 once from `/admin` (see [Admin API](admin-api.md#bilibili-uploads)); those
 reads respect the same backoff and accept only uploads of the configured
@@ -557,6 +552,25 @@ block that a concurrent read stored meanwhile (one still active and later
 than the writer's), with its failure count and code: a captcha backoff is
 never lost. A read that changes a merged upload's title rewrites the
 translation in the same transaction.
+
+### Source Request Limits
+
+Every source client requests fixed destinations with a 10-second timeout
+(official-API fetch windows use `SYNC_TIMEOUT_MS`; see
+[Fetch windows](workflows.md#official-api-windows))
+that stays active through body consumption, rejects redirects, and records
+only controlled error codes. Response bodies are limited to 4 MiB for X and
+YouTube and 2 MiB for Bilibili; a timed-out or oversized stream is cancelled
+and releases its reader so the single-flight queue can run a subsequent job.
+
+The YouTube client builds every public URL itself on `https://www.youtube.com`:
+`/feeds/videos.xml?channel_id=<id>`, `/channel/<id>/streams`,
+`/channel/<id>/videos` and `/watch?v=<id>`, after checking that the channel
+ID matches `UC` plus 22 characters and the video ID 11 characters. The Data
+API is reached only at `https://www.googleapis.com/youtube/v3/` (see
+[Data API](#data-api)). A redirect answer is reported as
+`youtube_redirect_rejected` and an oversized body as
+`youtube_response_oversized`.
 
 ### Schedule Extraction Pipeline
 
@@ -610,19 +624,20 @@ that fails counts as the first failure. A success or `uncertain` result,
 including a cache hit, clears the backoff. A cancelled run is not a failure.
 `skipped` outcomes that make no call (`media_pending`, `no_content`, no
 configured or compatible target) are not failures, keep any earlier count,
-and are scanned as before. The console shows the next retry time or that
-retries stopped next to the post's state. Older snapshots start with no
-backoff, so their failed posts are tried once more first.
+and stay eligible for later scans. The console shows the next retry time or
+that retries stopped next to the post's state. A failed post without a
+recorded failure count has no backoff and is tried on the next scan.
 
 Both paths, and the schedule-image check below, draw from one model priority
 queue: an ordered list of targets, each a provider plus one of its catalog
 models, and a target's capabilities are its model's `text`/`image` tags.
-Providers have no default model. The retired `llm_providers.model` column is
-kept but no longer read. A one-time upgrade (`llm_default_model_retired`)
-rewrites each queue target that followed it, including legacy provider-only
-routes, to name that model. Where the pair was already queued, the earlier
-position stays, and a target whose provider had no default is dropped
-because it could never be called. Target selection follows
+Providers have no default model, and nothing reads the
+`llm_providers.model` column. A one-time startup upgrade, recorded as
+`llm_default_model_retired`, rewrites each queue target without a model
+(including legacy provider-only routes) to name its provider's stored model.
+Where that pair is already queued, the earlier position stays, and a target
+whose provider has no stored model is dropped because it could never be
+called. Target selection follows
 the original post modality. Text-only input requires `text`; image-only input
 requires `image`; mixed input requires a model with both tags. Only ready cached images are sent to the model. A post that
 declares an image but whose cache is not ready is recorded as `media_pending`
@@ -630,16 +645,17 @@ and is not silently reduced to text-only input. Each provider uses OpenAI
 Responses, Chat Completions, or Anthropic Messages, receives at most three total calls (one
 initial request plus two retries), and then yields to the next enabled, keyed,
 capability-compatible target in queue order; targets whose capabilities do
-not fit the input are skipped without a call. The persisted
-`max_retries` field is retained for old clients and migrated to this fixed
-policy; it is not a cost-control override.
+not fit the input are skipped without a call. `llm_providers.max_retries`
+always stores 2 (startup sets every row to it), and the admin API validates
+but does not store a different `maxRetries`; it is not a cost-control
+override.
 
 ### LLM Provider Catalog
 
 `/admin` manages providers centrally. A provider stores the API host, format
 (Responses, Chat Completions, or Anthropic Messages), timeout, and encrypted key. On an operator
 action the server requests `GET <baseUrl>/models` with the stored key, a
-timeout, `redirect: "error"`, and a 4 MB response limit; it accepts OpenAI-style
+timeout, rejected redirects, and a 4 MiB response limit; it accepts OpenAI-style
 `{ data: [{ id }] }`, `{ models: [...] }`, or bare arrays. Upstream bodies and
 errors are reduced to fixed messages. Tags for newly added models are suggested
 from the model ID and stay editable. Removing a model removes its queue
@@ -649,7 +665,8 @@ and loopback address guard for provider URLs applies to model discovery too.
 API hosts can omit `/v1`: bare origins use `/v1`, while OpenRouter and Gemini
 use their preset API roots. Explicit versioned roots and custom paths are
 preserved, and a pasted inference endpoint is reduced to its API root.
-`src/lib/llm-endpoints.ts` owns this rule for both UI previews and server calls.
+`backend-go/internal/llmadmin/catalog.go` applies this rule to server calls,
+and `src/lib/llm-endpoints.ts` applies the same rule to UI previews.
 Anthropic requests use `x-api-key` and `anthropic-version: 2023-06-01`.
 Model discovery follows `has_more`/`last_id` with 100 models per page and a
 20-page cap under one timeout. Extraction offers one tool with the existing
@@ -700,8 +717,7 @@ keeps that route, image posts use `schedule_board`, and text posts use
 `schedule_message`. The route chooses the prompt path, not the models.
 
 Providers and the model queue are configured explicitly in `/admin`; initialization
-does not create or enable an OpenAI provider. The legacy model preference comes
-from `app_settings.llm_model`. Provider API keys are encrypted with
+does not create or enable an OpenAI provider. Provider API keys are encrypted with
 `LLM_SECRETS_KEY`; ciphertext is never returned by an API response or written
 to extraction `raw_json`. A legacy `OPENAI_API_KEY` can be imported once with
 `kano-go migrate-llm` (`npm run migrate:llm`) after creating an `openai-default` provider in `/admin`;
@@ -709,12 +725,11 @@ synchronization never reads that environment variable.
 Candidates from either X account use the same idempotent fingerprint and
 manual-lock rules. The stage flags are stored as `schedule_keyword_enabled`,
 `schedule_vision_enabled`, and `schedule_message_enabled` and can be changed
-independently in `/admin`. `schedule_message_all_posts` is off unless set
-explicitly and does not follow the legacy switch. The legacy `schedule_extraction_enabled` setting is
-retained for old clients and for seeding the stage defaults; it is no longer a
-runtime master switch, so a newly enabled stage can run even when an older
-database still contains `0` there. The old admin API field updates all three
-stage flags together for compatibility.
+independently in `/admin`. The legacy `schedule_extraction_enabled` setting
+(or `SCHEDULE_EXTRACTION_ENABLED`) is only the default for a stage flag that
+is not set; it is not a runtime master switch, so an enabled stage runs even
+when it contains `0`. `schedule_message_all_posts` is off unless set
+explicitly and does not follow the legacy setting.
 
 The `featured_video_id` setting is maintained through `/admin`. It points to an
 existing local `videos` row (or an empty value for no Featured item), and source
@@ -751,7 +766,8 @@ them.
 
 An operator can hide a post's quote from the public pages
 (`posts.quote_hidden_at`); synchronization, the X API window and the
-upgrade backfill keep updating the stored quote underneath and never write
+startup quote backfill (which fills a missing `quote_json` from the post's
+stored `raw_json`) keep updating the stored quote underneath and never write
 that decision.
 
 #### Refresh from the Source
@@ -777,56 +793,53 @@ candidates and extraction, whatever its wording says.
 
 ### Schedule Images
 
-Public-profile synchronization and official X date-window pages share the same
-candidate builder. Each page registers its newest matching image per applicable
-Japan Monday week, together with its source account. Explicit source dates win
-over relative wording. An omitted year uses the nearest valid year to publication;
-December-to-January ranges roll forward across the year. `今週` / `本周` /
-`this week` and `来週` / `下周` / `next week` anchor to the Japan publication
-week, with next week starting seven days later, including Sunday publication.
-Multi-day ranges retain both inclusive ends, even across multiple weeks.
-An explicit connected range is selected independently of other date mentions;
-multiple ranges or disconnected date lists are ambiguous. Ambiguous, invalid or
-absent dates produce a null period, never a publication-week
-guess. Operators can correct a period with a required reason independently of
-image approval; unknown and legacy periods are labelled in the console. Candidates, post/media records,
-and historical continuation checkpoints commit atomically. Older pages or
-accounts cannot replace a newer image for that week or the `weekly-schedule`
-compatibility alias. Registration does not run extraction or approve an image.
+Recent X synchronization and X fetch windows (timeline and API pages) share
+one candidate rule: a post with an image of its own whose text contains one
+of the fixed source keywords (`schedule`, `スケジュール`, `配信予定`,
+`週間予定`, `今週の予定`, case-insensitive; the configurable extraction
+keywords play no part) registers its first image as the schedule asset
+`schedule-x-<post ID>`, with its source URL and account. The asset, its
+`schedule-image` media link and a `pending` / `unreviewed` review commit
+with the post, and with the page's continuation checkpoint for a window.
+Registration does not run extraction or approve an image, and it writes no
+period.
+
+A schedule asset's period is `period_start`/`period_end` with its
+`period_basis`; the schema upgrade that adds these columns fills them from a
+stored `week_start` as a seven-day period. An asset without a period is unknown and labelled so
+in the console. Operators set or correct a period with a required reason
+(`manual_period_start`, `manual_period_end`, `manual_period_reason`)
+independently of image approval, and the manual period wins. The dashboard
+and calendar list an approved asset only while its period overlaps the
+requested dates.
 
 A schedule image (`assets.kind = schedule`) is public only after two gates:
 
-1. Sync promotes a post's image only when the author's own wording, including
-   quoted text, explicitly reads as a weekly or multi-day board notice
-   (`backend-go/internal/schedule/assets.go`). The stored post `label` is not part of that
-   input, because the looser post classifier labels any `配信予定` post as
-   `SCHEDULE / 日程`. The configurable extraction keywords do not promote images.
+1. The board-notice gate (`scheduleBoardPattern`,
+   `backend-go/internal/schedule/store.go`) checks that the source post's
+   own wording (its stored `raw_json.search_text` when present, otherwise
+   its text) reads as a weekly or multi-day board notice. The stored post `label` is not part of that input, because the
+   looser post classifier labels any `配信予定` post as `SCHEDULE / 日程`.
 2. The automatic scan sends each unreviewed candidate's ready cached image,
    without the post text, to the first image-capable targets of the model
-   queue and records
-   `schedule`, `not_schedule`, or `uncertain` in `schedule_asset_reviews`. A
-   candidate whose source post no longer passes gate 1 (written by an older
-   sync) is recorded as `skipped` / `source_not_board` without a model call. A
-   pending cache, or no keyed Image provider, is also `skipped` and retried.
-   An asset without an image URL (the legacy `weekly-schedule` alias written
-   by the old seed/importer) has nothing to download: it is recorded once as
-   `skipped` / `no_image` and left out of later scans, forced ones included,
-   until a writer gives it a URL. It is never public and never counts as
-   needing review; the console shows it as having no image, and an operator
-   may still label it `not_schedule`.
+   queue and records `schedule`, `not_schedule`, or `uncertain` in
+   `schedule_asset_reviews`. A candidate whose source post does not pass
+   gate 1 is recorded as `skipped` / `source_not_board` without a model
+   call. A pending cache, or no keyed Image provider, is also `skipped` and
+   retried. An asset without an image URL, such as a `weekly-schedule`
+   alias row, has nothing to download: it is recorded once as `skipped` /
+   `no_image` and left out of later scans, forced ones included, until a
+   writer gives it a URL. It is never public and never counts as needing
+   review; the console shows it as having no image, and an operator may
+   still label it `not_schedule`.
 
 `/api/dashboard` returns a schedule asset only when an operator labelled it
 `schedule`, or when it has no manual label, still passes gate 1, and the model
 returned `schedule`. A manual `not_schedule` always hides it. Labels require a
-reason and are set in the `/admin` schedule-images view. Sync reuses the
-`schedule-<week>` IDs and the `weekly-schedule` alias, so a review belongs to
-the image URL and version it judged: when an asset ID receives a different URL, its model
-verdict and manual label reset to `pending` / `unreviewed`.
-
-Source HTML/XML/JSON reads have a 4 MiB response-byte limit, reject redirects,
-and keep the configured timeout active through body consumption. A timed-out or
-oversized stream is cancelled and releases its reader so the single-flight queue
-can run a subsequent job.
+reason and are set in the `/admin` schedule-images view. A model verdict
+belongs to the image URL it judged: when a post's asset receives a different
+URL, its `asset_version` increases and its model verdict returns to
+`pending`, while a manual label stays.
 
 Image review budgets apply after cache checks and manual-label filtering across
 all stored candidates, rather than only the newest page. Retry order follows
@@ -900,14 +913,7 @@ them (platform `youtube`, `en` and `zh-CN`), and the
 for the title of a Bilibili upload merged into a YouTube video (platform
 `bilibili`, `zh-CN`).
 
-## Related Docs
-
-- [Workflow and historical fetch windows](workflows.md)
-- [Event precedence](data-model.md#event-precedence)
-- [Configuration](../operations/configuration.md)
-- [Secure development](../development/security.md)
-
-## Budget Fairness
+### Budget Fairness
 
 Incremental X rotates the first account across runs using independent
 `x-budget` state, so a one-request budget also serves later accounts. Failed
@@ -918,3 +924,10 @@ rotates before its request, failed work remains retryable, and completed ordinar
 videos leave the queue. Reservations continue to rotate for refresh. Reopening
 SQLite preserves those turns. Date-window work uses separate rotation/queue
 identities and never rewrites incremental cursors or their check metadata.
+
+## Related Docs
+
+- [Workflow and historical fetch windows](workflows.md)
+- [Event precedence](data-model.md#event-precedence)
+- [Configuration](../operations/configuration.md)
+- [Secure development](../development/security.md)

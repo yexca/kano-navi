@@ -26,12 +26,14 @@ temporary credential in shell history, source code, or the database.
 
 Provider keys are managed in `/admin` and encrypted in SQLite with the
 environment-only `LLM_SECRETS_KEY`. With no configured provider key, the
-schedule-extraction stage reports a safe skip. To import a legacy
-`OPENAI_API_KEY` once, set both environment variables and run
-`kano-go migrate-llm` (`npm run migrate:llm`); remove the legacy variable afterwards. `SCHEDULE_MESSAGE_ENABLED` controls the single-message detector;
-`SCHEDULE_KEYWORD_ENABLED` and `SCHEDULE_VISION_ENABLED` control the board
-path. `SCHEDULE_EXTRACTION_ENABLED` is retained for initial defaults and old
-API compatibility; the stage flags determine what runs after configuration.
+schedule-extraction stage reports a safe skip. To store an `OPENAI_API_KEY`
+as the encrypted key of the `openai-default` provider, set both environment
+variables, run `kano-go migrate-llm` (`npm run migrate:llm`) once, and remove
+`OPENAI_API_KEY` afterwards. `SCHEDULE_MESSAGE_ENABLED` controls the
+single-message detector; `SCHEDULE_KEYWORD_ENABLED` and
+`SCHEDULE_VISION_ENABLED` control the board path. `SCHEDULE_EXTRACTION_ENABLED`
+only supplies the default of a stage flag that has no stored or environment
+value; the stage flags determine what runs.
 Provider API keys entered in `/admin` require `LLM_SECRETS_KEY` and are
 encrypted before they reach SQLite; they are never returned by the API. Once
 configured, keys are read only by the server-side synchronization process.
@@ -52,9 +54,9 @@ before enabling source timers. Avoid simultaneous Windows/Linux access to
 the same SQLite file.
 
 Use additive schema upgrades in
-backend-go/internal/store/sqlite/schema_upgrade.go. Startup upgrades a snapshot
-from an earlier release in one transaction and never clears it; back up data/
-before the first start of a new release all the same. Seeding fills missing
+backend-go/internal/store/sqlite/schema_upgrade.go. Startup upgrades an older
+snapshot in one transaction and never clears it; back up data/ before the
+first start of a new release all the same. Seeding fills missing
 static IDs; it is not a database restore. The -overwrite option intentionally
 replaces the shipped static records and should only be used for reviewed
 maintenance.

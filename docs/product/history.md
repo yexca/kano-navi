@@ -57,16 +57,15 @@ To update the fixed collection from the local reference archive, run:
 npm run history:package -- --from /path/to/kano_official
 ```
 
-Packaging validates the entire selection before writing: manifest entries, contained real paths, size limits, SHA-256
-identities, and image magic bytes must match the catalog. Original bytes,
+Packaging validates the entire selection before writing: manifest entries,
+contained real paths, size limits, SHA-256 identities, and image magic bytes
+must match the catalog. Original bytes,
 credits, and provenance are preserved. Packaging performs no network requests
 and does not change the reference collection or runtime SQLite database.
 Review the catalog and packaged assets together when updating the collection.
 
-The runtime-cache importer of releases up to 0.1.3 (`history:import`), which
-copied these images into `media_assets` for the legacy opaque-ID `/media`
-URLs, was removed with the TypeScript backend. Rows it created in an existing
-snapshot are kept and still served; `/history` does not use them.
+`/history` reads no `media_assets` rows. A snapshot that holds rows for these
+images keeps them, and `/media/:id` serves them like any other ready media.
 
 When moving a deployment, preserve the ignored `data/` directory for source
 snapshots, dynamic media, and provider configuration. History images are

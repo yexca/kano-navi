@@ -6,7 +6,7 @@
 - Use one of `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`, `perf`, `style`, or `revert` as the type.
 - Keep the scope short, lowercase, and tied to the primary subsystem, such as `app`, `media`, `sync`, `docs`, or `ci`.
 - Write the description in lowercase imperative language, keep the subject at 72 characters or fewer, and do not end it with a period.
-- Keep each commit focused on one coherent change. Use a body when the reason or migration behavior is not evident from the subject.
+- Keep each commit focused on one coherent change. Use a body when the reason or upgrade behavior is not evident from the subject.
 - Mark an incompatible change with `!` before the colon and a `BREAKING CHANGE:` footer.
 - Before committing, run the required checks, review `git diff --cached`, and confirm that staged files match the user's requested boundary. Never stage ignored runtime data, secrets, or unrelated user changes.
 - Create, amend, rebase, or otherwise rewrite a commit only when the user explicitly requests it.

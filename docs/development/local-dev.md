@@ -12,8 +12,7 @@
 The backend is the Go module in `backend-go/`; it uses the pure-Go
 `modernc.org/sqlite` driver, so building and running it needs no C toolchain.
 Only the race detector needs cgo and a C compiler. Its package layout,
-commands and startup order are in
-[Go backend](../architecture/go-standalone.md).
+commands and startup order are in [Backend](../architecture/backend.md).
 
 The frontend, the maintenance scripts in `scripts/` and the frontend tests in
 `tests/` use TypeScript. Node 24 runs the scripts and tests through native
@@ -25,10 +24,10 @@ properties, and other syntax requiring runtime transformation.
 `tsconfig.node.json` checks the scripts and tests with NodeNext.
 Both use `noEmit`, `verbatimModuleSyntax`, and `erasableSyntaxOnly`.
 Run `make typecheck` for a standalone check. The shared
-public snapshot and UI primitive props have explicit types; existing dynamic
-JSON and SQLite mapping code retains permissive types during this migration.
-Strict mode is not enabled globally. API input validation and sanitized
-projections remain the runtime boundary.
+public snapshot and UI primitive props have explicit types; some dynamic JSON
+handling keeps permissive types. Strict mode is not enabled globally. The
+backend's API input validation and sanitized projections are the runtime
+boundary.
 
 ## Start and Build
 
@@ -114,7 +113,7 @@ one-shot maintenance commands; see
 [Database and maintenance](../operations/database.md).
 
 In PowerShell, use Copy-Item .env.example .env. GNU Make is the canonical
-validation entry point; npm scripts remain available for the individual tasks.
+validation entry point; npm scripts are available for the individual tasks.
 Run make help for targets. Validation targets use installed dependencies;
 make ci installs the lockfile first and then runs the full portable sequence.
 

@@ -1,20 +1,21 @@
 # Kano Navi Documentation
 
 These documents are organized by reader task: understand the board, operate a
-deployment, change code, or review security and design decisions.
+deployment, change code, or review security and design decisions. They
+describe the current system only.
 
 ## Start Here
 
 - [Project overview](overview.md): scope, pages, current behavior and limits.
 - [Local development](development/local-dev.md): setup and change workflow.
 - [Docker deployment](operations/docker.md): running and updating an instance.
-- [Repository Agent guide](../AGENTS.md): boundaries and validation rules.
+- [Repository agent guide](../AGENTS.md): boundaries and validation rules.
 
 ## By Area
 
 | Area         | Entry point                               | Contents                                                     |
 | ------------ | ----------------------------------------- | ------------------------------------------------------------ |
-| Architecture | [Architecture map](architecture/index.md) | Browser/API boundary, schema, sources, workflows, media      |
+| Architecture | [Architecture map](architecture/index.md) | Backend, APIs, frontend, schema, sources, workflows, media   |
 | Product      | [Product map](product/index.md)           | Board scope and curated history provenance                   |
 | Operations   | [Operations map](operations/index.md)     | Configuration, Docker, backup, reliability, troubleshooting  |
 | Development  | [Development map](development/index.md)   | Setup, design, testing, secure changes, commits and releases |
@@ -26,26 +27,37 @@ deployment, change code, or review security and design decisions.
 
 - Taking over the project: overview, core boundaries, data model, sources,
   workflows, and testing.
-- Changing public or admin UI: frontend ownership, design, and testing.
+- Changing public or admin UI: frontend, design, and testing.
+- Changing an HTTP or MCP contract: backend, public API or admin API, and
+  secure development.
 - Changing fetch or extraction behavior: sources, workflows, data model, media,
   and secure development.
 - Operating a deployment: configuration, Docker, database, reliability, and
   deployment security.
-- Preparing a release: testing, commit and release, and deployment instructions.
-- Reviewing a release: [release history](history/index.md) and the current
-  contracts linked from each focused document.
+- Preparing a release: testing, commit and release, and
+  [release history](history/index.md).
 
 ## Documentation Rules
 
-- Visitor-visible behavior belongs in overview or product; module and data
-  contracts belong in architecture.
-- Runtime setup and recovery belong in operations; local workflow and checks
-  belong in development.
-- Security reporting belongs in SECURITY.md; technical boundaries belong in the
-  linked deployment and development security documents.
-- Record durable trade-offs as ADRs. Update current contracts with code changes;
-  do not infer current behavior from historical notes.
-- Use repository-relative paths, synthetic examples, and empty credential fields.
-  .env.example is the complete runtime variable inventory.
-- Old flat documentation paths remain navigation pages for existing links.
-  Put substantive updates in the focused documents and run make docs-check.
+Where each topic belongs:
+
+- Visitor-visible behavior belongs in [Overview](overview.md) or
+  [Product](product/index.md).
+- Module, API and data contracts belong in
+  [Architecture](architecture/index.md), one topic per document.
+- Runtime setup and recovery belong in [Operations](operations/index.md).
+- Local workflow, checks and contribution rules belong in
+  [Development](development/index.md).
+- Security reporting belongs in [SECURITY.md](../SECURITY.md); technical
+  boundaries belong in [Deployment security](operations/security.md) and
+  [Secure development](development/security.md).
+- Durable design choices belong in [ADRs](decisions/index.md).
+- Release notes, pending changes, and per-release upgrade steps belong in
+  [History](history/index.md). Every other page describes only the current
+  system; see the writing rules in the
+  [repository agent guide](../AGENTS.md#documentation).
+- [.env.example](../.env.example) is the complete runtime variable inventory;
+  [Configuration](operations/configuration.md) documents each variable.
+- Documentation is English only. Use repository-relative paths, synthetic
+  examples, and empty credential fields, and run `make docs-check` after
+  changing links.

@@ -23,8 +23,7 @@ data/
   avatar/
     avatar.<extension>
     banner.<extension>
-  .tmp/
-    <temporary-file>.part
+    sha256/<first-two>/<content-sha256>.<extension>
   cache/media/
     sha256/<first-two>/<content-sha256>.<extension>
   cache/variants/
@@ -32,34 +31,42 @@ data/
 ```
 
 The whole `data/` directory is ignored by Git. It is created on demand by the
-server or synchronization command. The tracked `public/assets/` directory is
-reserved for fixed fallback branding and the reviewed history collection.
-Discovered X and YouTube profile
-candidates stay in their source namespaces; local uploads and the selected
-avatar and banner files remain runtime data in `data/avatar/`. The curated
-history collection ships as verified fixed files in `public/assets/history/`;
-it needs no runtime database rows. The optional legacy importer still stores
-original publisher files in `data/cache/media/`, with X and video sources in
-their source namespaces. See [History and visual archive](../product/history.md) for
-packaging and provenance details.
+server or synchronization command. Each write goes to a randomly named
+temporary file in its target directory (`.download-*`, `.part-*` or
+`.variant-*`) that is atomically renamed into place. The tracked
+`public/assets/` directory is reserved for fixed fallback branding and the
+reviewed history collection.
+
+Discovered X and YouTube profile candidates stay in their source namespaces;
+local uploads (`data/avatar/sha256/`) and the selected avatar and banner files
+remain runtime data in `data/avatar/`. A `cache_path` that starts with
+`sha256/` resolves under `data/cache/media/`; readers serve such rows, while
+the downloaders write only the source namespaces. The curated history
+collection ships as verified fixed files in `public/assets/history/`; it needs
+no runtime database rows. See
+[History and visual archive](../product/history.md) for packaging and
+provenance details.
 
 ## Database Model
 
 `media_assets` stores one row per normalized HTTP(S) source URL:
 
-- `id`: a 64-character SHA-256 identity derived from the source URL;
+- `id`: the lowercase hex SHA-256 of the normalized source URL (HTTP or HTTPS,
+  no userinfo, lowercase host, no fragment, an empty path becomes `/`), so a
+  URL always maps to the same row. A row registered under a short
+  `x-<32 hex>` identity is re-keyed to this identity, together with its links
+  and cache metadata, when its URL is registered again;
 - `source`, `source_url`: the platform adapter and original public URL;
 - `status`: `pending`, `ready`, `missing`, or `failed`;
-- `cache_path`: a path relative to the runtime `data/` directory, normally
-  `x/`, `youtube/`, or the legacy `cache/media/` namespace; never an absolute
-  path;
+- `cache_path`: a path relative to the runtime `data/` directory, under `x/`,
+  `youtube/`, `bilibili/` or `avatar/`, or a `sha256/` path under
+  `cache/media/`; never an absolute path or one with `..`;
 - `mime_type`, `extension`, `byte_size`, `sha256`, `width`, and `height`
   (read from the image header; `0×0` marks a header that could not be read,
   such as AVIF, and reads report it as unknown);
 - fetch/check/seen timestamps, validators (`etag`, `last_modified`), and the
   last error for maintainer diagnosis.
-- `retry_attempts` and `next_retry_at`: persisted failure backoff, added to
-  existing snapshots without clearing cached assets or links.
+- `retry_attempts` and `next_retry_at`: persisted failure backoff.
 
 `media_links` associates an asset with a domain record without coupling the
 media table to every content table. Its owner tuple is `(owner_type, owner_id,
@@ -69,9 +76,9 @@ it quotes use `quote-image` under the same post, so the board shows them in
 the quote card and extraction never reads them (see
 [Quoted posts](sources.md#quoted-posts)).
 
-The existing `media_url`, `thumbnail_url`, and image URL columns remain during
-the migration. They are source-snapshot fields and are not treated as safe
-browser URLs by the dashboard query.
+The `media_url`, `thumbnail_url`, and image URL columns of content tables are
+source-snapshot fields and are not treated as safe browser URLs by the
+dashboard query.
 
 The cache accepts only AVIF, GIF, JPEG, PNG, and WebP. SVG and
 arbitrary document MIME types are rejected so cached platform input cannot be
@@ -79,20 +86,23 @@ served as active same-origin content.
 
 ## Lifecycle
 
-1. A seed record or source adapter discovers a remote image and calls
-   `registerMediaCandidates`.
+1. A source adapter discovers a remote image, and its snapshot write
+   registers it inside the same transaction (`replaceMediaLink` in
+   `internal/store/sqlite/source_write.go`).
 2. The candidate is deduplicated by normalized source URL, recorded as
    `pending`, and linked to its owner. Registration does not download bytes.
-3. The media step claims a bounded batch during a synchronization.
+3. The media step claims at most 20 assets during a synchronization.
    Never-checked assets come first, ordered by their newest owner (a video's
    scheduled or published time, or the publication time of the post or
    schedule post that links it), so thumbnails the board shows first are not
-   left pending by a same-synchronization tie. Previously checked assets and
+   left pending by a same-synchronization tie. Already checked assets and
    assets without a dated owner follow by creation or last-check time. It
-   downloads with a timeout and byte limit, verifies the image magic bytes and
-   declared MIME type, writes a temporary file, atomically renames it into the
-   source namespace's `sha256/` directory, and calls `upsertMediaAsset` with
-   `status = ready` and the width and height its header declares. The same
+   downloads within the [download bounds](#download-boundary), writes the
+   bytes through a root confined to `data/` into
+   `<source>/sha256/<first-two>/<content-sha256>.<extension>`, reuses an
+   existing file there only when its hash agrees, and records the row as
+   `ready` with the width and height its header declares
+   (`SaveMediaDownload` in `internal/store/sqlite/media_commands.go`). The same
    step measures up to 50 ready files cached before dimensions were probed,
    reading each contained, hash-checked file's header only, and reports them
    as `measured`; a run that measures any advances the dashboard revision.
@@ -122,21 +132,32 @@ served as active same-origin content.
    and every video linked to the asset records the replaced thumbnail in
    `video_revisions`. An operator can pin such a version, or the file of an
    earlier thumbnail URL, from the video's history.
-8. Retention and garbage collection can later use `last_seen_at`,
-   `media_links`, `media_versions` and the operator pins to remove
-   unreferenced files deliberately.
 
-The downloader accepts only HTTPS URLs on X's `*.twimg.com` media CDN
-subdomains, YouTube's `*.ytimg.com` thumbnail CDN subdomains and Bilibili's
-`*.hdslb.com` cover CDN subdomains (`i0`, `i1`, `i2` and so on). It revalidates
-every redirect against the same suffix-bounded allowlist, requiring a real
-subdomain boundary; lookalike hosts and the bare parent domains are rejected.
+### Download Boundary
+
+`internal/mediadownload` accepts only HTTPS URLs on port 443 on X's
+`*.twimg.com` media CDN subdomains, YouTube's `*.ytimg.com` thumbnail CDN
+subdomains and Bilibili's `*.hdslb.com` cover CDN subdomains (`i0`, `i1`, `i2`
+and so on). The suffix check requires a real subdomain boundary, so
+lookalike hosts and the bare parent domains are rejected, as are userinfo,
+fragments and query keys that look like credentials (`token`, `secret`,
+`auth`, `api_key` and the like). Redirects are followed by hand: at most three,
+each revalidated against the same policy. One ten-second deadline covers the
+redirects, headers and body of a request (a smaller YouTube thumbnail size
+gets its own). Bodies are capped at 10 MiB, and the sniffed magic bytes must
+be a supported image whose type agrees with a declared image `Content-Type`.
+Failures become fixed codes (`media_destination_rejected`,
+`media_redirect_rejected`, `media_timeout`, `media_missing`,
+`media_response_oversized`, `media_invalid_image` and so on); no upstream body
+is stored.
+
 The host policy is kept in code because this is also an SSRF boundary; the
-broader privacy allowlist is not a download permission list. The cache still
+broader privacy allowlist is not a download permission list. The cache
 accepts image MIME types only, so X video URLs may be recognized as official
-media while remaining unavailable to the image cache. Cached files, including
-versions a revalidation replaced, are kept deliberately; there is no garbage
-collection.
+media while remaining unavailable to the image cache. A failed redownload
+keeps the ready file, and versioned public reads never fetch media. Cached
+files, including versions a revalidation replaced, are kept deliberately;
+there is no garbage collection.
 
 Content-addressed paths are deliberately preferred over layouts such as
 `pics/x/<timestamp>` or `pics/youtube/<video-id>`. Ownership already lives in
@@ -159,7 +180,7 @@ URL until the operator selects it. `/media/profile/:slot` validates and serves
 that selected version, so its bytes, ETag, and URL hash agree.
 
 Startup repairs selected hash/MIME from the selected file's bytes rather than
-the candidate, including earlier incorrect active-metadata upgrades. This is
+the candidate, whatever the stored active metadata says. This is
 idempotent and retains the manual selection and candidate version. Reads require
 both the stored path and its symlink-resolved target to stay inside `data/avatar/`,
 a regular file under the 15 MiB profile limit, and the existing supported-image
