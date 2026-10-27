@@ -99,6 +99,7 @@
   background: color-mix(in oklab, hsl(var(--background)) 84%, transparent);
   backdrop-filter: saturate(1.4) blur(14px);
   -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  view-transition-name: site-header;
 }
 
 .site-header::after {
@@ -226,31 +227,69 @@
   }
 }
 
-/* The localized site name needs about 650px beside the page links. */
-@media (max-width: 680px) {
-  .site-brand-copy {
-    display: none;
-  }
+.site-menu-button {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  transition: transform 160ms ease;
 }
 
-@media (max-width: 600px) {
+.site-menu-button svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 1px 1.5px rgb(40 16 8 / 0.25));
+}
+
+.site-menu-button:hover,
+.site-menu-button[data-state="open"] {
+  transform: rotate(-8deg);
+}
+
+.site-page-menu a {
+  font-weight: 700;
+}
+
+.site-page-menu a[aria-current="page"] {
+  color: var(--berry);
+}
+
+.site-page-menu a svg {
+  margin-left: auto;
+}
+
+/*
+ * The localized site name needs about 650px beside the page links, so narrow
+ * screens show the name alone and fold the links into the seal menu.
+ */
+@media (max-width: 680px) {
   .site-header-inner {
     gap: 8px;
   }
 
+  .site-brand {
+    flex: 0 1 auto;
+    margin-right: auto;
+  }
+
+  .site-brand img,
   .site-pages {
-    margin-inline: 0 auto;
+    display: none;
   }
 
-  .site-pages a {
-    padding: 6px 10px;
-    font-size: 12.5px;
+  .site-brand-copy {
+    min-width: 0;
   }
-}
 
-@media (max-width: 380px) {
-  .site-pages a {
-    padding: 6px 8px;
+  .site-brand-copy strong {
+    overflow: hidden;
+    font-size: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .site-menu-button {
+    display: inline-block;
   }
 }
 

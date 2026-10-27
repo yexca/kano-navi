@@ -69,6 +69,24 @@
     />
     <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png" />
     <title>What’s Kano Up To?</title>
+    <!--
+      Apply the saved theme and language before the first paint so a page
+      load never flashes the other theme. Mirrors readTheme and readLocale in
+      src/app-settings.tsx.
+    -->
+    <script>
+      try {
+        var theme = localStorage.getItem("kano-theme")
+        var dark = theme
+          ? theme === "dark"
+          : matchMedia("(prefers-color-scheme: dark)").matches
+        document.documentElement.classList.toggle("dark", dark)
+        var locale = localStorage.getItem("kano-locale")
+        if (["en", "ja", "zh-CN"].indexOf(locale) >= 0) {
+          document.documentElement.lang = locale
+        }
+      } catch (error) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -557,7 +557,7 @@ const messages = {
     "page.retry": "Reload page",
     "page.notFound": "This page doesn’t exist.",
     "page.home": "Back to the board",
-    "about.label": "About this site",
+    "about.label": "About",
     "common.retry": "Retry",
     "schedule.moreEvents": "Show more events this week",
     "common.close": "Close",

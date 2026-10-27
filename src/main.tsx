@@ -1,8 +1,9 @@
 import { createRoot, type Root } from "react-dom/client"
+import { flushSync } from "react-dom"
 import {
   Component,
-  lazy,
-  Suspense,
+  useEffect,
+  useState,
   type ComponentType,
   type ReactNode,
 } from "react"
@@ -14,7 +15,7 @@ import {
 } from "@/app-settings"
 import type { PageMessages } from "@/i18n"
 import { DashboardApp } from "@/dashboard/dashboard-app"
-import { pagePath } from "@/lib/page-path"
+import { inPlaceUrl, pagePath } from "@/lib/page-path"
 import "./index.css"
 
 declare global {
@@ -23,37 +24,64 @@ declare global {
 }
 
 function withMessages(Page: ComponentType, messages: PageMessages) {
-  return {
-    default: () => (
+  return function PageWithMessages() {
+    return (
       <PageMessagesProvider messages={messages}>
         <Page />
       </PageMessagesProvider>
-    ),
+    )
   }
 }
 
-const routes: Record<string, ComponentType> = {
-  "/about": lazy(async () => {
+// Keep in step with spaPages in backend-go/internal/httpapi/static.go.
+const routes: Record<string, () => Promise<ComponentType>> = {
+  "/": async () => DashboardApp,
+  "/about": async () => {
     const [page, copy] = await Promise.all([
       import("@/about/about-app"),
       import("@/about/about-i18n"),
     ])
     return withMessages(page.AboutApp, copy.aboutMessages)
-  }),
-  "/admin": lazy(async () => {
+  },
+  "/admin": async () => {
     const [page, copy] = await Promise.all([
       import("@/admin"),
       import("@/admin-i18n"),
     ])
     return withMessages(page.AdminApp, copy.adminMessages)
-  }),
-  "/history": lazy(async () => {
+  },
+  "/history": async () => {
     const [page, copy] = await Promise.all([
       import("@/history/history-app"),
       import("@/history/history-i18n"),
     ])
     return withMessages(page.HistoryApp, copy.historyMessages)
-  }),
+  },
+}
+
+/** Public pages open each other in place; /admin always loads on its own. */
+const publicPages = ["/", "/history", "/about"]
+
+const loadedPages = new Map<string, ComponentType>([["/", DashboardApp]])
+const pendingPages = new Map<string, Promise<ComponentType>>()
+
+/** Each page's code loads once; a failed load may be tried again. */
+function loadPage(path: string) {
+  let pending = pendingPages.get(path)
+  if (!pending) {
+    pending = routes[path]().then(
+      (Page) => {
+        loadedPages.set(path, Page)
+        return Page
+      },
+      (error: unknown) => {
+        pendingPages.delete(path)
+        throw error
+      },
+    )
+    pendingPages.set(path, pending)
+  }
+  return pending
 }
 
 function PageStatus({ failed = false }: { failed?: boolean }) {
@@ -61,7 +89,7 @@ function PageStatus({ failed = false }: { failed?: boolean }) {
   return (
     <main className="min-h-screen grid place-items-center p-6">
       <div
-        className="rounded-2xl border bg-card p-8 text-center shadow-sm"
+        className={`rounded-2xl border bg-card p-8 text-center shadow-sm${failed ? "" : " page-status-pending"}`}
         role={failed ? "alert" : "status"}
       >
         <p>{t(failed ? "page.error" : "page.loading")}</p>
@@ -109,12 +137,217 @@ class PageBoundary extends Component<
   }
 }
 
+const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")
+
+function newEntry() {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
+}
+
+/**
+ * A reloaded page restores its scroll once its content is tall enough,
+ * giving up after a moment or as soon as the reader scrolls themselves.
+ */
+function settleScroll(top: number) {
+  const deadline = performance.now() + 1500
+  let timer = 0
+  const stop = () => {
+    window.clearTimeout(timer)
+    for (const type of ["wheel", "touchstart", "keydown"])
+      window.removeEventListener(type, stop)
+  }
+  const step = () => {
+    window.scrollTo({ top, behavior: "instant" })
+    if (Math.abs(window.scrollY - top) > 1 && performance.now() < deadline)
+      timer = window.setTimeout(step, 50)
+    else stop()
+  }
+  for (const type of ["wheel", "touchstart", "keydown"])
+    window.addEventListener(type, stop, { passive: true })
+  timer = window.setTimeout(step, 50)
+  return stop
+}
+
+/**
+ * Moving between public pages keeps this document: the next page's code
+ * loads while the current page stays on screen, then the two cross-fade.
+ * Each history entry remembers its own scroll position.
+ */
+function usePageNavigation() {
+  const [path, setPath] = useState(() => pagePath(window.location.pathname))
+
+  useEffect(() => {
+    // The browser would restore an entry's scroll before the page it belongs
+    // to is back on screen, so entries keep their own position instead.
+    window.history.scrollRestoration = "manual"
+    const scrolls = new Map<string, number>()
+    const saved: unknown = window.history.state?.kanoScroll
+    let entry = String(window.history.state?.kanoEntry ?? newEntry())
+    window.history.replaceState(
+      { ...window.history.state, kanoEntry: entry },
+      "",
+    )
+    let shownPath = pagePath(window.location.pathname)
+    let ticket = 0
+    let stopSettling = () => {}
+    if (typeof saved === "number" && saved > 0) {
+      stopSettling = settleScroll(saved)
+    }
+
+    let saveTimer = 0
+    const remember = () => {
+      window.clearTimeout(saveTimer)
+      scrolls.set(entry, window.scrollY)
+      window.history.replaceState(
+        { ...window.history.state, kanoScroll: window.scrollY },
+        "",
+      )
+    }
+    // A reload starts from the entry's state, so save once scrolling rests.
+    const onScroll = () => {
+      window.clearTimeout(saveTimer)
+      saveTimer = window.setTimeout(remember, 250)
+    }
+
+    const show = async (url: URL, top: number) => {
+      const next = pagePath(url.pathname)
+      const current = ++ticket
+      try {
+        await loadPage(next)
+      } catch {
+        window.location.reload()
+        return
+      }
+      if (current !== ticket) return
+      const samePage = next === shownPath
+      shownPath = next
+      const commit = () => {
+        flushSync(() => setPath(next))
+        const target = url.hash
+          ? document.getElementById(decodeURIComponent(url.hash.slice(1)))
+          : null
+        if (target) target.scrollIntoView({ behavior: "instant" })
+        else window.scrollTo({ top, behavior: samePage ? "smooth" : "instant" })
+      }
+      if (samePage || !document.startViewTransition || reducedMotion?.matches) {
+        commit()
+        return
+      }
+      // A page that cannot render a frame never reaches the update, so the
+      // swap goes ahead without the fade rather than waiting for one.
+      const transition = document.startViewTransition(commit)
+      const skip = window.setTimeout(() => transition.skipTransition(), 400)
+      const settle = () => window.clearTimeout(skip)
+      transition.updateCallbackDone.then(settle, settle)
+      transition.ready.catch(() => undefined)
+    }
+
+    const onClick = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        !publicPages.includes(shownPath) ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return
+      const link = (event.target as Element | null)?.closest?.("a[href]")
+      if (
+        !(link instanceof HTMLAnchorElement) ||
+        (link.target && link.target !== "_self") ||
+        link.hasAttribute("download")
+      )
+        return
+      const url = inPlaceUrl(link.href, window.location.href, publicPages)
+      if (!url) return
+      event.preventDefault()
+      if (url.href !== window.location.href) {
+        remember()
+        entry = newEntry()
+        window.history.pushState({ kanoEntry: entry }, "", url.href)
+      }
+      void show(url, 0)
+    }
+
+    const onPopState = (event: PopStateEvent) => {
+      stopSettling()
+      window.clearTimeout(saveTimer)
+      scrolls.set(entry, window.scrollY)
+      entry = String(event.state?.kanoEntry ?? newEntry())
+      const url = new URL(window.location.href)
+      const next = pagePath(url.pathname)
+      const top: unknown = scrolls.get(entry) ?? event.state?.kanoScroll
+      if (!publicPages.includes(next)) window.location.reload()
+      else if (next !== shownPath || typeof top === "number")
+        void show(url, typeof top === "number" ? top : 0)
+    }
+
+    // Start loading a page as soon as a pointer or focus reaches its link.
+    const onIntent = (event: Event) => {
+      const link = (event.target as Element | null)?.closest?.("a[href]")
+      if (!(link instanceof HTMLAnchorElement)) return
+      const url = inPlaceUrl(link.href, window.location.href, publicPages)
+      if (url) loadPage(pagePath(url.pathname)).catch(() => undefined)
+    }
+
+    document.addEventListener("click", onClick)
+    document.addEventListener("pointerover", onIntent, { passive: true })
+    document.addEventListener("focusin", onIntent)
+    window.addEventListener("popstate", onPopState)
+    window.addEventListener("pagehide", remember)
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => {
+      stopSettling()
+      window.clearTimeout(saveTimer)
+      window.removeEventListener("scroll", onScroll)
+      document.removeEventListener("click", onClick)
+      document.removeEventListener("pointerover", onIntent)
+      document.removeEventListener("focusin", onIntent)
+      window.removeEventListener("popstate", onPopState)
+      window.removeEventListener("pagehide", remember)
+    }
+  }, [])
+
+  return path
+}
+
+function PageRouter() {
+  const path = usePageNavigation()
+  const [, setLoaded] = useState(0)
+  const [failed, setFailed] = useState(false)
+  const Page = Object.hasOwn(routes, path)
+    ? loadedPages.get(path)
+    : NotFoundPage
+
+  useEffect(() => {
+    if (Page) return
+    let current = true
+    loadPage(path).then(
+      () => {
+        if (current) setLoaded((count) => count + 1)
+      },
+      () => {
+        if (current) setFailed(true)
+      },
+    )
+    return () => {
+      current = false
+    }
+  }, [Page, path])
+
+  if (Page) {
+    return (
+      <PageBoundary key={path}>
+        <Page />
+      </PageBoundary>
+    )
+  }
+  return <PageStatus failed={failed} />
+}
+
 const rootElement = document.getElementById("root")
 if (!rootElement) throw new Error("Missing application root element")
-// Keep in step with spaPages in backend-go/internal/httpapi/static.go.
-const normalizedPath = pagePath(window.location.pathname)
-const PageApp =
-  normalizedPath === "/" ? DashboardApp : routes[normalizedPath] || NotFoundPage
 const reactRoot =
   globalThis.__kanoReactRoot && globalThis.__kanoRootElement === rootElement
     ? globalThis.__kanoReactRoot
@@ -123,11 +356,7 @@ globalThis.__kanoReactRoot = reactRoot
 globalThis.__kanoRootElement = rootElement
 reactRoot.render(
   <AppSettingsProvider>
-    <PageBoundary>
-      <Suspense fallback={<PageStatus />}>
-        <PageApp />
-      </Suspense>
-    </PageBoundary>
+    <PageRouter />
   </AppSettingsProvider>,
 )
 

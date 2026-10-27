@@ -1,9 +1,16 @@
 import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
-import { ArrowUp } from "lucide-react"
+import { ArrowUp, Check } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import { PreferenceControls } from "@/components/preference-controls"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { KanoSeal } from "./kano-seal"
 import "./site.css"
 
 export type PublicPage = "board" | "history" | "about"
@@ -61,6 +68,37 @@ function useScrolled() {
   return scrolled
 }
 
+/** Narrow screens fold the page links into the seal button. */
+function PageMenu({ page }: { page: PublicPage }) {
+  const { t } = useAppSettings()
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="site-menu-button"
+          aria-label={t("header.pages")}
+        >
+          <KanoSeal />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="site-page-menu">
+        {pages.map((item) => (
+          <DropdownMenuItem asChild key={item.id}>
+            <a
+              href={item.href}
+              aria-current={item.id === page ? "page" : undefined}
+            >
+              {t(item.labelKey)}
+              {item.id === page ? <Check aria-hidden="true" /> : null}
+            </a>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function SiteHeader({
   page,
   avatarUrl,
@@ -102,6 +140,7 @@ export function SiteHeader({
           {status}
           <JapanClock />
           <PreferenceControls />
+          <PageMenu page={page} />
         </div>
       </div>
     </header>
