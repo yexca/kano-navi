@@ -317,8 +317,9 @@ func sqliteModifier(d time.Duration) string {
 }
 
 // WriteYoutubeLive stores what a probe read: the actual start, the reported
-// end, the reservation and broadcast state, and the event status text, and
-// when it asked for each page, answered or not. It never touches feed cursors
+// end, the reservation and broadcast state, the event status text, the
+// localized titles a Data API answer named, and when it asked for each page,
+// answered or not. It never touches feed cursors
 // or the detail queue, keeps manual locks and tombstones, and bumps the
 // dashboard revision only when a public field changed. It reports that change.
 func (s *Store) WriteYoutubeLive(ctx context.Context, result ytsource.ProbeResult) (bool, error) {
@@ -354,6 +355,11 @@ func (s *Store) WriteYoutubeLive(ctx context.Context, result ytsource.ProbeResul
 	if err != nil {
 		return false, err
 	}
+	translated, err := writeYoutubeLocalizations(ctx, tx, result.Localized, now)
+	if err != nil {
+		return false, err
+	}
+	changed = changed || translated
 	if changed {
 		if err = bumpRevision(ctx, tx, now); err != nil {
 			return false, ErrSourceWrite

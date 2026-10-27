@@ -33,7 +33,9 @@
   rest on later runs instead of skipping the posts between its old cursor and
   the oldest one it read. A timeline that ends first reports
   `x_timeline_gap`. `X_BOOTSTRAP_DAYS` now applies only while an account has
-  no cursor.
+  no cursor. An incremental YouTube run counts only uploads not stored yet
+  against `max` and keeps its cursor while new uploads above it are unread,
+  so later runs take them.
 - Schedule extraction backs off posts that keep failing instead of retrying
   them on every X run: 1, 6 and 24 hours after the first three consecutive
   failures of the same input, and no automatic retry after the fourth. New
@@ -61,6 +63,16 @@
   video's page only when the API fails, leaves it out or cannot classify it.
   Each probe run costs one quota unit; the run result counts `apiRequests`.
   Without a key the probe reads watch pages as before.
+- With `YOUTUBE_API_KEY`, titles the creator localized on YouTube appear on
+  the board as `youtube` platform translations (`en` from any English key,
+  `zh-CN` from `zh`, `zh-CN` or `zh-Hans`). The recent step's `videos.list`
+  call now also asks for `localizations` (no extra quota unit) and fills its
+  batch of 50 with the newest listed uploads after the detail queue, so
+  titles localized after upload are picked up; a run whose listing answered
+  now always spends that one unit. A removed localization removes its row,
+  manual translations still win, and a video with both locales covered is
+  not sent to the translation model. Without a key no localized title is
+  read.
 
 </details>
 

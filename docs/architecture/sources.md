@@ -143,14 +143,19 @@ post that has fallen out of the discovered status list.
 
 The script reads the RSS feed for `YOUTUBE_CHANNEL_ID` (the current main channel
 by default), or with `YOUTUBE_API_KEY` the Data API's uploads playlist (see
-[Data API](#data-api)). It takes the newest listed uploads, at most the
-YouTube schedule's `max` or `count` (50 by default and for full syncs; the
-feed lists 15), and stores the ones not stored yet; see
-[source schedules](workflows.md#source-schedules). An operator
-`recent` window takes the listed uploads of its days instead, and a `count`
-window the newest `count`. Without a key, a `count` above the feed's 15 is
-partial and reports `youtube_count_limited`. The cursor is the newest listed
-upload. It separately inspects the streams page and keeps rechecking active or
+[Data API](#data-api)). It takes the newest listed uploads and stores the ones
+not stored yet; see [source schedules](workflows.md#source-schedules). An
+incremental run takes at most the YouTube schedule's `max` (50 by default and
+for full syncs; the feed lists 15) uploads that are not stored yet, plus the
+stored ones among the newest `max` as detail candidates. A `count` run, and an
+operator `count` window, take the newest `count` entries, stored or not, and
+an operator `recent` window the listed uploads of its days. Without a key, a
+`count` above the feed's 15 is partial and reports `youtube_count_limited`.
+The cursor is the newest listed upload. An incremental run that leaves a new
+upload above the stored cursor unread, because of its cap or a failed
+playlist page, keeps the cursor, so later runs take the rest while the
+listing still reaches it; without a cursor the first run is bounded on
+purpose. It separately inspects the streams page and keeps rechecking active or
 recent reservations for `scheduledStartTime`, writing them to both `videos` and
 `events`. When no schedule time is available, the script does not invent one. RSS insertion
 does not count as a reservation detail check, but RSS lists waiting rooms and
@@ -220,17 +225,23 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   ID after `UC`) is the listing, read like feed entries: the video's
   publication time (or the entry's), the title and the largest `*.ytimg.com`
   thumbnail. Private entries are skipped. Pages of 50 (one quota unit each,
-  at most four) follow `nextPageToken` until the run has its uploads; an
-  incremental run also stops at a page that holds a stored video. A failed
+  at most four) follow `nextPageToken` until the run has its uploads (new
+  ones, for an incremental run). An incremental run also stops at a page that
+  reaches the stored cursor (an entry at or below its time), or without a
+  cursor at a page that holds a stored video, so uploads an earlier capped
+  run left below newer stored ones are still read. A failed
   later page keeps the earlier ones. When the first page fails, the feed and
   then the uploads tab are tried as above.
-- One `videos.list` call (`snippet`, `contentDetails`, `liveStreamingDetails`)
-  covers the first 50 IDs of the detail queue. A described video counts as a
-  successful detail check without a watch-page request: its title, length
-  (ISO 8601 `duration`), and for a broadcast the actual start (or the
-  reservation), the actual end and `liveBroadcastContent` as
-  `upcoming`/`live`/`ended`. The watch-page budget
+- One `videos.list` call (`snippet`, `contentDetails`, `liveStreamingDetails`,
+  `localizations`) covers the first 50 IDs of the detail queue, and any room
+  left in it goes to the newest listed uploads of the run, stored or new. A
+  described queued video counts as a successful detail check without a
+  watch-page request: its title, length (ISO 8601 `duration`), and for a
+  broadcast the actual start (or the reservation), the actual end and
+  `liveBroadcastContent` as `upcoming`/`live`/`ended`. The watch-page budget
   (`YOUTUBE_MAX_DETAIL_REQUESTS`) then goes to the queued IDs the API left out.
+  An answer for a listed upload outside the queue only refreshes its
+  [localized titles](#localized-titles).
 - The API has no `isLiveContent`. An upcoming or live premiere already has its
   file's length while a stream reports `P0D`, so the length tells them apart
   until the broadcast ends. An ended broadcast is classified from its stored
@@ -265,6 +276,33 @@ back to the public pages; `apiRequests` in the step result counts the calls.
 The [live-status probe](#live-status-probe) asks the same `videos.list`
 first, one call and one quota unit per probe run, under the same
 classification rules.
+
+#### Localized Titles
+
+Titles the creator localized on YouTube are stored as
+[platform translations](data-model.md#translations) with platform `youtube`.
+Only a `videos.list` answer carries them, from its `localizations` part, which
+costs no extra quota unit; both the recent step's call and the live-status
+probe's call write them. Language keys map to the target locales: `en` and
+any `en-*` variant to `en`; `zh`, `zh-CN`, `zh-Hans` and `zh-Hans-*` to
+`zh-CN`. Traditional Chinese (`zh-TW`, `zh-Hant`, …) and other languages are
+ignored. When several keys fill one locale, the key naming the locale wins,
+then the first in sort order. A blank title, one equal to the video's
+original title, or one over `MaxTranslationRunes` is no translation.
+
+For every stored YouTube video an answer described, the writer upserts the
+locale's `youtube` row in the source's transaction and deletes it when the
+answer no longer fills that locale. A video the API did not answer, or a run
+whose call failed, keeps its rows. Manual and machine rows are never touched,
+and the dashboard revision moves only when readers see the change: a manual
+row of the locale hides the platform one. A video whose locales are all
+covered is not sent to the [translate step](#translation)'s model.
+
+Without `YOUTUBE_API_KEY` no localized title is read. A watch page requested
+with `hl=en` or `hl=zh-CN` shows the localized title in
+`videoPrimaryInfoRenderer`, but reading it would add two page requests per
+video to the bounded watch-page budget and the public pages' rate limits, and
+the page localizes by more than the query, so localized titles need the key.
 
 Video thumbnails are registered and linked to their rows, then the bounded media
 stage downloads pending files from YouTube's `*.ytimg.com` thumbnail CDN
@@ -357,8 +395,9 @@ names none. A live or ended broadcast's `startTimestamp` is its actual start
 and replaces the reservation time.
 
 With a key, one `videos.list` call (`snippet`, `contentDetails`,
-`liveStreamingDetails`) asks about all of a run's due videos before any
-watch page, and is read as in the [Data API](#data-api) detail check.
+`liveStreamingDetails`, `localizations`) asks about all of a run's due videos
+before any watch page, and is read as in the [Data API](#data-api) detail
+check, including the [localized titles](#localized-titles).
 `liveBroadcastContent` `upcoming` with a `scheduledStartTime` is `upcoming`;
 `live` without an `actualEndTime` is `live` and sets `LiveNow`; an
 `actualEndTime` is `ended` and writes the event's `ends_at`. The
@@ -802,11 +841,12 @@ Platform translations belong to source synchronization, not to this step,
 which only reads them. Writers store them through
 `UpsertPlatformTranslationTx` and remove them through
 `DeletePlatformTranslationTx` (see [Translations](data-model.md#translations)).
-No source writes them yet. The planned writers are YouTube titles a creator
-localized, read at the follow-up checks (the watch page's
-`videoPrimaryInfoRenderer` title under `hl=en` or `hl=zh-CN` differs from the
-original, while `videoDetails.title` stays the original), and the Chinese title
-of a Bilibili upload merged into a YouTube video.
+Two writers store them: the YouTube source, for the
+[titles a creator localized](#localized-titles) as a Data API answer reports
+them (platform `youtube`, `en` and `zh-CN`), and the
+[video merge](data-model.md#video-merging),
+for the title of a Bilibili upload merged into a YouTube video (platform
+`bilibili`, `zh-CN`).
 
 ## Related Docs
 

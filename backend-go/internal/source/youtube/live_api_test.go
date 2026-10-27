@@ -71,6 +71,11 @@ func TestProbeAsksTheDataAPIBeforeAnyWatchPage(t *testing.T) {
 	if result.APIRequests != 1 || result.Requested != 2 || result.Inspected != 5 || len(result.Attempted) != 5 || strings.Join(result.Errors, ",") != "youtube_http_error" {
 		t.Fatalf("result=%#v", result)
 	}
+	// Every answered video reports its localized titles, none here; the one
+	// the API left out reports nothing.
+	if _, missing := result.Localized["MMMMMMMMMMM"]; len(result.Localized) != 4 || missing || len(result.Localized["PPPPPPPPPPP"]) != 0 {
+		t.Fatalf("localized=%v", result.Localized)
+	}
 	got := map[string]Video{}
 	for _, v := range result.Videos {
 		got[v.ID] = v

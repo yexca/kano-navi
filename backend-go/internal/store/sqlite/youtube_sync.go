@@ -5,8 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
 )
@@ -83,6 +86,10 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 	if err != nil {
 		return err
 	}
+	translated, err := writeYoutubeLocalizations(ctx, tx, result.Localized, now)
+	if err != nil {
+		return err
+	}
 	meta, _ := json.Marshal(map[string]any{"streamDetailsCheckedIds": result.CheckedIDs, "feedEntries": result.Discovered, "detailRequested": result.Requested, "inspected": result.Inspected})
 	_, err = tx.ExecContext(ctx, `INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES('youtube',?,?,?,?,?) ON CONFLICT(source,account_id) DO UPDATE SET cursor_id=CASE WHEN julianday(excluded.cursor_time)>COALESCE(julianday(sync_state.cursor_time),0) THEN excluded.cursor_id ELSE sync_state.cursor_id END,cursor_time=CASE WHEN julianday(excluded.cursor_time)>COALESCE(julianday(sync_state.cursor_time),0) THEN excluded.cursor_time ELSE sync_state.cursor_time END,last_success_at=excluded.last_success_at,metadata_json=excluded.metadata_json`, channel, result.NextCursor, result.NextCursorTime, now, string(meta))
 	if err != nil {
@@ -91,7 +98,7 @@ func (s *Store) WriteYoutubeRecent(ctx context.Context, channel string, result y
 	if err = writeYoutubeQueue(ctx, tx, channel, result.Queue); err != nil {
 		return err
 	}
-	if len(result.Videos) > 0 || shorts {
+	if len(result.Videos) > 0 || shorts || translated {
 		if err = bumpRevision(ctx, tx, now); err != nil {
 			return ErrSourceWrite
 		}
@@ -149,6 +156,49 @@ func writeYoutubeShorts(ctx context.Context, tx *sql.Tx, shorts map[string]bool)
 			return false, ErrSourceWrite
 		}
 		changed = changed || count > 0
+	}
+	return changed, nil
+}
+
+// writeYoutubeLocalizations keeps the titles a creator localized on YouTube
+// as the platform translations (platform youtube) of the stored YouTube
+// videos the Data API answered for, after writeYoutubeVideos has added the
+// new ones. A locale the answer no longer fills loses its row; manual and
+// machine rows are never touched. It reports whether readers see a change:
+// a manual row of the locale hides the platform one.
+func writeYoutubeLocalizations(ctx context.Context, tx *sql.Tx, localized map[string]map[string]string, now string) (bool, error) {
+	changed := false
+	for _, id := range slices.Sorted(maps.Keys(localized)) {
+		var title string
+		err := tx.QueryRowContext(ctx, `SELECT title FROM videos WHERE id=? AND source='youtube'`, id).Scan(&title)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return false, ErrSourceWrite
+		}
+		for _, locale := range TranslationLocales {
+			text := strings.TrimSpace(localized[id][locale])
+			var written bool
+			if text == "" || utf8.RuneCountInString(text) > MaxTranslationRunes {
+				written, err = DeletePlatformTranslationTx(ctx, tx, TranslationOwnerVideo, id, "title", locale, "youtube")
+			} else {
+				written, err = UpsertPlatformTranslationTx(ctx, tx, TranslationWrite{
+					OwnerType: TranslationOwnerVideo, OwnerID: id, Field: "title", Locale: locale,
+					Platform: "youtube", Text: text, SourceText: title,
+				}, now)
+			}
+			if err != nil {
+				return false, ErrSourceWrite
+			}
+			if written && !changed {
+				var manual bool
+				if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM translations WHERE owner_type=? AND owner_id=? AND field='title' AND locale=? AND origin='manual')`, TranslationOwnerVideo, id, locale).Scan(&manual); err != nil {
+					return false, ErrSourceWrite
+				}
+				changed = !manual
+			}
+		}
 	}
 	return changed, nil
 }

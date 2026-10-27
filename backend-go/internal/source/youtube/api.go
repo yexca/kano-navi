@@ -4,14 +4,16 @@ import (
 	"encoding/json"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
 
 // The Data API is optional. With a key, the recent step lists the uploads
-// playlist and reads its detail candidates in one videos.list call before it
-// requests any watch page; see docs/architecture/sources.md.
+// playlist and reads its detail candidates and newest uploads in one
+// videos.list call before it requests any watch page; that call also returns
+// the titles the creator localized. See docs/architecture/sources.md.
 
 type apiThumbnails map[string]struct {
 	URL string `json:"url"`
@@ -102,6 +104,59 @@ type apiVideo struct {
 		ActualStart    string `json:"actualStartTime"`
 		ActualEnd      string `json:"actualEndTime"`
 	} `json:"liveStreamingDetails"`
+	// Localizations holds the creator's localized metadata by BCP-47
+	// language key.
+	Localizations map[string]struct {
+		Title string `json:"title"`
+	} `json:"localizations"`
+}
+
+// TitleLocales are the translation locales a localized title can fill.
+var TitleLocales = []string{"en", "zh-CN"}
+
+// titleLocale maps a YouTube language key to the translation locale it fills:
+// any English variant to en, and simplified or unmarked Chinese to zh-CN.
+// Traditional Chinese and other languages fill none and return "".
+func titleLocale(language string) string {
+	l := strings.ToLower(strings.TrimSpace(language))
+	switch {
+	case l == "en" || strings.HasPrefix(l, "en-"):
+		return "en"
+	case l == "zh" || l == "zh-cn" || l == "zh-hans" || strings.HasPrefix(l, "zh-hans-"):
+		return "zh-CN"
+	}
+	return ""
+}
+
+// localizedTitles returns the titles the creator localized for each of
+// TitleLocales, leaving out empty ones and ones equal to the original title.
+// When several keys fill one locale, the key naming the locale itself wins,
+// then the first key in sort order. The map is empty, never nil, for a video
+// with none.
+func localizedTitles(item apiVideo) map[string]string {
+	original := strings.TrimSpace(item.Snippet.Title)
+	keys := make([]string, 0, len(item.Localizations))
+	for key := range item.Localizations {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		ei := strings.EqualFold(keys[i], titleLocale(keys[i]))
+		ej := strings.EqualFold(keys[j], titleLocale(keys[j]))
+		if ei != ej {
+			return ei
+		}
+		return keys[i] < keys[j]
+	})
+	out := map[string]string{}
+	for _, key := range keys {
+		locale := titleLocale(key)
+		title := strings.TrimSpace(item.Localizations[key].Title)
+		if _, taken := out[locale]; locale == "" || taken || title == "" || title == original {
+			continue
+		}
+		out[locale] = title
+	}
+	return out
 }
 
 // ParseAPIVideos reads a videos.list answer by video ID. Videos the API does

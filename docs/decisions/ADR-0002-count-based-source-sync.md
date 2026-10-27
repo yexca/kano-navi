@@ -80,9 +80,11 @@ account has no cursor.
   and an operator YouTube `count` window reuses the uploads listing.
 - A YouTube count above 15 without a key is partial and reports
   `youtube_count_limited`.
-- A YouTube incremental run that lists `max` uploads without reaching a
-  stored one does not keep a continuation. Uploads arrive far more slowly
-  than X posts, and the uploads playlist answers 50 at a time.
+- A YouTube incremental run keeps no gap record. Its cap counts only uploads
+  not stored yet, and a run that leaves new uploads above the stored cursor
+  keeps the cursor, so later runs take them while the listing (the feed's 15
+  entries, or four playlist pages) still reaches them. Uploads arrive far
+  more slowly than X posts, and the uploads playlist answers 50 at a time.
 
 ## Alternatives Considered
 

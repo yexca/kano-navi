@@ -114,7 +114,9 @@ freezes it in `workflow_runs.source_sync_json`:
 - `{ "mode": "incremental", "max": 50 }`, the default: read newest first until
   a stored record, at most `max` (1–200) records that are not stored yet, per
   X account or for the YouTube channel. An X run that stops short leaves a
-  [timeline gap](sources.md#x) that later runs read.
+  [timeline gap](sources.md#x) that later runs read; a YouTube run that
+  leaves new uploads above its cursor keeps the cursor, and later runs take
+  them ([YouTube](sources.md#youtube)).
 - `{ "mode": "count", "count": N }`: read the newest `N` (1–200) every run,
   stored or not. X reads them as a `count` window from the timeline, which
   leaves the incremental cursor and pending queue alone. YouTube reads the

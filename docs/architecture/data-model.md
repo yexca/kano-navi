@@ -248,7 +248,11 @@ wording changed after it was written. Platform rows are owned by the source
 writers that store them (`UpsertPlatformTranslationTx`,
 `DeletePlatformTranslationTx` in `backend-go/internal/store/sqlite/translations.go`),
 which keep them current and remove them when the platform no longer provides
-one; readers do not compare their hash. Automatic writers never change a
+one; readers do not compare their hash. YouTube synchronization writes the
+`en` and `zh-CN` titles a creator localized (platform `youtube`, see
+[Localized titles](sources.md#localized-titles)), and the
+[video merge](#video-merging) writes a merged Bilibili upload's title
+(platform `bilibili`). Automatic writers never change a
 manual row, and every write that changes what readers see increments the
 dashboard revision.
 

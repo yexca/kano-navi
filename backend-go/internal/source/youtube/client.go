@@ -173,7 +173,8 @@ func (c *Client) PlaylistPage(ctx context.Context, key, channel, token string) (
 }
 
 // Videos reads up to MaxAPIVideos videos through the Data API's videos.list:
-// one quota unit for the whole batch.
+// one quota unit for the whole batch, whatever parts it names. The
+// localizations part carries the titles the creator localized.
 func (c *Client) Videos(ctx context.Context, key string, ids []string) ([]byte, error) {
 	if len(ids) == 0 || len(ids) > MaxAPIVideos {
 		return nil, &Error{"youtube_api_invalid_request"}
@@ -183,7 +184,7 @@ func (c *Client) Videos(ctx context.Context, key string, ids []string) ([]byte, 
 			return nil, &Error{"youtube_invalid_video"}
 		}
 	}
-	query := url.Values{"part": {"snippet,contentDetails,liveStreamingDetails"}, "id": {strings.Join(ids, ",")}, "maxResults": {"50"}}
+	query := url.Values{"part": {"snippet,contentDetails,liveStreamingDetails,localizations"}, "id": {strings.Join(ids, ",")}, "maxResults": {"50"}}
 	return c.api(ctx, "videos", query, key)
 }
 func (c *Client) api(ctx context.Context, resource string, query url.Values, key string) ([]byte, error) {
