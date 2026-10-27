@@ -196,7 +196,7 @@ func TestTimelineStatusesNormalizeOwnPostsFromThePage(t *testing.T) {
 			"author":{"screen_name":"Kano","name":"Kano","description":"the whole profile repeats on every status"},
 			"media":{"all":[{"type":"photo","url":"https://pbs.twimg.com/media/a.jpg"},{"type":"video","url":"https://video.twimg.com/v.mp4","thumbnail_url":"https://pbs.twimg.com/thumb/v.jpg"},{"type":"mosaic_photo","url":"https://pbs.twimg.com/mosaic/m.jpg"}]}},
 		{"type":"status","id":"QUOTING","text":"look","created_timestamp":EPOCH,"author":{"screen_name":"kano"},
-			"quote":{"type":"status","id":"1","text":"quoted","author":{"screen_name":"other"},"media":{"photos":[{"type":"photo","url":"https://pbs.twimg.com/media/q.jpg"}]}}},
+			"quote":{"type":"status","id":"1900000000000000001","text":"quoted","author":{"screen_name":"other","name":"Other","description":"repeated"},"media":{"photos":[{"type":"photo","url":"https://pbs.twimg.com/media/q.jpg"}]}}},
 		{"type":"status","id":"REPOST","text":"another author","created_timestamp":EPOCH,"author":{"screen_name":"other"}},
 		{"type":"status","id":"EMPTY","author":{"screen_name":"kano"}}]}`)
 	requests := 0
@@ -226,8 +226,14 @@ func TestTimelineStatusesNormalizeOwnPostsFromThePage(t *testing.T) {
 	if author := first.Raw["author"].(map[string]any); author["description"] != nil || author["screen_name"] != "Kano" {
 		t.Fatalf("raw author=%v", author)
 	}
-	if quote := page.Statuses[1].Post; quote == nil || strings.Join(quote.MediaURLs, ",") != "https://pbs.twimg.com/media/q.jpg" {
-		t.Fatalf("quote=%+v", quote)
+	// A quoted status's images belong to its quote, not to the quoting post.
+	quotePost := page.Statuses[1].Post
+	if quotePost == nil || len(quotePost.MediaURLs) != 0 || quotePost.Quote == nil || quotePost.Quote.ID != "1900000000000000001" || quotePost.Quote.AuthorName != "Other" ||
+		strings.Join(quotePost.Quote.MediaURLs, ",") != "https://pbs.twimg.com/media/q.jpg" {
+		t.Fatalf("quoting=%+v", quotePost)
+	}
+	if author := quotePost.Raw["quote"].(map[string]any)["author"].(map[string]any); author["description"] != nil {
+		t.Fatalf("raw quote author=%v", author)
 	}
 	// An entry without content keeps its ID and Snowflake time for the window.
 	if last := page.Statuses[2]; last.ID != empty || last.Post != nil || last.PublishedAt != "2026-10-24T08:00:00Z" {

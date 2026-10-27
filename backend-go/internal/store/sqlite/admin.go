@@ -37,6 +37,42 @@ type AdminPost struct {
 	MediaStatus string           `json:"mediaStatus"`
 	// Translation is nil for posts outside the machine scope (non-X).
 	Translation *AdminTranslation `json:"translation"`
+	// Quote is the quoted status as the board would show it, nil when the
+	// post quotes none. QuoteHiddenAt is when an operator hid it from the
+	// public pages; RefreshRequestedAt is a queued refresh from the source.
+	Quote              *AdminQuote `json:"quote"`
+	QuoteHiddenAt      *string     `json:"quoteHiddenAt"`
+	RefreshRequestedAt *string     `json:"refreshRequestedAt"`
+}
+
+// AdminQuote is a post's stored quote, read-only in the console. Media
+// lists only its ready cached images, apart from the post's own.
+type AdminQuote struct {
+	ID           string           `json:"id"`
+	AuthorHandle *string          `json:"authorHandle"`
+	AuthorName   *string          `json:"authorName"`
+	Text         *string          `json:"text"`
+	PublishedAt  *string          `json:"publishedAt"`
+	URL          string           `json:"url"`
+	Unavailable  bool             `json:"unavailable"`
+	Media        []AdminPostImage `json:"media"`
+}
+
+func adminQuote(q *PostQuote) *AdminQuote {
+	if q == nil {
+		return nil
+	}
+	text := func(v string) *string {
+		if v == "" {
+			return nil
+		}
+		return &v
+	}
+	out := &AdminQuote{ID: q.ID, AuthorHandle: text(q.AuthorHandle), AuthorName: text(q.AuthorName), Text: text(q.Text), PublishedAt: text(q.PublishedAt), URL: q.URL, Unavailable: q.Unavailable, Media: []AdminPostImage{}}
+	for _, m := range q.Media {
+		out.Media = append(out.Media, AdminPostImage{URL: m.URL, Status: m.Status, Alt: m.Alt})
+	}
+	return out
 }
 
 // AdminPostImage is one post image. URL is the local /media URL of a ready
@@ -408,19 +444,21 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	totalPages := pageCount(total, pageSize)
 	page = safePage(page, totalPages)
 	offset := (page - 1) * pageSize
-	query := `SELECT p.id,p.source,p.account_handle,p.text,p.published_at,p.url,p.media_url,p.media_alt,COALESCE(s.status,'never'),s.route,s.last_attempt_at,s.last_processed_at,s.last_error,s.last_extraction_id,COALESCE(s.reprocess_requested,0),COALESCE(s.failure_count,0),s.next_attempt_at FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE ` + where + ` ORDER BY julianday(p.published_at) DESC,p.id ASC LIMIT ? OFFSET ?`
+	query := `SELECT p.id,p.source,p.account_handle,p.text,p.published_at,p.url,p.media_url,p.media_alt,COALESCE(s.status,'never'),s.route,s.last_attempt_at,s.last_processed_at,s.last_error,s.last_extraction_id,COALESCE(s.reprocess_requested,0),COALESCE(s.failure_count,0),s.next_attempt_at,p.quote_json,p.quote_hidden_at,p.refresh_requested_at FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE ` + where + ` ORDER BY julianday(p.published_at) DESC,p.id ASC LIMIT ? OFFSET ?`
 	rows, err := s.db.QueryContext(ctx, query, append(args, pageSize, offset)...)
 	if err != nil {
 		return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
 	}
 	defer rows.Close()
 	items := []AdminPost{}
+	quotes := map[string]sql.NullString{}
 	for rows.Next() {
 		var p AdminPost
+		var quote, quoteHidden, refreshRequested sql.NullString
 		var account, mediaURL, mediaAlt, route, lastAttempt, lastProcessed, lastError, retryAt sql.NullString
 		var extraction sql.NullInt64
 		var requested, failures int
-		if err := rows.Scan(&p.ID, &p.Source, &account, &p.Text, &p.PublishedAt, &p.URL, &mediaURL, &mediaAlt, &p.LLMStatus, &route, &lastAttempt, &lastProcessed, &lastError, &extraction, &requested, &failures, &retryAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Source, &account, &p.Text, &p.PublishedAt, &p.URL, &mediaURL, &mediaAlt, &p.LLMStatus, &route, &lastAttempt, &lastProcessed, &lastError, &extraction, &requested, &failures, &retryAt, &quote, &quoteHidden, &refreshRequested); err != nil {
 			return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
 		}
 		p.AccountHandle = nullString(account)
@@ -432,6 +470,9 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 		p.LLMLastError = sanitizeLLMError(lastError)
 		p.LLMLastExtractionID = nullInt(extraction)
 		p.LLMReprocessRequested = requested != 0
+		p.QuoteHiddenAt = nullString(quoteHidden)
+		p.RefreshRequestedAt = nullString(refreshRequested)
+		quotes[p.ID] = quote
 		// A queued request runs regardless of the backoff.
 		if failures > 0 && !p.LLMReprocessRequested {
 			p.LLMRetryAt = nullString(retryAt)
@@ -448,6 +489,11 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 		if err := s.resolveAdminPostMedia(ctx, &items[i]); err != nil {
 			return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
 		}
+		quote, err := s.mapQuote(ctx, items[i].ID, quotes[items[i].ID])
+		if err != nil {
+			return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
+		}
+		items[i].Quote = adminQuote(quote)
 	}
 	ids := []string{}
 	for _, item := range items {
@@ -471,7 +517,7 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 // images, or else the stored media URL.
 func (s *Store) resolveAdminPostMedia(ctx context.Context, p *AdminPost) error {
 	p.Media, p.MediaStatus = []AdminPostImage{}, "none"
-	links, err := s.queryPostMedia(ctx, p.ID)
+	links, err := s.queryPostMedia(ctx, p.ID, "post-image")
 	if err != nil {
 		return err
 	}

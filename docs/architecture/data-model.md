@@ -15,7 +15,7 @@ belong to the TypeScript initializer. See
 | Table                    | Purpose                                                                                                |
 | ------------------------ | ------------------------------------------------------------------------------------------------------ |
 | `profiles`               | Name, bio, avatar, banner, and official entry points                                                   |
-| `posts`                  | X posts, account source, publication time, engagement counts, and media                                |
+| `posts`                  | X posts, account source, publication time, engagement counts, media, and the quoted status             |
 | `events`                 | Unified schedules, provenance, confidence, manual locks, tombstones, and duplicate merges              |
 | `event_sources`          | Source post/reservation identities attached to each event                                              |
 | `videos`                 | YouTube videos and streams, Bilibili uploads and their merges, corrections, and refresh requests       |
@@ -191,6 +191,52 @@ Complete post `media_urls` snapshots reconcile `post-image` ownership in the
 same transaction as the post write. An empty list removes all display links;
 omitted media fields preserve the known declaration. Failed source reads never
 call this writer. Cache rows/files may remain after a link is removed.
+
+## Quoted Posts
+
+A post that quotes another status keeps it in `posts.quote_json`, a
+sanitized projection (`id`, `authorHandle`, `authorName`, `text`,
+`publishedAt`, `url`, and `unavailable` for a quote the source names but
+does not carry). The quoted status's images are `media_links` with the role
+`quote-image` and the quoting post as owner; `quote_json` holds no image
+address, and a post's `post-image` links, `media_url` and
+`raw_json.mediaURLs` are its own images only. A post without a quote stores
+`NULL`. See [Quoted posts](sources.md#quoted-posts) for how the X adapter
+reads it and why quoted images are never schedule candidates.
+
+The public dashboard, the post archive and MCP add `quote` to each post:
+`{id, authorHandle, authorName, text, publishedAt, url, unavailable, media}`,
+where empty fields are `null` and `media` has the shape of the post's own
+`media` but lists only ready, contained opaque-ID images. The read path
+drops a stored projection whose ID is not a status ID or whose URL is not
+that status's x.com address. An unavailable quote has only `id` and `url`.
+The console's post list keeps a post's own images apart from its quote.
+
+`posts.quote_hidden_at` records an operator's decision to keep a post's
+quote off the public pages: the dashboard, the post archive and MCP then
+omit `quote` entirely, while the console still shows it. No synchronization
+path, refresh or backfill writes this column, so the decision survives every
+rewrite of `quote_json` and the `quote-image` links, like a manual lock.
+`posts.refresh_requested_at` is a queued refresh from the source, cleared
+once the X synchronization made its detail request (see
+[Refresh from the source](sources.md#refresh-from-the-source)). Both are
+additive columns, `NULL` by default.
+
+Startup adds `quote_json` additively. It then fills it for every X post
+whose `raw_json` names a quoted status (an object under `qrt`, `quote`,
+`quotedTweet` or `quoted_tweet`, or a `qrtURL`) and still has no
+projection, and moves the quoted images that earlier releases linked as
+the post's own. Those releases linked the post's own images first and the
+quoted status's after them, all as `post-image`; a `post-image` link moves to
+`quote-image` when its image is one of the quote's and not one the post's
+`raw_json` declares as its own, so the remaining own links keep their
+positions, and an image both declare stays the post's. `media_url` then
+names the first own image or `NULL`. The step reads only rows without a
+projection, so it is idempotent; it never clears a post or another link,
+and it increments the dashboard revision when it changes a row. A timeline
+page that lists a stored post again leaves it unchanged, so a post stored
+before the upgrade gets its quote from this step; any later detail refresh
+rewrites it from the source.
 
 The dashboard reads a bounded current-week/focus selection, not all history.
 Event totals and upcoming counts use SQL aggregates over all visible records;

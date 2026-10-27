@@ -66,6 +66,24 @@ export interface Post {
   /** Translations of the text and its detected language (ja, en, zh, ...). */
   translations?: Translations
   sourceLanguage?: string | null
+  /** The status this post quotes, shown nested in the post. */
+  quote?: PostQuote | null
+}
+
+/**
+ * A quoted X status. Its wording stays untranslated, and media lists only
+ * ready local images. An unavailable quote (deleted or withheld) has only
+ * its id and x.com url.
+ */
+export interface PostQuote {
+  id: string
+  authorHandle: string | null
+  authorName: string | null
+  text: string | null
+  publishedAt: string | null
+  url: string
+  unavailable: boolean
+  media: MediaItem[]
 }
 
 export interface ScheduleEvent {

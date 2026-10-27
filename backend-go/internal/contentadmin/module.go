@@ -1,5 +1,6 @@
 // Package contentadmin owns the operator routes for profile media, schedule
-// image reviews and post reprocess requests; see docs/architecture/admin-api.md.
+// image reviews, post reprocess requests and post quote decisions; see
+// docs/architecture/admin-api.md.
 package contentadmin
 
 import (
@@ -71,8 +72,8 @@ func failure(message string) error { return &opError{message: message} }
 
 func (m *Module) timestamp() string { return sqlite.ISOTime(m.now()) }
 
-// AdminRoutes lists the profile media, schedule image and post reprocess
-// endpoints. The router has already authenticated the session and applied the
+// AdminRoutes lists the profile media, schedule image, post reprocess and
+// post quote endpoints. The router has already authenticated the session and applied the
 // origin guard.
 func (m *Module) AdminRoutes() []httpx.Route {
 	id := func(next func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
@@ -92,6 +93,8 @@ func (m *Module) AdminRoutes() []httpx.Route {
 		{Method: http.MethodPost, Path: "/schedule-images/{id}/review", Handler: m.guard(id(m.manualReviewRoute))},
 		{Method: http.MethodPut, Path: "/schedule-images/{id}/period", Handler: m.guard(id(m.periodRoute))},
 		{Method: http.MethodPost, Path: "/posts/{id}/reprocess", Handler: m.guard(id(m.reprocessPost))},
+		{Method: http.MethodPut, Path: "/posts/{id}/quote/hidden", Handler: m.guard(id(m.quoteHiddenRoute))},
+		{Method: http.MethodPost, Path: "/posts/{id}/refresh", Handler: m.guard(id(m.refreshPostRoute))},
 	}
 }
 

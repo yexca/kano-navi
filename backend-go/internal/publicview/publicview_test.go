@@ -67,8 +67,8 @@ func TestDashboardProjectionKeepsOperatorColumnsOut(t *testing.T) {
 	// paths, raw provider errors and a credential-shaped message.
 	testutil.Exec(t, path, `
 	INSERT INTO profiles (id,display_name,x_url,updated_at,raw_json) VALUES ('p','Synthetic','https://x.example.invalid/synthetic','2026-01-02T00:00:00.000Z','{"token":"OPERATOR_ONLY_profile"}');
-	INSERT INTO posts (id,source,account_handle,type,text,published_at,url,likes,reposts,replies,media_url,raw_json) VALUES
-	 ('post-1','x','synthetic','daily','hello','2026-01-02T00:00:00.000Z','https://x.example.invalid/status/1',1,2,3,'https://media.example.invalid/post.png','{"search_text":"OPERATOR_ONLY_post search text"}');
+	INSERT INTO posts (id,source,account_handle,type,text,published_at,url,likes,reposts,replies,media_url,raw_json,quote_json) VALUES
+	 ('post-1','x','synthetic','daily','hello','2026-01-02T00:00:00.000Z','https://x.example.invalid/status/1',1,2,3,'https://media.example.invalid/post.png','{"search_text":"OPERATOR_ONLY_post search text"}','{"id":"1900000000000000001","authorHandle":"quoted_synthetic","text":"quoted wording","url":"https://x.com/quoted_synthetic/status/1900000000000000001","rawJson":"OPERATOR_ONLY_quote","mediaURLs":["https://media.example.invalid/OPERATOR_ONLY.png"]}');
 	INSERT INTO post_llm_states (post_id,status,last_error,failure_fingerprint,updated_at) VALUES ('post-1','failed','OPERATOR_ONLY_llm upstream said Bearer sk-OPERATOR_ONLY','OPERATOR_ONLY_fingerprint','');
 	INSERT INTO translations (owner_type,owner_id,field,locale,origin,platform,text,source_hash,provider_id,model_id,created_at,updated_at) VALUES
 	 ('post','post-1','text','en','manual','','hello in English','OPERATOR_ONLY_hash','OPERATOR_ONLY_provider','OPERATOR_ONLY_model','','');
@@ -80,7 +80,7 @@ func TestDashboardProjectionKeepsOperatorColumnsOut(t *testing.T) {
 	INSERT INTO event_sources (event_id,source,source_item_id,source_key,url,raw_json,created_at,updated_at) VALUES ('event-1','x','OPERATOR_ONLY_source','OPERATOR_ONLY_source_key','https://x.example.invalid/status/1','{"x":"OPERATOR_ONLY_event_source"}','','');
 	INSERT INTO media_assets (id,source,source_url,cache_path,sha256,status,etag,last_error,raw_json) VALUES
 	 ('media-post','x','https://media.example.invalid/post.png','/srv/OPERATOR_ONLY/data/x/post.png','OPERATOR_ONLY_media_sha','pending','OPERATOR_ONLY_etag','OPERATOR_ONLY_download C:\OPERATOR_ONLY\data','{"OPERATOR_ONLY":1}');
-	INSERT INTO media_links (media_id,owner_type,owner_id,role,position) VALUES ('media-post','post','post-1','image',0);
+	INSERT INTO media_links (media_id,owner_type,owner_id,role,position) VALUES ('media-post','post','post-1','image',0),('media-post','post','post-1','quote-image',0);
 	INSERT INTO profile_media (id,slot,source,source_url,active_cache_path,active_sha256,status,is_active,raw_json) VALUES
 	 ('avatar-1','avatar','x','https://media.example.invalid/avatar.png','/srv/OPERATOR_ONLY/avatar.png','OPERATOR_ONLY_avatar_sha','pending',1,'{"OPERATOR_ONLY":2}');
 	INSERT INTO assets (id,kind,url,source_url,alt,week_start,period_start,period_end,period_basis,source_account,updated_at,raw_json) VALUES
@@ -135,7 +135,7 @@ func TestDashboardProjectionKeepsOperatorColumnsOut(t *testing.T) {
 
 	// The records the markers ride on were all projected.
 	body, _ := encode(t, projections["dashboard"])
-	for _, id := range []string{`"post-1"`, `"video-1"`, `"event-1"`, `"asset-1"`, `"avatar-1"`, `"media-post"`, `"hello in English"`, `"Debut"`} {
+	for _, id := range []string{`"post-1"`, `"video-1"`, `"event-1"`, `"asset-1"`, `"avatar-1"`, `"media-post"`, `"hello in English"`, `"Debut"`, `"quoted wording"`} {
 		if !strings.Contains(body, id) {
 			t.Fatalf("dashboard lacks %s: %s", id, body)
 		}

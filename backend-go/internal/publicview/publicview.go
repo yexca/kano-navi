@@ -41,13 +41,7 @@ func Dashboard(d *sqlite.Dashboard) map[string]any {
 	}
 	posts := make([]any, 0, len(d.Posts))
 	for _, p := range d.Posts {
-		media := make([]any, 0, len(p.Media))
-		for _, m := range p.Media {
-			media = append(media, map[string]any{"id": value(m.ID), "url": value(m.URL), "status": m.Status, "sourceUrl": value(m.SourceURL), "alt": value(m.Alt), "position": m.Position, "width": valueInt(m.Width), "height": valueInt(m.Height)})
-		}
-		posts = append(posts, map[string]any{
-			"id": p.ID, "source": p.Source, "accountHandle": value(p.AccountHandle), "type": p.Type, "label": value(p.Label), "text": p.Text, "publishedAt": p.PublishedAt, "url": p.URL, "likes": p.Likes, "reposts": p.Reposts, "replies": p.Replies, "mediaUrl": value(p.MediaURL), "mediaAlt": value(p.MediaAlt), "accountUrl": value(p.AccountURL), "media": media, "mediaId": value(p.MediaID), "mediaStatus": p.MediaStatus, "mediaSourceUrl": value(p.MediaSourceURL), "translations": publicTranslations(p.Translations), "sourceLanguage": value(p.Translations.SourceLanguage),
-		})
+		posts = append(posts, publicPost(p))
 	}
 	events := make([]any, 0, len(d.Events))
 	for _, e := range d.Events {
@@ -125,11 +119,30 @@ func PublicEvent(e sqlite.DashboardEvent, extras bool) map[string]any {
 	return out
 }
 func publicPost(p sqlite.Post) map[string]any {
-	media := make([]any, 0, len(p.Media))
-	for _, m := range p.Media {
+	return map[string]any{"id": p.ID, "source": p.Source, "accountHandle": value(p.AccountHandle), "type": p.Type, "label": value(p.Label), "text": p.Text, "publishedAt": p.PublishedAt, "url": p.URL, "likes": p.Likes, "reposts": p.Reposts, "replies": p.Replies, "mediaUrl": value(p.MediaURL), "mediaAlt": value(p.MediaAlt), "accountUrl": value(p.AccountURL), "media": publicMedia(p.Media), "mediaId": value(p.MediaID), "mediaStatus": p.MediaStatus, "mediaSourceUrl": value(p.MediaSourceURL), "translations": publicTranslations(p.Translations), "sourceLanguage": value(p.Translations.SourceLanguage), "quote": publicQuote(p.Quote)}
+}
+
+func publicMedia(items []sqlite.PostMedia) []any {
+	media := make([]any, 0, len(items))
+	for _, m := range items {
 		media = append(media, map[string]any{"id": value(m.ID), "url": value(m.URL), "status": m.Status, "sourceUrl": value(m.SourceURL), "alt": value(m.Alt), "position": m.Position, "width": valueInt(m.Width), "height": valueInt(m.Height)})
 	}
-	return map[string]any{"id": p.ID, "source": p.Source, "accountHandle": value(p.AccountHandle), "type": p.Type, "label": value(p.Label), "text": p.Text, "publishedAt": p.PublishedAt, "url": p.URL, "likes": p.Likes, "reposts": p.Reposts, "replies": p.Replies, "mediaUrl": value(p.MediaURL), "mediaAlt": value(p.MediaAlt), "accountUrl": value(p.AccountURL), "media": media, "mediaId": value(p.MediaID), "mediaStatus": p.MediaStatus, "mediaSourceUrl": value(p.MediaSourceURL), "translations": publicTranslations(p.Translations), "sourceLanguage": value(p.Translations.SourceLanguage)}
+	return media
+}
+
+// publicQuote is the quoted status a post shows: its author, wording, time,
+// x.com link and ready images. Empty fields are null.
+func publicQuote(q *sqlite.PostQuote) any {
+	if q == nil {
+		return nil
+	}
+	text := func(s string) any {
+		if s == "" {
+			return nil
+		}
+		return s
+	}
+	return map[string]any{"id": q.ID, "authorHandle": text(q.AuthorHandle), "authorName": text(q.AuthorName), "text": text(q.Text), "publishedAt": text(q.PublishedAt), "url": q.URL, "unavailable": q.Unavailable, "media": publicMedia(q.Media)}
 }
 func publicVideo(v sqlite.Video) map[string]any {
 	return map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus), "durationSeconds": valueInt(v.DurationSeconds), "isShort": valueBool(v.IsShort), "translations": publicTranslations(v.Translations), "sourceLanguage": value(v.Translations.SourceLanguage), "alternates": publicAlternates(v.Alternates)}

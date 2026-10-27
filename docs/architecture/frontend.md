@@ -90,6 +90,30 @@ event status codes and the generated YouTube details become labels through
 stored, while other details and operator notes show as stored (see
 [Stored event text](data-model.md#stored-event-text)).
 
+A post that quotes another status (`post.quote`, see
+[Quoted posts](data-model.md#quoted-posts)) shows it nested in the post note,
+below the post's own wording and images and above the engagement counts: an
+indented card on the quieter sunken surface with "display name @handle ·
+time", the quoted wording clamped to four lines and up to three thumbnails
+("+N" counts the rest). The card follows the quoted post's x.com link from
+anywhere except its thumbnails, which open the image viewer with the quote's
+images. Read more also appears when the clamp hides quoted wording; the full
+post dialog and the archive show the whole quote with larger thumbnails. An
+unavailable quote shows a localized "Quoted post unavailable" placeholder
+linking to x.com. Quoted wording is shown as written, without translations.
+A quote an operator hid is absent from the snapshot, so the board shows the
+post without it.
+
+The console's post list (`src/admin/views/posts.tsx`) shows a post's quote
+read-only in its own cell under the wording, indented on the sunken surface
+so its thumbnails never read as the post's own images: author, time, the
+wording clamped to three lines, ready quote thumbnails that open the image
+viewer, or the unavailable state. Badges mark a quote hidden from the board
+and a queued refresh. Its actions hide the quote from the board or show it
+again, queue a refresh from the source (disabled while one is queued), and
+open the quoted post; nothing edits the quote itself. On narrow containers
+the quote cell spans the row.
+
 Post text and video titles come with server-resolved `translations` (see
 [Translations](data-model.md#translations)). `src/components/translated-text.tsx`
 chooses what a reader sees: English and Chinese readers get their locale's

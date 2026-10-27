@@ -1609,6 +1609,101 @@ button.adm-run-line:hover,
   grid-area: image;
 }
 
+/*
+ * A quoted post nests under the post's wording, indented on the sunken
+ * surface so its images never read as the post's own. A hidden quote dims
+ * its content and keeps a dashed edge.
+ */
+.adm-post-quote {
+  display: grid;
+  justify-self: stretch;
+  gap: 6px;
+  min-width: 0;
+  margin-left: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--adm-line);
+  border-left: 3px solid var(--adm-line-strong);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-sunken);
+  font-size: 13px;
+}
+
+.adm-post-quote.is-hidden {
+  border-style: dashed;
+  border-left-style: solid;
+}
+
+.adm-post-quote.is-hidden :is(.adm-post-quote-text, .adm-post-quote-media) {
+  opacity: 0.6;
+}
+
+.adm-post-quote-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-post-quote-head > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.adm-post-quote-kicker {
+  font-weight: 600;
+}
+
+.adm-post-quote-author {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-width: 0;
+}
+
+.adm-post-quote-author strong {
+  color: var(--adm-text);
+  overflow-wrap: anywhere;
+}
+
+.adm-post-quote-text {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.adm-post-quote-missing {
+  margin: 0;
+  color: var(--adm-muted);
+  font-style: italic;
+}
+
+.adm-post-quote-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.adm-post-quote-media .adm-post-thumb {
+  width: 44px;
+  height: 44px;
+}
+
+.adm-post-quote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
 /* A square crop of the first cached image; the count marks more images. */
 .adm-post-thumb {
   position: relative;
@@ -1784,6 +1879,49 @@ button.adm-run-line:hover,
 
   .adm-post-table .adm-post-route select {
     max-width: 220px;
+  }
+}
+
+/*
+ * A row with a quoted post gives the quote its own cell under the wording,
+ * which spans the row once the image moves beside the wording.
+ */
+.adm-post-quote-cell {
+  grid-area: quote;
+  min-width: 0;
+}
+
+.adm-post-table-row:has(> .adm-post-quote-cell) {
+  grid-template-areas:
+    "origin body image state route actions"
+    "origin quote image state route actions";
+  row-gap: 8px;
+}
+
+@container (max-width: 900px) {
+  .adm-post-table-row:has(> .adm-post-quote-cell) {
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      "origin image state route actions"
+      "body image state route actions"
+      "quote image state route actions";
+    row-gap: 4px;
+  }
+}
+
+@container (max-width: 640px) {
+  .adm-post-table-row:has(> .adm-post-quote-cell) {
+    grid-template-rows: none;
+    grid-template-areas:
+      "origin state"
+      "body image"
+      "quote quote"
+      "route actions";
+    gap: 8px 12px;
+  }
+
+  .adm-post-quote {
+    margin-left: 0;
   }
 }
 

@@ -247,10 +247,12 @@ alias); `none` never needs review and keeps `previewUrl` null.
 
 ## Posts
 
-| Method and path              | Body / query                                                                                         | Result        |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------- | ------------- |
-| `GET /posts`                 | `page`, `pageSize` (≤ 200), `source`, `account`, `from`, `to`, `search`, `media`, `llm`, `reprocess` | list of posts |
-| `POST /posts/{id}/reprocess` | `{route?}`                                                                                           | `{state}`     |
+| Method and path                | Body / query                                                                                         | Result        |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------- |
+| `GET /posts`                   | `page`, `pageSize` (≤ 200), `source`, `account`, `from`, `to`, `search`, `media`, `llm`, `reprocess` | list of posts |
+| `POST /posts/{id}/reprocess`   | `{route?}`                                                                                           | `{state}`     |
+| `PUT /posts/{id}/quote/hidden` | `{hidden}`                                                                                           | `{state}`     |
+| `POST /posts/{id}/refresh`     | none                                                                                                 | `{state}`     |
 
 `account` is an X handle, matched without case or a leading `@`; `media` is
 `present` or `missing`; `llm` is `never`, `pending`, `processed`, `failed`,
@@ -278,6 +280,31 @@ the stored media URL) as `{url, status, alt}`. `url` is the local
 ready; the remote address stays in `mediaUrl` and is never shown. `status` is
 `ready`, `pending`, `failed` or `missing`. `mediaStatus` repeats the first
 image's status, or is `none` for a text-only post.
+
+Each post also carries `quote`, the stored quoted status read-only (see
+[Quoted posts](data-model.md#quoted-posts)), or `null`:
+`{id, authorHandle, authorName, text, publishedAt, url, unavailable, media}`.
+Its `media` has the `{url, status, alt}` shape but lists only ready cached
+quote images, never the post's own. `quoteHiddenAt` is when an operator hid
+the quote from the public pages, and `refreshRequestedAt` is a queued
+refresh from the source; both are `null` otherwise. The console never edits
+the quoted wording, author or images.
+
+`PUT /posts/{id}/quote/hidden` with `{"hidden": true}` hides the post's
+quote from the dashboard, the post archive and MCP; `false` shows it again.
+`hidden` must be a JSON boolean. Hiding again keeps the first decision's
+time. A post without a stored quote answers `404 quote_not_found`.
+Synchronization never writes the decision, so it outlives every rewrite of
+the stored quote. A change increments the dashboard revision.
+
+`POST /posts/{id}/refresh` queues a stored X post for a detail request in
+the next X synchronization and removes its pending failure backoff; it
+contacts no source itself. A repeated request keeps the first request's
+place. Posts that are not X statuses with a known account answer
+`400 invalid_input`. See
+[Refresh from the source](sources.md#refresh-from-the-source). Both routes
+answer `{state: {postId, quoteHiddenAt, refreshRequestedAt}}`; MCP control
+has neither.
 
 ## Videos
 

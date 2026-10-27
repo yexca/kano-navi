@@ -139,6 +139,7 @@ func TestTimelineAndDetailStoreTheSameValues(t *testing.T) {
 				"media":     {strings.Join(fromDetail.MediaURLs, " "), strings.Join(fromTimeline.MediaURLs, " ")},
 				// Extraction declares the images raw_json lists as mediaURLs.
 				"declared": {string(decoded(t, fromDetail.Raw["mediaURLs"])), string(decoded(t, fromTimeline.Raw["mediaURLs"]))},
+				"quote":    {quoteSummary(t, fromDetail.Quote), quoteSummary(t, fromTimeline.Quote)},
 			} {
 				if pair[0] != pair[1] {
 					t.Errorf("%s: detail %v, timeline %v", field, pair[0], pair[1])
@@ -148,7 +149,76 @@ func TestTimelineAndDetailStoreTheSameValues(t *testing.T) {
 			if slices.ContainsFunc(fromDetail.MediaURLs, func(u string) bool { return strings.Contains(u, "video.twimg.com") || strings.Contains(u, "?") }) {
 				t.Errorf("media=%v", fromDetail.MediaURLs)
 			}
+			// A quoted status's image is the quote's, never the post's own.
+			if f.quote != nil {
+				q := fromDetail.Quote
+				if q == nil || q.ID != quoted.id || q.AuthorHandle != "other" || q.AuthorName != "Synthetic" || q.Text != "quoted" || q.PublishedAt != "2026-10-20T02:04:05Z" ||
+					q.URL != "https://x.com/other/status/"+quoted.id || q.Unavailable || strings.Join(q.MediaURLs, " ") != "https://pbs.twimg.com/media/quoted.jpg" {
+					t.Errorf("quote=%+v", q)
+				}
+				if slices.Contains(fromDetail.MediaURLs, "https://pbs.twimg.com/media/quoted.jpg") || slices.Contains(fromDetail.Raw["mediaURLs"].([]any), any("https://pbs.twimg.com/media/quoted.jpg")) {
+					t.Errorf("own media=%v declared=%v", fromDetail.MediaURLs, fromDetail.Raw["mediaURLs"])
+				}
+			} else if fromDetail.Quote != nil {
+				t.Errorf("quote=%+v", fromDetail.Quote)
+			}
 		})
+	}
+}
+
+// quoteSummary is a quote with its images, which its JSON form leaves out.
+func quoteSummary(t *testing.T, q *Quote) string {
+	t.Helper()
+	if q == nil {
+		return "nil"
+	}
+	return string(decoded(t, q)) + " " + strings.Join(q.MediaURLs, " ")
+}
+
+func TestQuoteOfReadsUnavailableAndUnsafeQuotes(t *testing.T) {
+	id := "1900000000000000001"
+	for name, tc := range map[string]struct {
+		payload map[string]any
+		want    string
+	}{
+		"no quote":            {map[string]any{"qrt": nil, "qrtURL": nil}, "nil"},
+		"vxtwitter could not": {map[string]any{"qrt": nil, "qrtURL": "https://x.com/other/status/" + id}, `{"id":"` + id + `","url":"https://x.com/i/status/` + id + `","unavailable":true} `},
+		"fxtwitter tombstone": {map[string]any{"quote": map[string]any{"type": "tombstone", "id": id, "text": "gone", "author": map[string]any{"screen_name": "other"}}}, `{"id":"` + id + `","url":"https://x.com/other/status/` + id + `","unavailable":true} `},
+		"without content":     {map[string]any{"quote": map[string]any{"type": "status", "id": id, "author": map[string]any{"screen_name": "other"}}}, `{"id":"` + id + `","url":"https://x.com/other/status/` + id + `","unavailable":true} `},
+		// The URL is built from the validated ID and handle, never copied.
+		"unsafe handle and url": {map[string]any{"qrt": map[string]any{"tweetID": id, "text": "hi", "user_screen_name": "../evil", "tweetURL": "https://evil.example.invalid/status/" + id}}, `{"id":"` + id + `","url":"https://x.com/i/status/` + id + `","unavailable":true} `},
+		"id from the url":       {map[string]any{"quote": map[string]any{"url": "https://x.com/other/status/" + id, "text": "hi", "author": map[string]any{"screen_name": "other", "name": strings.Repeat("名", 60)}}}, `{"id":"` + id + `","authorHandle":"other","authorName":"` + strings.Repeat("名", 50) + `","text":"hi","url":"https://x.com/other/status/` + id + `"} `},
+		"no usable id":          {map[string]any{"quote": map[string]any{"id": "1", "text": "hi", "author": map[string]any{"screen_name": "other"}}}, "nil"},
+	} {
+		if got := quoteSummary(t, QuoteOf(tc.payload)); got != tc.want {
+			t.Errorf("%s: %s, want %s", name, got, tc.want)
+		}
+	}
+}
+
+// A quoted status's image is never a schedule candidate, whether the post is
+// read from a timeline page or through a detail request.
+func TestQuotedImageIsNeverAScheduleCandidate(t *testing.T) {
+	at := func(h int) time.Time { return timelineNow.Add(-time.Duration(h) * time.Hour).Truncate(time.Second) }
+	quoted := &statusFixture{id: statusAt(at(40)), text: "スケジュール", at: at(40), author: "other", media: []mediaFixture{{kind: "photo", file: "https://pbs.twimg.com/media/other-week.jpg"}}}
+	fromPage := statusFixture{id: statusAt(at(1)), text: "今週の配信予定はこちら", at: at(1), quote: quoted}
+	fromDetail := statusFixture{id: statusAt(at(2)), text: "今週の配信予定", at: at(2), quote: quoted}
+	known := statusFixture{id: statusAt(at(30)), text: "stored", at: at(30)}
+	s := &timelineServer{bodies: map[string]string{"": fxPage(t, "", fromPage.timeline(), known.timeline())}}
+	s.detail = detailFor(t, map[string]statusFixture{fromDetail.id: fromDetail})
+	opts := Options{BootstrapDays: 7, DiscoveryLimit: 50, MaxDetailRequests: 5, ScheduleKeywords: []string{"配信予定"},
+		CursorID: known.id, KnownIDs: map[string]bool{known.id: true}, PendingIDs: []string{fromDetail.id}}
+	got, err := s.adapter(opts).FetchRecent(context.Background(), "kano", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Posts) != 2 || len(got.ScheduleCandidates) != 0 {
+		t.Fatalf("posts=%d candidates=%+v", len(got.Posts), got.ScheduleCandidates)
+	}
+	for _, p := range got.Posts {
+		if len(p.MediaURLs) != 0 || p.Quote == nil || strings.Join(p.Quote.MediaURLs, ",") != "https://pbs.twimg.com/media/other-week.jpg" {
+			t.Fatalf("post=%+v quote=%+v", p, p.Quote)
+		}
 	}
 }
 

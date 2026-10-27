@@ -205,7 +205,10 @@ CREATE TABLE posts (
     replies INTEGER DEFAULT 0,
     media_url TEXT,
     media_alt TEXT,
-    raw_json TEXT
+    raw_json TEXT,
+    quote_json TEXT,
+    quote_hidden_at TEXT,
+    refresh_requested_at TEXT
   );
 
 CREATE TABLE profile_media (

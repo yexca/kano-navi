@@ -1,7 +1,7 @@
 # Unreleased
 
 <details>
-<summary><strong>Public board</strong></summary>
+<summary><strong>Public pages</strong></summary>
 
 - The X posts section always has at least the eight newest posts, however
   old, so a quiet three-day window no longer leaves the wall half empty. The
@@ -10,6 +10,25 @@
   four, five in three columns show three). The profile's post count still
   counts the three-day window, and the section subtitle reads "Latest posts"
   instead of naming the window.
+- A post that quotes another X status shows it as a nested card below its
+  own wording and images: the quoted author, time, wording (clamped on the
+  board, whole in the full post and the archive) and small thumbnails that
+  open the image viewer. The card links to the quoted post on x.com, and a
+  deleted or withheld quote shows a "Quoted post unavailable" placeholder.
+
+</details>
+
+<details>
+<summary><strong>Operator console</strong></summary>
+
+- The post list shows a post's quoted post read-only in its own cell, apart
+  from the post's images: author, time, wording, cached thumbnails or the
+  unavailable state. An operator can hide the quote from the public board,
+  archive and MCP and show it again (`PUT /api/admin/posts/{id}/quote/hidden`);
+  synchronization never overrides that decision. **Refresh from source**
+  (`POST /api/admin/posts/{id}/refresh`) queues the post for a detail request
+  in the next X synchronization, even when a timeline page lists it or a
+  failure backoff holds it, and the list shows the queued refresh.
 
 </details>
 
@@ -21,5 +40,11 @@
   `pendingDropped` with `x_status_foreign`, instead of an `account_mismatch`
   error, a retry and a partial run. Profile fallbacks now queue only the
   account's own `/<handle>/status/<id>` links.
+- A quoted status's images are no longer merged into the quoting post's own
+  images. They are stored as the post's `quote-image` media beside a
+  sanitized `posts.quote_json` projection, and are never schedule
+  candidates or extraction input. The first start fills the projection for
+  stored posts from their `raw_json` and moves quoted images that earlier
+  releases linked as the post's own.
 
 </details>

@@ -64,7 +64,10 @@ packaging and provenance details.
 `media_links` associates an asset with a domain record without coupling the
 media table to every content table. Its owner tuple is `(owner_type, owner_id,
 role, position)`, for example `post / 209... / post-image / 0` or `video / abc /
-thumbnail / 0`.
+thumbnail / 0`. A post's own images use `post-image`; the images of a status
+it quotes use `quote-image` under the same post, so the board shows them in
+the quote card and extraction never reads them (see
+[Quoted posts](sources.md#quoted-posts)).
 
 The existing `media_url`, `thumbnail_url`, and image URL columns remain during
 the migration. They are source-snapshot fields and are not treated as safe
@@ -219,8 +222,10 @@ synthetic response bodies; CI does not download live media.
 
 ## Complete Post Media Declarations
 
-A successful complete post update replaces only its `post-image` links inside
-the post transaction, preserving declared order and removing vanished positions.
+A successful complete post update replaces only its `post-image` and
+`quote-image` links inside the post transaction, preserving declared order and
+removing vanished positions; an X API window, which does not read quotes,
+keeps the `quote-image` links.
 An explicit empty media list clears the links and primary source URL; an omitted
 media declaration retains the previous snapshot. Failed reads make no post write.
 Unreferenced cached bytes may be retained, but neither post display nor extraction

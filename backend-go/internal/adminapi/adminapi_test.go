@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/adminauth"
+	"github.com/yexca/kano-navi/backend-go/internal/contentadmin"
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/jobs"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
@@ -540,5 +541,37 @@ func TestLiveProbeSettings(t *testing.T) {
 	}
 	if _, payload = c.call(t, "GET", "/api/admin/sources/youtube/live-probe", ""); payload["lastRunAt"] == nil {
 		t.Fatalf("lastRunAt missing: %v", payload)
+	}
+}
+
+// The post quote decisions and the refresh request need the admin session
+// like every other content route; an anonymous request changes nothing.
+func TestPostQuoteRoutesRequireTheSession(t *testing.T) {
+	store, err := sqlite.OpenInitialized(filepath.Join(t.TempDir(), "database", "kano.sqlite"), true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	if _, err = store.DB().Exec(`INSERT INTO posts(id,source,account_handle,text,published_at,url,quote_json) VALUES('1900000000000000100','x','synthetic','look','2026-10-01T00:00:00.000Z','https://x.com/synthetic/status/1900000000000000100','{"id":"1900000000000000001","url":"https://x.com/other/status/1900000000000000001"}')`); err != nil {
+		t.Fatal(err)
+	}
+	c := &console{store: store, handler: New(Options{Store: store, Auth: newAuth(t, "production", "synthetic-password"), Modules: []httpx.AdminModule{contentadmin.New(store, contentadmin.Options{})}})}
+	for _, call := range [][3]string{
+		{"PUT", "/api/admin/posts/1900000000000000100/quote/hidden", `{"hidden":true}`},
+		{"POST", "/api/admin/posts/1900000000000000100/refresh", ""},
+	} {
+		if code, payload := c.call(t, call[0], call[1], call[2]); code != 401 || payload["error"] != "admin_auth_required" {
+			t.Fatalf("%s %s=%d %v", call[0], call[1], code, payload)
+		}
+	}
+	var hidden, refresh *string
+	if err = store.DB().QueryRow(`SELECT quote_hidden_at, refresh_requested_at FROM posts`).Scan(&hidden, &refresh); err != nil || hidden != nil || refresh != nil {
+		t.Fatalf("anonymous request changed the post: %v %v %v", hidden, refresh, err)
+	}
+	if code, _ := c.call(t, "POST", "/api/admin/session", `{"password":"synthetic-password"}`); code != 200 {
+		t.Fatalf("login=%d", code)
+	}
+	if code, payload := c.call(t, "PUT", "/api/admin/posts/1900000000000000100/quote/hidden", `{"hidden":true}`); code != 200 || payload["state"] == nil {
+		t.Fatalf("signed-in hide=%d %v", code, payload)
 	}
 }

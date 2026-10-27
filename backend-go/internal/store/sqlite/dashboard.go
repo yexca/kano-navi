@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -75,6 +76,21 @@ type Post struct {
 	MediaSourceURL *string
 	// Translations resolves the text's translations by precedence.
 	Translations TranslationSet
+	// Quote is the status the post quotes, nil when it quotes none.
+	Quote *PostQuote
+}
+
+// PostQuote is the stored projection of a quoted status. Media lists only
+// its ready cached images; an Unavailable quote has just its ID and URL.
+type PostQuote struct {
+	ID           string `json:"id"`
+	AuthorHandle string `json:"authorHandle"`
+	AuthorName   string `json:"authorName"`
+	Text         string `json:"text"`
+	PublishedAt  string `json:"publishedAt"`
+	URL          string `json:"url"`
+	Unavailable  bool   `json:"unavailable"`
+	Media        []PostMedia
 }
 
 type PostMedia struct {
@@ -565,6 +581,8 @@ type postRow struct {
 	id, source, accountHandle, typ, label, text, publishedAt, url, mediaURL, mediaAlt string
 	likes, reposts, replies                                                           int64
 	hasAccount, hasLabel, hasMediaURL, hasMediaAlt                                    bool
+	// quoteJSON is NULL in public reads when an operator hid the quote.
+	quoteJSON sql.NullString
 }
 
 // dashboardMinPosts is how many of the newest posts the board always lists,
@@ -575,7 +593,7 @@ const dashboardMinPosts = 8
 // queryPosts lists the posts published since the window start, and at least
 // the newest dashboardMinPosts of them.
 func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, source, account_handle, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt FROM posts WHERE julianday(published_at) >= julianday(?) OR id IN (SELECT id FROM posts ORDER BY julianday(published_at) DESC, id ASC LIMIT ?) ORDER BY julianday(published_at) DESC, id ASC LIMIT 100`, since, dashboardMinPosts)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, source, account_handle, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, CASE WHEN quote_hidden_at IS NULL THEN quote_json END FROM posts WHERE julianday(published_at) >= julianday(?) OR id IN (SELECT id FROM posts ORDER BY julianday(published_at) DESC, id ASC LIMIT ?) ORDER BY julianday(published_at) DESC, id ASC LIMIT 100`, since, dashboardMinPosts)
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -584,7 +602,7 @@ func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error)
 	for rows.Next() {
 		var r postRow
 		var account, label, mu, ma sql.NullString
-		if err := rows.Scan(&r.id, &r.source, &account, &r.typ, &label, &r.text, &r.publishedAt, &r.url, &r.likes, &r.reposts, &r.replies, &mu, &ma); err != nil {
+		if err := rows.Scan(&r.id, &r.source, &account, &r.typ, &label, &r.text, &r.publishedAt, &r.url, &r.likes, &r.reposts, &r.replies, &mu, &ma, &r.quoteJSON); err != nil {
 			return nil, dbErr(err)
 		}
 		r.accountHandle, r.hasAccount = account.String, account.Valid
@@ -601,7 +619,7 @@ func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error)
 func (s *Store) queryLatestPost(ctx context.Context) (*postRow, error) {
 	var r postRow
 	var account, label, mu, ma sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt FROM posts ORDER BY julianday(published_at) DESC,id ASC LIMIT 1`).Scan(&r.id, &r.source, &account, &r.typ, &label, &r.text, &r.publishedAt, &r.url, &r.likes, &r.reposts, &r.replies, &mu, &ma)
+	err := s.db.QueryRowContext(ctx, `SELECT id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,CASE WHEN quote_hidden_at IS NULL THEN quote_json END FROM posts ORDER BY julianday(published_at) DESC,id ASC LIMIT 1`).Scan(&r.id, &r.source, &account, &r.typ, &label, &r.text, &r.publishedAt, &r.url, &r.likes, &r.reposts, &r.replies, &mu, &ma, &r.quoteJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -650,7 +668,7 @@ func (s *Store) mapPost(ctx context.Context, r postRow) (Post, error) {
 		p.MediaURL = ref.PublicURL
 		p.Media = []PostMedia{{ID: ref.ID, URL: ref.PublicURL, Status: ref.Status, SourceURL: ref.SourceURL, Alt: p.MediaAlt, Position: 0, Width: ref.Width, Height: ref.Height}}
 	}
-	links, err := s.queryPostMedia(ctx, r.id)
+	links, err := s.queryPostMedia(ctx, r.id, "post-image")
 	if err != nil {
 		return p, err
 	}
@@ -658,10 +676,58 @@ func (s *Store) mapPost(ctx context.Context, r postRow) (Post, error) {
 		p.Media = links
 		p.MediaID, p.MediaURL, p.MediaStatus, p.MediaSourceURL = links[0].ID, links[0].URL, links[0].Status, links[0].SourceURL
 	}
+	if p.Quote, err = s.mapQuote(ctx, r.id, r.quoteJSON); err != nil {
+		return p, err
+	}
 	return p, nil
 }
-func (s *Store) queryPostMedia(ctx context.Context, id string) ([]PostMedia, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT ml.media_id,ml.position,ml.alt,ma.source_url,ma.cache_path,ma.mime_type,ma.byte_size,ma.sha256,NULLIF(ma.width,0),NULLIF(ma.height,0),ma.status FROM media_links ml LEFT JOIN media_assets ma ON ma.id=ml.media_id WHERE ml.owner_type='post' AND ml.owner_id=? AND ml.role='post-image' ORDER BY ml.position ASC`, id)
+
+var (
+	quoteIDPattern   = regexp.MustCompile(`^\d{10,22}$`)
+	quotePathPattern = regexp.MustCompile(`^/[A-Za-z0-9_]{1,30}/status/(\d{10,22})$`)
+)
+
+// quoteLinksTo reports whether a stored quote URL is exactly the x.com page
+// of the status id.
+func quoteLinksTo(raw, id string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host != "x.com" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+	m := quotePathPattern.FindStringSubmatch(u.Path)
+	return m != nil && m[1] == id
+}
+
+// mapQuote reads a post's stored quote. A projection that is not a valid
+// quote of an x.com status is left out; its images are the post's
+// quote-image links whose cached files are ready.
+func (s *Store) mapQuote(ctx context.Context, postID string, stored sql.NullString) (*PostQuote, error) {
+	if !stored.Valid || stored.String == "" {
+		return nil, nil
+	}
+	var q PostQuote
+	if json.Unmarshal([]byte(stored.String), &q) != nil || !quoteIDPattern.MatchString(q.ID) || !quoteLinksTo(q.URL, q.ID) {
+		return nil, nil
+	}
+	q.Media = []PostMedia{}
+	if q.Unavailable {
+		q.AuthorHandle, q.AuthorName, q.Text, q.PublishedAt = "", "", "", ""
+		return &q, nil
+	}
+	links, err := s.queryPostMedia(ctx, postID, roleQuoteImage)
+	if err != nil {
+		return nil, err
+	}
+	for _, link := range links {
+		if link.Status == "ready" && link.ID != nil && link.URL != nil {
+			q.Media = append(q.Media, link)
+		}
+	}
+	return &q, nil
+}
+
+func (s *Store) queryPostMedia(ctx context.Context, id, role string) ([]PostMedia, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT ml.media_id,ml.position,ml.alt,ma.source_url,ma.cache_path,ma.mime_type,ma.byte_size,ma.sha256,NULLIF(ma.width,0),NULLIF(ma.height,0),ma.status FROM media_links ml LEFT JOIN media_assets ma ON ma.id=ml.media_id WHERE ml.owner_type='post' AND ml.owner_id=? AND ml.role=? ORDER BY ml.position ASC`, id, role)
 	if err != nil {
 		return nil, dbErr(err)
 	}

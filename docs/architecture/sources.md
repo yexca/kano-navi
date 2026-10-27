@@ -80,7 +80,8 @@ own images (not a quoted status's) as `mediaURLs` too, because schedule
 extraction declares a post's images from that field. Photo-only posts already
 stored from detail answers keep identical values; a stored video or GIF post
 changes once, on its next refresh, from a file that could not be cached to
-its thumbnail.
+its thumbnail. A quoted status is read into the same
+[quote projection](#quoted-posts) on both paths.
 
 Operator fetch windows read the same timeline differently (see
 [Fetch windows](workflows.md#fetch-windows-and-historical-backfill)): without
@@ -88,9 +89,9 @@ Operator fetch windows read the same timeline differently (see
 always, request pages of 100 and store each own status from the page itself.
 The adapter maps FxTwitter's `created_timestamp`, `text`, counters and
 `media` (a photo's URL without the `?name=orig` size, or a video's or GIF's
-thumbnail, in post order, also inside a quoted status) onto the same post
-fields the detail path fills, and keeps only the author's name and handle of
-the repeated profile in `raw_json`. Such windows leave stored posts, the
+thumbnail, in post order; a quoted status's images belong to its quote) onto
+the same post fields the detail path fills, and keeps only the author's name
+and handle of the repeated profile, and of a quoted status's, in `raw_json`. Such windows leave stored posts, the
 cursor and the pending queue unchanged.
 
 Both discovery hosts and the detail host share one client: a fixed timeout and
@@ -134,8 +135,6 @@ appear only when used.
 Each discovered image URL is registered and linked to its post. A bounded media
 stage later in the same command downloads pending image files from X's
 `*.twimg.com` media CDN subdomains.
-The X adapter also accepts media carried by a quoted tweet (`qrt` in the
-detail response, `quote` on a timeline page).
 When a schedule asset already has a source status URL but no image URL, the
 synchronizer adds up to `X_SCHEDULE_REFRESH_LIMIT` recent source IDs per
 account to the detail-request queue. On a cursorless bootstrap with no asset
@@ -727,6 +726,54 @@ file. Missing links, partially ready images, absent files or unsafe paths keep
 `media_pending`, preserve a forced reprocess request, and cannot replace an
 existing complete extraction or retire its events. Text-only overrides do not
 bypass that readiness gate.
+
+### Quoted Posts
+
+A status a post quotes (`qrt` in the detail answer, `quote` on a timeline
+page) is never a post of its own: it does not enter `posts`, the timeline
+cursor, the pending queue or extraction. The adapter
+(`backend-go/internal/source/x/quote.go`) reads it into a sanitized
+projection stored beside the quoting post in `posts.quote_json`: the quoted
+status ID, its author's handle and display name, its wording (as written,
+untranslated), its publication time, and an x.com URL built from the
+validated ID and handle rather than copied from the payload. Its images (a
+photo, or a video's or GIF's thumbnail, at most four) are linked to the
+quoting post with the `quote-image` role and cached like the post's own
+(see [Media cache](media-cache.md)); `quote_json` holds no image address.
+
+A quote the payload names but does not carry is stored as unavailable with
+only its ID and URL: vxtwitter's `qrtURL` without `qrt`, an FxTwitter quote
+typed as anything other than a status (a tombstone), or a quoted status
+without an author or content. A payload that names no usable status ID
+stores no quote. The X API date-window path does not read referenced
+statuses, so it keeps a stored quote and its images instead of clearing
+them.
+
+An operator can hide a post's quote from the public pages
+(`posts.quote_hidden_at`); synchronization, the X API window and the
+upgrade backfill keep updating the stored quote underneath and never write
+that decision.
+
+#### Refresh from the Source
+
+An operator's refresh (`POST /api/admin/posts/{id}/refresh`) only stores
+`posts.refresh_requested_at` and removes the status's pending failure
+backoff. The next X recent synchronization reads up to 20 such posts per
+account, oldest request first, and puts them ahead of the queue. Each takes
+a detail request even when a timeline page lists the status (which would
+otherwise store it from the page and leave the stored post unchanged) and
+even while a failure backoff holds it. A usable answer rewrites the post,
+its quote and its `quote-image` links like any detail answer; the hide
+decision stays. The request is cleared once its detail request was made,
+whatever it answered; a failed request is then pending like any other. A
+refresh shares the `X_MAX_STATUS_REQUESTS` budget, so with a budget of 0 it
+waits. The step result counts made refreshes as `refreshed`, only when
+there were any.
+
+**Quoted images are never schedule candidates.** A post's `MediaURLs`, its
+`raw_json.mediaURLs` and its `post-image` links are its own images only, so
+a post that has only a quoted image becomes a text post for keyword
+candidates and extraction, whatever its wording says.
 
 ### Schedule Images
 

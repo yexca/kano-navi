@@ -24,7 +24,7 @@ func NewSnapshot(t testing.TB) string {
 		CREATE TABLE posts (
 			id TEXT PRIMARY KEY, source TEXT NOT NULL, account_handle TEXT, type TEXT NOT NULL DEFAULT 'daily', label TEXT,
 			text TEXT NOT NULL, published_at TEXT NOT NULL, url TEXT NOT NULL, likes INTEGER DEFAULT 0, reposts INTEGER DEFAULT 0,
-			replies INTEGER DEFAULT 0, media_url TEXT, media_alt TEXT, raw_json TEXT
+			replies INTEGER DEFAULT 0, media_url TEXT, media_alt TEXT, raw_json TEXT, quote_json TEXT, quote_hidden_at TEXT, refresh_requested_at TEXT
 		);
 		CREATE TABLE post_llm_states (
 			post_id TEXT PRIMARY KEY, status TEXT NOT NULL DEFAULT 'never', route TEXT,

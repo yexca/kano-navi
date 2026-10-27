@@ -47,6 +47,13 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 			return ErrSourceWrite
 		}
 	}
+	// A requested refresh is done once its detail request was made; the
+	// answer, if usable, was written above.
+	for _, id := range result.Refreshed {
+		if _, err = tx.ExecContext(ctx, `UPDATE posts SET refresh_requested_at=NULL WHERE id=? AND lower(account_handle)=lower(?)`, id, account); err != nil {
+			return ErrSourceWrite
+		}
+	}
 	for _, c := range result.ScheduleCandidates {
 		if c.MediaURL == "" || c.SourceURL == "" || kept[c.PostID] {
 			continue
@@ -148,7 +155,7 @@ func writeXPost(ctx context.Context, tx *sql.Tx, account string, p xsource.Post,
 	if len(p.MediaURLs) > 0 {
 		media = p.MediaURLs[0]
 	}
-	written, err := tx.ExecContext(ctx, `INSERT INTO posts(id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,raw_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET account_handle=excluded.account_handle,type=excluded.type,label=excluded.label,text=excluded.text,published_at=excluded.published_at,url=excluded.url,likes=excluded.likes,reposts=excluded.reposts,replies=excluded.replies,media_url=excluded.media_url,media_alt=excluded.media_alt,raw_json=excluded.raw_json WHERE lower(posts.account_handle)=lower(excluded.account_handle) OR posts.account_handle IS NULL`, p.ID, "x", account, p.Type, p.Label, p.Text, p.PublishedAt, p.URL, p.Likes, p.Reposts, p.Replies, nullable(media), nullable(p.MediaAlt), string(raw))
+	written, err := tx.ExecContext(ctx, `INSERT INTO posts(id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,raw_json,quote_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET account_handle=excluded.account_handle,type=excluded.type,label=excluded.label,text=excluded.text,published_at=excluded.published_at,url=excluded.url,likes=excluded.likes,reposts=excluded.reposts,replies=excluded.replies,media_url=excluded.media_url,media_alt=excluded.media_alt,raw_json=excluded.raw_json,quote_json=CASE WHEN ? THEN posts.quote_json ELSE excluded.quote_json END WHERE lower(posts.account_handle)=lower(excluded.account_handle) OR posts.account_handle IS NULL`, p.ID, "x", account, p.Type, p.Label, p.Text, p.PublishedAt, p.URL, p.Likes, p.Reposts, p.Replies, nullable(media), nullable(p.MediaAlt), string(raw), quoteJSON(p.Quote), p.QuoteUnread)
 	if err != nil {
 		return false, err
 	}
@@ -157,7 +164,8 @@ func writeXPost(ctx context.Context, tx *sql.Tx, account string, p xsource.Post,
 	} else if count != 1 {
 		return false, nil
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM media_links WHERE owner_type='post' AND owner_id=? AND role='post-image'`, p.ID); err != nil {
+	// A source that does not read quotes keeps the stored quote and its images.
+	if _, err = tx.ExecContext(ctx, `DELETE FROM media_links WHERE owner_type='post' AND owner_id=? AND (role='post-image' OR (role=? AND NOT ?))`, p.ID, roleQuoteImage, p.QuoteUnread); err != nil {
 		return false, err
 	}
 	for i, u := range p.MediaURLs {
@@ -165,7 +173,45 @@ func writeXPost(ctx context.Context, tx *sql.Tx, account string, p xsource.Post,
 			return false, err
 		}
 	}
+	if p.Quote != nil && !p.QuoteUnread {
+		if err = writeQuoteMedia(ctx, tx, p.ID, p.Quote.MediaURLs, now); err != nil {
+			return false, err
+		}
+	}
 	return true, nil
+}
+
+// roleQuoteImage links a quoted status's images to the quoting post, apart
+// from its own post-image links, which alone feed schedule extraction.
+const roleQuoteImage = "quote-image"
+
+// quoteJSON is the stored quote projection; its images are media links.
+func quoteJSON(q *xsource.Quote) any {
+	if q == nil {
+		return nil
+	}
+	body, err := json.Marshal(q)
+	if err != nil {
+		return nil
+	}
+	return string(body)
+}
+
+// writeQuoteMedia registers a quoted status's images as pending candidates.
+// A quoted image the cache cannot identify is left out rather than failing
+// the post.
+func writeQuoteMedia(ctx context.Context, tx *sql.Tx, postID string, urls []string, now string) error {
+	position := 0
+	for _, u := range urls {
+		if _, _, err := mediaIdentity(u); err != nil {
+			continue
+		}
+		if err := replaceMediaLink(ctx, tx, "x", u, "post", postID, roleQuoteImage, position, now); err != nil {
+			return err
+		}
+		position++
+	}
+	return nil
 }
 func nullable(v string) any {
 	if strings.TrimSpace(v) == "" {
@@ -208,7 +254,14 @@ type XRecentState struct {
 	CursorID string
 	// Gap is the timeline stretch a capped run left unread, or nil.
 	Gap *xsource.Gap
+	// RefreshIDs are the account's posts an operator asked to read again,
+	// oldest request first.
+	RefreshIDs []string
 }
+
+// maxRefreshIDs bounds the refreshes one run reads for an account; the
+// rest wait for the next run.
+const maxRefreshIDs = 20
 
 func (s *Store) XAccountStart(ctx context.Context, handles []string) (int, error) {
 	var next string
@@ -272,6 +325,22 @@ func (s *Store) XRecentState(ctx context.Context, account string) (XRecentState,
 		out.KnownIDs[id] = true
 	}
 	if rows.Err() != nil {
+		return out, ErrSourceWrite
+	}
+	rows.Close()
+	refresh, err := s.db.QueryContext(ctx, `SELECT id FROM posts WHERE source='x' AND lower(account_handle)=lower(?) AND refresh_requested_at IS NOT NULL ORDER BY refresh_requested_at,id LIMIT ?`, account, maxRefreshIDs)
+	if err != nil {
+		return out, ErrSourceWrite
+	}
+	defer refresh.Close()
+	for refresh.Next() {
+		var id string
+		if refresh.Scan(&id) != nil {
+			return out, ErrSourceWrite
+		}
+		out.RefreshIDs = append(out.RefreshIDs, id)
+	}
+	if refresh.Err() != nil {
 		return out, ErrSourceWrite
 	}
 	return out, nil

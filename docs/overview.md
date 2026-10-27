@@ -61,9 +61,11 @@ snapshot health dot.
    six posts or two rows, whichever is more, and a single row when fewer
    posts would leave the last row short (a long post shows six lines and Read
    more opens it whole in a dialog), with an account filter, an image viewer,
-   and engagement counts. The profile's post count
-   still counts the three-day window. When no post is stored at all the
-   section says so. A Past posts dialog browses every stored post month by
+   and engagement counts. A post that quotes another status shows it as a
+   nested card (author, time, wording, small thumbnails) linking to x.com.
+   The profile's post count still counts the three-day window. When no post
+   is stored at all the section says so. A Past posts dialog browses every
+   stored post month by
    month in a masonry wall, with the same account filter and per-account
    counts.
 4. Streams and works (YouTube, with bilibili links): a large lead card for

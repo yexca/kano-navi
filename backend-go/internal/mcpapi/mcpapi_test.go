@@ -53,10 +53,11 @@ func seed(t *testing.T, store *sqlite.Store) {
 		 VALUES ('manual-public-event','manual','Manual schedule','2026-09-03','Asia/Tokyo','unknown','event','manual',1,'none','2026-09-01T00:00:00.000Z','2026-09-01T00:00:00.000Z')`,
 		`INSERT INTO events (id,source,title,starts_on,timezone,time_precision,event_type,provenance,manual_locked,cancellation_status,deleted_at,created_at,updated_at)
 		 VALUES ('deleted-public-event','manual','Deleted schedule','2026-09-04','Asia/Tokyo','unknown','event','manual',1,'none','2026-09-01T00:00:00.000Z','2026-09-01T00:00:00.000Z','2026-09-01T00:00:00.000Z')`,
-		`INSERT INTO posts (id,source,account_handle,type,text,published_at,url,raw_json)
-		 VALUES ('post-1','x','example','post','first synthetic post','2026-09-01T10:00:00.000Z','https://x.com/example/status/1','{"note":"raw-json-placeholder"}')`,
-		`INSERT INTO posts (id,source,account_handle,type,text,published_at,url)
-		 VALUES ('post-2','x','example','post','second synthetic post','2026-09-01T12:00:00.000Z','https://x.com/example/status/2')`,
+		// An operator hid the first post's quote; the second shows its own.
+		`INSERT INTO posts (id,source,account_handle,type,text,published_at,url,raw_json,quote_json,quote_hidden_at)
+		 VALUES ('post-1','x','example','post','first synthetic post','2026-09-01T10:00:00.000Z','https://x.com/example/status/1','{"note":"raw-json-placeholder"}','{"id":"1900000000000000001","text":"hidden quoted wording","authorHandle":"quoted_example","url":"https://x.com/quoted_example/status/1900000000000000001"}','2026-09-01T11:00:00.000Z')`,
+		`INSERT INTO posts (id,source,account_handle,type,text,published_at,url,quote_json)
+		 VALUES ('post-2','x','example','post','second synthetic post','2026-09-01T12:00:00.000Z','https://x.com/example/status/2','{"id":"1900000000000000002","text":"shown quoted wording","authorHandle":"quoted_example","url":"https://x.com/quoted_example/status/1900000000000000002"}')`,
 		`INSERT INTO sync_runs (source,started_at,finished_at,status,message,counts_json,triggered_by,job_id)
 		 VALUES ('manual','2026-09-01T00:00:00.000Z','2026-09-01T00:00:05.000Z','partial','raw diagnostic message','{"rawError":"raw upstream failure"}','internal-trigger-placeholder','internal-job-placeholder')`,
 		`INSERT INTO sync_runs (source,started_at,finished_at,status,message,counts_json,triggered_by,job_id)
@@ -535,6 +536,13 @@ func TestPostsListReadsTheStoredSnapshot(t *testing.T) {
 	}
 	if posts[0].(map[string]any)["id"] != "post-2" {
 		t.Fatalf("newest post first, got %v", posts[0])
+	}
+	// A quote an operator hid is left out entirely.
+	if quote, _ := posts[0].(map[string]any)["quote"].(map[string]any); quote["text"] != "shown quoted wording" {
+		t.Fatalf("shown quote = %v", posts[0])
+	}
+	if hidden := posts[1].(map[string]any)["quote"]; hidden != nil || strings.Contains(response.body, "hidden quoted wording") {
+		t.Fatalf("hidden quote = %v", hidden)
 	}
 	assertNoOperatorData(t, "posts_list", response.body)
 

@@ -145,7 +145,7 @@ type schemaQuerier interface {
 func verifySchema(ctx context.Context, db schemaQuerier) error {
 	required := map[string][]string{
 		"profiles":               {"id", "display_name", "romanized_name", "bio", "avatar_url", "banner_url", "x_url", "youtube_url", "updated_at"},
-		"posts":                  {"id", "source", "account_handle", "type", "label", "text", "published_at", "url", "likes", "reposts", "replies", "media_url", "media_alt", "raw_json"},
+		"posts":                  {"id", "source", "account_handle", "type", "label", "text", "published_at", "url", "likes", "reposts", "replies", "media_url", "media_alt", "raw_json", "quote_json", "quote_hidden_at", "refresh_requested_at"},
 		"post_llm_states":        {"post_id", "status", "route", "last_attempt_at", "last_processed_at", "last_error", "last_extraction_id", "reprocess_requested", "failure_count", "failure_fingerprint", "next_attempt_at"},
 		"events":                 {"id", "source", "source_item_id", "source_key", "title", "detail", "starts_on", "starts_at", "ends_at", "timezone", "time_precision", "status", "event_type", "url", "provenance", "manual_locked", "cancellation_status", "cancellation_source", "cancellation_reason", "cancellation_evidence", "cancellation_source_item_id", "cancellation_confidence", "cancellation_at", "deleted_at", "created_at", "updated_at", "merged_into", "merge_source", "merge_reason", "merged_at"},
 		"event_sources":          {"event_id", "source", "source_item_id", "deleted_at"},

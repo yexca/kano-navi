@@ -151,6 +151,10 @@ type Options struct {
 	// Gap is the unread stretch an earlier capped run left, read after the
 	// newest pages.
 	Gap *Gap
+	// RefreshIDs are stored statuses an operator asked to read again. Each
+	// takes a detail request ahead of the rest, even when a timeline page
+	// carries it or a failure backoff holds it.
+	RefreshIDs []string
 }
 
 func DefaultOptions() Options {
@@ -226,7 +230,13 @@ type Post struct {
 	MediaURLs                                              []string
 	MediaAlt                                               string
 	AuthorScreenName                                       string
-	Raw                                                    map[string]any
+	// Quote is the status the post quotes, nil when it quotes none. Its
+	// images are never the post's own MediaURLs.
+	Quote *Quote
+	// QuoteUnread marks a source that does not read quotes (the X API
+	// window), so a stored quote is kept rather than cleared.
+	QuoteUnread bool
+	Raw         map[string]any
 }
 type ScheduleCandidate struct{ PostID, SourceURL, MediaURL, AccountHandle string }
 type Result struct {
@@ -253,6 +263,9 @@ type Result struct {
 	// there is none; Notes are controlled codes about it.
 	Gap   *Gap
 	Notes []string
+	// Refreshed lists the requested refreshes whose detail request was
+	// made, whatever it answered.
+	Refreshed []string
 }
 
 type Adapter struct {
@@ -331,7 +344,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		ids = filtered
 	}
 	result.DiscoveredCount = len(ids)
-	if len(ids) == 0 && len(opts.PendingIDs) == 0 {
+	if len(ids) == 0 && len(opts.PendingIDs) == 0 && len(opts.RefreshIDs) == 0 {
 		return result, &Error{Code: ErrInvalidResponse, Err: errors.New("no status ids")}
 	}
 	queue := []string{}
@@ -340,6 +353,13 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		if statusIDPattern.MatchString(id) && !seen[id] {
 			queue = append(queue, id)
 			seen[id] = true
+		}
+	}
+	// An operator's refresh goes first and always takes a detail request.
+	forced := map[string]bool{}
+	for _, id := range opts.RefreshIDs {
+		if add(id); seen[id] {
+			forced[id] = true
 		}
 	}
 	for _, id := range opts.PendingIDs {
@@ -353,6 +373,9 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 	// Known posts are refreshed through the detail request even when the
 	// timeline lists them, so a stored post is rewritten from one shape only.
 	refreshing := map[string]bool{}
+	for id := range forced {
+		refreshing[id] = true
+	}
 	refresh := opts.RefreshKnown
 	for _, id := range ids {
 		if opts.KnownIDs[id] && refresh > 0 {
@@ -387,7 +410,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 			result.FromTimeline[id] = true
 			continue
 		}
-		if retry, ok := opts.PendingRetries[id]; ok && retry.waiting(now) {
+		if retry, ok := opts.PendingRetries[id]; ok && retry.waiting(now) && !forced[id] {
 			result.Held++
 			continue
 		}
@@ -446,6 +469,11 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		if !accept(post) {
 			result.Dropped = append(result.Dropped, DroppedStatus{ID: id, Code: DroppedForeign})
 			foreign++
+		}
+	}
+	for _, id := range detail {
+		if forced[id] && attempted[id] {
+			result.Refreshed = append(result.Refreshed, id)
 		}
 	}
 	// Unattempted work keeps its order and failed work moves behind it, so a

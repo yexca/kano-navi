@@ -296,6 +296,27 @@ export interface AdminPost {
   llmRetryStopped: boolean
   /** Null for posts the translate step does not cover (non-X). */
   translation: AdminTranslation | null
+  /** The status the post quotes, read-only; null when it quotes none. */
+  quote: AdminQuote | null
+  /** When an operator hid the quote from the public pages. */
+  quoteHiddenAt: string | null
+  /** A refresh from the source waiting for the next X synchronization. */
+  refreshRequestedAt: string | null
+}
+
+/**
+ * A post's stored quote. Media lists only its ready cached images, apart
+ * from the post's own; an unavailable quote has only its id and url.
+ */
+export interface AdminQuote {
+  id: string
+  authorHandle: string | null
+  authorName: string | null
+  text: string | null
+  publishedAt: string | null
+  url: string
+  unavailable: boolean
+  media: AdminPostImage[]
 }
 
 export type TranslationOwner = "post" | "video"

@@ -32,8 +32,10 @@ func Normalize(payload map[string]any, fallbackID, account string) *Post {
 	if own := extendedMediaURLs(payload); own != nil {
 		payload["mediaURLs"] = own
 	}
-	media := mediaURLs(payload, 0)
-	if id == "" || published == "" || (text == "" && len(media) == 0) {
+	// A quoted status's images stay out of the post's own media.
+	media := mediaURLs(payload)
+	quote := QuoteOf(payload)
+	if id == "" || published == "" || (text == "" && len(media) == 0 && quote == nil) {
 		return nil
 	}
 	author := object(payload["author"])
@@ -52,7 +54,7 @@ func Normalize(payload map[string]any, fallbackID, account string) *Post {
 		u = "https://x.com/" + account + "/status/" + id
 	}
 	u = strings.ReplaceAll(u, "twitter.com", "x.com")
-	p := &Post{ID: id, AccountHandle: account, Type: "daily", Label: "DAILY / 近况", Text: text, PublishedAt: published, URL: u, Likes: number(first(payload, "likes", "likeCount")), Reposts: number(first(payload, "retweets", "reposts", "retweetCount")), Replies: number(first(payload, "replies", "replyCount")), MediaURLs: media, AuthorScreenName: screen, Raw: payload}
+	p := &Post{ID: id, AccountHandle: account, Type: "daily", Label: "DAILY / 近况", Text: text, PublishedAt: published, URL: u, Likes: number(first(payload, "likes", "likeCount")), Reposts: number(first(payload, "retweets", "reposts", "retweetCount")), Replies: number(first(payload, "replies", "replyCount")), MediaURLs: media, AuthorScreenName: screen, Quote: quote, Raw: payload}
 	if strings.Contains(strings.ToLower(text), "schedule") || strings.Contains(text, "スケジュール") || strings.Contains(text, "配信予定") || strings.Contains(text, "週間予定") || strings.Contains(text, "今週の予定") {
 		p.Type = "notice"
 		p.Label = "SCHEDULE / 日程"
@@ -98,10 +100,8 @@ func number(v any) int {
 	}
 	return 0
 }
-func mediaURLs(payload map[string]any, depth int) []string {
-	if depth > 2 {
-		return nil
-	}
+// mediaURLs lists a status's own images, never those of a status it quotes.
+func mediaURLs(payload map[string]any) []string {
 	out := []string{}
 	add := func(v any) {
 		if s, ok := v.(string); ok && s != "" {
@@ -133,12 +133,6 @@ func mediaURLs(payload map[string]any, depth int) []string {
 	}
 	for _, u := range fxMediaURLs(object(payload["media"])) {
 		add(u)
-	}
-	for _, k := range []string{"qrt", "quotedTweet", "quoted_tweet", "quote"} {
-		if m := object(payload[k]); len(m) > 0 {
-			out = append(out, mediaURLs(m, depth+1)...)
-			break
-		}
 	}
 	uniq := []string{}
 	seen := map[string]bool{}

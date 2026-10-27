@@ -95,6 +95,10 @@ const messages = {
     "feed.replies": "回复",
     "feed.readMore": "展开全文",
     "feed.fullPost": "动态全文",
+    "feed.quoteUnavailable": "引用的动态已无法查看",
+    "feed.openQuote": ({ name }: { name: any }) =>
+      `在 X 打开被引用的 ${name} 的动态`,
+    "feed.openQuoteMedia": "查看引用动态的图片",
     "translation.machine": "AI 翻译",
     "translation.machineShort": "AI",
     "translation.machineHint": "由 AI 模型自动翻译，可能有误。",
@@ -333,6 +337,10 @@ const messages = {
     "feed.replies": "返信",
     "feed.readMore": "全文を表示",
     "feed.fullPost": "ポストの全文",
+    "feed.quoteUnavailable": "引用元のポストは表示できません",
+    "feed.openQuote": ({ name }: { name: any }) =>
+      `${name} の引用元ポストを X で開く`,
+    "feed.openQuoteMedia": "引用元の画像を開く",
     "translation.machine": "AI 翻訳",
     "translation.machineShort": "AI",
     "translation.machineHint":
@@ -573,6 +581,10 @@ const messages = {
     "feed.replies": "Replies",
     "feed.readMore": "Read more",
     "feed.fullPost": "Full post",
+    "feed.quoteUnavailable": "Quoted post unavailable",
+    "feed.openQuote": ({ name }: { name: any }) =>
+      `Open the quoted post by ${name} on X`,
+    "feed.openQuoteMedia": "Open quoted image",
     "translation.machine": "AI translation",
     "translation.machineShort": "AI",
     "translation.machineHint":

@@ -3,16 +3,22 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  ExternalLink,
+  Eye,
+  EyeOff,
   FileText,
   ImageOff,
+  Quote,
+  RefreshCw,
   Search,
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import { formatDateTime } from "@/admin/format"
-import type { AdminPost, Sources } from "@/admin/types"
+import type { AdminPost, AdminPostImage, Sources } from "@/admin/types"
 import {
+  Badge,
   Button,
   Empty,
   IconButton,
@@ -47,22 +53,24 @@ function PostAccount({ post }: { post: AdminPost }) {
 }
 
 /**
- * The post's images one at a time inside the page, fitted to the viewport.
- * The buttons and arrow keys step through a post with several images.
+ * A post's images, or its quote's, one at a time inside the page, fitted to
+ * the viewport. The buttons and arrow keys step through several images.
  */
 function PostImageViewer({
   post,
+  images = post.media,
   start,
   onClose,
 }: {
   post: AdminPost
+  images?: AdminPostImage[]
   start: number
   onClose: () => void
 }) {
   const { t, locale } = useAppSettings()
   const [index, setIndex] = useState(start)
-  const count = post.media.length
-  const image = post.media[index]
+  const count = images.length
+  const image = images[index]
   const url = localUrl(image?.url)
   const step = (delta: number) =>
     setIndex((current) => (current + delta + count) % count)
@@ -90,7 +98,12 @@ function PostImageViewer({
     >
       <div className="adm-image-viewer-stage">
         {url ? (
-          <img src={url} alt={image.alt || post.mediaAlt || ""} />
+          <img
+            src={url}
+            alt={
+              image.alt || (images === post.media ? post.mediaAlt : "") || ""
+            }
+          />
         ) : (
           <span>
             <ImageOff aria-hidden />
@@ -165,6 +178,161 @@ function PostImage({ post }: { post: AdminPost }) {
   )
 }
 
+/**
+ * The status a post quotes, read-only and apart from the post's own images:
+ * author, time, wording and its cached thumbnails. An operator can hide it
+ * from the public pages, show it again, or queue a refresh from the source
+ * for the next X synchronization.
+ */
+function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
+  const { t, locale } = useAppSettings()
+  const { api, act } = useAdmin()
+  const [busy, setBusy] = useState<"" | "visibility" | "refresh">("")
+  const [viewing, setViewing] = useState<number | null>(null)
+  const quote = post.quote
+  const queued = post.refreshRequestedAt
+  if (!quote && !queued) return null
+  const hidden = Boolean(post.quoteHiddenAt)
+  const images = (quote?.media || []).filter((image) => localUrl(image.url))
+  const run = async (
+    kind: "visibility" | "refresh",
+    call: () => Promise<unknown>,
+    notice: string,
+  ) => {
+    setBusy(kind)
+    const result = await act(call, notice)
+    setBusy("")
+    if (result) onDone()
+  }
+  const name =
+    quote?.authorName || (quote?.authorHandle ? `@${quote.authorHandle}` : "")
+  return (
+    <section
+      className={`adm-post-quote${hidden ? " is-hidden" : ""}`}
+      aria-label={t("admin.posts.quote.label")}
+    >
+      <header className="adm-post-quote-head">
+        <Quote aria-hidden />
+        <span className="adm-post-quote-kicker">
+          {t("admin.posts.quote.label")}
+        </span>
+        {quote && !quote.unavailable ? (
+          <span className="adm-post-quote-author">
+            <strong>{name}</strong>
+            {quote.authorName && quote.authorHandle ? (
+              <span>@{quote.authorHandle}</span>
+            ) : null}
+            {quote.publishedAt ? (
+              <time dateTime={quote.publishedAt}>
+                {formatDateTime(quote.publishedAt, locale)}
+              </time>
+            ) : null}
+          </span>
+        ) : null}
+      </header>
+      {hidden || queued ? (
+        <div className="adm-chip-row">
+          {hidden ? (
+            <Badge tone="warning" icon={EyeOff}>
+              {t("admin.posts.quote.hidden")}
+            </Badge>
+          ) : null}
+          {queued ? (
+            <Badge tone="running" icon={RefreshCw}>
+              {t("admin.posts.refreshQueued", {
+                time: formatDateTime(queued, locale),
+              })}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
+      {quote?.unavailable ? (
+        <p className="adm-post-quote-missing">
+          {t("admin.posts.quote.unavailable")}
+        </p>
+      ) : quote?.text ? (
+        <p className="adm-post-quote-text">{quote.text}</p>
+      ) : null}
+      {images.length ? (
+        <div className="adm-post-quote-media">
+          {images.map((image, index) => (
+            <button
+              type="button"
+              key={image.url}
+              className="adm-post-thumb"
+              onClick={() => setViewing(index)}
+              aria-label={`${t("admin.posts.quote.imageView")} ${index + 1}`}
+              title={t("admin.posts.quote.imageView")}
+            >
+              <img
+                src={localUrl(image.url) || undefined}
+                alt=""
+                loading="lazy"
+              />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="adm-post-quote-actions">
+        {quote ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={hidden ? Eye : EyeOff}
+            busy={busy === "visibility"}
+            onClick={() =>
+              run(
+                "visibility",
+                () => api.setQuoteHidden(post.id, !hidden),
+                hidden ? "admin.notice.quoteShown" : "admin.notice.quoteHidden",
+              )
+            }
+          >
+            {t(hidden ? "admin.posts.quote.show" : "admin.posts.quote.hide")}
+          </Button>
+        ) : null}
+        {post.source === "x" ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={RefreshCw}
+            busy={busy === "refresh"}
+            disabled={Boolean(queued)}
+            onClick={() =>
+              run(
+                "refresh",
+                () => api.refreshPost(post.id),
+                "admin.notice.refreshQueued",
+              )
+            }
+          >
+            {t("admin.posts.refresh")}
+          </Button>
+        ) : null}
+        {quote ? (
+          <a
+            className="adm-link"
+            href={quote.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("admin.posts.quote.open")}
+            <ExternalLink aria-hidden />
+          </a>
+        ) : null}
+      </div>
+      {viewing !== null ? (
+        <PostImageViewer
+          post={post}
+          images={images}
+          start={viewing}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
+    </section>
+  )
+}
+
 function PostTableRow({
   post,
   onDone,
@@ -194,6 +362,11 @@ function PostTableRow({
           onChanged={onDone}
         />
       </div>
+      {post.quote || post.refreshRequestedAt ? (
+        <div role="cell" className="adm-post-quote-cell">
+          <PostQuote post={post} onDone={onDone} />
+        </div>
+      ) : null}
       <div role="cell" className="adm-post-image">
         <PostImage post={post} />
       </div>

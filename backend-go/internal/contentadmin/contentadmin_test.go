@@ -226,11 +226,12 @@ func TestReadOnlyStoreRejectsEveryMutation(t *testing.T) {
 	for _, path := range []string{
 		"/profile-media", "/profile-media/discover", "/profile-media/upload?slot=avatar",
 		"/profile-media/abc/download", "/profile-media/abc/select",
-		"/schedule-images/abc/review", "/posts/abc/reprocess",
+		"/schedule-images/abc/review", "/posts/abc/reprocess", "/posts/1900000000000000100/refresh",
 	} {
 		f.request(http.MethodPost, path, "application/json", []byte(`{}`)).expect(t, http.StatusServiceUnavailable, "read_only")
 	}
 	f.put("/schedule-images/abc/period", map[string]any{}).expect(t, http.StatusServiceUnavailable, "read_only")
+	f.put("/posts/abc/quote/hidden", map[string]any{"hidden": true}).expect(t, http.StatusServiceUnavailable, "read_only")
 	if len(f.network.visited) != 0 {
 		t.Fatalf("read-only requests reached the network: %v", f.network.visited)
 	}

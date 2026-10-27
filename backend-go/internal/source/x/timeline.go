@@ -70,10 +70,13 @@ func parseTimelineStatuses(body []byte, account string) (TimelineStatuses, error
 		}
 		// Every status repeats the whole author profile; the post keeps its name.
 		status["author"] = map[string]any{"screen_name": author["screen_name"], "name": author["name"]}
+		if quoted := object(object(status["quote"])["author"]); len(quoted) > 0 {
+			object(status["quote"])["author"] = map[string]any{"screen_name": quoted["screen_name"], "name": quoted["name"]}
+		}
 		entry := TimelineStatus{ID: id}
 		if post := Normalize(status, id, account); post != nil && post.ID == id {
-			// Like the detail answer, raw_json declares the post's own images,
-			// without a quoted status's, for schedule extraction.
+			// Like the detail answer, raw_json declares the post's own images
+			// for schedule extraction; a quoted status's are never among them.
 			own := []any{}
 			for _, u := range fxMediaURLs(object(status["media"])) {
 				if u != "" {

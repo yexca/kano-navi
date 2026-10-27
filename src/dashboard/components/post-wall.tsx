@@ -3,9 +3,10 @@ import type {
   Locale,
   MediaItem,
   Post,
+  PostQuote,
   Translator,
 } from "@/types"
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowUpRight,
@@ -13,6 +14,7 @@ import {
   History,
   ImageOff,
   MessageCircle,
+  MessageSquareOff,
   Repeat2,
   X,
 } from "lucide-react"
@@ -22,7 +24,7 @@ import {
   useTranslatedText,
 } from "@/components/translated-text"
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
-import { ExternalLink, XLogo } from "@/site/links"
+import { ExternalLink, XLogo, followCardLink } from "@/site/links"
 import { mediaSrcSet } from "@/lib/media"
 import {
   formatCompact,
@@ -79,6 +81,115 @@ function Engagement({
         </span>
       ))}
     </p>
+  )
+}
+
+// A board quote shows three thumbnails; "+N" counts the rest.
+const QUOTE_THUMBS = 3
+
+/**
+ * The status a post quotes, nested in the note: author, time, wording and
+ * small thumbnails. The card follows the quoted post's x.com link, while its
+ * thumbnails open the image viewer. Quoted wording is shown as written.
+ */
+function QuoteCard({
+  quote,
+  absoluteTime,
+  clamp,
+  textRef,
+  locale,
+  now,
+  t,
+  onOpenMedia,
+}: {
+  quote: PostQuote
+  absoluteTime: boolean
+  /** The board clamps the wording; the full post shows all of it. */
+  clamp: boolean
+  textRef?: RefObject<HTMLParagraphElement | null>
+  locale: Locale
+  now: number
+  t: Translator
+  onOpenMedia: (media: MediaItem[], index: number) => void
+}) {
+  if (quote.unavailable) {
+    return (
+      <ExternalLink className="post-quote is-unavailable" href={quote.url}>
+        <MessageSquareOff aria-hidden="true" />
+        <span>{t("feed.quoteUnavailable")}</span>
+        <ArrowUpRight aria-hidden="true" />
+      </ExternalLink>
+    )
+  }
+  const media = quote.media.filter((item) => item.url)
+  const shown = clamp ? media.slice(0, QUOTE_THUMBS) : media
+  const hidden = media.length - shown.length
+  const name =
+    quote.authorName || (quote.authorHandle ? `@${quote.authorHandle}` : "X")
+  return (
+    <div
+      className={`post-quote link-card${clamp ? "" : " is-full"}`}
+      onClick={followCardLink}
+    >
+      <p className="post-quote-head">
+        <ExternalLink
+          className="card-link post-quote-name"
+          href={quote.url}
+          aria-label={t("feed.openQuote", { name })}
+        >
+          {name}
+        </ExternalLink>
+        {quote.authorName && quote.authorHandle ? (
+          <span className="post-quote-handle">@{quote.authorHandle}</span>
+        ) : null}
+        {quote.publishedAt ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <time
+              dateTime={quote.publishedAt}
+              title={`${formatJapanDay(quote.publishedAt, locale)} ${formatJapanTime(quote.publishedAt)} ${t("common.timezoneShort")}`}
+            >
+              {absoluteTime
+                ? formatStamp(quote.publishedAt)
+                : formatRelative(quote.publishedAt, locale, now)}
+            </time>
+          </>
+        ) : null}
+      </p>
+      {quote.text ? (
+        <p
+          ref={textRef}
+          className={`post-quote-text${clamp ? " is-clamped" : ""}`}
+        >
+          {quote.text}
+        </p>
+      ) : null}
+      {shown.length ? (
+        <div className="post-quote-media">
+          {shown.map((item, index) => (
+            <button
+              type="button"
+              key={item.id || item.url}
+              onClick={() => onOpenMedia(media, index)}
+              aria-label={`${t("feed.openQuoteMedia")} ${index + 1}`}
+            >
+              <img
+                src={item.url || undefined}
+                srcSet={mediaSrcSet(item.url, item.width)}
+                sizes={clamp ? "72px" : "(max-width: 640px) 30vw, 160px"}
+                alt={item.alt || ""}
+                loading="lazy"
+              />
+              {hidden > 0 && index === shown.length - 1 ? (
+                <span className="post-quote-more" aria-hidden="true">
+                  +{hidden}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -157,19 +268,40 @@ function PostNote({
     locale,
   )
   const textRef = useRef<HTMLParagraphElement>(null)
+  const quoteRef = useRef<HTMLParagraphElement>(null)
   const [overflows, setOverflows] = useState(false)
   const [reading, setReading] = useState(false)
-  // "Read more" appears only while six lines hide some wording.
+  // "Read more" appears only while the clamp hides some of the post's or
+  // the quote's wording.
   useLayoutEffect(() => {
-    const element = textRef.current
-    if (!element || !clamp) return
+    const elements = [textRef.current, quoteRef.current].filter(
+      (element): element is HTMLParagraphElement => Boolean(element),
+    )
+    if (!elements.length || !clamp) return
     const check = () =>
-      setOverflows(element.scrollHeight > element.clientHeight + 1)
+      setOverflows(
+        elements.some(
+          (element) => element.scrollHeight > element.clientHeight + 1,
+        ),
+      )
     check()
     const observer = new ResizeObserver(check)
-    observer.observe(element)
+    for (const element of elements) observer.observe(element)
     return () => observer.disconnect()
-  }, [clamp, wording.text])
+  }, [clamp, wording.text, post.quote?.text])
+  const quote = (full: boolean) =>
+    post.quote ? (
+      <QuoteCard
+        quote={post.quote}
+        absoluteTime={absoluteTime}
+        clamp={clamp && !full}
+        textRef={full ? undefined : quoteRef}
+        locale={locale}
+        now={now}
+        t={t}
+        onOpenMedia={onOpenMedia}
+      />
+    ) : null
 
   const head = (close?: ReactNode) => (
     <header className="post-note-head">
@@ -255,6 +387,7 @@ function PostNote({
       ) : null}
       <TranslationNote state={wording} t={t} />
       {mediaGrid}
+      {quote(false)}
       <Engagement post={post} locale={locale} t={t} />
       {reading ? (
         <PostDialog
@@ -278,6 +411,7 @@ function PostNote({
             </p>
             <TranslationNote state={wording} t={t} />
             {mediaGrid}
+            {quote(true)}
             <Engagement post={post} locale={locale} t={t} />
           </article>
         </PostDialog>

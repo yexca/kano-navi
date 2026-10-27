@@ -138,7 +138,7 @@ func (s *Store) GetPostArchive(ctx context.Context, from, to, account string, pa
 		return nil, dbErr(err)
 	}
 	page, pageSize, totalPages := archivePaging(total, page, pageSize)
-	rows, err := s.db.QueryContext(ctx, `SELECT id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt FROM posts`+inRange+filter+` ORDER BY `+instant+` DESC,id ASC LIMIT ? OFFSET ?`, append(args, pageSize, (page-1)*pageSize)...)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,CASE WHEN quote_hidden_at IS NULL THEN quote_json END FROM posts`+inRange+filter+` ORDER BY `+instant+` DESC,id ASC LIMIT ? OFFSET ?`, append(args, pageSize, (page-1)*pageSize)...)
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -146,7 +146,7 @@ func (s *Store) GetPostArchive(ctx context.Context, from, to, account string, pa
 	for rows.Next() {
 		var r postRow
 		var handle, label, mu, ma sql.NullString
-		if err := rows.Scan(&r.id, &r.source, &handle, &r.typ, &label, &r.text, &r.publishedAt, &r.url, &r.likes, &r.reposts, &r.replies, &mu, &ma); err != nil {
+		if err := rows.Scan(&r.id, &r.source, &handle, &r.typ, &label, &r.text, &r.publishedAt, &r.url, &r.likes, &r.reposts, &r.replies, &mu, &ma, &r.quoteJSON); err != nil {
 			_ = rows.Close()
 			return nil, dbErr(err)
 		}

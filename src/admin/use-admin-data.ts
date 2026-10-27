@@ -172,6 +172,12 @@ function createClient(run: Runner, slow: Runner) {
         `/posts/${enc(id)}/reprocess`,
         route ? { route } : {},
       ),
+    setQuoteHidden: (id: string, hidden: boolean) =>
+      send<{ state: unknown }>("PUT", `/posts/${enc(id)}/quote/hidden`, {
+        hidden,
+      }),
+    refreshPost: (id: string) =>
+      send<{ state: unknown }>("POST", `/posts/${enc(id)}/refresh`),
 
     translations: () => get<TranslationSummary>("/translations"),
     setTranslation: (

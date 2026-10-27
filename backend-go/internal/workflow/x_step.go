@@ -50,6 +50,8 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	// Posts read straight from timeline pages, pending IDs waiting for their
 	// backoff, and pending IDs the run stopped requesting.
 	fromTimeline, held := 0, 0
+	// Operator refreshes whose detail request was made.
+	refreshed := 0
 	dropped := []string{}
 	partial := false
 	errorsOut := []string{}
@@ -76,6 +78,7 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		accountOpts.KnownIDs = state.KnownIDs
 		accountOpts.CursorID = state.CursorID
 		accountOpts.Gap = state.Gap
+		accountOpts.RefreshIDs = state.RefreshIDs
 		result, err := x.Adapter.FetchRecent(ctx, account, accountOpts)
 		for _, note := range result.Notes {
 			notes = append(notes, account+": "+note)
@@ -91,6 +94,7 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		total += len(result.Posts)
 		fromTimeline += len(result.FromTimeline)
 		held += result.Held
+		refreshed += len(result.Refreshed)
 		for _, d := range result.Dropped {
 			dropped = append(dropped, account+": "+d.ID+": "+d.Code)
 		}
@@ -136,6 +140,9 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	}
 	if len(dropped) > 0 {
 		out["pendingDropped"] = dropped
+	}
+	if refreshed > 0 {
+		out["refreshed"] = refreshed
 	}
 	return AttemptResult{Status: status, Result: out}, nil
 }

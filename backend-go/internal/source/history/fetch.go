@@ -437,6 +437,8 @@ func (f *Fetcher) mapPage(request Request, payload map[string]any, page *Page) (
 			if post == nil {
 				return 0, &Error{Code: "source_api_invalid_records"}
 			}
+			// The API page is read without referenced statuses.
+			post.QuoteUnread = true
 			if !page.Window.Contains(post.PublishedAt) {
 				continue
 			}

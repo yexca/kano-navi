@@ -2510,6 +2510,159 @@ a.month-event:hover {
   margin-top: 0;
 }
 
+/*
+ * A quoted post nests in the note below its own wording and images: an
+ * indented, quieter card that follows the quoted post's link, with small
+ * thumbnails that open the image viewer.
+ */
+.post-quote {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin: auto 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--sunken);
+  transition: border-color 160ms ease;
+}
+
+.post-note-media + .post-quote,
+.post-quote + .post-engagement {
+  margin-top: 0;
+}
+
+.post-quote:hover {
+  border-color: color-mix(in oklab, var(--berry) 45%, transparent);
+}
+
+.post-quote-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+  margin: 0;
+  color: var(--soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.post-quote-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+
+.post-quote:hover .post-quote-name {
+  color: var(--berry);
+}
+
+/* On a narrow card the handle gives way before the display name. */
+.post-quote-handle {
+  min-width: 0;
+  flex-shrink: 100;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.post-quote-head time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.post-quote-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.post-quote-text.is-clamped {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.post-quote-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.post-quote-media button {
+  position: relative;
+  width: 64px;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  cursor: zoom-in;
+}
+
+.post-quote-media button:focus-visible {
+  outline: 2px solid var(--berry);
+  outline-offset: 2px;
+}
+
+.post-quote-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-quote-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(20 12 18 / 0.55);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.post-quote.is-full .post-quote-text {
+  font-size: 14.5px;
+}
+
+.post-quote.is-full .post-quote-media button {
+  width: min(140px, calc(50% - 2px));
+}
+
+/* A quoted post that is gone or withheld keeps only its link. */
+.post-quote.is-unavailable {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--soft);
+  font-size: 12.5px;
+}
+
+.post-quote.is-unavailable svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.post-quote.is-unavailable svg:last-child {
+  margin-left: auto;
+}
+
+.post-quote.is-unavailable:hover {
+  color: var(--berry);
+}
+
+.post-quote.is-unavailable:focus-visible {
+  outline: 2px solid var(--berry);
+  outline-offset: 2px;
+}
+
 .post-engagement svg {
   width: 14px;
   height: 14px;
