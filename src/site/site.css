@@ -99,6 +99,7 @@
   background: color-mix(in oklab, hsl(var(--background)) 84%, transparent);
   backdrop-filter: saturate(1.4) blur(14px);
   -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  view-transition-name: site-header;
 }
 
 .site-header::after {

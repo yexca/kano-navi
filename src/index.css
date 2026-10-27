@@ -239,3 +239,26 @@
     font-weight: 600;
   }
 }
+
+/*
+ * Public pages open each other in place (src/main.tsx). The header keeps its
+ * own snapshot so it holds still while the page beneath it cross-fades.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 220ms;
+    animation-timing-function: ease-out;
+  }
+}
+
+/* A fast first load never shows the loading card; a slow one fades it in. */
+.page-status-pending {
+  animation: page-status-in 240ms ease-out 400ms both;
+}
+
+@keyframes page-status-in {
+  from {
+    opacity: 0;
+  }
+}

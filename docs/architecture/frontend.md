@@ -3,7 +3,14 @@
 ## Presentation: `src/`
 
 `src/main.tsx` routes between the public board, the static `/history`
-page in `src/history/`, the static `/about` page in `src/about/`, and `/admin`. History copy and image metadata are
+page in `src/history/`, the static `/about` page in `src/about/`, and `/admin`.
+Links between the three public pages open in place: the next page's code
+loads while the current page stays on screen (hovering or focusing a link
+starts that load), then the pages cross-fade under a fixed header with the
+View Transition API. Back and forward restore each entry's scroll position,
+including after a reload. `/admin`, other paths, modified clicks and links
+with a target load normally, and `index.html` applies the saved theme and
+language before the first paint so no load flashes the other theme. History copy and image metadata are
 static; verified fixed images ship in `public/assets/history/` and `dist/`.
 `scripts/package-history-media.ts` updates these files from a local reference
 archive without network requests.
