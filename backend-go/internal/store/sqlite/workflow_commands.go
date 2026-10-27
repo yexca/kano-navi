@@ -181,7 +181,7 @@ func (s *Store) ClaimWorkflowRun(ctx context.Context, id, owner string, now time
 	// A source schedule plans its next run from the claim of a run its timer
 	// submitted. An operator's Run now leaves the plan alone.
 	if source, scheduled := SourceScheduleOf(workflowID); scheduled && trigger == "scheduler" {
-		if e = planSourceSchedule(ctx, tx, source, now); e != nil {
+		if e = s.planSourceSchedule(ctx, tx, source, now); e != nil {
 			return WorkflowLease{}, e
 		}
 	}

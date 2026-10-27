@@ -36,6 +36,8 @@ type Store struct {
 	// sourceSync reports the source_sync_json columns, which a read-only
 	// snapshot migrated by an older release lacks.
 	sourceSync bool
+	// scheduleOffset draws a source schedule's jitter; nil draws at random.
+	scheduleOffset func(spread int64) int64
 }
 
 // OpenReadOnly opens an existing snapshot without creating directories,

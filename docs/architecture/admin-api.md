@@ -173,8 +173,9 @@ null. The Bilibili `minIntervalMinutes` is `BILIBILI_MIN_INTERVAL_MINUTES`.
 intervalMinutes, sync}` and keeps omitted fields. It answers `404 not_found`
 for another source and `400 invalid_input` for other fields, an interval
 outside the bounds, an invalid `sync` or a `sync` for Bilibili. Enabling a
-schedule or changing its interval plans the next run one interval later; a
-sync change alone keeps the plan.
+schedule or changing its interval plans the next run one interval later,
+with the timer's [random offset](workflows.md#source-schedules); a sync
+change alone keeps the plan.
 
 `POST /sources/{source}/run` is **Run now**: it submits the source's fixed
 chain once, triggered by the operator and read with the schedule's sync

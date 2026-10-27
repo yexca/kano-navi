@@ -27,6 +27,8 @@ func scheduleBySource(t *testing.T, payload map[string]any, source string) map[s
 
 func TestSourceSchedulesAPI(t *testing.T) {
 	c := newConsole(t, "development", "", &gatedSteps{})
+	// Without jitter, plans land exactly one interval on.
+	c.store.SetScheduleOffset(func(int64) int64 { return 0 })
 	code, payload := c.call(t, "GET", "/api/admin/sources", "")
 	if code != 200 {
 		t.Fatalf("sources=%d %v", code, payload)
@@ -142,6 +144,7 @@ func TestSourceSchedulesAPI(t *testing.T) {
 func TestRunNowSubmitsTheSourceChainOnce(t *testing.T) {
 	steps := &gatedSteps{gate: make(chan struct{})}
 	c := newConsole(t, "development", "", steps)
+	c.store.SetScheduleOffset(func(int64) int64 { return 0 })
 	if code, payload := c.call(t, "PUT", "/api/admin/sources/x/schedule", `{"enabled":true,"sync":{"mode":"count","count":40}}`); code != 200 || payload["nextRunAt"] != "2026-03-02T03:30:00.000Z" {
 		t.Fatalf("x schedule=%d %v", code, payload)
 	}

@@ -121,6 +121,13 @@ starve another. The single-flight queue is unchanged, and a busy queue leaves
 the schedule due for the next tick. Enabling a schedule or changing its
 interval plans the next run one interval later, never immediately.
 
+Every plan, from a claimed timed run or a saved schedule, adds a random
+offset of up to ±10% of the interval, reflected into the interval bounds, so
+the platforms do not see a fixed period. Bilibili's offset is never negative,
+so no plan comes sooner than `BILIBILI_MIN_INTERVAL_MINUTES` and the adapter
+never skips a timed run for its interval. Run now, WebSub and the live probe
+are unchanged.
+
 - `WORKFLOW_SCHEDULER_ENABLED=0` stops the source schedules. The name stays
   so existing deployments keep working. Only its description changes.
 - `SKIP_X`, `SKIP_YOUTUBE` and `SKIP_BILIBILI` disable that source's

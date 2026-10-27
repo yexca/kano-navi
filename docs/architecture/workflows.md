@@ -134,6 +134,17 @@ Enabling a schedule or changing its interval plans the next run one interval
 later, never immediately; a sync change alone keeps the plan. Claiming a run
 the timer submitted plans the next one an interval after the claim; Run now
 does not move it.
+
+Each plan adds a random offset of whole seconds, uniform in ±10% of the
+interval (a 30-minute X timer runs 27–33 minutes apart), so timed reads do
+not reach FxTwitter, YouTube or `api.bilibili.com` on a fixed cadence. An
+offset that would leave the interval bounds is reflected back, so a plan is
+never shorter than 15 minutes nor longer than 7 days. Bilibili's offset is
+never negative (0 to +10%): its interval is never below
+`BILIBILI_MIN_INTERVAL_MINUTES`, so a plan is never sooner than the floor and
+the adapter's interval check does not skip a timed run. Run now, YouTube
+pushes and the live-status probe have no offset. The draw is the store's
+injectable `SetScheduleOffset`, which tests replace for deterministic plans.
 `WORKFLOW_SCHEDULER_ENABLED=0` stops source schedules as well, and `SKIP_X`,
 `SKIP_YOUTUBE` and `SKIP_BILIBILI` disable that source's schedule, which the
 console reports as `{ skipped: true, reason: "environment" }`.

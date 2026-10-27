@@ -15,7 +15,128 @@ func openScheduleStore(t *testing.T) *Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
+	// Without jitter, plans land exactly one interval on.
+	s.SetScheduleOffset(func(int64) int64 { return 0 })
 	return s
+}
+
+// offsetOf draws the same fraction of the spread every time.
+func offsetOf(numerator, denominator int64) func(int64) int64 {
+	return func(spread int64) int64 { return spread * numerator / denominator }
+}
+
+func TestPlannedIntervalJittersWithinTheBounds(t *testing.T) {
+	s := &Store{}
+	for _, c := range []struct {
+		name    string
+		source  string
+		minutes int
+		draw    func(int64) int64
+		want    time.Duration
+	}{
+		{"none", "x", 30, offsetOf(0, 1), 30 * time.Minute},
+		{"earliest", "x", 30, offsetOf(-1, 1), 27 * time.Minute},
+		{"latest", "youtube", 60, offsetOf(1, 1), 66 * time.Minute},
+		{"whole seconds", "x", 30, offsetOf(1, 3), 30*time.Minute + 60*time.Second},
+		{"out of range draw", "x", 30, offsetOf(5, 1), 33 * time.Minute},
+		// Below the 15-minute bound or above 7 days the offset is reflected.
+		{"reflected at the lower bound", "x", 15, offsetOf(-1, 2), 15*time.Minute + 45*time.Second},
+		{"partly reflected", "x", 16, offsetOf(-1, 1), 16*time.Minute + 96*time.Second},
+		{"within the lower bound", "x", 16, offsetOf(-1, 2), 16*time.Minute - 48*time.Second},
+		{"reflected at the upper bound", "youtube", SourceScheduleMaxMinutes, offsetOf(1, 1), SourceScheduleMaxMinutes * time.Minute * 9 / 10},
+		// Bilibili never runs earlier than its interval.
+		{"bilibili earliest", "bilibili", 180, offsetOf(-1, 1), 198 * time.Minute},
+		{"bilibili later", "bilibili", 180, offsetOf(1, 2), 189 * time.Minute},
+		{"bilibili at 7 days", "bilibili", SourceScheduleMaxMinutes, offsetOf(1, 1), SourceScheduleMaxMinutes * time.Minute},
+	} {
+		s.SetScheduleOffset(c.draw)
+		if got := s.plannedInterval(c.source, c.minutes); got != c.want {
+			t.Errorf("%s: %s %d min => %v, want %v", c.name, c.source, c.minutes, got, c.want)
+		}
+	}
+
+	// The random draw stays within ±10% and the bounds, varies, and never
+	// moves Bilibili earlier.
+	s.SetScheduleOffset(nil)
+	for _, c := range []struct {
+		source   string
+		minutes  int
+		earliest time.Duration
+		latest   time.Duration
+	}{
+		{"x", 30, 27 * time.Minute, 33 * time.Minute},
+		{"x", 15, 15 * time.Minute, 15*time.Minute + 90*time.Second},
+		{"youtube", SourceScheduleMaxMinutes, SourceScheduleMaxMinutes * time.Minute * 9 / 10, SourceScheduleMaxMinutes * time.Minute},
+		{"bilibili", 180, 180 * time.Minute, 198 * time.Minute},
+	} {
+		seen := map[time.Duration]bool{}
+		for range 500 {
+			got := s.plannedInterval(c.source, c.minutes)
+			if got < c.earliest || got > c.latest || got%time.Second != 0 {
+				t.Fatalf("%s %d min => %v, outside %v–%v", c.source, c.minutes, got, c.earliest, c.latest)
+			}
+			seen[got] = true
+		}
+		if len(seen) < 10 {
+			t.Fatalf("%s %d min drew only %d plans", c.source, c.minutes, len(seen))
+		}
+	}
+}
+
+func TestBilibiliPlansNeverGoBelowTheFloor(t *testing.T) {
+	s := openScheduleStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
+	// The earliest draw is reflected: Bilibili's adapter skips a list read
+	// sooner than BILIBILI_MIN_INTERVAL_MINUTES after the last one, so a plan
+	// at or after the floor is never skipped for its interval.
+	s.SetScheduleOffset(offsetOf(-1, 1))
+	const floor = 240
+	if err := s.PrepareSourceSchedules(ctx, floor, now); err != nil {
+		t.Fatal(err)
+	}
+	bilibili := scheduleOf(t, s, "bilibili", floor)
+	bilibili.Enabled = true
+	saved, err := s.SaveSourceSchedule(ctx, bilibili, floor, now)
+	if err != nil || saved.IntervalMinutes != floor || *saved.NextRunAt != "2026-03-02T07:24:00.000Z" {
+		t.Fatalf("enable=%+v %v", saved, err)
+	}
+	claim := now.Add(265 * time.Minute)
+	run, err := s.CreateWorkflowRun(ctx, WorkflowDefinition{ID: SourceScheduleWorkflow("bilibili"), Steps: []string{"bilibili"}}, "scheduler", "", map[string]bool{"bilibili": true}, claim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ClaimWorkflowRun(ctx, run.ID, "test", claim, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	next, err := time.Parse(time.RFC3339, *scheduleOf(t, s, "bilibili", floor).NextRunAt)
+	if err != nil || next.Sub(claim) != 264*time.Minute {
+		t.Fatalf("planned %v after the claim, %v", next.Sub(claim), err)
+	}
+}
+
+func TestClaimingATimedRunJittersItsNextRun(t *testing.T) {
+	s := openScheduleStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
+	s.SetScheduleOffset(offsetOf(1, 2))
+	x := scheduleOf(t, s, "x", 180)
+	x.Enabled = true
+	saved, err := s.SaveSourceSchedule(ctx, x, 180, now)
+	if err != nil || *saved.NextRunAt != "2026-03-02T03:31:30.000Z" {
+		t.Fatalf("enable=%+v %v", saved, err)
+	}
+	s.SetScheduleOffset(offsetOf(-1, 1))
+	run, err := s.CreateWorkflowRun(ctx, WorkflowDefinition{ID: SourceScheduleWorkflow("x"), Steps: []string{"x"}}, "scheduler", "", map[string]bool{"x": true}, now.Add(32*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ClaimWorkflowRun(ctx, run.ID, "test", now.Add(32*time.Minute), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if got := scheduleOf(t, s, "x", 180); *got.NextRunAt != "2026-03-02T03:59:00.000Z" {
+		t.Fatalf("claimed=%v", *got.NextRunAt)
+	}
 }
 
 func scheduleOf(t *testing.T, s *Store, source string, floor int) SourceSchedule {

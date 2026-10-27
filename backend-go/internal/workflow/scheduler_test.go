@@ -28,6 +28,8 @@ func TestSchedulerRunsOnlySourceSchedulesEarliestFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	// Without jitter, plans land exactly one interval on.
+	s.SetScheduleOffset(func(int64) int64 { return 0 })
 	ctx := context.Background()
 	clock := time.Date(2026, 3, 2, 3, 10, 0, 0, time.UTC)
 	now := func() time.Time { return clock }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"time"
@@ -196,7 +197,7 @@ func (s *Store) SaveSourceSchedule(ctx context.Context, input SourceSchedule, fl
 	case !input.Enabled:
 		next = nil
 	case !current.Enabled || current.IntervalMinutes != input.IntervalMinutes || next == nil:
-		planned := workflowTime(now.Add(time.Duration(input.IntervalMinutes) * time.Minute))
+		planned := workflowTime(now.Add(s.plannedInterval(input.Source, input.IntervalMinutes)))
 		next = &planned
 	}
 	if err = upsertSourceSchedule(ctx, tx, input, next, now); err != nil {
@@ -285,9 +286,40 @@ func (s *Store) SourceScheduleSync(ctx context.Context) (map[string]SourceSync, 
 	return out, nil
 }
 
-// planSourceSchedule moves a source schedule's next run one interval past a
-// claimed run of it.
-func planSourceSchedule(ctx context.Context, tx *sql.Tx, source string, now time.Time) error {
+// SetScheduleOffset replaces the random draw of source schedule jitter, for
+// deterministic tests. draw returns whole seconds in [-spread, spread]; nil
+// restores the random draw.
+func (s *Store) SetScheduleOffset(draw func(spread int64) int64) { s.scheduleOffset = draw }
+
+// plannedInterval is a source's interval with a random offset of up to a
+// tenth of it, so timed reads do not hit a platform on a fixed cadence. The
+// offset is whole seconds, uniform in ±10%, and is reflected into the
+// interval bounds: a plan never goes below the lower bound or above 7 days.
+// Bilibili's offset is never negative, so a plan is never shorter than its
+// interval and therefore never below BILIBILI_MIN_INTERVAL_MINUTES, and the
+// adapter's own interval check does not skip the run.
+func (s *Store) plannedInterval(source string, minutes int) time.Duration {
+	minutes = min(max(minutes, SourceScheduleMinMinutes), SourceScheduleMaxMinutes)
+	interval := time.Duration(minutes) * time.Minute
+	spread := int64(minutes) * 6 // a tenth of the interval, in seconds
+	draw := s.scheduleOffset
+	if draw == nil {
+		draw = func(n int64) int64 { return rand.Int64N(2*n+1) - n }
+	}
+	offset := time.Duration(min(max(draw(spread), -spread), spread)) * time.Second
+	low, high := SourceScheduleMinMinutes*time.Minute, SourceScheduleMaxMinutes*time.Minute
+	if source == "bilibili" {
+		low = interval
+	}
+	if interval+offset < low || interval+offset > high {
+		offset = -offset
+	}
+	return min(max(interval+offset, low), high)
+}
+
+// planSourceSchedule moves a source schedule's next run one interval, with
+// its jitter, past a claimed run of it.
+func (s *Store) planSourceSchedule(ctx context.Context, tx *sql.Tx, source string, now time.Time) error {
 	var interval, enabled int
 	err := tx.QueryRowContext(ctx, `SELECT interval_minutes,enabled FROM source_schedules WHERE source=?`, source).Scan(&interval, &enabled)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -298,7 +330,7 @@ func planSourceSchedule(ctx context.Context, tx *sql.Tx, source string, now time
 	}
 	var next any
 	if enabled != 0 {
-		next = workflowTime(now.Add(time.Duration(min(max(interval, SourceScheduleMinMinutes), SourceScheduleMaxMinutes)) * time.Minute))
+		next = workflowTime(now.Add(s.plannedInterval(source, interval)))
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE source_schedules SET next_run_at=? WHERE source=?`, next, source); err != nil {
 		return ErrWorkflowStorage
