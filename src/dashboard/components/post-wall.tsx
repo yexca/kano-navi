@@ -31,6 +31,7 @@ import {
   formatRelative,
   formatStamp,
 } from "../format"
+import { postWallCount } from "../post-rows"
 import { ArchiveMore, ArchiveState } from "./archive-dialog"
 
 // A post's images fill a card of the post grid or the archive's masonry
@@ -327,8 +328,8 @@ export function PostWall({
       (post) =>
         String(post.accountHandle || "").toLowerCase() === handle.toLowerCase(),
     ).length
-  // The board shows two rows of the wall's current column count; older posts
-  // stay in the Past posts dialog.
+  // The board shows whole rows of the wall's current column count (see
+  // postWallCount); older posts stay in the Past posts dialog.
   const [wall, setWall] = useState<HTMLDivElement | null>(null)
   const [columns, setColumns] = useState(3)
   useLayoutEffect(() => {
@@ -346,7 +347,7 @@ export function PostWall({
     observer.observe(wall)
     return () => observer.disconnect()
   }, [wall])
-  const shown = visible.slice(0, columns * 2)
+  const shown = visible.slice(0, postWallCount(visible.length, columns))
 
   return (
     <section className="section posts" id="feed" aria-labelledby="posts-title">
@@ -359,7 +360,7 @@ export function PostWall({
           </>
         }
         title={t("feed.title")}
-        note={t("feed.subtitle", { days: windowDays })}
+        note={t("feed.subtitle")}
       >
         {accounts.length > 1 ? (
           <div className="segmented" role="group" aria-label={t("feed.filter")}>

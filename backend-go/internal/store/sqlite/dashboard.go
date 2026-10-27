@@ -567,8 +567,15 @@ type postRow struct {
 	hasAccount, hasLabel, hasMediaURL, hasMediaAlt                                    bool
 }
 
+// dashboardMinPosts is how many of the newest posts the board always lists,
+// however old, so a quiet window still fills the wall's whole rows (two rows
+// of up to four columns; see src/dashboard/post-rows.ts).
+const dashboardMinPosts = 8
+
+// queryPosts lists the posts published since the window start, and at least
+// the newest dashboardMinPosts of them.
 func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, source, account_handle, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt FROM posts WHERE julianday(published_at) >= julianday(?) ORDER BY julianday(published_at) DESC, id ASC LIMIT 100`, since)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, source, account_handle, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt FROM posts WHERE julianday(published_at) >= julianday(?) OR id IN (SELECT id FROM posts ORDER BY julianday(published_at) DESC, id ASC LIMIT ?) ORDER BY julianday(published_at) DESC, id ASC LIMIT 100`, since, dashboardMinPosts)
 	if err != nil {
 		return nil, dbErr(err)
 	}

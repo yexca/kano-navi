@@ -56,11 +56,14 @@ snapshot health dot.
    month navigation; picking a date lists that day's entries and can show its
    week on the board. A Subscribe menu offers the schedule as a calendar
    subscription; videos also have an Atom feed.
-3. Posts on X: roughly three days of posts from both accounts in an aligned
-   grid (two rows only; a long post shows six lines and Read more
-   opens it whole in a dialog) with an account filter, an image viewer, and
-   engagement counts. When the window is empty the most recent stored post
-   is still shown. A Past posts dialog browses every stored post month by
+3. Posts on X: the last three days of posts from both accounts, and at least
+   the eight newest however old, in an aligned grid of whole rows only: up to
+   six posts or two rows, whichever is more, and a single row when fewer
+   posts would leave the last row short (a long post shows six lines and Read
+   more opens it whole in a dialog), with an account filter, an image viewer,
+   and engagement counts. The profile's post count
+   still counts the three-day window. When no post is stored at all the
+   section says so. A Past posts dialog browses every stored post month by
    month in a masonry wall, with the same account filter and per-account
    counts.
 4. Streams and works (YouTube, with bilibili links): a large lead card for

@@ -82,8 +82,7 @@ const messages = {
     "common.timezoneShort": "JST",
     "common.all": "全部",
     "feed.title": "X 动态",
-    "feed.subtitle": ({ days }: { days: any }) =>
-      `最近 ${days} 天 · 两个账号合并`,
+    "feed.subtitle": "最新动态 · 两个账号合并",
     "feed.openMedia": "查看图片",
     "feed.originalPost": "在 X 打开原帖",
     "feed.previousImage": "上一张",
@@ -320,8 +319,7 @@ const messages = {
     "common.timezoneShort": "JST",
     "common.all": "すべて",
     "feed.title": "X のポスト",
-    "feed.subtitle": ({ days }: { days: any }) =>
-      `直近 ${days} 日 · 2 アカウントを統合`,
+    "feed.subtitle": "最新のポスト · 2 アカウントを統合",
     "feed.openMedia": "画像を開く",
     "feed.originalPost": "X で元のポストを開く",
     "feed.previousImage": "前の画像",
@@ -561,8 +559,7 @@ const messages = {
     "common.timezoneShort": "JST",
     "common.all": "All",
     "feed.title": "Posts on X",
-    "feed.subtitle": ({ days }: { days: any }) =>
-      `Last ${days} days · both accounts`,
+    "feed.subtitle": "Latest posts · both accounts",
     "feed.openMedia": "Open image",
     "feed.originalPost": "Open the original post on X",
     "feed.previousImage": "Previous image",
