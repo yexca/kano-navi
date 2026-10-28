@@ -68,7 +68,7 @@ export function runTitle(run: Run, t: Translator) {
       ? t("admin.run.sourceTitle", { source })
       : t("admin.run.sourceRunNow", { source })
   }
-  // An older run of a saved workflow, retired by ADR-0003.
+  // A stored run of a saved workflow (see ADR-0003).
   if (run.workflowId)
     return t("admin.run.retiredWorkflow", { id: run.workflowId })
   if (

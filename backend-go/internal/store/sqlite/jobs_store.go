@@ -9,7 +9,7 @@ import (
 )
 
 // Ad-hoc workflow IDs name the kind of work a run does. Every new run is ad
-// hoc; older runs of retired saved workflows keep IDs that match
+// hoc; a stored run of a saved workflow keeps an ID that matches
 // ^[a-z0-9][a-z0-9_-]*$, so the prefix cannot collide.
 const (
 	AdhocSyncWorkflow  = "@sync"

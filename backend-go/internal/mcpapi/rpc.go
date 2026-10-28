@@ -65,7 +65,7 @@ type message struct {
 }
 
 // encodeJSON marshals without HTML escaping so that the text content of a
-// tool result reads like the JSON the original service produced.
+// tool result is plain JSON.
 func encodeJSON(value any) ([]byte, error) {
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)

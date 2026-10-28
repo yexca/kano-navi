@@ -1262,7 +1262,7 @@ func (s *Store) profileMedia(id, slot, source string, su, cp, sha, mime sql.Null
 func (s *Store) getFeaturedVideoID(ctx context.Context) (*string, error) {
 	var v string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM app_settings WHERE key='featured_video_id'`).Scan(&v)
-	// An absent setting preserves the legacy focus selection. An explicit
+	// An absent setting falls back to the focus row's video. An explicit
 	// empty (or stale) setting is an operator decision and must not fall back.
 	if errors.Is(err, sql.ErrNoRows) {
 		var legacy sql.NullString

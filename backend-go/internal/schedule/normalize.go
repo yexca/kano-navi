@@ -10,8 +10,8 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
-// messageError carries one of the fixed, sanitized messages that the
-// TypeScript service stores in schedule_extractions.error,
+// messageError carries one of the fixed, sanitized messages stored in
+// schedule_extractions.error,
 // post_llm_states.last_error and schedule_asset_reviews.llm_reason.
 type messageError struct{ message string }
 
@@ -69,8 +69,8 @@ func isCancelledEventStatus(status any) bool {
 	return cancelledEventStatuses[value] || strings.HasPrefix(value, "cancel")
 }
 
-// normalizedEvent is one model entry after validation, in the shape the
-// TypeScript normalizer handed to the event writer.
+// normalizedEvent is one model entry after validation, in the shape the event
+// writer takes.
 type normalizedEvent struct {
 	id                    string
 	canonicalSource       string
@@ -93,7 +93,7 @@ type normalizedEvent struct {
 }
 
 // rawObject reproduces the property order of the JavaScript event object so
-// raw_json stays identical to rows written by the TypeScript service.
+// raw_json keeps one stable form across stored rows.
 func (e normalizedEvent) rawObject() *object {
 	return obj(
 		"id", e.id,

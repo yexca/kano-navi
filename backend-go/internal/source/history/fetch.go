@@ -62,7 +62,7 @@ type Page struct {
 	// cursor is not an API next_token.
 	Checkpoint string
 	// HeadFetchedAt records a successful read of the newest timeline page.
-	// Resumed pages retain it; checkpoints from older releases leave it unknown.
+	// Resumed pages retain it; a checkpoint without it leaves it unknown.
 	HeadFetchedAt string
 	// CheckpointOnly clears a stale timeline cursor without a successful read.
 	CheckpointOnly     bool

@@ -175,7 +175,7 @@ func (m *Module) listScheduleAssets(ctx context.Context, limit int) ([]scheduleA
 
 // attachMedia maps the stored image URL to a safe browser URL while keeping
 // the source and cache status visible to the operator. An asset without an
-// image URL (a legacy row) reports `none`: there is nothing to download.
+// image URL reports `none`: there is nothing to download.
 func (m *Module) attachMedia(ctx context.Context, asset *scheduleAsset) error {
 	asset.PreviewURL, asset.MediaID, asset.MediaSourceURL, asset.MediaStatus = nil, nil, nil, "missing"
 	source := asset.URL

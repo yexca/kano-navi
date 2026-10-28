@@ -12,8 +12,8 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
-// This file ports the server/database.ts reads and writes the extractor
-// needs. The store has a single connection: every *sql.Rows is drained and
+// This file holds the reads and writes the extractor needs. The store has a
+// single connection: every *sql.Rows is drained and
 // closed before the next statement, and no transaction spans a provider call.
 
 type queryer interface {
@@ -167,8 +167,8 @@ func (e *Extractor) loadConfig(ctx context.Context) (scheduleConfig, error) {
 		}
 		*stage.target = settingBoolean(value, legacyEnabled)
 	}
-	// Unlike the stages, the all-posts switch does not follow the legacy
-	// switch: it is off unless explicitly enabled.
+	// Unlike the stages, the all-posts switch does not follow
+	// schedule_extraction_enabled: it is off unless explicitly enabled.
 	allPosts, err := setting("schedule_message_all_posts", "SCHEDULE_MESSAGE_ALL_POSTS", "0")
 	if err != nil {
 		return config, err

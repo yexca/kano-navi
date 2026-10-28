@@ -186,7 +186,7 @@ func TestHistoryVideosKeepReservationStateAndRestartAfterSearchLimit(t *testing.
 func TestStandaloneSeedsNoWorkflowsAndRestoresStaticWording(t *testing.T) {
 	s, query := openHistoryStore(t)
 	ctx := context.Background()
-	// Saved workflows are retired (ADR-0003): the table stays, empty.
+	// No workflows are seeded (ADR-0003): the table stays, empty.
 	if got := query(`SELECT COUNT(*) FROM workflows`); got != "0" {
 		t.Fatalf("workflows=%s", got)
 	}

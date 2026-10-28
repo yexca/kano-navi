@@ -75,7 +75,7 @@ func TestTimelineCheckpointFreshnessDoesNotAdvanceOnContinuationOrCleanup(t *tes
 	if got := query(`SELECT COALESCE(cursor_id,'cleared')||'/'||last_success_at FROM sync_state WHERE source='x-timeline-window'`); got != "cleared/2026-03-11T01:00:00.000Z" {
 		t.Fatalf("cursor cleanup recorded a new success=%s", got)
 	}
-	// A legacy checkpoint has no known head timestamp. Clearing it preserves
+	// A checkpoint without a head timestamp is unknown. Clearing it preserves
 	// this uncertainty, including when no successful checkpoint row existed.
 	if _, err := s.db.Exec(`DELETE FROM sync_state`); err != nil {
 		t.Fatal(err)

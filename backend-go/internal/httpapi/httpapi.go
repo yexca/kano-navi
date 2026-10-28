@@ -20,7 +20,7 @@ type Handler struct {
 	now   func() time.Time
 	admin http.Handler
 	// static and mcp are attached only when this process is the single owner
-	// of the site instead of a read-only sidecar.
+	// of the site, not in read-only mode.
 	static http.Handler
 	mcp    http.Handler
 	// websub receives YouTube hub verifications and signed notifications.
@@ -70,7 +70,7 @@ func NewHandlerWithClock(store *sqlite.Store, now func() time.Time) http.Handler
 }
 
 // NewHandlerWithAdmin serves the public reads plus an operator API handler,
-// which the read-only sidecar attaches once its admin configuration is valid.
+// which read-only mode attaches once its admin configuration is valid.
 func NewHandlerWithAdmin(store *sqlite.Store, now func() time.Time, admin http.Handler) http.Handler {
 	if now == nil {
 		now = time.Now
@@ -277,9 +277,8 @@ func (h *Handler) calendar(w http.ResponseWriter, r *http.Request) {
 	items := make([]any, 0, len(calendar.Items))
 	for _, event := range calendar.Items {
 		projected := publicview.PublicEvent(event, false)
-		// Calendar exposes the same manual lock marker as TypeScript's
-		// publicEvent(event, ["manualLocked"]) and the board's trusted live
-		// state, while omitting dashboard-only isUpcoming.
+		// Calendar adds the manual lock marker and the board's trusted live
+		// state to the public event, while omitting dashboard-only isUpcoming.
 		projected["manualLocked"] = event.ManualLocked
 		projected["liveStatus"] = event.LiveStatus
 		items = append(items, projected)

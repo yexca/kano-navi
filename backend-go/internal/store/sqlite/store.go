@@ -34,7 +34,7 @@ type Store struct {
 	workflowWritable bool
 	workflowVersion  int
 	// sourceSync reports the source_sync_json columns, which a read-only
-	// snapshot migrated by an older release lacks.
+	// snapshot that has not been upgraded lacks.
 	sourceSync bool
 	// scheduleOffset draws a source schedule's jitter; nil draws at random.
 	scheduleOffset func(spread int64) int64

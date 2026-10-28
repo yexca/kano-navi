@@ -9,12 +9,11 @@ import (
 	"time"
 )
 
-// testdata/vectors.json was recorded from the original TypeScript sources and
-// the Node runtime before that implementation was removed. It is a frozen
-// reference that pins the JavaScript semantics this package re-implements: URL
-// normalization, string handling, number formatting and the result
-// normalizers. One deliberate change is applied to the recorded results: the
-// default status is the English pending code, not the recorded Chinese text.
+// testdata/vectors.json is a frozen reference that pins the JavaScript
+// semantics this package implements: URL normalization, string handling,
+// number formatting and the result normalizers. One adjustment is applied to
+// the recorded results: the default status is the English pending code, not
+// the recorded Chinese text.
 type vectorData struct {
 	Board        [][]any    `json:"board"`
 	Numbers      [][]any    `json:"numbers"`

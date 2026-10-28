@@ -12,8 +12,8 @@ import (
 )
 
 // OpenStandalone opens the runtime database for the process that owns the
-// site. A missing file is created and seeded. An existing snapshot written by
-// an earlier release is upgraded in one transaction: missing tables, columns
+// site. A missing file is created and seeded. An existing snapshot is
+// upgraded in one transaction: missing tables, columns
 // and indexes are added and their documented backfills run. The only rebuild
 // is the events table of a snapshot that predates event sources, which keeps
 // every row. No snapshot is cleared, and an unrecognized schema is left
@@ -267,8 +267,8 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 		}
 		return nil
 	}
-	// Seeded wording that earlier releases shipped. Only rows that still carry
-	// the exact seeded values change, so operator edits are preserved.
+	// Superseded seed wording. Only rows that still carry the exact seeded
+	// values change, so operator edits are preserved.
 	for _, statement := range []string{
 		`UPDATE resources SET title='official site',detail=NULL WHERE id=9 AND title='旧 official site' AND detail='更新截至 2022 · 资料存档'`,
 		`UPDATE timeline SET detail='8 月加入ミリプロSONA，以新形象开始配信。' WHERE id=1 AND detail='加入ミリプロSONA，开始 VTuber 活动。'`,
@@ -341,8 +341,9 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM app_settings WHERE key='llm_default_model_retired'`).Scan(&retired); err != nil {
 		return ErrSchema
 	}
-	// Until the provider default model is retired, it also appears in the
-	// model catalog. Afterwards a removed catalog model stays removed.
+	// Until retireDefaultModel has run, the provider default model also
+	// appears in the model catalog. Afterwards a removed catalog model stays
+	// removed.
 	if retired == 0 {
 		if err := exec(`INSERT OR IGNORE INTO llm_models(provider_id,model_id,name,tags_json,enabled,origin,owned_by,created_at,updated_at) SELECT id,model,NULL,capabilities_json,1,'legacy',NULL,created_at,created_at FROM llm_providers WHERE model<>''`); err != nil {
 			return err
@@ -357,8 +358,8 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 	return nil
 }
 
-// backfillEventCodes replaces the Chinese status and detail text that earlier
-// releases generated for events with the stored codes and neutral wording.
+// backfillEventCodes replaces generated Chinese status and detail text on
+// events with the stored codes and neutral wording.
 // Only rows synchronization still owns change; manual locks and tombstones
 // keep their text, which the frontend translates for display.
 func backfillEventCodes(ctx context.Context, tx *sql.Tx) error {
@@ -384,8 +385,8 @@ func backfillEventCodes(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-// backfillYoutubeEventTimePrecision repairs automatic YouTube rows written by
-// older releases that retained unknown precision after a timestamp was added.
+// backfillYoutubeEventTimePrecision repairs automatic YouTube rows that keep
+// unknown precision although they carry a timestamp.
 // A timestamp supplied by the YouTube reservation path is exact; manual rows,
 // tombstones and other sources keep their operator-owned precision.
 func backfillYoutubeEventTimePrecision(ctx context.Context, tx *sql.Tx) error {

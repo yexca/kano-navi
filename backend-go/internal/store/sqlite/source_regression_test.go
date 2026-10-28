@@ -90,7 +90,7 @@ func TestWorkflowV1UpgradeRetainsRunsAttemptsAndFrozenInputs(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	// An older run of a retired saved workflow keeps its ID.
+	// A stored run of a saved workflow keeps its ID.
 	def := &WorkflowDefinition{ID: "x-recent", Steps: []string{"x"}}
 	r, err := s.CreateWorkflowRun(ctx, *def, "operator", "fixture-key", map[string]bool{"x": true}, time.Now())
 	if err != nil {
@@ -138,7 +138,7 @@ func TestWorkflowV1UpgradeRetainsRunsAttemptsAndFrozenInputs(t *testing.T) {
 	if err != nil || got.Status != "succeeded" || got.WorkflowID != "x-recent" || len(got.Steps[0].Attempts) != 1 {
 		t.Fatalf("upgraded=%#v %v", got, err)
 	}
-	// The retired workflows table stays in the schema, with its columns.
+	// The unread workflows table stays in the schema, with its columns.
 	var columns int
 	if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('workflows') WHERE name IN ('steps_json','schedule_enabled','source_sync_json')`).Scan(&columns); err != nil || columns != 3 {
 		t.Fatalf("workflows columns=%d %v", columns, err)

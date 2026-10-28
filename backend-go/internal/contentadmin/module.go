@@ -62,8 +62,8 @@ func New(store *sqlite.Store, opts Options) *Module {
 	return m
 }
 
-// opError is an expected operation failure. TypeScript surfaces these as a
-// bare 500 internal_error; the fixed message is only stored as last_error.
+// opError is an expected operation failure. It surfaces as a bare 500
+// internal_error; the fixed message is only stored as last_error.
 type opError struct{ message string }
 
 func (e *opError) Error() string { return e.message }

@@ -26,8 +26,8 @@ const (
 	testBaseURL    = "https://provider.example.test/v1"
 )
 
-// Rejected and literal-address inputs are composed from parts, as the
-// TypeScript suite does, so the sources carry no address-like literals.
+// Rejected and literal-address inputs are composed from parts, so the sources
+// carry no address-like literals.
 func ipv4(a, b, c, d byte) string { return netip.AddrFrom4([4]byte{a, b, c, d}).String() }
 
 func composedURL(scheme, host, path string) string { return scheme + "://" + host + path }

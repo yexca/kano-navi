@@ -109,8 +109,8 @@ func localizedTitle(source string, translations sqlite.TranslationSet, l Locale)
 	return source
 }
 
-// detailCodes are the generated YouTube details, including the forms earlier
-// releases stored (src/lib/event-text.ts); other detail text is an operator's
+// detailCodes are the generated YouTube details, including every stored form
+// src/lib/event-text.ts recognizes; other detail text is an operator's
 // or a model's and stays as written.
 var detailCodes = map[string]string{
 	"YouTube Live":          "youtube_live",

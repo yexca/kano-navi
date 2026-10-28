@@ -249,7 +249,7 @@ func TestListAndPageMatchEachJobDetail(t *testing.T) {
 	start(KindWorkflow, Options{Source: "bilibili"})
 	start(KindLive, Options{})
 
-	// An older run of a retired saved workflow with frozen lookback days, and
+	// A stored run of a saved workflow with frozen lookback days, and
 	// a run whose history row is gone.
 	legacy, err := m.Store.CreateWorkflowRun(ctx, sqlite.WorkflowDefinition{ID: "legacy-daily", Steps: []string{"x", "media"}, SourceLookbackDays: map[string]int{"x": 4}}, "scheduler", "", map[string]bool{"x": true, "media": true}, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
 	if err != nil {

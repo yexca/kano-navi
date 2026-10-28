@@ -20,8 +20,8 @@ func (e *Extractor) skipAsset(ctx context.Context, update reviewUpdate, reason s
 	return assetResult{status: "skipped"}, err
 }
 
-// hasImage reports whether a schedule asset names an image at all. A legacy
-// row without a URL has nothing to download, so it is recorded once as
+// hasImage reports whether a schedule asset names an image at all. A row
+// without a URL has nothing to download, so it is recorded once as
 // `skipped` / `no_image` instead of waiting for a cache that never arrives.
 func hasImage(review *assetReview) bool {
 	return jsTrim(review.url) != ""

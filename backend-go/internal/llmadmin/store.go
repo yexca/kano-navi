@@ -136,8 +136,8 @@ func SetAppSetting(ctx context.Context, db Querier, key, value string) (updatedA
 }
 
 // The credential column is reduced to a flag inside SQLite, so the ciphertext
-// never reaches the projection code. The retired llm_providers.model column
-// is kept for older snapshots but no longer read.
+// never reaches the projection code. llm_providers.model stays in the schema
+// and is not read; the model queue names models explicitly.
 const providerColumns = `id, name, protocol, base_url, enabled, vision_capable,
 	capabilities_json, timeout_ms, max_retries,
 	(api_key_ciphertext IS NOT NULL AND api_key_ciphertext <> '') AS api_key_configured,
@@ -323,8 +323,8 @@ func ScheduleExtractionConfig(ctx context.Context, db Querier, lookupEnv func(st
 	if config.MessageEnabled, err = stage("schedule_message_enabled", "SCHEDULE_MESSAGE_ENABLED"); err != nil {
 		return config, err
 	}
-	// The legacy switch only seeds the stage defaults: the message detector
-	// can be enabled on its own.
+	// schedule_extraction_enabled only seeds the stage defaults: the message
+	// detector can be enabled on its own.
 	config.Enabled = config.MessageEnabled || (config.KeywordEnabled && config.VisionEnabled)
 	// The all-posts switch is off unless explicitly enabled.
 	allPosts, err := setting("schedule_message_all_posts", "SCHEDULE_MESSAGE_ALL_POSTS", "0")
@@ -355,7 +355,7 @@ func videoExists(ctx context.Context, db Querier, id string) (bool, error) {
 	return err == nil, err
 }
 
-// FeaturedVideoID returns the operator's featured video, or the legacy focus
+// FeaturedVideoID returns the operator's featured video, or the focus
 // row while no choice has been stored. "" means none; a video that no longer
 // exists is never returned.
 func FeaturedVideoID(ctx context.Context, db Querier) (string, error) {

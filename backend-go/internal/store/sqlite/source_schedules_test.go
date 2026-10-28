@@ -152,8 +152,8 @@ func TestPrepareSourceSchedulesLeavesRetiredWorkflowsAlone(t *testing.T) {
 	s := openScheduleStore(t)
 	ctx := context.Background()
 	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
-	// A timed workflow that reads sources, as an earlier release kept it.
-	// Saved workflows are retired without a migration (ADR-0003).
+	// A timed row in the workflows table that reads sources. Nothing moves
+	// it into source_schedules (ADR-0003).
 	const row = `wf-frequent|Frequent|["x","youtube","media"]|1|20|2026-03-02T03:10:00.000Z`
 	if _, err := s.db.Exec(`INSERT INTO workflows(id,name,steps_json,source_sync_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES('wf-frequent','Frequent','["x","youtube","media"]','{"x":{"mode":"count","count":30}}',1,20,'2026-03-02T03:10:00.000Z','2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`); err != nil {
 		t.Fatal(err)

@@ -25,7 +25,7 @@ func publicTranslations(set sqlite.TranslationSet) map[string]any {
 
 // Dashboard returns a sanitized JSON-ready map. The store types intentionally
 // omit sensitive columns; this second boundary also controls the exact public
-// field set used by the TypeScript service.
+// field set.
 func Dashboard(d *sqlite.Dashboard) map[string]any {
 	if d == nil {
 		return nil

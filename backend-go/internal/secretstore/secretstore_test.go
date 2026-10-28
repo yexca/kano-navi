@@ -28,7 +28,8 @@ func TestRoundTripAndFailures(t *testing.T) {
 	}
 }
 
-// The TypeScript service wrote this value with the same synthetic key.
+// An externally supplied ciphertext of "synthetic-value" under the same
+// synthetic key must decrypt, which pins the stored format.
 func TestReadsTypeScriptCiphertext(t *testing.T) {
 	value := os.Getenv("KANO_TS_CIPHERTEXT")
 	if value == "" {

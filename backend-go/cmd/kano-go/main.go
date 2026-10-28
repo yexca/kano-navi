@@ -25,8 +25,8 @@ import (
 )
 
 // usage lists the commands of the process that owns the site. Running the
-// binary with flags only keeps the read-only sidecar used by the comparison
-// checks.
+// binary with flags only starts the read-only mode used by the container
+// smoke.
 const usage = `Usage: kano-go <command> [flags]
 
 Commands:
@@ -96,10 +96,9 @@ func main() {
 		os.Exit(2)
 	}
 	var admin *adminauth.Auth
-	// The public sidecar remains usable for the existing read-only smoke tests
-	// when no admin environment is supplied. Supplying any admin setting opts
-	// into the TypeScript-compatible production default and validates it before
-	// the admin router is attached.
+	// Without any admin environment, read-only mode serves public reads only.
+	// Supplying any admin setting opts into the production default and
+	// validates it before the admin router is attached.
 	if os.Getenv("APP_MODE") != "" || os.Getenv("ADMIN_PASSWORD") != "" || os.Getenv("ADMIN_ORIGIN") != "" {
 		adminConfig, configErr := adminauth.ResolveEnv()
 		if configErr != nil {
@@ -163,7 +162,7 @@ func main() {
 	scheduler := &workflow.Scheduler{Store: store, Queue: queue, Enabled: cfg.EnableScheduler}
 	scheduler.Start()
 	defer scheduler.Stop()
-	// The sidecar attaches the operator API only with a valid admin
+	// Read-only mode attaches the operator API only with a valid admin
 	// configuration; run routes need the development source queue.
 	var adminHandler http.Handler
 	if admin != nil {

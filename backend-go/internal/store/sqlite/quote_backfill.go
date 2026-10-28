@@ -19,12 +19,12 @@ const quotedPostsSQL = `SELECT id,raw_json,COALESCE(media_url,'') FROM posts
   OR json_type(raw_json,'$.quotedTweet')='object' OR json_type(raw_json,'$.quoted_tweet')='object'
   OR json_type(raw_json,'$.qrtURL')='text')`
 
-// backfillQuotes gives posts stored before quote projections their quote
-// from the raw_json each kept, and moves the quoted images that earlier
-// releases linked as the post's own images to quote-image links.
+// backfillQuotes gives posts without a stored quote their quote from the
+// raw_json each kept, and moves quoted images linked as the post's own images
+// to quote-image links.
 //
-// Those releases listed the post's own images first and the quoted status's
-// after them, both as post-image. A post-image link is moved when its asset
+// Such rows list the post's own images first and the quoted status's after
+// them, both as post-image. A post-image link is moved when its asset
 // is one of the quote's images and not one the post's raw_json declares as
 // its own, so the remaining own links keep their positions. An image both
 // declare stays the post's own. media_url, the first own image, follows.

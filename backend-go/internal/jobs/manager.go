@@ -309,8 +309,8 @@ func toJob(run *sqlite.WorkflowRun, history *sqlite.JobRun) *Job {
 	if source, scheduled := sqlite.SourceScheduleOf(run.WorkflowID); scheduled {
 		job.SourceSchedule = &source
 	}
-	// An older run of a retired saved workflow keeps its ID; its name is
-	// not read (ADR-0003).
+	// A stored run of a saved workflow keeps its ID; the definition is not
+	// read (ADR-0003).
 	if !sqlite.IsAdhocWorkflow(run.WorkflowID) {
 		id := run.WorkflowID
 		job.WorkflowID = &id
@@ -346,8 +346,8 @@ func toJob(run *sqlite.WorkflowRun, history *sqlite.JobRun) *Job {
 			} else if sync, ok := run.SourceSync[step]; ok {
 				windows[step] = sync
 			} else if days, ok := run.SourceLookbackDays[step]; ok {
-				// An older run of a retired saved workflow, from before
-				// sourceSync replaced its days.
+				// A stored run that froze lookback days instead of a
+				// sourceSync.
 				windows[step] = map[string]any{"mode": "recent", "days": days}
 			}
 		}

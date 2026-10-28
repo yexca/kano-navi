@@ -48,8 +48,8 @@ type Job struct {
 	StartedAt   *string `json:"startedAt"`
 	FinishedAt  *string `json:"finishedAt"`
 	TriggeredBy string  `json:"triggeredBy"`
-	// WorkflowID names the retired saved workflow an older run belongs to;
-	// every new run has none (ADR-0003).
+	// WorkflowID names the saved workflow a stored run belongs to; every
+	// new run has none (ADR-0003).
 	WorkflowID   *string        `json:"workflowId"`
 	Steps        []string       `json:"steps"`
 	FetchWindows map[string]any `json:"fetchWindows"`

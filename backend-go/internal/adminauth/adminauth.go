@@ -40,8 +40,9 @@ func ResolveConfig(environment map[string]string) (Config, error) {
 	return NewConfig(mode, environment["ADMIN_PASSWORD"], environment["ADMIN_ORIGIN"])
 }
 
-// ResolveEnv follows the TypeScript defaults. The caller may choose to leave
-// the admin sidecar disabled when no admin environment is supplied at all.
+// ResolveEnv reads the admin environment with production as the default mode.
+// Read-only mode leaves the operator API off when no admin environment is
+// supplied at all.
 func ResolveEnv() (Config, error) {
 	values := map[string]string{
 		"APP_MODE":       os.Getenv("APP_MODE"),

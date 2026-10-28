@@ -19,8 +19,8 @@ var (
 	ErrMediaVersionNotFound = errors.New("media version not found")
 )
 
-// Source media downloads are capped at 10 MiB by the TypeScript media
-// downloader. Public reads enforce the same bound before allocating a byte
+// Source media downloads are capped at 10 MiB by the media downloader.
+// Public reads enforce the same bound before allocating a byte
 // slice, so a corrupt or operator-edited cache row cannot trigger an
 // unbounded read.
 const maxCachedMediaBytes = 10 * 1024 * 1024

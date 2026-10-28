@@ -42,9 +42,9 @@ func streamIdentity(value string) string {
 	return "url:" + value
 }
 
-// Register the same deterministic SQLite function that the TypeScript
-// service installs during database initialization. This lets Go reuse the
-// indexed stream_identity(url) expressions without writing to the snapshot.
+// Register the deterministic stream_identity SQLite function that the schema's
+// indexed stream_identity(url) expressions use, without writing to the
+// snapshot.
 func init() {
 	if err := moderncsqlite.RegisterDeterministicScalarFunction("stream_identity", 1, func(_ *moderncsqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
 		if len(args) == 0 || args[0] == nil {

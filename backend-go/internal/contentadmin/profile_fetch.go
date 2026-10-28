@@ -201,7 +201,7 @@ var (
 )
 
 // decodeEscapedURL undoes the JSON and HTML escaping seen in profile pages,
-// in the same order as the original implementation.
+// in a fixed order.
 func decodeEscapedURL(value string) string {
 	value = strings.ReplaceAll(value, `\/`, "/")
 	value = strings.ReplaceAll(value, `\`+"u0026", "&")

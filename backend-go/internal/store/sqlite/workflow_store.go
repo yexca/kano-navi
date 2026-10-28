@@ -76,7 +76,7 @@ func (s *Store) ListWorkflowRuns(ctx context.Context, page, size int, status, wo
 }
 
 // runConfigColumns selects the lookback days, windows and sync frozen on a
-// run, as NULL where an older snapshot lacks the column.
+// run, as NULL where a read-only snapshot lacks the column.
 func (s *Store) runConfigColumns() string {
 	columns := []string{"NULL", "NULL", "NULL"}
 	if s.workflowVersion >= 2 {

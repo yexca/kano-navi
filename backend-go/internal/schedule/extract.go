@@ -1,5 +1,5 @@
-// Package schedule ports the LLM schedule extraction step of the TypeScript
-// service (server/schedule-extractor.ts). It reads stored X posts and schedule
+// Package schedule is the LLM schedule extraction step. It reads stored X
+// posts and schedule
 // board images, asks the configured model providers for structured output and
 // writes events, extraction records, post LLM states, image reviews and
 // cancellation overlays back to the shared SQLite snapshot.

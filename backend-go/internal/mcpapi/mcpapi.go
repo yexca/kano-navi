@@ -28,7 +28,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
-// bodyLimit mirrors the global 32 KiB JSON body limit of the original service.
+// bodyLimit is the 32 KiB JSON body limit of the MCP endpoint.
 const bodyLimit = 32 << 10
 
 // maxBatchSize mirrors the transport limit on one JSON-RPC batch.
@@ -111,7 +111,7 @@ func (h *handler) post(w http.ResponseWriter, r *http.Request) {
 	jsonBody := isJSONContentType(r.Header.Get("Content-Type"))
 
 	// Only a JSON body is parsed. Any other media type reaches the transport
-	// checks below with no body, exactly like an unparsed request used to.
+	// checks below with no body.
 	var body any
 	if jsonBody {
 		parsed, status, code := readBody(w, r)
