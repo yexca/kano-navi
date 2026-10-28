@@ -184,6 +184,14 @@ func TestUpgradeBackfillsQuotesAndMovesQuotedImages(t *testing.T) {
 		`INSERT INTO posts(id,source,account_handle,text,published_at,url,media_url,raw_json) VALUES('only-quote','x','kano','look','2026-03-02T00:00:00.000Z','https://x.com/kano/status/1900000000000000101','` + twimg("quoted") + `','{"tweetID":"1900000000000000101","mediaURLs":[],"qrt":` + qrt + `}')`,
 		`INSERT INTO posts(id,source,account_handle,text,published_at,url,media_url,raw_json) VALUES('gone','x','kano','look','2026-03-03T00:00:00.000Z','https://x.com/kano/status/1900000000000000102',NULL,'{"tweetID":"1900000000000000102","mediaURLs":[],"qrt":null,"qrtURL":"https://x.com/quoted_synthetic/status/` + quotedID + `"}')`,
 		`INSERT INTO posts(id,source,account_handle,text,published_at,url,media_url,raw_json) VALUES('plain','x','kano','plain','2026-03-04T00:00:00.000Z','https://x.com/kano/status/1900000000000000103','` + twimg("plain") + `','{"tweetID":"1900000000000000103","mediaURLs":["` + twimg("plain") + `"],"qrt":null}')`,
+		`INSERT INTO posts(id,source,account_handle,text,published_at,url,media_url,raw_json) VALUES('labelled','x','kano','look','2026-03-05T00:00:00.000Z','https://x.com/kano/status/1900000000000000104','` + twimg("quoted") + `','{"tweetID":"1900000000000000104","mediaURLs":[],"qrt":` + qrt + `}')`,
+		// Schedule candidates: a quoted image taken as the post's own, the
+		// post's own image, and a quoted image an operator labelled.
+		`INSERT INTO assets(id,kind,url,source_url,updated_at) VALUES('schedule-x-only-quote','schedule','` + twimg("quoted") + `','https://x.com/kano/status/1900000000000000101','2026-03-02T00:00:00Z')`,
+		`INSERT INTO schedule_asset_reviews(asset_id,llm_status,manual_status,updated_at) VALUES('schedule-x-only-quote','schedule','unreviewed','2026-03-02T00:00:00Z')`,
+		`INSERT INTO assets(id,kind,url,source_url,updated_at) VALUES('schedule-x-both','schedule','` + twimg("own") + `','https://x.com/kano/status/1900000000000000100','2026-03-01T00:00:00Z')`,
+		`INSERT INTO assets(id,kind,url,source_url,updated_at) VALUES('schedule-x-labelled','schedule','` + twimg("quoted") + `','https://x.com/kano/status/1900000000000000104','2026-03-05T00:00:00Z')`,
+		`INSERT INTO schedule_asset_reviews(asset_id,llm_status,manual_status,updated_at) VALUES('schedule-x-labelled','pending','schedule','2026-03-05T00:00:00Z')`,
 	} {
 		if _, err = db.Exec(statement); err != nil {
 			t.Fatalf("%s: %v", statement, err)
@@ -195,6 +203,13 @@ func TestUpgradeBackfillsQuotesAndMovesQuotedImages(t *testing.T) {
 	link("only-quote", twimg("quoted"), "post-image", 0)
 	link("only-quote", twimg("shared"), "post-image", 1)
 	link("plain", twimg("plain"), "post-image", 0)
+	link("labelled", twimg("quoted"), "post-image", 0)
+	for _, asset := range []string{"schedule-x-only-quote", "schedule-x-labelled"} {
+		id, _, _ := mediaIdentity(twimg("quoted"))
+		if _, err = db.Exec(`INSERT INTO media_links(media_id,owner_type,owner_id,role,position,created_at,updated_at) VALUES(?,'asset',?,'schedule-image',0,'2026-03-01T00:00:00Z','2026-03-01T00:00:00Z')`, id, asset); err != nil {
+			t.Fatal(err)
+		}
+	}
 	var revision string
 	_ = db.QueryRow(`SELECT COALESCE((SELECT value FROM app_settings WHERE key='dashboard_revision'),'0')`).Scan(&revision)
 	db.Close()
@@ -214,6 +229,7 @@ func TestUpgradeBackfillsQuotesAndMovesQuotedImages(t *testing.T) {
 		"only-quote": {quote, "", twimg("quoted") + " " + twimg("shared"), ""},
 		"gone":       {`{"id":"` + quotedID + `","url":"https://x.com/i/status/` + quotedID + `","unavailable":true}`, "", "", ""},
 		"plain":      {"", twimg("plain"), "", twimg("plain")},
+		"labelled":   {quote, "", twimg("quoted") + " " + twimg("shared"), ""},
 	} {
 		var mediaURL sql.NullString
 		if err = db.QueryRow(`SELECT media_url FROM posts WHERE id=?`, post).Scan(&mediaURL); err != nil {
@@ -222,6 +238,13 @@ func TestUpgradeBackfillsQuotesAndMovesQuotedImages(t *testing.T) {
 		got := [4]string{storedQuote(t, db, post), linkedMedia(t, db, post, "post-image"), linkedMedia(t, db, post, "quote-image"), mediaURL.String}
 		if got != want {
 			t.Errorf("%s:\n got %q\nwant %q", post, got, want)
+		}
+	}
+	for asset, want := range map[string]int{"schedule-x-only-quote": 0, "schedule-x-both": 1, "schedule-x-labelled": 1} {
+		var assets, reviews, links int
+		_ = db.QueryRow(`SELECT (SELECT COUNT(*) FROM assets WHERE id=?1),(SELECT COUNT(*) FROM schedule_asset_reviews WHERE asset_id=?1),(SELECT COUNT(*) FROM media_links WHERE owner_type='asset' AND owner_id=?1)`, asset).Scan(&assets, &reviews, &links)
+		if assets != want || (want == 0 && reviews+links != 0) {
+			t.Errorf("%s: assets=%d reviews=%d links=%d, want %d", asset, assets, reviews, links, want)
 		}
 	}
 	var after string

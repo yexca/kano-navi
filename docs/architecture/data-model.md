@@ -271,7 +271,11 @@ lists its own images first and the quoted status's after them, all as
 `quote-image` when its image is one of the quote's and not one the post's
 `raw_json` declares as its own, so the remaining own links keep their
 positions, and an image both declare stays the post's. `media_url` then
-names the first own image or `NULL`. The step reads only rows without a
+names the first own image or `NULL`. A post without own images took the
+quote's first image as its schedule candidate, so a `schedule-x-<post id>`
+asset whose image is one of the moved quoted images is removed with its
+review and `schedule-image` link, unless an operator labelled it or set its
+period. The step reads only rows without a
 projection, so it is idempotent; it never clears a post or another link,
 and it increments the dashboard revision when it changes a row. A timeline
 page that lists a stored post again leaves it unchanged, so a stored post
