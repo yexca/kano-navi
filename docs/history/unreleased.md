@@ -41,6 +41,16 @@
   settings.
 - Schedule and Posts filters are labelled pills with one date range and a
   clear button that counts the active filters.
+- The schedule entry dialog picks the type from a segmented control and
+  groups the date, start and length in one card with an **At a time** /
+  **All day** switch. A new entry starts timed and needs a start time;
+  **All day** saves a date-only entry. The length defaults to the type's
+  calendar length (an hour for streams and memberships, half an hour
+  otherwise) without saving an end, and presets or a custom end save one.
+  A preview line shows how calendar subscribers will see the entry. The
+  detail box grows with its text and counts characters toward the limit. The
+  status note and cancellation fold away and open on their own when the
+  entry already uses them; save and cancel stay pinned to the dialog's foot.
 - Translation chips open the editor on the clicked language; the editor
   shows the original beside one language at a time.
 - Video cards keep their actions on one row at the foot of each card.

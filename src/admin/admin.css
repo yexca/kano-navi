@@ -4294,6 +4294,127 @@ button.adm-run-line:hover {
   font-size: 12px;
 }
 
+/* Schedule entry dialog: title, type, a "when" card with its calendar
+   preview, then the rarer fields folded away. */
+.adm-shell input.adm-entry-title {
+  height: 44px;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+/* The type choices wrap on narrow screens; a pill would turn into a blob. */
+.adm-entry-dialog .adm-field > .adm-segmented {
+  border-radius: 19px;
+}
+
+.adm-entry-when {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-sunken);
+}
+
+.adm-entry-when > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.adm-entry-when > header strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.adm-entry-when .adm-segmented {
+  background: color-mix(in oklab, var(--adm-line-strong) 45%, transparent);
+}
+
+.adm-entry-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--adm-line-strong);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.adm-entry-preview svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--adm-accent);
+}
+
+.adm-entry-preview span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.adm-entry-preview small {
+  color: var(--adm-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+/* The detail grows with its text inside one framed box, with the counter
+   on its own line so it never covers the wording. */
+.adm-entry-detail {
+  display: grid;
+  border: 1px solid var(--adm-line-strong);
+  border-radius: var(--adm-radius-sm);
+  background: hsl(var(--background));
+  cursor: text;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.adm-entry-detail:focus-within {
+  border-color: var(--adm-accent);
+  box-shadow: var(--adm-focus);
+}
+
+.adm-shell .adm-entry-detail textarea {
+  height: auto;
+  min-height: 76px;
+  max-height: 240px;
+  padding: 11px 13px 4px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  line-height: 1.55;
+  resize: none;
+  field-sizing: content;
+}
+
+.adm-entry-count {
+  justify-self: end;
+  padding: 0 12px 8px;
+  color: var(--adm-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-entry-count.is-near {
+  color: var(--honey);
+  font-weight: 650;
+}
+
+.adm-entry-more {
+  padding-top: 14px;
+  border-top: 1px solid var(--adm-line);
+}
+
 .adm-modal.adm-translation-editor {
   width: min(920px, calc(100vw - 32px));
 }

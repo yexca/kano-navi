@@ -1,8 +1,10 @@
 import { useState, type SubmitEvent } from "react"
 import {
+  CalendarCheck,
   CalendarPlus,
   CheckCheck,
   ExternalLink,
+  Link2,
   Pencil,
   Search,
   Split,
@@ -15,6 +17,7 @@ import type { ViewProps } from "@/admin"
 import {
   eventStatusLabel,
   formatDateTime,
+  formatDay,
   japanClock,
   japanDay,
   japanInstant,
@@ -38,6 +41,7 @@ import {
   PageHeader,
   Pager,
   Panel,
+  Segmented,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import {
@@ -47,13 +51,28 @@ import {
   ProvenanceBadge,
 } from "@/admin/views/event-parts"
 
-const eventTypes = ["event", "stream", "member", "release", "appearance"]
+const eventTypes = ["stream", "member", "appearance", "release", "event"]
+
+/** The form's limit on an entry's detail, shown by its counter. */
+const detailLimit = 500
+
+/** Preset lengths, in minutes, that save an end time. */
+const lengths = [30, 60, 120, 180]
+
+/** The calendar feed's length for a timed entry without an end: an hour for
+ * the stream types and half an hour otherwise (see the public feeds). */
+function defaultMinutes(eventType: string) {
+  return eventType === "stream" || eventType === "member" ? 60 : 30
+}
 
 interface Draft {
   title: string
   detail: string
   startsOn: string
+  timed: boolean
   start: string
+  /** "" keeps the end open, a preset is minutes, "custom" uses end. */
+  length: string
   end: string
   approximate: boolean
   eventType: string
@@ -64,11 +83,20 @@ interface Draft {
 }
 
 function draftOf(event: AdminEvent | null): Draft {
+  const startsAt = Date.parse(event?.startsAt || "")
+  const minutes = (Date.parse(event?.endsAt || "") - startsAt) / 60_000
   return {
     title: event?.title || "",
     detail: event?.detail || "",
     startsOn: event?.startsOn || japanToday(),
+    // A new entry starts timed so a date-only entry is a deliberate choice.
+    timed: event ? Boolean(event.startsAt) : true,
     start: japanClock(event?.startsAt),
+    length: !event?.endsAt
+      ? ""
+      : lengths.includes(minutes)
+        ? String(minutes)
+        : "custom",
     end: japanClock(event?.endsAt),
     approximate: event?.timePrecision === "approximate",
     eventType: event?.eventType || "stream",
@@ -79,25 +107,35 @@ function draftOf(event: AdminEvent | null): Draft {
   }
 }
 
-/** Build the request; an end clock before the start means the next day. */
-function inputOf(draft: Draft): EventInput {
-  const startsAt = draft.start ? japanInstant(draft.startsOn, draft.start) : ""
-  let endsAt = ""
-  if (startsAt && draft.end) {
-    let endDay = draft.startsOn
-    if (draft.end < draft.start) {
-      const next = new Date(`${draft.startsOn}T12:00:00+09:00`)
-      next.setUTCDate(next.getUTCDate() + 1)
-      endDay = japanDay(next.toISOString())
-    }
-    endsAt = japanInstant(endDay, draft.end)
+/** The saved end instant; a custom end clock before the start is the next day. */
+function endOf(draft: Draft, startsAt: string) {
+  if (!startsAt || !draft.length) return ""
+  if (draft.length !== "custom") {
+    const end = new Date(Date.parse(startsAt) + Number(draft.length) * 60_000)
+    return japanInstant(
+      japanDay(end.toISOString()),
+      japanClock(end.toISOString()),
+    )
   }
+  if (!draft.end) return ""
+  let endDay = draft.startsOn
+  if (draft.end < draft.start) {
+    const next = new Date(`${draft.startsOn}T12:00:00+09:00`)
+    next.setUTCDate(next.getUTCDate() + 1)
+    endDay = japanDay(next.toISOString())
+  }
+  return japanInstant(endDay, draft.end)
+}
+
+function inputOf(draft: Draft): EventInput {
+  const startsAt =
+    draft.timed && draft.start ? japanInstant(draft.startsOn, draft.start) : ""
   return {
     title: draft.title,
     detail: draft.detail,
     startsOn: draft.startsOn,
     startsAt,
-    endsAt,
+    endsAt: endOf(draft, startsAt),
     timePrecision: startsAt
       ? draft.approximate
         ? "approximate"
@@ -121,10 +159,14 @@ function EventDialog({
   event: AdminEvent | null
   onClose: (saved?: boolean) => void
 }) {
-  const { t } = useAppSettings()
+  const { t, locale } = useAppSettings()
   const { api, act } = useAdmin()
   const [draft, setDraft] = useState(() => draftOf(event))
   const [busy, setBusy] = useState(false)
+  // The rarer fields open on their own only when the entry already uses them.
+  const [moreOpen] = useState(
+    () => Boolean(draft.status) || draft.cancellationStatus !== "none",
+  )
   const set = (patch: Partial<Draft>) =>
     setDraft((current) => ({ ...current, ...patch }))
   const save = async (submit: SubmitEvent<HTMLFormElement>) => {
@@ -138,17 +180,55 @@ function EventDialog({
     setBusy(false)
     if (result) onClose(true)
   }
+  const minutesLabel = (minutes: number) =>
+    minutes < 60
+      ? t("admin.interval.minutes", { count: minutes })
+      : t("admin.interval.hours", { count: minutes / 60 })
+  const fallback = minutesLabel(defaultMinutes(draft.eventType))
+
+  // What a calendar subscriber sees for this entry once it is saved.
+  const input = inputOf(draft)
+  let preview = `${formatDay(draft.startsOn, locale)} · ${t("admin.schedule.allDay")}`
+  if (input.startsAt) {
+    const end =
+      input.endsAt ||
+      new Date(
+        Date.parse(input.startsAt) + defaultMinutes(draft.eventType) * 60_000,
+      ).toISOString()
+    const nextDay = japanDay(end) !== draft.startsOn ? " (+1)" : ""
+    preview = `${formatDay(draft.startsOn, locale)} · ${draft.approximate ? "~" : ""}${draft.start}–${japanClock(end)}${nextDay} JST`
+  } else if (draft.timed) {
+    preview = t("admin.schedule.preview.needsStart")
+  }
+
   return (
     <Modal
       open
       wide
+      className="adm-entry-dialog"
       title={event ? t("admin.schedule.edit") : t("admin.schedule.create")}
       onClose={() => onClose()}
+      footer={
+        <>
+          <span className="adm-muted">{t("admin.schedule.lockHint")}</span>
+          <Button onClick={() => onClose()}>{t("admin.action.cancel")}</Button>
+          <Button
+            type="submit"
+            form="adm-entry-form"
+            variant="primary"
+            busy={busy}
+          >
+            {event?.deletedAt
+              ? t("admin.schedule.restore")
+              : t("admin.action.save")}
+          </Button>
+        </>
+      }
     >
-      <form className="adm-form" onSubmit={save}>
-        <p className="adm-note">{t("admin.schedule.lockHint")}</p>
+      <form id="adm-entry-form" className="adm-form" onSubmit={save}>
         <Field label={t("admin.schedule.field.title")}>
           <input
+            className="adm-entry-title"
             value={draft.title}
             onChange={(e) => set({ title: e.target.value })}
             maxLength={240}
@@ -156,127 +236,206 @@ function EventDialog({
             autoFocus
           />
         </Field>
-        <div className="adm-form-row is-three">
-          <Field
-            label={t("admin.schedule.field.date")}
-            hint={t("admin.schedule.field.dateHint")}
-          >
-            <input
-              type="date"
-              value={draft.startsOn}
-              onChange={(e) => set({ startsOn: e.target.value })}
-              required
-            />
-          </Field>
-          <Field
-            label={t("admin.schedule.field.start")}
-            hint={t("admin.schedule.field.startHint")}
-          >
-            <input
-              type="time"
-              value={draft.start}
-              onChange={(e) => set({ start: e.target.value })}
-            />
-          </Field>
-          <Field label={t("admin.schedule.field.end")}>
-            <input
-              type="time"
-              value={draft.end}
-              disabled={!draft.start}
-              onChange={(e) => set({ end: e.target.value })}
-            />
-          </Field>
-        </div>
-        <div className="adm-form-row">
-          <Field label={t("admin.schedule.field.type")}>
-            <select
-              value={draft.eventType}
-              onChange={(e) => set({ eventType: e.target.value })}
-            >
-              {eventTypes.map((type) => (
-                <option key={type} value={type}>
-                  {t(`admin.event.type.${type}`)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field
-            label={t("admin.schedule.field.status")}
-            hint={t("admin.schedule.field.statusHint")}
-          >
-            <input
-              value={draft.status}
-              onChange={(e) => set({ status: e.target.value })}
-              maxLength={80}
-            />
-          </Field>
-        </div>
-        {draft.start ? (
-          <label className="adm-check">
-            <input
-              type="checkbox"
-              checked={draft.approximate}
-              onChange={(e) => set({ approximate: e.target.checked })}
-            />
-            {t("admin.schedule.field.approximate")}
-          </label>
-        ) : null}
-        <Field label={t("admin.schedule.field.url")}>
-          <input
-            type="url"
-            value={draft.url}
-            onChange={(e) => set({ url: e.target.value })}
-            maxLength={2000}
-            placeholder="https://"
+        <div className="adm-field">
+          <span className="adm-field-label">
+            {t("admin.schedule.field.type")}
+          </span>
+          <Segmented
+            label={t("admin.schedule.field.type")}
+            value={draft.eventType}
+            options={eventTypes.map((type) => ({
+              value: type,
+              label: t(`admin.event.type.${type}`),
+            }))}
+            onChange={(eventType) => set({ eventType })}
           />
+        </div>
+
+        <section
+          className="adm-entry-when"
+          aria-label={t("admin.schedule.when")}
+        >
+          <header>
+            <strong>{t("admin.schedule.when")}</strong>
+            <Segmented
+              label={t("admin.schedule.when")}
+              value={draft.timed ? "timed" : "allDay"}
+              options={[
+                { value: "timed", label: t("admin.schedule.timed") },
+                { value: "allDay", label: t("admin.schedule.allDay") },
+              ]}
+              onChange={(mode) => set({ timed: mode === "timed" })}
+            />
+          </header>
+          <div
+            className={`adm-form-row is-top${draft.timed ? " is-three" : ""}`}
+          >
+            <Field
+              label={t("admin.schedule.field.date")}
+              hint={t("admin.schedule.field.dateHint")}
+            >
+              <input
+                type="date"
+                value={draft.startsOn}
+                onChange={(e) => set({ startsOn: e.target.value })}
+                required
+              />
+            </Field>
+            {draft.timed ? (
+              <>
+                <Field
+                  label={t("admin.schedule.field.start")}
+                  hint={t("admin.schedule.field.startHint")}
+                >
+                  <input
+                    type="time"
+                    value={draft.start}
+                    onChange={(e) => set({ start: e.target.value })}
+                    required
+                  />
+                </Field>
+                <Field
+                  label={t("admin.schedule.field.length")}
+                  hint={
+                    draft.length
+                      ? undefined
+                      : t("admin.schedule.length.openHint", {
+                          length: fallback,
+                        })
+                  }
+                >
+                  <select
+                    value={draft.length}
+                    onChange={(e) => set({ length: e.target.value })}
+                  >
+                    <option value="">
+                      {t("admin.schedule.length.default", {
+                        length: fallback,
+                      })}
+                    </option>
+                    {lengths.map((minutes) => (
+                      <option key={minutes} value={minutes}>
+                        {minutesLabel(minutes)}
+                      </option>
+                    ))}
+                    <option value="custom">
+                      {t("admin.schedule.length.custom")}
+                    </option>
+                  </select>
+                </Field>
+              </>
+            ) : null}
+          </div>
+          {draft.timed && draft.length === "custom" ? (
+            <div className="adm-form-row is-three">
+              <Field
+                label={t("admin.schedule.field.end")}
+                hint={t("admin.schedule.field.endHint")}
+              >
+                <input
+                  type="time"
+                  value={draft.end}
+                  onChange={(e) => set({ end: e.target.value })}
+                  required
+                />
+              </Field>
+            </div>
+          ) : null}
+          {draft.timed ? (
+            <label className="adm-check">
+              <input
+                type="checkbox"
+                checked={draft.approximate}
+                onChange={(e) => set({ approximate: e.target.checked })}
+              />
+              {t("admin.schedule.field.approximate")}
+            </label>
+          ) : null}
+          <p className="adm-entry-preview" aria-live="polite">
+            <CalendarCheck aria-hidden />
+            <span>
+              <small>{t("admin.schedule.preview")}</small>
+              {preview}
+            </span>
+          </p>
+        </section>
+
+        <Field label={t("admin.schedule.field.url")}>
+          <span className="adm-input-icon">
+            <Link2 aria-hidden />
+            <input
+              type="url"
+              value={draft.url}
+              onChange={(e) => set({ url: e.target.value })}
+              maxLength={2000}
+              placeholder="https://"
+            />
+          </span>
         </Field>
         <Field label={t("admin.schedule.field.detail")}>
-          <textarea
-            value={draft.detail}
-            onChange={(e) => set({ detail: e.target.value })}
-            maxLength={500}
-            rows={3}
-          />
-        </Field>
-        <Field label={t("admin.schedule.field.cancellation")}>
-          <select
-            value={draft.cancellationStatus}
-            onChange={(e) =>
-              set({
-                cancellationStatus: e.target
-                  .value as Draft["cancellationStatus"],
-              })
-            }
-          >
-            <option value="none">{t("admin.schedule.cancel.none")}</option>
-            {event?.cancellationStatus === "llm_suspected" ? (
-              <option value="llm_suspected">
-                {t("admin.schedule.cancel.keep")}
-              </option>
-            ) : null}
-            <option value="manual_confirmed">
-              {t("admin.schedule.cancel.confirmed")}
-            </option>
-          </select>
-        </Field>
-        {draft.cancellationStatus === "manual_confirmed" ? (
-          <Field label={t("admin.review.cancelReason")}>
-            <input
-              value={draft.cancellationReason}
-              onChange={(e) => set({ cancellationReason: e.target.value })}
-              maxLength={500}
-              required
+          <span className="adm-entry-detail">
+            <textarea
+              value={draft.detail}
+              onChange={(e) => set({ detail: e.target.value })}
+              maxLength={detailLimit}
+              rows={2}
+              placeholder={t("admin.schedule.field.detailPlaceholder")}
             />
-          </Field>
-        ) : null}
-        <div className="adm-form-actions">
-          <Button onClick={() => onClose()}>{t("admin.action.cancel")}</Button>
-          <Button type="submit" variant="primary" busy={busy}>
-            {event?.deletedAt
-              ? t("admin.schedule.restore")
-              : t("admin.action.save")}
-          </Button>
-        </div>
+            <span
+              className={`adm-entry-count${draft.detail.length > detailLimit - 50 ? " is-near" : ""}`}
+              aria-hidden
+            >
+              {draft.detail.length} / {detailLimit}
+            </span>
+          </span>
+        </Field>
+
+        <details className="adm-disclosure adm-entry-more" open={moreOpen}>
+          <summary>{t("admin.schedule.more")}</summary>
+          <div className="adm-form-row is-top">
+            <Field
+              label={t("admin.schedule.field.status")}
+              hint={t("admin.schedule.field.statusHint")}
+            >
+              <input
+                value={draft.status}
+                onChange={(e) => set({ status: e.target.value })}
+                maxLength={80}
+              />
+            </Field>
+            <Field label={t("admin.schedule.field.cancellation")}>
+              <select
+                value={draft.cancellationStatus}
+                onChange={(e) =>
+                  set({
+                    cancellationStatus: e.target
+                      .value as Draft["cancellationStatus"],
+                  })
+                }
+              >
+                <option value="none">{t("admin.schedule.cancel.none")}</option>
+                {event?.cancellationStatus === "llm_suspected" ? (
+                  <option value="llm_suspected">
+                    {t("admin.schedule.cancel.keep")}
+                  </option>
+                ) : null}
+                <option value="manual_confirmed">
+                  {t("admin.schedule.cancel.confirmed")}
+                </option>
+              </select>
+            </Field>
+          </div>
+          {draft.cancellationStatus === "manual_confirmed" ? (
+            <Field label={t("admin.review.cancelReason")}>
+              <input
+                value={draft.cancellationReason}
+                onChange={(e) => set({ cancellationReason: e.target.value })}
+                maxLength={500}
+                required
+              />
+            </Field>
+          ) : null}
+        </details>
       </form>
     </Modal>
   )

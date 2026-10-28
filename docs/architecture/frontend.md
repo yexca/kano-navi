@@ -113,6 +113,13 @@ linking to x.com. Quoted wording is shown as written, without translations.
 A quote an operator hid is absent from the snapshot, so the board shows the
 post without it.
 
+The console's schedule entry dialog (`src/admin/views/schedule.tsx`) is
+either timed or all day. A timed entry needs a start time; its length
+defaults to the [calendar feed's](public-api.md#public-feeds) length for the
+type without saving an end, so the board keeps treating a stream as
+open-ended, while presets and a custom end save `endsAt`. A preview line
+renders the entry as calendar subscribers will see it.
+
 The console's post list (`src/admin/views/posts.tsx`) shows a post's quote
 read-only in its own cell under the wording, indented on the sunken surface
 so its thumbnails never read as the post's own images: author, time, the
