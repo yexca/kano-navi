@@ -19,6 +19,7 @@ const groups = {
     "docs-check": "Check local Markdown links",
     "sensitive-check": "Scan workspace source for sensitive information",
     "test-sensitive": "Test scanner behavior",
+    "test-ci-plan": "Test GitHub Actions job selection and the Gate",
     "test-frontend":
       "Test frontend request hooks, polling, and the history catalog",
     "go-test": "Run Go backend contracts and vet without Docker",

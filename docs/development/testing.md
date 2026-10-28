@@ -20,21 +20,21 @@ CI/tooling work, and pre-commit validation.
 
 ## Validation Targets
 
-| Change or task                                          | Target                | Requirements                             |
-| ------------------------------------------------------- | --------------------- | ---------------------------------------- |
-| Documentation links                                     | make docs-check       | Node.js                                  |
-| Formatting, docs, workflows, scanner and source privacy | make ci-style         | Locked dependencies and Go               |
-| SQLite, API, sync, media or extraction                  | make ci-backend       | Go and a C compiler                      |
-| TypeScript frontend, scripts, tests, and config         | make typecheck        | Locked dependencies                      |
-| Public or admin UI                                      | make ci-frontend      | Locked dependencies                      |
-| Seed and HTTP snapshot integration                      | make smoke            | Node.js and Go                           |
-| Production image                                        | make docker-build     | Docker with Linux containers             |
-| Production entry point, pages and guards                | make production-smoke | The locally built DOCKER_IMAGE           |
-| All checks without Docker or installation               | make check            | Locked dependencies, Go and a C compiler |
-| Full locally portable Actions validation                | make ci-local         | Locked dependencies and Docker           |
-| Install then full validation                            | make ci               | Node/npm, Go and Docker                  |
-| Manual privacy review before handoff or commit          | make sensitive-check  | Node and Git                             |
-| Dependency advisories and npm registry signatures       | make audit            | Locked installation, Go and network      |
+| Change or task                                         | Target                | Requirements                             |
+| ------------------------------------------------------ | --------------------- | ---------------------------------------- |
+| Documentation links                                    | make docs-check       | Node.js                                  |
+| Formatting, docs, workflows, CI plan, scanner, privacy | make ci-style         | Locked dependencies and Go               |
+| SQLite, API, sync, media or extraction                 | make ci-backend       | Go and a C compiler                      |
+| TypeScript frontend, scripts, tests, and config        | make typecheck        | Locked dependencies                      |
+| Public or admin UI                                     | make ci-frontend      | Locked dependencies                      |
+| Seed and HTTP snapshot integration                     | make smoke            | Node.js and Go                           |
+| Production image                                       | make docker-build     | Docker with Linux containers             |
+| Production entry point, pages and guards               | make production-smoke | The locally built DOCKER_IMAGE           |
+| All checks without Docker or installation              | make check            | Locked dependencies, Go and a C compiler |
+| Full locally portable Actions validation               | make ci-local         | Locked dependencies and Docker           |
+| Install then full validation                           | make ci               | Node/npm, Go and Docker                  |
+| Manual privacy review before handoff or commit         | make sensitive-check  | Node and Git                             |
+| Dependency advisories and npm registry signatures      | make audit            | Locked installation, Go and network      |
 
 make ci-style runs make go-format-check, the gofmt step of make go-check on LF
 copies of the Go sources, so make check catches Go formatting without Docker.
@@ -146,24 +146,73 @@ This HTTP check does not claim to verify browser interaction.
 
 ## GitHub Actions
 
-The CI workflow runs on pull requests, pushes to main, and reusable workflow
-calls from Release:
+Validation runs in two tiers that share one set of job definitions:
+
+| Tier   | Workflow  | Runs on                                                | Selects                    | Decides                            |
+| ------ | --------- | ------------------------------------------------------ | -------------------------- | ---------------------------------- |
+| `pr`   | `PR`      | Every pull request                                     | Jobs for the changed paths | Whether the pull request may merge |
+| `full` | `Full`    | Every push to `main`, and any branch or tag on request | Every job                  | Whether `main` is healthy          |
+| `full` | `Release` | Every release tag                                      | Every job                  | Whether the tag may publish        |
+
+`.github/workflows/validate.yml` holds the jobs and has no trigger of its own.
+`pr.yml`, `full.yml` and `release.yml` call it with an explicit `tier`, so a
+tier never depends on the event or branch that started a run.
 
 ```text
-Style -> Backend, Go gate, Frontend, API smoke, Docker image -> Validate
+Style
+Plan -> Backend, Go gate, Frontend, API smoke, Docker image
+Plan, Style, and all planned jobs -> Gate
 ```
 
-Style runs make ci-style, which also checks the workflow files and their shell
-snippets with actionlint (shellcheck is preinstalled on the runner). Backend
-runs make ci-backend: golangci-lint, vet and the Go contract tests under the
-race detector. Go gate runs make go-check: formatting, CGO-free and cross-platform
-builds and the read-only container smoke. Frontend runs make
-npm-audit-signatures on its fresh installation, then make ci-frontend: the
-type check, the build and the frontend tests. API smoke runs make smoke
-against the Go backend. Docker
-image runs make docker-build, which compiles the Go backend and the frontend
-into the release image, with Buildx cache arguments and then make
-production-smoke against that image.
+Plan selects the remaining jobs, so they start without waiting for Style.
+Style runs beside them and always runs make ci-style, which also checks the
+workflow files and their shell snippets with actionlint (shellcheck is
+preinstalled on the runner) and tests the CI selection and gate policy with
+make test-ci-plan. Backend runs make ci-backend: golangci-lint, vet and the Go
+contract tests under the race detector. Go gate runs make go-check:
+formatting, CGO-free and cross-platform builds and the read-only container
+smoke. Frontend runs make npm-audit-signatures on its fresh installation, then
+make ci-frontend: the type check, the build and the frontend tests. API smoke
+runs make smoke against the Go backend. Docker image runs make docker-build,
+which compiles the Go backend and the frontend into the release image, with
+Buildx cache arguments and then make production-smoke against that image.
+
+`scripts/ci-plan.ts` owns the plan (make ci-plan) and the Gate's verdict (make
+ci-results); its tests guard against accidental validation skips. In the `pr`
+tier it compares the PR base with the checked-out merge result, including both
+sides of renames and deleted paths:
+
+| PR changes                                                                     | Planned jobs beside Plan, Style, and the Gate              |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| Only documentation, issue forms, `.env.example`, Compose or formatter settings | None                                                       |
+| Go backend source, tests, SQL or module files                                  | Backend, Go gate, API smoke, Docker image                  |
+| The static seed                                                                | Backend, Go gate, Frontend, API smoke, Docker image        |
+| `backend-go/Dockerfile`                                                        | Go gate                                                    |
+| Frontend source, `public/`, frontend configuration, npm manifest or lockfile   | Frontend, Docker image                                     |
+| Frontend tests                                                                 | Frontend                                                   |
+| Root `Dockerfile`, `.dockerignore`, or `LICENSE`                               | Docker image                                               |
+| A validation script                                                            | The jobs that run or type-check it, listed in `scriptJobs` |
+| Makefile, `.nvmrc`, workflows, composite actions, the planner, or other paths  | All jobs                                                   |
+
+Mixed changes use the union of planned jobs, and a missing or empty PR diff
+selects all jobs. The frontend build type-checks every TypeScript script, so
+each one selects Frontend; `scriptJobs` names the other jobs behind each
+script. A script missing from that table selects all jobs, and the planner's
+tests fail until it is listed. The `full` tier ignores changed paths and always
+plans every job, so whatever a pull request leaves out is validated on `main`
+and before a release publishes.
+
+Gate always evaluates the plan against the job results, even after failures.
+It rejects failed, cancelled, missing, or unexpectedly skipped results and a
+missing or invalid plan; only a job the plan disables may be skipped. A check
+is named after the calling job and the validation job, so the ruleset for
+`main` requires the single check `PR / Gate`; adding, splitting or renaming a
+job never changes what the ruleset names. `Full / Gate` reports the same
+verdict for a commit on `main`, and `Verify release / Gate` for a release tag.
+Release grants write permissions only to publication jobs. A new push cancels
+the superseded run of the same pull request or branch; release publication is
+serialized per tag.
+
 Every runner has a timeout, locked installation, and read-only repository
 permissions. Checkout does not persist credentials. Caches speed installation
 and image layers but never skip validation targets. Actions are pinned to
@@ -176,14 +225,6 @@ toolchain.
 builds the browser bundle, then runs the frontend tests. Node executes script
 and test `.ts` files directly; runtime execution alone does not check types.
 No source files are excluded with `@ts-nocheck`.
-
-Validate always evaluates every job result and fails on failure,
-cancellation, or a skipped job. There is no path-based job selection; even
-documentation-only changes run the complete sequence. Keep the Validate and
-Docker image check names stable. Release calls this workflow rather
-than maintaining another list of check commands, then grants write permissions
-only to publication jobs. Only normal CI runs cancel superseded runs; release
-publication is serialized per tag.
 
 The Dependency audit workflow runs daily at 03:17 UTC and on manual dispatch.
 Its npm job runs make npm-audit-production and then make npm-audit, which read

@@ -56,10 +56,11 @@ package.json version and point to a commit on `main`.
 
 The Release workflow first verifies its source: the tag matches package.json,
 `docs/history/<tag>.md` exists, and the tagged commit is on `main`. It then
-reuses .github/workflows/ci.yml for the tagged revision. The full read-only
-validation, including the production image and runtime smoke, must pass before
-publishing. CI is intentionally rerun for the tag; there is no lookup or wait
-for a previous main-branch run.
+calls .github/workflows/validate.yml in the `full` tier for the tagged
+revision, as described in [GitHub Actions](testing.md#github-actions). Every
+read-only validation job, including the production image and runtime smoke,
+must pass its Gate before publishing. Validation is intentionally rerun for
+the tag; there is no lookup or wait for a previous `Full` run.
 
 ## Release Notes
 
@@ -118,7 +119,7 @@ documents.
 
 ## Publication Order and Credentials
 
-1. Verify the release source and complete the reusable CI workflow.
+1. Verify the release source and pass the `full` validation tier.
 2. Build one publication image and push it to Docker Hub and GHCR with version,
    major/minor, and latest tags. Preserve provenance and SBOM generation.
 3. Create or publish the GitHub Release from `docs/history/<tag>.md` after

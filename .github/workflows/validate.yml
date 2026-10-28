@@ -1,20 +1,54 @@
-name: CI
+name: Validate
 
+# The job definitions shared by both validation tiers. PR, Full and Release
+# call this file and choose the tier; it has no trigger of its own, so a tier
+# is always an explicit decision of the caller.
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_call:
+    inputs:
+      tier:
+        description: >-
+          pr selects jobs from the changed paths; full runs every job.
+        required: true
+        type: string
 
 permissions:
   contents: read
 
-concurrency:
-  group: kano-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/') }}
-
 jobs:
+  # Planning needs only Node and the diff, so every planned job starts without
+  # waiting for Style, which runs beside them.
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      backend: ${{ steps.plan.outputs.backend }}
+      go: ${{ steps.plan.outputs.go }}
+      frontend: ${{ steps.plan.outputs.frontend }}
+      smoke: ${{ steps.plan.outputs.smoke }}
+      docker: ${{ steps.plan.outputs.docker }}
+    steps:
+      # Full history without file contents: the diff against the PR base reads
+      # only commits and trees.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          filter: blob:none
+      - name: Set up Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          cache: "false"
+      - name: Select required validation
+        id: plan
+        env:
+          CI_TIER: ${{ inputs.tier }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: make ci-plan
+
   style:
     name: Style
     runs-on: ubuntu-latest
@@ -34,12 +68,13 @@ jobs:
           cache-dependency-path: backend-go/go.sum
       - name: Install locked dependencies
         run: make install
-      - name: Check formatting, docs, workflows, and source privacy
+      - name: Check formatting, docs, workflows, CI policy, and source privacy
         run: make ci-style
 
   backend:
     name: Backend
-    needs: style
+    needs: plan
+    if: needs.plan.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -57,7 +92,8 @@ jobs:
 
   go:
     name: Go gate
-    needs: style
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -75,7 +111,8 @@ jobs:
 
   frontend:
     name: Frontend
-    needs: style
+    needs: plan
+    if: needs.plan.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -94,7 +131,8 @@ jobs:
 
   smoke:
     name: API smoke
-    needs: style
+    needs: plan
+    if: needs.plan.outputs.smoke == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -114,7 +152,8 @@ jobs:
 
   docker:
     name: Docker image
-    needs: style
+    needs: plan
+    if: needs.plan.outputs.docker == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -148,27 +187,25 @@ jobs:
       - name: Check production runtime
         run: make DOCKER_IMAGE=kano-navi:ci production-smoke
 
-  validate:
-    name: Validate
+  # The only result a caller or a ruleset needs: it fails unless every planned
+  # job succeeded, and only the plan may authorize a skipped job.
+  gate:
+    name: Gate
     if: always()
-    needs: [style, backend, frontend, smoke, docker, go]
+    needs: [plan, style, backend, go, frontend, smoke, docker]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require every validation phase
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          cache: "false"
+      - name: Verify all planned validation results
         env:
-          STYLE_RESULT: ${{ needs.style.result }}
-          BACKEND_RESULT: ${{ needs.backend.result }}
-          FRONTEND_RESULT: ${{ needs.frontend.result }}
-          SMOKE_RESULT: ${{ needs.smoke.result }}
-          DOCKER_RESULT: ${{ needs.docker.result }}
-          GO_RESULT: ${{ needs.go.result }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for result in "$STYLE_RESULT" "$BACKEND_RESULT" "$FRONTEND_RESULT" "$SMOKE_RESULT" "$DOCKER_RESULT" "$GO_RESULT"; do
-            if [ "$result" != success ]; then
-              echo "A required validation phase ended with: $result"
-              exit 1
-            fi
-          done
+          CI_PLAN: ${{ needs.plan.outputs.plan }}
+          CI_RESULTS: ${{ toJSON(needs) }}
+        run: make ci-results

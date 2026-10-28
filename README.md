@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://kano.yexca.net/"><img alt="Live site" src="https://img.shields.io/badge/live-kano.yexca.net-d94a5a"></a>
   <a href="https://github.com/yexca/kano-navi/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/yexca/kano-navi"></a>
-  <a href="https://github.com/yexca/kano-navi/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/yexca/kano-navi/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/yexca/kano-navi/actions/workflows/full.yml"><img alt="CI" src="https://github.com/yexca/kano-navi/actions/workflows/full.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/github/license/yexca/kano-navi"></a>
 </p>
 

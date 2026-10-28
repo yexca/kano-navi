@@ -55,7 +55,9 @@ jobs:
   verify:
     name: Verify release
     needs: verify-source
-    uses: ./.github/workflows/ci.yml
+    uses: ./.github/workflows/validate.yml
+    with:
+      tier: full
 
   publish-image:
     name: Publish container image to Docker Hub and GHCR

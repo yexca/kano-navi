@@ -75,7 +75,7 @@ When a finding appears, fix the underlying content. Do not hide it with an
 CI has read-only repository permissions and checks formatting, documentation,
 scanner behavior, source privacy, server contracts, the frontend build, local
 API smoke, and a disposable production container. Platform and model data is
-never fetched by validation. Release reuses the same CI workflow before registry
+never fetched by validation. Release reuses the same validation jobs before registry
 publication; only registry and release jobs receive write permissions.
 Credentials are used only for registry login and must not enter build arguments,
 images, source artifacts, or logs. See [Testing](testing.md) and
