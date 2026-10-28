@@ -155,6 +155,10 @@ type Options struct {
 	// takes a detail request ahead of the rest, even when a timeline page
 	// carries it or a failure backoff holds it.
 	RefreshIDs []string
+	// RefreshOnly reads RefreshIDs alone: no discovery, pending IDs or
+	// known-post refreshes. A count setting, whose timeline read leaves the
+	// incremental state as it is, serves operator refreshes this way.
+	RefreshOnly bool
 }
 
 func DefaultOptions() Options {
@@ -266,6 +270,9 @@ type Result struct {
 	// Refreshed lists the requested refreshes whose detail request was
 	// made, whatever it answered.
 	Refreshed []string
+	// RefreshOnly marks a run of Options.RefreshOnly; its write leaves the
+	// account's incremental state as it is.
+	RefreshOnly bool
 }
 
 type Adapter struct {
@@ -312,12 +319,22 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		}
 		cutoff = now.Add(-time.Duration(opts.BootstrapDays) * 24 * time.Hour)
 	}
-	// The timeline pages back to stored posts; the logged-out profile page
-	// lists only the newest few statuses and is the fallback.
-	found, err := a.discoverTimeline(ctx, account, opts, cutoff)
+	var found discovery
+	var err error
+	if opts.RefreshOnly {
+		if len(opts.RefreshIDs) == 0 {
+			return result, &Error{Code: ErrInvalidResponse, Err: errors.New("no status ids")}
+		}
+		opts.PendingIDs, opts.PendingRetries, opts.RefreshKnown = nil, nil, 0
+		result.RefreshOnly = true
+	} else {
+		// The timeline pages back to stored posts; the logged-out profile page
+		// lists only the newest few statuses and is the fallback.
+		found, err = a.discoverTimeline(ctx, account, opts, cutoff)
+		result.Discovery, result.Gap, result.Notes = DiscoveryTimeline, found.gap, found.notes
+	}
 	ids := found.ids
-	result.Discovery, result.Gap, result.Notes = DiscoveryTimeline, found.gap, found.notes
-	if err != nil || len(ids) == 0 {
+	if !opts.RefreshOnly && (err != nil || len(ids) == 0) {
 		// The profile page lists IDs only; every one needs a detail request.
 		found.posts = nil
 		result.Discovery, result.Gap, result.Notes = DiscoveryProfile, opts.Gap, nil

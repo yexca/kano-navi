@@ -62,6 +62,26 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 			return ErrSourceWrite
 		}
 	}
+	// A refresh-only run leaves the incremental state as it is.
+	if !result.RefreshOnly {
+		if err = writeXState(ctx, tx, account, result, success, now); err != nil {
+			return ErrSourceWrite
+		}
+	}
+	if len(result.Posts) > 0 {
+		if err = bumpRevision(ctx, tx, now); err != nil {
+			return ErrSourceWrite
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return ErrSourceWrite
+	}
+	return nil
+}
+
+// writeXState replaces the account's incremental sync state: the pending
+// queue, its retries, the timeline gap and a cursor that only moves forward.
+func writeXState(ctx context.Context, tx *sql.Tx, account string, result xsource.Result, success bool, now string) error {
 	var oldMetadata string
 	_ = tx.QueryRowContext(ctx, "SELECT COALESCE(metadata_json,'') FROM sync_state WHERE source='x' AND account_id=?", account).Scan(&oldMetadata)
 	pending := append([]string(nil), result.PendingIDs...)
@@ -127,24 +147,13 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 	if success && result.NextCursor != "" && (oldTime == "" || newInstant.After(oldInstant)) {
 		cursorID, cursorTime = result.NextCursor, result.NextCursorTime
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES('x',?,?,?,?,?) ON CONFLICT(source,account_id) DO UPDATE SET cursor_id=excluded.cursor_id,cursor_time=excluded.cursor_time,last_success_at=CASE WHEN excluded.last_success_at IS NULL THEN sync_state.last_success_at ELSE excluded.last_success_at END,metadata_json=excluded.metadata_json`, account, nullable(cursorID), nullable(cursorTime), func() any {
+	_, err := tx.ExecContext(ctx, `INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES('x',?,?,?,?,?) ON CONFLICT(source,account_id) DO UPDATE SET cursor_id=excluded.cursor_id,cursor_time=excluded.cursor_time,last_success_at=CASE WHEN excluded.last_success_at IS NULL THEN sync_state.last_success_at ELSE excluded.last_success_at END,metadata_json=excluded.metadata_json`, account, nullable(cursorID), nullable(cursorTime), func() any {
 		if success {
 			return now
 		}
 		return nil
 	}(), string(metaBytes))
-	if err != nil {
-		return ErrSourceWrite
-	}
-	if len(result.Posts) > 0 {
-		if err = bumpRevision(ctx, tx, now); err != nil {
-			return ErrSourceWrite
-		}
-	}
-	if err = tx.Commit(); err != nil {
-		return ErrSourceWrite
-	}
-	return nil
+	return err
 }
 
 // writeXPost stores one post with its media candidates. It reports false when

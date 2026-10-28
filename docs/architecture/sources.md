@@ -775,7 +775,11 @@ that decision.
 An operator's refresh (`POST /api/admin/posts/{id}/refresh`) only stores
 `posts.refresh_requested_at` and removes the status's pending failure
 backoff. The next X recent synchronization reads up to 20 such posts per
-account, oldest request first, and puts them ahead of the queue. Each takes
+account, oldest request first, and puts them ahead of the queue. Under a
+`count` sync setting, whose timeline read leaves the incremental state as it
+is, the step makes these detail requests after that read and alone: no
+discovery, pending queue or change to the incremental cursor, pending IDs or
+timeline gap. Each takes
 a detail request even when a timeline page lists the status (which would
 otherwise store it from the page and leave the stored post unchanged) and
 even while a failure backoff holds it. A usable answer rewrites the post,

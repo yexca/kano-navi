@@ -61,12 +61,30 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 			return s.History.FetchX(ctx, *in.Window)
 		}
 		// A count setting reads the newest posts from the timeline every run;
-		// the incremental cursor and pending queue stay as they are.
+		// the incremental cursor and pending queue stay as they are. Operator
+		// refreshes take their detail requests after that read.
 		if in.Window == nil && in.Sync.Mode == sqlite.SyncCount {
 			if s.History == nil {
 				return AttemptResult{}, NewStepError("history_unavailable", ErrDependency)
 			}
-			return s.History.FetchX(ctx, history.Window{Mode: history.ModeCount, Count: in.Sync.Count})
+			out, err := s.History.FetchX(ctx, history.Window{Mode: history.ModeCount, Count: in.Sync.Count})
+			if err != nil {
+				return out, err
+			}
+			refreshed, refreshErr := s.X.Refresh(ctx)
+			if ctx.Err() != nil {
+				return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
+			}
+			if refreshErr != nil {
+				return AttemptResult{}, NewStepError("x_source_write_failed", ErrSchema)
+			}
+			if refreshed > 0 {
+				if out.Result == nil {
+					out.Result = map[string]any{}
+				}
+				out.Result["refreshed"] = refreshed
+			}
+			return out, nil
 		}
 		if s.X != nil {
 			return s.X.Execute(ctx, in)

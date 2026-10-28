@@ -242,3 +242,44 @@ func TestSavedWorkflowsReadBySyncSettingWhateverTheCredentials(t *testing.T) {
 		t.Fatalf("window=%+v", window)
 	}
 }
+
+// A count setting serves operator refreshes after its timeline read: each
+// takes one detail request, its answer is stored and the request cleared,
+// and the incremental state stays as it is.
+func TestCountSettingServesOperatorRefreshes(t *testing.T) {
+	transport := &historyTransport{respond: func(*http.Request) (int, string) { return 200, `{"meta":{}}` }}
+	source, store := newHistorySource(t, transport)
+	source.Fetcher.Timeline = &stubTimeline{}
+	id := "1900000000000000050"
+	metadata := `{"pendingStatusIds":["1900000000000000040"],"timelineGap":{"floor":"1900000000000000030"}}`
+	for _, statement := range []string{
+		`INSERT INTO posts(id,source,account_handle,text,published_at,url,raw_json,refresh_requested_at) VALUES('` + id + `','x','synthetic_two','stale','2026-03-04T00:00:00.000Z','https://x.com/synthetic_two/status/` + id + `','{}','2026-03-09T00:00:00.000Z')`,
+		`INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,metadata_json) VALUES('x','synthetic_two','1900000000000000009','2026-03-09T00:00:00.000Z','` + metadata + `')`,
+	} {
+		if _, err := store.DB().Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths := []string{}
+	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
+		paths = append(paths, r.URL.Host+r.URL.Path)
+		body := `{"tweetID":"` + id + `","text":"refreshed wording","date":"2026-03-04T00:00:00Z","user_screen_name":"synthetic_two"}`
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})
+	adapter := xsource.NewAdapter(xsource.NewClient(&http.Client{Transport: rt}), xsource.Options{Handles: source.Handles, MaxDetailRequests: 3, BootstrapDays: 7})
+	steps := &SourceSteps{History: source, X: &XRecentExecutor{Store: store, Adapter: adapter, Options: adapter.Options}}
+	out, err := steps.Execute(context.Background(), StepInput{StepID: "x", WorkflowID: "full-refresh", Sync: sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 30}})
+	if err != nil || out.Result["discovery"] != xsource.DiscoveryTimeline || out.Result["refreshed"] != 1 {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+	if strings.Join(paths, ",") != "api.vxtwitter.com/synthetic_two/status/"+id {
+		t.Fatalf("requests=%v", paths)
+	}
+	var text, requested, cursor, stored string
+	if err = store.DB().QueryRow(`SELECT text,COALESCE(refresh_requested_at,'') FROM posts WHERE id=?`, id).Scan(&text, &requested); err != nil || text != "refreshed wording" || requested != "" {
+		t.Fatalf("text=%q requested=%q err=%v", text, requested, err)
+	}
+	if err = store.DB().QueryRow(`SELECT cursor_id,metadata_json FROM sync_state WHERE source='x' AND account_id='synthetic_two'`).Scan(&cursor, &stored); err != nil || cursor != "1900000000000000009" || stored != metadata {
+		t.Fatalf("cursor=%s metadata=%s err=%v", cursor, stored, err)
+	}
+}

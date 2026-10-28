@@ -146,3 +146,44 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	}
 	return AttemptResult{Status: status, Result: out}, nil
 }
+
+// Refresh reads only the operator refreshes of every account, within the
+// detail request budget. A count setting, whose timeline read leaves the
+// incremental state as it is, calls it after that read. It reports how many
+// refreshes took their detail request.
+func (x *XRecentExecutor) Refresh(ctx context.Context) (int, error) {
+	if x == nil || x.Store == nil || x.Adapter == nil {
+		return 0, nil
+	}
+	opts := x.Options
+	if len(opts.Handles) == 0 {
+		opts = xsource.OptionsFromEnv()
+	}
+	opts.RefreshOnly = true
+	remaining, refreshed := max(opts.MaxDetailRequests, 0), 0
+	for _, account := range opts.Handles {
+		if remaining == 0 || ctx.Err() != nil {
+			break
+		}
+		state, err := x.Store.XRecentState(ctx, account)
+		if err != nil {
+			return refreshed, err
+		}
+		if len(state.RefreshIDs) == 0 {
+			continue
+		}
+		accountOpts := opts
+		accountOpts.RefreshIDs = state.RefreshIDs
+		accountOpts.MaxDetailRequests = remaining
+		result, fetchErr := x.Adapter.FetchRecent(ctx, account, accountOpts)
+		remaining -= min(result.RequestedCount, remaining)
+		if len(result.Refreshed) == 0 {
+			continue
+		}
+		refreshed += len(result.Refreshed)
+		if err = x.Store.WriteXRecent(ctx, account, result, fetchErr == nil); err != nil {
+			return refreshed, err
+		}
+	}
+	return refreshed, nil
+}
