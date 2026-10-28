@@ -146,6 +146,10 @@ function createClient(run: Runner, slow: Runner) {
     confirmEvent: (id: string, body?: Partial<EventInput>) =>
       send<{ event: AdminEvent }>("POST", `/events/${enc(id)}/confirm`, body),
     deleteEvent: (id: string) => send<null>("DELETE", `/events/${enc(id)}`),
+    mergeEvent: (id: string, into: string) =>
+      send<{ event: AdminEvent }>("POST", `/events/${enc(id)}/merge`, {
+        into,
+      }),
     unmergeEvent: (id: string) =>
       send<{ event: AdminEvent }>("POST", `/events/${enc(id)}/unmerge`),
 

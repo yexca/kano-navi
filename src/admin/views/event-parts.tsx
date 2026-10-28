@@ -1,9 +1,11 @@
+import { useState } from "react"
 import { Combine, Lock, Sparkles, Split } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
-import { formatDay, formatTime } from "@/admin/format"
+import { formatDay, formatTime, japanDay } from "@/admin/format"
 import type { AdminEvent, EventInput } from "@/admin/types"
-import { Badge } from "@/admin/ui"
+import { Badge, Button, Loading, Modal } from "@/admin/ui"
+import { useAdmin, useResource } from "@/admin/use-admin-data"
 
 /** The writable fields of a stored event, for a save that keeps them. */
 export function eventToInput(event: AdminEvent): EventInput {
@@ -69,6 +71,100 @@ export function MergeBadge({ event }: { event: AdminEvent }) {
   if (event.mergeSource === "manual")
     return <Badge icon={Split}>{t("admin.event.keptSeparate")}</Badge>
   return null
+}
+
+/** The Japan date `days` away from `day`. */
+function shiftDay(day: string, days: number) {
+  const date = new Date(`${day}T12:00:00+09:00`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return japanDay(date.toISOString())
+}
+
+/**
+ * Hides an entry behind another one the board shows, as an operator decision
+ * automatic merging never changes. It offers the visible entries from the day
+ * before to the day after, since an X post's date can be a day off.
+ */
+export function EventMergeDialog({
+  event,
+  onClose,
+}: {
+  event: AdminEvent
+  onClose: (merged?: boolean) => void
+}) {
+  const { t, locale } = useAppSettings()
+  const { api, act } = useAdmin()
+  const [busy, setBusy] = useState("")
+  const candidates = useResource(
+    () =>
+      api.events({
+        from: shiftDay(event.startsOn, -1),
+        to: shiftDay(event.startsOn, 1),
+        merge: "visible",
+        order: "asc",
+        pageSize: 50,
+      }),
+    [event.id, event.startsOn],
+  )
+  const items = (candidates.data?.items ?? []).filter(
+    (item) => item.id !== event.id,
+  )
+  const merge = async (into: string) => {
+    setBusy(into)
+    const result = await act(
+      () => api.mergeEvent(event.id, into),
+      "admin.notice.eventMerged",
+    )
+    setBusy("")
+    if (result) onClose(true)
+  }
+  return (
+    <Modal
+      open
+      className="adm-event-merge"
+      title={t("admin.schedule.merge.title")}
+      onClose={() => onClose()}
+    >
+      <p className="adm-muted">
+        {t("admin.schedule.merge.hint", {
+          title: event.title,
+          day: formatDay(event.startsOn, locale),
+        })}
+      </p>
+      {!candidates.data ? (
+        <Loading />
+      ) : items.length ? (
+        <ul className="adm-merge-candidates">
+          {items.map((item) => (
+            <li key={item.id}>
+              <span className="adm-merge-video-body">
+                <strong>{item.title}</strong>
+                <small>
+                  {formatDay(item.startsOn, locale)} ·{" "}
+                  {item.startsAt
+                    ? `${formatTime(item.startsAt, locale)} JST`
+                    : t("admin.event.dateOnly")}{" "}
+                  · {t(`admin.event.type.${item.eventType || "event"}`)} ·{" "}
+                  {t(`admin.schedule.merge.source.${item.source}`)}
+                </small>
+              </span>
+              <Button
+                size="sm"
+                icon={Combine}
+                busy={busy === item.id}
+                disabled={Boolean(busy)}
+                onClick={() => merge(item.id)}
+              >
+                {t("admin.schedule.merge.action")}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="adm-muted">{t("admin.schedule.merge.none")}</p>
+      )}
+    </Modal>
+  )
 }
 
 export function CancellationBadge({ event }: { event: AdminEvent }) {

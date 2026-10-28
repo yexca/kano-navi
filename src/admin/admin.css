@@ -2876,6 +2876,16 @@ button.adm-run-line:hover {
   gap: 10px;
 }
 
+/* The schedule's merge dialog: the explanation, then the visible entries. */
+.adm-event-merge .adm-modal-content {
+  display: grid;
+  gap: 14px;
+}
+
+.adm-event-merge .adm-modal-content > p {
+  margin: 0;
+}
+
 .adm-video-merge-section h3 {
   display: flex;
   align-items: center;

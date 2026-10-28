@@ -235,7 +235,8 @@ step can be retried without any saved definition.
 safe in a manual run soon after its timer (see
 [Bilibili](sources.md#bilibili)).
 
-`reconcile` applies the deterministic duplicate-merge rules in
+`reconcile` derives the YouTube events of stored videos and applies the
+deterministic duplicate-merge rules in
 [Duplicate merging](data-model.md#duplicate-merging) to the Japan dates from
 30 days ago to 60 days ahead, then the
 [video merging](data-model.md#video-merging) rule to every Bilibili upload.
@@ -243,9 +244,10 @@ Every run that includes `x`, `youtube`, `bilibili` or `schedule` (sync, scan,
 fetch windows, source schedules, Run now, step runs, WebSub pushes and MCP) appends it as its last
 step; it can also be selected alone. Its
 result counts `considered`, `merged`, `retargeted`, `released`, `kept` and
-`ambiguous` events, and `videosConsidered`, `videosMerged`, `videosReleased`,
-`videosKept` and `videosAmbiguous` uploads. It advances the dashboard
-revision only when a merge decision or a merged upload's translation
+`ambiguous` events, `eventsTimed` and `eventsCreated` YouTube events, and
+`videosConsidered`, `videosMerged`, `videosReleased`, `videosKept` and
+`videosAmbiguous` uploads. It advances the dashboard revision only when a
+merge decision, a derived YouTube event or a merged upload's translation
 changed.
 
 `translate` machine-translates X post text and YouTube titles that lack a

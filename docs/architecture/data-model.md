@@ -393,27 +393,49 @@ reservation refresh, keep the merge. `merge_source` names the owner:
   date, or whose event became manual or locked. Deleting an event releases
   the rule merges into it in the same transaction, so a duplicate older than
   the reconciler's window is shown again; other owners' merges stay.
-- `manual`: an operator decision. `merge_source = manual` with a null
-  `merged_into` is an undone merge; the reconciler never merges that event
-  again.
+- `manual`: an operator decision (`merge_reason` `manual`), which the rules
+  never change. `merge_source = manual` with a null `merged_into` is an undone
+  merge; the reconciler never merges that event again.
 - Any other owner is left untouched by the rules in the same way.
 
-The rules consider active, non-deleted `stream`/`member` events from 30 days
-before to 60 days after the current Japan date:
+The rules consider active, non-deleted events from 30 days before to 60 days
+after the current Japan date:
 
-- Rule B: an automatic X event with an exact or approximate time merges into
-  the only compatible YouTube event on the same date that starts within 30
-  minutes. The stored time precision stays unchanged. A generic stream may
-  merge into a members-only stream, not the reverse.
-- Rule A (after Rule B): a date-only automatic event merges into the timed
-  stream on the same date whose normalized title overlaps its own (one
-  contains the other or they share a token of at least two characters after
-  punctuation, brackets and medium words such as 配信 are removed). Without a
-  title overlap it merges only when the date has exactly one date-only event
-  and one timed stream.
+- Rule B: an automatic X `stream`, `member` or `release` with an exact or
+  approximate time, or an X `event` (an entry that names no activity, such as
+  「このあと20時からはじまります！」) with an exact time, merges into the only
+  compatible YouTube event on the same date that starts within 30 minutes. A
+  generic stream may merge into a members-only stream, not the reverse; a
+  release only into a release; an `event` into a stream or members-only
+  stream. The stored time precision stays unchanged.
+- Rule A (after Rule B): a date-only automatic `stream`/`member` event merges
+  into the timed stream on the same date whose normalized title overlaps its
+  own (one contains the other or they share a token of at least two
+  characters after punctuation, brackets and medium words such as 配信 are
+  removed). Without a title overlap it merges only when the date has exactly
+  one date-only event and one timed stream. A YouTube event never merges into
+  an X event.
 - Several plausible targets leave the event unmerged and are counted as
   `ambiguous`. A cancellation overlay (`llm_suspected` or `manual_confirmed`)
   on either side freezes the current decision.
+
+Before the rules run, the same step derives YouTube events from the stored
+videos whose start falls in that window, so the YouTube side of a match
+exists and carries its time whichever source was read first:
+
+- An automatic, unlocked YouTube event (`source = youtube`, the video's
+  reservation identity) takes its start from its video with `exact`
+  precision: the reservation's start, or the publication time of an upload or
+  Short. An X post that links a video writes that event with only the post's
+  date or announced time. An end before the new start is cleared.
+- An ended broadcast with a start but without any event or evidence row for
+  its video gets its reservation event, as the YouTube writer would write it
+  (see [YouTube](sources.md#youtube)). A broadcast without a premiere verdict
+  counts as a stream only when it lasted at least 30 minutes; a shorter one
+  gets no event.
+
+Manual locks and tombstones keep their rows, and no video gets a second
+event identity.
 
 Every public reader excludes merged rows: the dashboard events, totals,
 upcoming counts and summary/spotlight candidates, calendar items, totals,

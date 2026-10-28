@@ -162,6 +162,27 @@ func (a *api) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// mergeEvent accepts { into } with an event ID and hides the event behind
+// that event as an operator decision the reconciler never changes.
+func (a *api) mergeEvent(w http.ResponseWriter, r *http.Request) {
+	body, err := httpx.Body(w, r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	var into string
+	if json.Unmarshal(body["into"], &into) != nil || strings.TrimSpace(into) == "" {
+		httpx.WriteError(w, httpx.Invalid("into must name an event"))
+		return
+	}
+	event, err := a.Store.MergeEvent(r.Context(), r.PathValue("id"), into)
+	if err != nil {
+		writeEventError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"event": event})
+}
+
 // unmergeEvent shows a merged duplicate again. The decision is durable: the
 // reconciler never merges that event automatically afterwards.
 func (a *api) unmergeEvent(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +198,10 @@ func writeEventError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, sqlite.ErrEventNotMerged):
 		httpx.WriteError(w, httpx.Invalid("event is not merged"))
+	case errors.Is(err, sqlite.ErrEventMergeInvalid):
+		httpx.WriteError(w, httpx.Invalid("an event can only be merged into another visible, unmerged event"))
+	case errors.Is(err, sqlite.ErrEventMergeConflict):
+		httpx.WriteCode(w, http.StatusConflict, "merge_conflict")
 	case errors.Is(err, sqlite.ErrReadOnly):
 		httpx.ReadOnly(w)
 	case errors.Is(err, sql.ErrNoRows):

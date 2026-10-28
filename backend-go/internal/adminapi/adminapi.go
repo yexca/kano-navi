@@ -121,6 +121,7 @@ func (a *api) routes() []httpx.Route {
 		{Method: http.MethodPost, Path: "/events", Handler: a.createEvent},
 		{Method: http.MethodPut, Path: "/events/{id}", Handler: a.updateEvent},
 		{Method: http.MethodPost, Path: "/events/{id}/confirm", Handler: a.confirmEvent},
+		{Method: http.MethodPost, Path: "/events/{id}/merge", Handler: a.mergeEvent},
 		{Method: http.MethodPost, Path: "/events/{id}/unmerge", Handler: a.unmergeEvent},
 		{Method: http.MethodDelete, Path: "/events/{id}", Handler: a.deleteEvent},
 

@@ -3,6 +3,7 @@ import {
   CalendarCheck,
   CalendarPlus,
   CheckCheck,
+  Combine,
   ExternalLink,
   Link2,
   Pencil,
@@ -46,6 +47,7 @@ import {
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import {
   CancellationBadge,
+  EventMergeDialog,
   EventWhen,
   MergeBadge,
   ProvenanceBadge,
@@ -464,6 +466,7 @@ export function ScheduleView(_: ViewProps) {
   const [editing, setEditing] = useState<AdminEvent | null | undefined>(
     undefined,
   )
+  const [merging, setMerging] = useState<AdminEvent | null>(null)
   const events = useResource(
     () =>
       api.events({
@@ -640,6 +643,12 @@ export function ScheduleView(_: ViewProps) {
                             void events.reload()
                         }}
                       />
+                    ) : !event.deletedAt ? (
+                      <IconButton
+                        icon={Combine}
+                        label={t("admin.schedule.merge.open")}
+                        onClick={() => setMerging(event)}
+                      />
                     ) : null}
                     {!event.manualLocked && !event.deletedAt ? (
                       <IconButton
@@ -704,6 +713,15 @@ export function ScheduleView(_: ViewProps) {
           onClose={(saved) => {
             setEditing(undefined)
             if (saved) void events.reload()
+          }}
+        />
+      ) : null}
+      {merging ? (
+        <EventMergeDialog
+          event={merging}
+          onClose={(merged) => {
+            setMerging(null)
+            if (merged) void events.reload()
           }}
         />
       ) : null}

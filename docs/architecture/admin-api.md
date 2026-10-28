@@ -207,6 +207,7 @@ one, and rejects other fields and intervals outside 5–360 minutes with
 | `POST /events`              | event fields                                                                                                            | `201 {event}`     |
 | `PUT /events/{id}`          | event fields                                                                                                            | `{event}`         |
 | `POST /events/{id}/confirm` | optional overrides                                                                                                      | `{event}`         |
+| `POST /events/{id}/merge`   | `{into}` (event ID)                                                                                                     | `{event}`         |
 | `POST /events/{id}/unmerge` |                                                                                                                         | `{event}`         |
 | `DELETE /events/{id}`       |                                                                                                                         | `204` (tombstone) |
 
@@ -222,12 +223,21 @@ the stored values unless the body overrides them.
 The list includes merged duplicates by default; `merge=merged` lists only
 them and `merge=visible` excludes them, as every public reader does. Each
 event carries `mergedInto`, `mergedIntoTitle`, `mergeSource` (`rule` or
-`manual`), `mergeReason` and `mergedAt`. `unmerge` shows a merged event again
+`manual`), `mergeReason` and `mergedAt`.
+
+`merge` hides the event behind the event `into` names, on any date, as a
+durable operator decision (`mergeSource = manual`, `mergeReason = manual`)
+that the reconciler never changes. The target must be another visible event:
+itself, a merged or a deleted target, or a missing `into`, answers `400`; a
+missing or deleted `{id}` answers `404`. Rule merges into the merged event are
+released with it, and an operator's or another owner's merge into it answers
+`409 {"error":"merge_conflict"}`, so no merge points at a merged event.
+Repeating the same merge changes nothing. `unmerge` shows a merged event again
 as a durable operator decision (`mergeSource = manual` without a target) that
 the reconciler never overrides; an event that is not merged answers `400`.
 Editing or confirming a rule-merged event also shows it again, because a
-manual event is never merged away. Unmerging and edits advance the dashboard
-revision.
+manual event is never merged away; an operator merge stays. Merging,
+unmerging and edits advance the dashboard revision.
 
 ## Schedule images
 

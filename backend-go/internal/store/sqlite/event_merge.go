@@ -34,7 +34,13 @@ const (
 	mergeStartTolerance = 30 * time.Minute
 )
 
-var ErrEventNotMerged = errors.New("event_not_merged")
+var (
+	ErrEventNotMerged     = errors.New("event_not_merged")
+	ErrEventMergeInvalid  = errors.New("invalid_input")
+	ErrEventMergeConflict = errors.New("event_merge_conflict")
+)
+
+const mergeReasonManual = "manual"
 
 // MergeCounts is the reconcile step's recorded result.
 type MergeCounts struct {
@@ -46,16 +52,22 @@ type MergeCounts struct {
 	Released   int    `json:"released"`
 	Kept       int    `json:"kept"`
 	Ambiguous  int    `json:"ambiguous"`
+	// EventsTimed and EventsCreated count the YouTube events the step derived
+	// from their videos before merging (see settleVideoEvents).
+	EventsTimed   int `json:"eventsTimed"`
+	EventsCreated int `json:"eventsCreated"`
 }
 
-// Changed reports whether the run wrote any merge decision.
-func (c MergeCounts) Changed() bool { return c.Merged+c.Retargeted+c.Released > 0 }
+// Changed reports whether the run wrote any merge decision or derived event.
+func (c MergeCounts) Changed() bool {
+	return c.Merged+c.Retargeted+c.Released+c.EventsTimed+c.EventsCreated > 0
+}
 
 type mergeEvent struct {
-	id, source, title, startsOn, eventType, provenance, cancellation string
-	mergedInto, mergeSource                                          string
-	start                                                            time.Time
-	hasStart, locked                                                 bool
+	id, source, title, startsOn, eventType, precision, provenance, cancellation string
+	mergedInto, mergeSource                                                     string
+	start                                                                       time.Time
+	hasStart, locked                                                            bool
 }
 
 func (e mergeEvent) stream() bool { return e.eventType == "stream" || e.eventType == "member" }
@@ -70,17 +82,21 @@ func (e mergeEvent) ruleOwned() bool { return e.mergeSource == "" || e.mergeSour
 // timed events carry a usable start; anything else is date-only.
 func (e mergeEvent) timed() bool { return e.hasStart }
 
-// mergeSource events may be merged away. An operator's decision, including
-// an undone merge, keeps the event where it is.
-func mergeSource(e mergeEvent) bool {
-	return e.stream() && !e.overlay() && !e.protected() && e.ruleOwned()
+// notice events are the timed X entries Rule B compares with YouTube: a
+// stream, a release, or an entry of unnamed type whose exact time is all
+// it says, such as 「このあと20時からはじまります！」.
+func (e mergeEvent) notice() bool {
+	return e.source == "x" && e.timed() &&
+		(e.stream() || e.eventType == "release" || e.eventType == "event" && e.precision == "exact")
 }
 
-// mergeTarget events may receive a merge. An event hidden by a decision the
+// movable events may be merged away. An operator's decision, including an
+// undone merge, keeps the event where it is.
+func movable(e mergeEvent) bool { return !e.overlay() && !e.protected() && e.ruleOwned() }
+
+// receivable events may receive a merge. An event hidden by a decision the
 // reconciler does not own cannot; a manual or locked event can.
-func mergeTarget(e mergeEvent) bool {
-	return e.stream() && !e.overlay() && (e.ruleOwned() || e.mergedInto == "")
-}
+func receivable(e mergeEvent) bool { return !e.overlay() && (e.ruleOwned() || e.mergedInto == "") }
 
 // compatible lets a generic stream merge into a members-only stream, which a
 // YouTube title or an operator can classify more specifically.
@@ -88,15 +104,28 @@ func compatible(source, target mergeEvent) bool {
 	return source.eventType == target.eventType || source.eventType == "stream" && target.eventType == "member"
 }
 
-// ReconcileEventMerges applies the deterministic merge rules to active
-// stream/member events in a bounded window of Japan dates around now:
+// noticeCompatible extends compatible for Rule B: a release notice matches
+// only a YouTube release, and an entry of unnamed type only a stream.
+func noticeCompatible(source, target mergeEvent) bool {
+	if source.eventType == "event" {
+		return target.stream()
+	}
+	return compatible(source, target)
+}
+
+// ReconcileEventMerges first derives the YouTube events of stored videos
+// (settleVideoEvents), then applies the deterministic merge rules to active
+// events in a bounded window of Japan dates around now:
 //
-//   - Rule B: an automatic X event with an exact or approximate time merges
-//     into the only compatible YouTube event on the same date that starts
-//     within 30 minutes.
-//   - Rule A: a date-only automatic event merges into the timed stream on the
+//   - Rule B: an automatic X stream or release with an exact or approximate
+//     time, or an X entry of unnamed type with an exact time, merges into the
+//     only compatible YouTube event on the same date that starts within 30
+//     minutes. A release matches only a release, an unnamed entry only a
+//     stream.
+//   - Rule A: a date-only automatic stream merges into the timed stream on the
 //     same date whose normalized title overlaps its own, or, when the day has
-//     exactly one date-only and one timed stream, into that stream.
+//     exactly one date-only and one timed stream, into that stream. A YouTube
+//     event never merges into an X entry.
 //
 // Manual or locked events are never merged away. Events with a cancellation
 // overlay, and merges into an overlaid target, keep their current state.
@@ -120,6 +149,10 @@ func (s *Store) ReconcileEventMerges(ctx context.Context, now time.Time) (MergeC
 	if err = fenceSourceWrite(ctx, tx); err != nil {
 		return MergeCounts{}, err
 	}
+	timestamp := workflowTime(now)
+	if counts.EventsTimed, counts.EventsCreated, err = settleVideoEvents(ctx, tx, counts.From, counts.To, timestamp); err != nil {
+		return MergeCounts{}, ErrSourceWrite
+	}
 	events, err := loadMergeEvents(ctx, tx, counts.From, counts.To)
 	if err != nil {
 		return MergeCounts{}, ErrSourceWrite
@@ -130,12 +163,11 @@ func (s *Store) ReconcileEventMerges(ctx context.Context, now time.Time) (MergeC
 	}
 	desired, reasons, ambiguous := planMerges(events)
 	counts.Ambiguous = ambiguous
-	timestamp := workflowTime(now)
 	for _, event := range events {
 		if !event.ruleOwned() {
 			continue
 		}
-		if mergeSource(event) {
+		if movable(event) && (event.stream() || event.notice()) {
 			counts.Considered++
 		}
 		current := ""
@@ -196,7 +228,7 @@ func loadMergeEvents(ctx context.Context, tx *sql.Tx, from, to string) ([]mergeE
 		if err = rows.Scan(&e.id, &e.source, &e.title, &e.startsOn, &startsAt, &precision, &e.eventType, &e.provenance, &locked, &e.cancellation, &e.mergedInto, &e.mergeSource); err != nil {
 			return nil, err
 		}
-		e.locked = locked != 0
+		e.locked, e.precision = locked != 0, precision
 		if start, ok := parseMergeInstant(startsAt); ok && precision != "unknown" {
 			e.start, e.hasStart = start, true
 		}
@@ -223,7 +255,6 @@ func parseMergeInstant(value string) (time.Time, bool) {
 func planMerges(events []mergeEvent) (map[string]string, map[string]string, int) {
 	desired, reasons := map[string]string{}, map[string]string{}
 	ambiguous := 0
-	source, target := mergeSource, mergeTarget
 	byDay := map[string][]mergeEvent{}
 	for _, e := range events {
 		byDay[e.startsOn] = append(byDay[e.startsOn], e)
@@ -235,14 +266,15 @@ func planMerges(events []mergeEvent) (map[string]string, map[string]string, int)
 	slices.Sort(days)
 	for _, day := range days {
 		list := byDay[day]
-		// Rule B: a timed X notice and the YouTube reservation of the stream.
+		// Rule B: a timed X notice and the YouTube event of the same stream or
+		// release.
 		for _, s := range list {
-			if !source(s) || s.source != "x" || !s.timed() {
+			if !s.notice() || !movable(s) {
 				continue
 			}
 			matches := []string{}
 			for _, t := range list {
-				if t.id == s.id || !target(t) || t.source != "youtube" || !t.timed() || !compatible(s, t) {
+				if t.id == s.id || !receivable(t) || t.source != "youtube" || !t.timed() || !noticeCompatible(s, t) {
 					continue
 				}
 				if gap := s.start.Sub(t.start); gap <= mergeStartTolerance && gap >= -mergeStartTolerance {
@@ -257,19 +289,26 @@ func planMerges(events []mergeEvent) (map[string]string, map[string]string, int)
 				ambiguous++
 			}
 		}
-		// Rule A: a date-only entry, usually from a weekly schedule image.
+		// Rule A: a date-only stream entry, usually from a weekly schedule image.
 		dateOnly, timed := []mergeEvent{}, []mergeEvent{}
 		for _, e := range list {
 			switch {
-			case !e.timed() && source(e):
+			case !e.stream():
+			case !e.timed() && movable(e):
 				dateOnly = append(dateOnly, e)
-			case e.timed() && target(e) && desired[e.id] == "":
+			case e.timed() && receivable(e) && desired[e.id] == "":
 				timed = append(timed, e)
 			}
 		}
 		for _, s := range dateOnly {
+			// A YouTube event outranks every X entry, so it only merges into
+			// another YouTube event.
+			targets := slices.DeleteFunc(slices.Clone(timed), func(t mergeEvent) bool { return s.source == "youtube" && t.source != "youtube" })
+			if len(targets) == 0 {
+				continue
+			}
 			matches := []string{}
-			for _, t := range timed {
+			for _, t := range targets {
 				if compatible(s, t) && titlesOverlap(s.title, t.title) {
 					matches = append(matches, t.id)
 				}
@@ -279,9 +318,9 @@ func planMerges(events []mergeEvent) (map[string]string, map[string]string, int)
 				desired[s.id], reasons[s.id] = matches[0], mergeReasonTitle
 			case len(matches) > 1:
 				ambiguous++
-			case len(dateOnly) == 1 && len(timed) == 1 && compatible(s, timed[0]):
+			case len(dateOnly) == 1 && len(timed) == 1 && len(targets) == 1 && compatible(s, timed[0]):
 				desired[s.id], reasons[s.id] = timed[0].id, mergeReasonOnly
-			case len(timed) > 0:
+			default:
 				ambiguous++
 			}
 		}
@@ -331,6 +370,66 @@ func titlesOverlap(a, b string) bool {
 		}
 	}
 	return false
+}
+
+// MergeEvent hides an event behind another, given by its ID, as an operator
+// decision the reconciler never changes. Any visible event can be the target,
+// on any date; a merged or deleted one cannot, and neither can the event
+// itself. Rule merges into the merged event are released, since a duplicate
+// is no target; an operator's or another owner's merge into it is a conflict,
+// so no merge ever points at a merged event.
+func (s *Store) MergeEvent(ctx context.Context, id, into string) (AdminEvent, error) {
+	into = strings.TrimSpace(into)
+	tx, err := s.eventTx(ctx)
+	if err != nil {
+		return AdminEvent{}, err
+	}
+	defer tx.Rollback()
+	var current, owner string
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(merged_into,''),COALESCE(merge_source,'') FROM events WHERE id=? AND deleted_at IS NULL`, id).Scan(&current, &owner)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AdminEvent{}, sql.ErrNoRows
+	}
+	if err != nil {
+		return AdminEvent{}, fmt.Errorf("%w: event", ErrUnavailable)
+	}
+	if into == "" || into == id {
+		return AdminEvent{}, ErrEventMergeInvalid
+	}
+	var targetInto string
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE(merged_into,'') FROM events WHERE id=? AND deleted_at IS NULL`, into).Scan(&targetInto)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && targetInto != "" {
+		return AdminEvent{}, ErrEventMergeInvalid
+	}
+	if err != nil {
+		return AdminEvent{}, fmt.Errorf("%w: target", ErrUnavailable)
+	}
+	var others int
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE merged_into=? AND deleted_at IS NULL AND COALESCE(merge_source,'')<>?`, id, MergeSourceRule).Scan(&others); err != nil {
+		return AdminEvent{}, fmt.Errorf("%w: merges", ErrUnavailable)
+	}
+	if others > 0 {
+		return AdminEvent{}, ErrEventMergeConflict
+	}
+	if current == into && owner == MergeSourceManual {
+		_ = tx.Rollback()
+		return s.event(ctx, id)
+	}
+	now := ISOTime(time.Now())
+	if _, err = tx.ExecContext(ctx, `UPDATE events SET merged_into=NULL,merge_source=NULL,merge_reason=NULL,merged_at=NULL WHERE merged_into=? AND merge_source=?`, id, MergeSourceRule); err != nil {
+		return AdminEvent{}, fmt.Errorf("%w: merges", ErrUnavailable)
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE events SET merged_into=?,merge_source=?,merge_reason=?,merged_at=? WHERE id=?`,
+		into, MergeSourceManual, mergeReasonManual, now, id); err != nil {
+		return AdminEvent{}, fmt.Errorf("%w: event", ErrUnavailable)
+	}
+	if err = bumpRevision(ctx, tx, now); err != nil {
+		return AdminEvent{}, fmt.Errorf("%w: revision", ErrUnavailable)
+	}
+	if err = tx.Commit(); err != nil {
+		return AdminEvent{}, fmt.Errorf("%w: commit", ErrUnavailable)
+	}
+	return s.event(ctx, id)
 }
 
 // UnmergeEvent undoes a merge as an operator decision. The event keeps

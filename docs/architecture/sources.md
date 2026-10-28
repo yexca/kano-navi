@@ -260,8 +260,10 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   stored kind (a stored `UPCOMING LIVE` becomes `LIVE ARCHIVE`), the
   `is_premiere` verdict and the reservation event's type and detail stay. Such
   an answer updates an existing reservation event but creates none, and the
-  failed page's code is still recorded. A later readable page settles the
-  verdict as usual.
+  failed page's code is still recorded. The `reconcile` step adds the event of
+  an ended broadcast that has none (see
+  [Duplicate merging](data-model.md#duplicate-merging)). A later readable page
+  settles the verdict as usual.
 - A thumbnail that is the same image as the stored one keeps the stored URL,
   so the watch page's `?v=` version does not read as a replacement; the media
   step still revalidates the file. See [Video corrections](data-model.md#video-corrections-and-history)
@@ -699,8 +701,9 @@ outcomes idempotent. Successful/uncertain posts stay eligible for cache checks
 and can run again when their input or provider configuration changes. Date-only events store `starts_on`, a null `starts_at`, and
 `time_precision = unknown`; the model must not invent a specific time.
 The extractor never deduplicates against other posts or reservations beyond
-shared IDs; the later `reconcile` step merges date-only and X-notice
-duplicates into the more precise event (see
+shared IDs; the later `reconcile` step gives an event for a linked YouTube
+video the video's start and merges date-only and X-notice duplicates into the
+more precise event (see
 [Duplicate merging](data-model.md#duplicate-merging)). Re-extraction rewrites
 the source row but never its merge columns.
 

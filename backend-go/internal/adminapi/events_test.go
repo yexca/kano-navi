@@ -164,3 +164,43 @@ func TestMergedEventsCanBeListedAndUndone(t *testing.T) {
 		t.Fatalf("missing=%d %v", code, payload)
 	}
 }
+
+func TestOperatorMergesAnEventIntoAnother(t *testing.T) {
+	c := newConsole(t, "development", "", &gatedSteps{})
+	for _, statement := range []string{
+		`INSERT INTO events(id,source,title,starts_on,starts_at,time_precision,event_type,provenance,manual_locked,created_at,updated_at) VALUES('youtube-AAAAAAAAAAA','youtube','【VALORANT】コンペ','2026-03-02','2026-03-02T10:01:35Z','exact','stream','automatic',0,'2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`,
+		`INSERT INTO events(id,source,title,starts_on,time_precision,event_type,provenance,manual_locked,created_at,updated_at) VALUES('x-collab','x','コラボ配信','2026-03-02','unknown','stream','automatic',0,'2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`,
+		`INSERT INTO events(id,source,title,starts_on,time_precision,event_type,provenance,manual_locked,created_at,updated_at) VALUES('x-other','x','雑談','2026-03-03','unknown','stream','automatic',0,'2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`,
+	} {
+		c.exec(t, statement)
+	}
+	revision := c.text(t, `SELECT value FROM app_settings WHERE key='dashboard_revision'`)
+	code, payload := c.call(t, "POST", "/api/admin/events/x-collab/merge", `{"into":"youtube-AAAAAAAAAAA"}`)
+	if event, _ := payload["event"].(map[string]any); code != 200 || event["mergedInto"] != "youtube-AAAAAAAAAAA" || event["mergedIntoTitle"] != "【VALORANT】コンペ" || event["mergeSource"] != "manual" || event["mergeReason"] != "manual" || event["mergedAt"] == nil {
+		t.Fatalf("merge=%d %v", code, payload)
+	}
+	if c.text(t, `SELECT value FROM app_settings WHERE key='dashboard_revision'`) == revision {
+		t.Fatal("merge must bump the revision")
+	}
+	// The merged event already holds a duplicate, so it cannot be merged away.
+	if code, payload = c.call(t, "POST", "/api/admin/events/youtube-AAAAAAAAAAA/merge", `{"into":"x-other"}`); code != 409 || payload["error"] != "merge_conflict" {
+		t.Fatalf("conflict=%d %v", code, payload)
+	}
+	for body, want := range map[string]int{
+		`{}`: 400, `{"into":7}`: 400, `{"into":" "}`: 400, `{"into":"x-other-missing"}`: 400,
+		`{"into":"x-other"}`: 200,
+	} {
+		if code, payload = c.call(t, "POST", "/api/admin/events/x-collab/merge", body); code != want {
+			t.Fatalf("%s=%d %v", body, code, payload)
+		}
+	}
+	// A merged event is no target, and an event never merges into itself.
+	for _, body := range []string{`{"into":"x-collab"}`, `{"into":"x-other"}`} {
+		if code, payload = c.call(t, "POST", "/api/admin/events/x-other/merge", body); code != 400 {
+			t.Fatalf("self or merged target=%d %v", code, payload)
+		}
+	}
+	if code, payload = c.call(t, "POST", "/api/admin/events/missing/merge", `{"into":"x-other"}`); code != 404 || payload["error"] != "event_not_found" {
+		t.Fatalf("missing=%d %v", code, payload)
+	}
+}

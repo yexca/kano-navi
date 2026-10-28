@@ -176,6 +176,7 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 		return AttemptResult{Status: "succeeded", Result: map[string]any{
 			"from": counts.From, "to": counts.To, "considered": counts.Considered, "merged": counts.Merged,
 			"retargeted": counts.Retargeted, "released": counts.Released, "kept": counts.Kept, "ambiguous": counts.Ambiguous,
+			"eventsTimed": counts.EventsTimed, "eventsCreated": counts.EventsCreated,
 			"videosConsidered": videos.Considered, "videosMerged": videos.Merged, "videosReleased": videos.Released,
 			"videosKept": videos.Kept, "videosAmbiguous": videos.Ambiguous,
 		}}, nil
