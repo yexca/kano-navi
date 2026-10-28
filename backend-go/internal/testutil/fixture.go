@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -127,15 +128,27 @@ func NewSnapshot(t testing.TB) string {
 	return path
 }
 
+// Exec writes to a snapshot that a running handler may be reading. The busy
+// timeout lets the write wait out a reader's shared lock; it is set on the
+// connection rather than in a file: URI because t.TempDir keeps '#' and '%'
+// from subtest names, which a URI would misread.
 func Exec(t testing.TB, path, query string, args ...any) {
 	t.Helper()
-	// A server under test may be reading the same file; wait out its lock.
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatalf("open fixture for write: %v", err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(query, args...); err != nil {
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatalf("open fixture for write: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `PRAGMA busy_timeout = 5000`); err != nil {
+		t.Fatalf("set fixture busy timeout: %v", err)
+	}
+	if _, err := conn.ExecContext(ctx, query, args...); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 }
