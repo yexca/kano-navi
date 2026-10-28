@@ -4,6 +4,7 @@ Use the Makefile for checks and keep changes within the existing product and mod
 
 - [Local setup](local-dev.md)
 - [Design and interaction](design.md)
+- [History archive maintenance](history-archive.md)
 - [Testing and Actions](testing.md)
 - [Synthetic performance measurements](performance.md)
 - [Secure development](security.md)

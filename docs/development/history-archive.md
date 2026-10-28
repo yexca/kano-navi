@@ -1,12 +1,10 @@
-# History and Visual Archive
+# History Archive Maintenance
 
-`/history` contains a multilingual timeline of 45 milestones from 2010 onward
-and 60 images from the maintainer's `kano_official` reference collection,
-reviewed in October 2026. Visitors can filter by activity identity, jump to a
-year from the year rail (one dot per milestone, with empty years folded into
-a gap; a sticky side rail on wide screens and a sticky strip on phones), or browse the gallery by image type. Timeline cards show
-compact thumbnails; image dialogs show the full file, dimensions, date basis,
-recorded credit, and original-source links.
+The [Journey](../user/journey.md) page shows a multilingual timeline of 45
+milestones from 2010 onward and 60 images from the maintainer's
+`kano_official` reference collection, reviewed in October 2026. This page
+covers where that content lives, how its provenance is recorded, and how the
+bundled images are packaged.
 
 ## Content and Provenance
 

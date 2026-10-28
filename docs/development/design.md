@@ -35,7 +35,7 @@ as another cue. Keep implementation details out of visitor-facing copy.
 
 ## Related Docs
 
-- [Product overview](../overview.md)
+- [User guide](../user/index.md)
 - [Frontend ownership](../architecture/frontend.md)
-- [History provenance](../product/history.md)
+- [History archive maintenance](history-archive.md)
 - [Testing](testing.md)

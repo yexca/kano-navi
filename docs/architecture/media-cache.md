@@ -44,7 +44,7 @@ remain runtime data in `data/avatar/`. A `cache_path` that starts with
 the downloaders write only the source namespaces. The curated history
 collection ships as verified fixed files in `public/assets/history/`; it needs
 no runtime database rows. See
-[History and visual archive](../product/history.md) for packaging and
+[History archive maintenance](../development/history-archive.md) for packaging and
 provenance details.
 
 ## Database Model
