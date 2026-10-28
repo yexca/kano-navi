@@ -25,6 +25,33 @@ func TestCalendarFoldsMultibyteTextWithoutSplittingCharacters(t *testing.T) {
 	}
 }
 
+func TestCalendarFlagsOnlyAllDayEntriesAndNamesNoTimeZone(t *testing.T) {
+	start := "2026-10-09T11:00:00Z"
+	body := string(Calendar([]sqlite.DashboardEvent{
+		{ID: "day", StartsOn: "2026-10-09", TimePrecision: "unknown"},
+		// A stored time with unknown precision is still an all-day entry.
+		{ID: "unknown", StartsOn: "2026-10-09", StartsAt: &start, TimePrecision: "unknown"},
+		{ID: "timed", StartsOn: "2026-10-09", StartsAt: &start, TimePrecision: "exact"},
+	}, time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC), English))
+	if strings.Contains(body, "X-WR-TIMEZONE") || strings.Contains(body, "TZID") || strings.Contains(body, "VTIMEZONE") {
+		t.Fatalf("calendar names a time zone:\n%s", body)
+	}
+	events := map[string]string{}
+	for _, block := range strings.Split(body, "BEGIN:VEVENT\r\n")[1:] {
+		id, _, _ := strings.Cut(strings.TrimPrefix(block, "UID:"), "@kano-navi")
+		events[id] = block
+	}
+	for _, id := range []string{"day", "unknown"} {
+		want := "DTSTART;VALUE=DATE:20261009\r\nDTEND;VALUE=DATE:20261010\r\nX-MICROSOFT-CDO-ALLDAYEVENT:TRUE\r\n"
+		if !strings.Contains(events[id], want) {
+			t.Fatalf("%s lacks %q:\n%s", id, want, events[id])
+		}
+	}
+	if timed := events["timed"]; !strings.Contains(timed, "DTSTART:20261009T110000Z\r\n") || strings.Contains(timed, "VALUE=DATE") || strings.Contains(timed, "X-MICROSOFT-CDO-ALLDAYEVENT") {
+		t.Fatalf("timed entry is not a plain UTC event:\n%s", timed)
+	}
+}
+
 func TestCalendarDefaultsTheLengthOfTimedEventsWithoutAnEnd(t *testing.T) {
 	text := func(value string) *string { return &value }
 	start := "2026-10-28T11:00:00Z"

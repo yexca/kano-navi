@@ -21,8 +21,9 @@ var japan = time.FixedZone("JST", 9*60*60)
 // Calendar renders events as an iCalendar document (RFC 5545) with CRLF line
 // endings and folded lines, worded for locale: titles resolve translations
 // as the board does and the fixed strings come from the locale's messages.
-// Times are UTC; date-only and unknown-time events become all-day entries on
-// their Japan date. LAST-MODIFIED and SEQUENCE follow the stored update time
+// The document names no time zone: times are UTC, and date-only and
+// unknown-time events become floating all-day entries on their Japan date, so
+// every viewer sees the same day. LAST-MODIFIED and SEQUENCE follow the stored update time
 // so clients replace a changed entry. Every DTSTAMP is stamp, which the caller
 // keeps steady between polls so an unchanged document keeps its validator.
 func Calendar(events []sqlite.DashboardEvent, stamp time.Time, locale Locale) []byte {
@@ -34,7 +35,6 @@ func Calendar(events []sqlite.DashboardEvent, stamp time.Time, locale Locale) []
 	line("CALSCALE", "GREGORIAN")
 	line("METHOD", "PUBLISH")
 	line("X-WR-CALNAME", escapeText(locale.messages().siteName))
-	line("X-WR-TIMEZONE", "Asia/Tokyo")
 	line("REFRESH-INTERVAL;VALUE=DURATION", "PT1H")
 	line("X-PUBLISHED-TTL", "PT1H")
 	dtstamp := stamp.UTC().Format("20060102T150405Z")
@@ -61,6 +61,9 @@ func Calendar(events []sqlite.DashboardEvent, stamp time.Time, locale Locale) []
 		} else {
 			line("DTSTART;VALUE=DATE", day.Format("20060102"))
 			line("DTEND;VALUE=DATE", day.AddDate(0, 0, 1).Format("20060102"))
+			// Outlook keeps an entry with this flag a single all-day event
+			// instead of converting its dates into a span across two days.
+			line("X-MICROSOFT-CDO-ALLDAYEVENT", "TRUE")
 		}
 		line("SUMMARY", escapeText(localizedTitle(e.Title, e.Translations, locale)))
 		if description := eventDescription(e, timed, locale); description != "" {

@@ -60,12 +60,13 @@ func TestCalendarFeed(t *testing.T) {
 	}
 	unfolded := strings.ReplaceAll(body, "\r\n ", "")
 	for _, want := range []string{
-		"BEGIN:VCALENDAR\r\n", "X-WR-TIMEZONE:Asia/Tokyo\r\n",
+		"BEGIN:VCALENDAR\r\n",
 		// A stream without an end lasts an hour; LAST-MODIFIED and SEQUENCE
-		// follow updated_at (whole seconds since 2020-01-01T00:00:00Z).
+		// follow updated_at (whole seconds since 2020-01-01T00:00:00Z). A
+		// timed entry carries no all-day flag.
 		"UID:feed-timed@kano-navi\r\nDTSTAMP:20261026T150000Z\r\nLAST-MODIFIED:20261026T093000Z\r\nSEQUENCE:215170200\r\nDTSTART:20261028T110000Z\r\nDTEND:20261028T120000Z\r\nSUMMARY:Night\\, stream\\; part 2\r\n",
 		"URL:https://example.invalid/post\r\nSTATUS:CONFIRMED\r\n", "Confirmed by the site maintainer.",
-		"DTSTART;VALUE=DATE:20261029\r\nDTEND;VALUE=DATE:20261030\r\n",
+		"DTSTART;VALUE=DATE:20261029\r\nDTEND;VALUE=DATE:20261030\r\nX-MICROSOFT-CDO-ALLDAYEVENT:TRUE\r\n",
 		// Another timed event without an end lasts half an hour, and one
 		// without a parseable update time has no SEQUENCE.
 		"UID:feed-suspect@kano-navi\r\nDTSTAMP:20261026T150000Z\r\nDTSTART:20261030T110000Z\r\nDTEND:20261030T113000Z\r\n", "STATUS:TENTATIVE\r\n",
@@ -77,7 +78,8 @@ func TestCalendarFeed(t *testing.T) {
 			t.Fatalf("calendar lacks %q:\n%s", want, unfolded)
 		}
 	}
-	for _, leaked := range []string{"private evidence", "javascript:", "Too old", "manualLocked"} {
+	// The feed names no time zone, so all-day entries stay floating.
+	for _, leaked := range []string{"private evidence", "javascript:", "Too old", "manualLocked", "X-WR-TIMEZONE"} {
 		if strings.Contains(unfolded, leaked) {
 			t.Fatalf("calendar contains %q", leaked)
 		}

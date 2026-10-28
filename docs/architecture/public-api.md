@@ -149,8 +149,12 @@ calendar.
 dated 30 days before to 90 days after today's Japan date, at most 500 events,
 each once: events from today on fill the cap first and the most recent past
 events take what is left. They are read through the same bounded calendar
-pages and event projection as `/api/calendar`. Times are UTC; an event without
-a time, or of `unknown` precision, is an all-day entry on its Japan date. A
+pages and event projection as `/api/calendar`. The calendar names no time
+zone, so it reads the same in every viewer's zone: times are UTC, and an event
+without a time, or of `unknown` precision, is a floating all-day entry
+(`DTSTART;VALUE=DATE` with an exclusive `DTEND` the next day) on its Japan
+date. All-day entries also carry `X-MICROSOFT-CDO-ALLDAYEVENT:TRUE`, which
+keeps Outlook from drawing them across two days; timed entries do not. A
 timed event without a stored end after its start lasts an hour when it is a
 stream (the `stream` and `member` types the board treats as streams) and half
 an hour otherwise, since RFC 5545 would make it zero-length. A UID is the
