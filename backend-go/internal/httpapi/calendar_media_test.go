@@ -37,7 +37,7 @@ func TestCalendarRangePaginationAndPublicProjection(t *testing.T) {
 	defer store.Close()
 	handler := NewHandler(store)
 	recorder := request(t, handler, http.MethodGet, "/api/calendar?from=2026-10-10&to=2026-10-11&page=1&pageSize=1")
-	if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != "no-store" {
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != "no-cache" {
 		t.Fatalf("calendar status=%d headers=%v body=%s", recorder.Code, recorder.Header(), recorder.Body)
 	}
 	var payload map[string]any

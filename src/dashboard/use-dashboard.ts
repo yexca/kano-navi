@@ -83,6 +83,7 @@ async function readScopedJson(url: string, signal: AbortSignal) {
   const response = await fetch(url, {
     signal,
     headers: { accept: "application/json" },
+    cache: "no-cache",
   })
   if (!response.ok) throw new Error(`API ${response.status}`)
   return response.json()
@@ -168,7 +169,9 @@ export function useDashboard(now = Date.now()) {
     const key = rangeKey(rangeRef.current)
     const current = calendarKeyRef.current === key ? calendarRef.current : null
     calendarRefreshRef.current = false
-    setCalendarLoading(true)
+    // Only a week without a loaded snapshot shows the placeholder; a refresh
+    // keeps the current week rendered and swaps its data in place.
+    if (!current) setCalendarLoading(true)
     try {
       const payload = await scope.run("calendar", async (signal) => {
         const readPage = async (page: number): Promise<CalendarSnapshot> => {
@@ -304,10 +307,12 @@ export function useDashboard(now = Date.now()) {
         return await Promise.race([
           cancelled,
           (async () => {
+            // The snapshot carries an ETag, so an unchanged one revalidates
+            // with a bodiless 304; the revision reply is never stored.
             const response = await fetch(url, {
               headers: { accept: "application/json" },
               signal: controller.signal,
-              cache: "no-store",
+              cache: "no-cache",
             })
             if (!response.ok) throw new Error(`API ${response.status}`)
             return response.json()

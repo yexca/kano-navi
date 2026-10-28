@@ -220,6 +220,45 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
     )
 
     await t.test(
+      "only a week without a loaded snapshot reports calendar loading",
+      async (context) => {
+        const fixture = await setup(context, true)
+        const emptyWeek = {
+          ...calendarPage(1, null),
+          events: [],
+          total: 0,
+        }
+        try {
+          await fixture.respond(0, snapshot(1))
+          assert.equal(fixture.current().calendarLoading, true)
+          await fixture.respondCalendar(0, emptyWeek)
+          assert.equal(fixture.current().calendarLoading, false)
+          // A background refresh of the same week keeps it rendered.
+          await act(async () => void fixture.current().reload())
+          await fixture.respond(1, snapshot(1))
+          assert.equal(fixture.calendarRequests.length, 2)
+          assert.equal(fixture.current().calendarLoading, false)
+          await fixture.respondCalendar(1, emptyWeek)
+          assert.equal(fixture.current().calendarLoading, false)
+          // Another week has nothing loaded yet.
+          await act(async () =>
+            fixture
+              .current()
+              .setWeekStart(
+                (week: Date) => new Date(week.getTime() + 7 * 864e5),
+              ),
+          )
+          assert.equal(fixture.calendarRequests.length, 3)
+          assert.equal(fixture.current().calendarLoading, true)
+          await fixture.respondCalendar(2, emptyWeek)
+          assert.equal(fixture.current().calendarLoading, false)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
       "first failure retries with bounded backoff, and later failures retain the known snapshot",
       async (context) => {
         const fixture = await setup(context)

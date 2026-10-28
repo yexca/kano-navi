@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -223,7 +225,23 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "")
 		return
 	}
-	writeJSON(w, http.StatusOK, publicview.Dashboard(dashboard), "no-store")
+	payload := publicview.Dashboard(dashboard)
+	// meta.generatedAt changes on every read; leaving it out of the validator
+	// lets an otherwise unchanged snapshot revalidate.
+	validated := make(map[string]any, len(payload))
+	for key, value := range payload {
+		validated[key] = value
+	}
+	if meta, ok := payload["meta"].(map[string]any); ok {
+		stable := make(map[string]any, len(meta))
+		for key, value := range meta {
+			if key != "generatedAt" {
+				stable[key] = value
+			}
+		}
+		validated["meta"] = stable
+	}
+	writeRevalidatedJSON(w, r, payload, validated)
 }
 
 func queryCalendarNumber(r *http.Request, key string, fallback float64) float64 {
@@ -287,12 +305,12 @@ func (h *Handler) calendar(w http.ResponseWriter, r *http.Request) {
 	for _, asset := range calendar.ScheduleImages {
 		images = append(images, publicview.PublicAsset(asset))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	writeRevalidatedJSON(w, r, map[string]any{
 		"items": items, "events": items, "page": calendar.Page, "pageSize": calendar.PageSize,
 		"total": calendar.Total, "totalPages": calendar.TotalPages, "hasPrevious": calendar.HasPrevious,
 		"hasNext": calendar.HasNext, "dayCounts": calendar.DayCounts, "revision": calendar.Revision,
 		"scheduleImages": images, "adjacent": map[string]any{"previous": calendar.Previous, "next": calendar.Next},
-	}, "no-store")
+	}, nil)
 }
 
 func numericPrefix(raw string) bool {
@@ -321,6 +339,33 @@ func writeJSON(w http.ResponseWriter, status int, value any, cacheControl string
 		body = []byte(`{"error":"internal_error"}`)
 	}
 	w.WriteHeader(status)
+	_, _ = w.Write(body)
+}
+
+// writeRevalidatedJSON answers a polled public read with a validator over its
+// identity JSON (or over validated, a semantically equivalent value without
+// per-read fields), so an unchanged snapshot costs a 304 instead of a body.
+// The ETag is weak: gzip changes the transferred bytes, and the validator may
+// ignore fields that do not change the content.
+func writeRevalidatedJSON(w http.ResponseWriter, r *http.Request, value any, validated any) {
+	body, err := json.Marshal(value)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"}, "")
+		return
+	}
+	validator := body
+	if validated != nil {
+		if validator, err = json.Marshal(validated); err != nil {
+			validator = body
+		}
+	}
+	sum := sha256.Sum256(validator)
+	w.Header().Set("Cache-Control", "no-cache")
+	if notModified(w, r, `W/"`+hex.EncodeToString(sum[:16])+`"`) {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
 }
 

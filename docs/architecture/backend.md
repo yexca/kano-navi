@@ -182,8 +182,10 @@ public feeds, `/api/calendar.ics` and `/api/feed.xml`, whose subscription
 fetchers (Google Calendar's among them) honour it. `/index.html` is the file
 itself, which the frontend shows as the board. A missing/invalid manifest
 falls back to revalidation. Dynamic media retains its independent version/hash
-validation and caching. Dashboard/revision remain `no-store`; there is no
-dashboard response cache.
+validation and caching. The server keeps no dashboard response cache; the
+dashboard and calendar reads are revalidated by the browser through their
+[ETags](public-api.md#public-snapshot-contract), and the revision read is
+`no-store`.
 
 ## Share Tags
 

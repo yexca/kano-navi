@@ -52,11 +52,13 @@ func feedETag(kind string, locale feeds.Locale, state string) string {
 	return `"` + kind + "-" + string(locale) + "-" + buildinfo.Version + "-" + state + `"`
 }
 
-// notModified sets the ETag and answers a matching conditional request.
+// notModified sets the ETag and answers a matching conditional request,
+// comparing weakly as If-None-Match requires.
 func notModified(w http.ResponseWriter, r *http.Request, etag string) bool {
 	w.Header().Set("ETag", etag)
+	opaque := strings.TrimPrefix(etag, "W/")
 	for _, candidate := range strings.Split(r.Header.Get("If-None-Match"), ",") {
-		if strings.TrimPrefix(strings.TrimSpace(candidate), "W/") == etag {
+		if strings.TrimPrefix(strings.TrimSpace(candidate), "W/") == opaque {
 			w.WriteHeader(http.StatusNotModified)
 			return true
 		}

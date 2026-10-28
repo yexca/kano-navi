@@ -39,6 +39,15 @@ item IDs stay in the guarded admin API. `GET /api/dashboard/revision` reports
 a small revision hint without external work. Timestamps are parseable ISO 8601
 strings; display and date-window boundaries use Asia/Tokyo.
 
+`/api/dashboard` and `/api/calendar` send `Cache-Control: no-cache` and a weak
+ETag, a SHA-256 prefix of the uncompressed JSON body. The dashboard's tag
+leaves out `meta.generatedAt`, which changes on every read; the other
+time-derived fields are included, so the tag changes with them as well as with
+stored data. A matching `If-None-Match`, weak or strong, answers 304 without a
+body, and the client keeps its stored copy, including that copy's
+`generatedAt`. Because the tag is weak it validates the gzip and identity
+encodings alike. `/api/dashboard/revision` is `no-store`.
+
 Media responses follow the [media HTTP contract](media-cache.md#http-contract).
 Selected profile media uses `/media/profile/avatar` and
 `/media/profile/banner`.

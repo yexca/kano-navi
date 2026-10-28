@@ -305,7 +305,15 @@ they never append pages from different revisions. Every successful full board
 snapshot, including its visible minute refresh and manual reload, refreshes the
 calendar. Active calendar work finishes first, and later revision polls consume
 any pending time refresh or calendar revision.
+Only a week without a loaded snapshot shows the loading placeholder; a refresh
+of the shown week keeps its days or empty-week note in place and swaps the data
+when it arrives, so a quiet week does not flicker on each refresh.
 Adjacent-date hints support jumping to stored activity in either direction.
+
+Snapshot and calendar reads use `cache: "no-cache"`: the browser revalidates
+its stored copy with the response's
+[ETag](public-api.md#public-snapshot-contract) and receives a bodiless 304 when
+nothing changed, so the minute refresh costs little when the board is quiet.
 
 The month dialogs read through `useArchive` in `use-dashboard.ts`, only
 while one is open: the schedule reads the Monday-first weeks covering the month

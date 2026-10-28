@@ -15,6 +15,12 @@
   board, whole in the full post and the archive) and small thumbnails that
   open the image viewer. The card links to the quoted post on x.com, and a
   deleted or withheld quote shows a "Quoted post unavailable" placeholder.
+- A week without schedule entries no longer flickers to the loading
+  placeholder on each background refresh; the placeholder appears only while
+  a week is first loading.
+- `/api/dashboard` and `/api/calendar` send a weak ETag with
+  `Cache-Control: no-cache` instead of `no-store`, and the board revalidates
+  them, so an unchanged board answers its minute refresh with a bodiless 304.
 
 </details>
 

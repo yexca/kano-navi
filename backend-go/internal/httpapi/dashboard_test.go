@@ -51,7 +51,7 @@ func TestDashboardEmptySnapshotAndDaysBounds(t *testing.T) {
 		if status != http.StatusOK {
 			t.Fatalf("%s status=%d body=%s", tc.path, status, body)
 		}
-		if headers.Get("Vary") != "Accept-Encoding" || headers.Get("Cache-Control") != "no-store" {
+		if headers.Get("Vary") != "Accept-Encoding" || headers.Get("Cache-Control") != "no-cache" || !strings.HasPrefix(headers.Get("ETag"), `W/"`) {
 			t.Fatalf("%s headers=%v", tc.path, headers)
 		}
 		meta := payload["meta"].(map[string]any)
@@ -134,7 +134,7 @@ func TestDashboardPublicProjectionAndBoundedSemantics(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("status=%d body=%s", status, body)
 	}
-	if headers.Get("Vary") != "Accept-Encoding" || headers.Get("Cache-Control") != "no-store" {
+	if headers.Get("Vary") != "Accept-Encoding" || headers.Get("Cache-Control") != "no-cache" || !strings.HasPrefix(headers.Get("ETag"), `W/"`) {
 		t.Fatalf("headers=%v", headers)
 	}
 	posts := payload["posts"].([]any)
