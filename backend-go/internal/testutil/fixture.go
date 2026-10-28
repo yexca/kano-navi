@@ -129,7 +129,8 @@ func NewSnapshot(t testing.TB) string {
 
 func Exec(t testing.TB, path, query string, args ...any) {
 	t.Helper()
-	db, err := sql.Open("sqlite", path)
+	// A server under test may be reading the same file; wait out its lock.
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
 		t.Fatalf("open fixture for write: %v", err)
 	}
