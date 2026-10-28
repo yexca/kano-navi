@@ -22,7 +22,9 @@ export const repositoryRoot = path.resolve(scriptDirectory, "..")
 export const privacyAllowlistFile = "scripts/privacy-allowlist.json"
 
 const urlPattern = /\bhttps?:\/\/[^\s<>"'`]+/giu
-const ipv4Pattern = /\b(?:\d{1,3}\.){3}\d{1,3}\b/gu
+// Four dotted numbers that are not part of a longer run, such as the
+// decimals of an SVG path.
+const ipv4Pattern = /(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?!\.?\d)/gu
 const knownTokenPatterns = [
   /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/gu,
   /\bgithub_pat_[A-Za-z0-9_]{20,}\b/gu,
@@ -265,14 +267,19 @@ export function isAllowedHost(
   return false
 }
 
-function isDocumentationIPv4(value: string): boolean {
+function isIPv4(value: string): boolean {
   const octets = value.split(".").map(Number)
-  if (
-    octets.length !== 4 ||
-    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
-  ) {
-    return false
-  }
+  return (
+    octets.length === 4 &&
+    octets.every(
+      (octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255,
+    )
+  )
+}
+
+function isDocumentationIPv4(value: string): boolean {
+  if (!isIPv4(value)) return false
+  const octets = value.split(".").map(Number)
   return (
     (octets[0] === 192 && octets[1] === 0 && octets[2] === 2) ||
     (octets[0] === 198 && octets[1] === 51 && octets[2] === 100) ||
@@ -388,7 +395,7 @@ export function scanLine(
 
   ipv4Pattern.lastIndex = 0
   for (const match of text.matchAll(ipv4Pattern)) {
-    if (!isAllowedIPv4(match[0])) {
+    if (isIPv4(match[0]) && !isAllowedIPv4(match[0])) {
       findings.push({ ...entry, kind: "non-documentation IPv4 address" })
       break
     }

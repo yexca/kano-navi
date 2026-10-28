@@ -103,6 +103,17 @@ test("detects private paths and non-approved hosts", () => {
   )
 })
 
+test("detects public IPv4 addresses but not other dotted numbers", () => {
+  const isIPv4Finding = (text: string) =>
+    findingsFor(text).some(
+      (finding) => finding.kind === "non-documentation IPv4 address",
+    )
+  assert.equal(isIPv4Finding(["listen 10", "20.30", "40:80"].join(".")), true)
+  assert.equal(isIPv4Finding("listen 203.0.113.5:80"), false)
+  assert.equal(isIPv4Finding("999.1.1.1"), false)
+  assert.equal(isIPv4Finding("c.267-.249.573-.373.92.373.347 0"), false)
+})
+
 test("rejects malformed allowlist documents", () => {
   assert.throws(
     () =>
