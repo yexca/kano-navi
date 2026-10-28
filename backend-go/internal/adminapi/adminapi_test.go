@@ -414,6 +414,17 @@ func TestSourceFetchWindows(t *testing.T) {
 	}
 }
 
+func TestWindowAvailabilityFailsClosedWithoutHistoryWiring(t *testing.T) {
+	a := &api{}
+	for _, source := range []string{"x", "youtube"} {
+		for _, mode := range []string{"recent", "before", "range", "count"} {
+			if a.windowAvailable(source, mode) {
+				t.Fatalf("%s/%s unexpectedly available without history wiring", source, mode)
+			}
+		}
+	}
+}
+
 func TestOverviewCountsWhatNeedsReview(t *testing.T) {
 	c := newConsole(t, "development", "", &gatedSteps{})
 	c.exec(t, `INSERT INTO events(id,source,title,starts_on,timezone,time_precision,provenance,manual_locked,cancellation_status,created_at,updated_at) VALUES

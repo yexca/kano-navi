@@ -288,31 +288,40 @@ func formDecode(s string) string {
 	return strings.ToValidUTF8(percentDecode(strings.ReplaceAll(s, "+", " ")), "�")
 }
 
-var youtubePathPattern = regexp.MustCompile(`/(?:live|shorts)/([^/]+)`)
+var (
+	youtubePathPattern    = regexp.MustCompile(`/(?:live|shorts)/([^/]+)`)
+	youtubeVideoIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+)
 
 func youtubeIDFromURL(value string) string {
 	if value == "" {
 		return ""
 	}
 	u, ok := parseURL(value)
-	if !ok || !u.special {
+	if !ok || !u.web() {
 		return ""
 	}
 	return youtubeIDOf(u)
 }
 
-// youtubeIDOf keeps the original host test, a plain suffix match, so any host
-// whose name merely ends in "youtube.com" is treated the same way.
+func validYouTubeID(value string) string {
+	if youtubeVideoIDPattern.MatchString(value) {
+		return value
+	}
+	return ""
+}
+
+// youtubeIDOf accepts only YouTube's real host boundary and video ID shape.
 func youtubeIDOf(u *parsedURL) string {
 	if u.host == "youtu.be" {
-		return u.path[1:]
+		return validYouTubeID(strings.TrimPrefix(u.path, "/"))
 	}
-	if strings.HasSuffix(u.host, "youtube.com") {
+	if u.host == "youtube.com" || strings.HasSuffix(u.host, ".youtube.com") {
 		if id, _ := u.searchParam("v"); id != "" {
-			return id
+			return validYouTubeID(id)
 		}
 		if match := youtubePathPattern.FindStringSubmatch(u.path); match != nil {
-			return match[1]
+			return validYouTubeID(match[1])
 		}
 	}
 	return ""

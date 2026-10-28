@@ -23,6 +23,7 @@
     "check-sensitive": "node scripts/check-sensitive.ts",
     "test:sensitive": "node --test scripts/check-sensitive.test.ts",
     "test:frontend": "node --test tests/*.test.ts",
+    "test": "npm run test:frontend",
     "docs:check-links": "node scripts/check-doc-links.ts",
     "check": "npm run format:check && npm run test:sensitive && npm run test:frontend && npm run check-sensitive && npm run docs:check-links && npm run build"
   },

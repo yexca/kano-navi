@@ -54,18 +54,27 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 		// their start, as count windows always do; a backfill then fails with
 		// the credential message. Only a recent window without either source
 		// stays incremental.
+		if in.Window != nil && s.History == nil {
+			return AttemptResult{}, NewStepError("history_unavailable", ErrDependency)
+		}
 		if in.Window != nil && (in.Window.Mode != history.ModeRecent || s.History.Available(history.SourceX) || s.History.timeline(history.ModeRecent)) {
 			return s.History.FetchX(ctx, *in.Window)
 		}
 		// A count setting reads the newest posts from the timeline every run;
 		// the incremental cursor and pending queue stay as they are.
 		if in.Window == nil && in.Sync.Mode == sqlite.SyncCount {
+			if s.History == nil {
+				return AttemptResult{}, NewStepError("history_unavailable", ErrDependency)
+			}
 			return s.History.FetchX(ctx, history.Window{Mode: history.ModeCount, Count: in.Sync.Count})
 		}
 		if s.X != nil {
 			return s.X.Execute(ctx, in)
 		}
 	case "youtube":
+		if in.Window != nil && s.History == nil {
+			return AttemptResult{}, NewStepError("history_unavailable", ErrDependency)
+		}
 		if in.Window != nil && in.Window.Mode != history.ModeRecent && in.Window.Mode != history.ModeCount {
 			return s.History.FetchYoutube(ctx, *in.Window)
 		}

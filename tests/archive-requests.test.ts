@@ -17,7 +17,7 @@ test("month archives page by revision, follow the board and cancel on close", as
   const vite = await createServer({
     configFile: false,
     envDir: false,
-    server: { middlewareMode: true, watch: null },
+    server: { middlewareMode: true, watch: null, ws: false },
     optimizeDeps: { noDiscovery: true, include: [] },
     resolve: { alias: { "@": path.resolve("src") } },
   })

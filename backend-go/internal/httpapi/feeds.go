@@ -79,14 +79,12 @@ func (h *Handler) calendarFeed(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// The language, the snapshot revision and the Japan date decide the
-	// calendar's content; only DTSTAMP follows the clock.
+	// The calendar body includes DTSTAMP, so build the body before evaluating a
+	// conditional request. Its ETag must identify the complete representation,
+	// including the clock-derived stamp.
 	revision, err := h.store.GetDashboardRevision(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "")
-		return
-	}
-	if notModified(w, r, feedETag("ics", locale, strconv.FormatInt(revision, 10)+"-"+now.In(feedJapan).Format("20060102"))) {
 		return
 	}
 	today, _ := time.ParseInLocation("2006-01-02", now.In(feedJapan).Format("2006-01-02"), feedJapan)
@@ -96,8 +94,14 @@ func (h *Handler) calendarFeed(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "no-store")
 		return
 	}
+	body := feeds.Calendar(events, now, locale)
+	sum := sha256.Sum256(body)
+	state := strconv.FormatInt(revision, 10) + "-" + hex.EncodeToString(sum[:12])
+	if notModified(w, r, feedETag("ics", locale, state)) {
+		return
+	}
 	w.Header().Set("Content-Disposition", `inline; filename="kano-schedule.ics"`)
-	writeFeed(w, r, "text/calendar; charset=utf-8", feeds.Calendar(events, now, locale))
+	writeFeed(w, r, "text/calendar; charset=utf-8", body)
 }
 
 // calendarEvents reads the calendar's events in date order. The coming days

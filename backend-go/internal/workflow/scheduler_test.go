@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,27 @@ func TestSchedulerIsDisabledByDefault(t *testing.T) {
 	if status["running"] != false || status["enabled"] != false || status["tickSeconds"] != 30 {
 		t.Fatalf("unexpected default scheduler status: %#v", status)
 	}
+	s.Stop()
+}
+
+func TestSchedulerStartStopAndStatusAreSafeConcurrently(t *testing.T) {
+	s := &Scheduler{Enabled: true, TickInterval: time.Millisecond}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			s.Start()
+			s.Stop()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			_ = s.Status()
+		}
+	}()
+	wg.Wait()
 	s.Stop()
 }
 

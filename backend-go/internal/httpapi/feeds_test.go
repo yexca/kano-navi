@@ -81,7 +81,7 @@ func TestCalendarFeed(t *testing.T) {
 		}
 	}
 	etag := response.Header().Get("ETag")
-	if etag != `"ics-en-`+buildinfo.Version+`-7-20261027"` {
+	if !strings.HasPrefix(etag, `"ics-en-`+buildinfo.Version+`-7-`) {
 		t.Fatalf("etag %q", etag)
 	}
 	conditional := httptest.NewRequest(http.MethodGet, "/api/calendar.ics", nil)
@@ -96,6 +96,30 @@ func TestCalendarFeed(t *testing.T) {
 	}
 	if post := request(t, handler, http.MethodPost, "/api/calendar.ics"); post.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("post status=%d", post.Code)
+	}
+}
+
+func TestCalendarFeedETagChangesWithClockStamp(t *testing.T) {
+	var now time.Time
+	handler := NewHandlerWithClock(feedStore(t), func() time.Time { return now })
+	get := func(etag string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/api/calendar.ics", nil)
+		if etag != "" {
+			request.Header.Set("If-None-Match", etag)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response
+	}
+	now = time.Date(2026, 10, 27, 3, 0, 0, 0, time.UTC)
+	first := get("")
+	if first.Code != http.StatusOK {
+		t.Fatalf("first status=%d", first.Code)
+	}
+	now = now.Add(time.Minute)
+	second := get(first.Header().Get("ETag"))
+	if second.Code != http.StatusOK || second.Header().Get("ETag") == first.Header().Get("ETag") || second.Body.String() == first.Body.String() {
+		t.Fatalf("clock change was cached: first=%d/%q second=%d/%q", first.Code, first.Header().Get("ETag"), second.Code, second.Header().Get("ETag"))
 	}
 }
 

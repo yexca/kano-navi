@@ -138,9 +138,8 @@ func TestURLNormalizationMatchesWHATWG(t *testing.T) {
 			t.Errorf("mediaIDForSourceURL(%q) = %q, want %q", input, got, text(item[3]))
 		}
 	}
-	// The original host test is a suffix match without a label boundary.
-	if got := youtubeIDOf(&parsedURL{special: true, host: "notyoutube.com", path: "/shorts/abc"}); got != "abc" {
-		t.Errorf("suffix host id = %q", got)
+	if got := youtubeIDOf(&parsedURL{special: true, host: "notyoutube.com", path: "/shorts/abc"}); got != "" {
+		t.Errorf("lookalike host id = %q", got)
 	}
 	if got := normalizePublicURL("javascript:alert(1)", "https://x.com/fallback"); got != "https://x.com/fallback" {
 		t.Errorf("non-http link was kept: %q", got)

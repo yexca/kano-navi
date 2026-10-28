@@ -11,7 +11,7 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
   const vite = await createServer({
     configFile: false,
     envDir: false,
-    server: { middlewareMode: true, watch: null },
+    server: { middlewareMode: true, watch: null, ws: false },
     optimizeDeps: { noDiscovery: true, include: [] },
     resolve: { alias: { "@": path.resolve("src") } },
   })

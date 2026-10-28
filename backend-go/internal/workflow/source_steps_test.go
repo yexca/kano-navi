@@ -12,11 +12,26 @@ import (
 	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/mediadownload"
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 	"github.com/yexca/kano-navi/backend-go/internal/testutil"
 )
+
+func TestWindowStepWithoutHistoryReturnsDependencyInsteadOfPanicking(t *testing.T) {
+	for _, step := range []string{"x", "youtube"} {
+		t.Run(step, func(t *testing.T) {
+			steps := &SourceSteps{}
+			window := history.Window{Mode: history.ModeRecent, Days: 7}
+			_, err := steps.Execute(context.Background(), StepInput{StepID: step, Window: &window})
+			var stepErr *StepError
+			if !errors.As(err, &stepErr) || stepErr.Code != "history_unavailable" || stepErr.Category != ErrDependency {
+				t.Fatalf("err=%#v", err)
+			}
+		})
+	}
+}
 
 func TestGoSourceWorkflowProducesPostsReservationsAndReadableMedia(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite")

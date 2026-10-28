@@ -57,7 +57,8 @@ type Options struct {
 	HistoryAvailable func(source string) bool
 	// WindowAvailable reports whether a source can run a fetch window mode
 	// now, which X range and count windows can through the public timeline.
-	// Nil falls back to HistoryAvailable for every mode but recent.
+	// When neither availability callback is configured, windows are disabled;
+	// this keeps a read-only sidecar from accepting work its queue cannot run.
 	WindowAvailable func(source, mode string) bool
 	// Now is the clock for Japan-date aggregates; nil uses time.Now.
 	Now func() time.Time
@@ -172,6 +173,9 @@ func (a *api) historyAvailable(source string) bool {
 func (a *api) windowAvailable(source, mode string) bool {
 	if a.WindowAvailable != nil {
 		return a.WindowAvailable(source, mode)
+	}
+	if a.HistoryAvailable == nil {
+		return false
 	}
 	return mode == history.ModeRecent || (source == history.SourceYoutube && mode == history.ModeCount) || (mode != history.ModeCount && a.historyAvailable(source))
 }

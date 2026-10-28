@@ -33,11 +33,14 @@ type Scheduler struct {
 	BilibiliFloor int
 	TickInterval  time.Duration
 	Now           func() time.Time
+	mu            sync.Mutex
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
 }
 
 func (s *Scheduler) Start() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.Enabled || s.cancel != nil {
 		return
 	}
@@ -65,6 +68,8 @@ func (s *Scheduler) Start() {
 	}()
 }
 func (s *Scheduler) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
@@ -72,6 +77,8 @@ func (s *Scheduler) Stop() {
 	}
 }
 func (s *Scheduler) Status() map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	interval := s.TickInterval
 	if interval <= 0 {
 		interval = 30 * time.Second
