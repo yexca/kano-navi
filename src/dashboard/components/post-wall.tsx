@@ -521,12 +521,14 @@ export function PostWall({
         ) : null}
         <button
           type="button"
-          className="pill-button"
+          className="pill-button is-collapsible"
           onClick={() => onOpenArchive(account)}
           aria-haspopup="dialog"
+          aria-label={t("feed.archive")}
+          title={t("feed.archive")}
         >
           <History aria-hidden="true" />
-          {t("feed.archive")}
+          <span className="pill-label">{t("feed.archive")}</span>
         </button>
       </SectionTitle>
 

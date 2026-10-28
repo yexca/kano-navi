@@ -776,11 +776,42 @@
   }
 
   .profile-body {
+    grid-template-columns: minmax(0, 1fr);
     padding-top: 0;
+    padding-inline: 18px;
   }
 
   .profile-avatar {
     margin-top: -42px;
+  }
+
+  /*
+   * Both X handles and the platform icons share one row; on the narrowest
+   * phones the handles shorten before the row wraps.
+   */
+  .profile-links {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .profile-links .pill-button {
+    min-width: 0;
+    gap: 4px;
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+
+  .profile-links .pill-button span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .profile-links .round-button {
+    flex: none;
+    width: 32px;
+    height: 32px;
   }
 
   .ticket-stub {
@@ -1256,6 +1287,22 @@
 
 .guide .section-title-actions {
   gap: 10px;
+}
+
+/* The week arrows stand apart from Subscribe and Month view. */
+.guide .guide-nav {
+  margin-left: 12px;
+}
+
+/* Phones: the actions span the row, with the week arrows at its end. */
+@media (max-width: 560px) {
+  .guide .section-title-actions {
+    flex-basis: 100%;
+  }
+
+  .guide .guide-nav {
+    margin-left: auto;
+  }
 }
 
 .month {
@@ -2044,7 +2091,7 @@ a.month-event:hover {
 
 /*
  * Positioned so the screen-reader-only text inside stays within the phone
- * rail; otherwise it escapes the rail's clip and widens the page.
+ * Shorts rail; otherwise it escapes the rail's clip and widens the page.
  */
 .video-grid {
   position: relative;
@@ -2168,11 +2215,22 @@ a.month-event:hover {
   }
 }
 
-/* Phones: the grid becomes a rail that scrolls inside the section. */
+/*
+ * Phones: two columns, with the All view's preview cut to two rows. Shorts
+ * become a rail that scrolls inside the section.
+ */
 @media (max-width: 560px) {
   .video-grid {
+    gap: 18px 12px;
+  }
+
+  .video-grid.is-preview > :nth-child(n + 5) {
+    display: none;
+  }
+
+  .video-grid.is-shorts {
     grid-template-columns: none;
-    grid-auto-columns: min(74%, 280px);
+    grid-auto-columns: min(42%, 180px);
     grid-auto-flow: column;
     margin-inline: calc(var(--gutter) * -1);
     padding: 2px var(--gutter) 10px;
@@ -2183,18 +2241,18 @@ a.month-event:hover {
     scrollbar-width: thin;
   }
 
-  .video-card {
+  .video-grid.is-shorts .video-card {
     scroll-snap-align: start;
   }
 
   /* The rail scrolls, so a Shorts row shows every card again. */
-  .video-grid.is-shorts {
-    grid-template-columns: none;
-    grid-auto-columns: min(42%, 180px);
-  }
-
   .video-grid.is-row > :nth-child(n) {
     display: grid;
+  }
+
+  /* The kind filter drops its counts to share a row with the archive button. */
+  .videos .segmented small {
+    display: none;
   }
 
   .video-lead-art .video-thumb-badge {
@@ -2227,6 +2285,19 @@ a.month-event:hover {
 }
 
 /* ------------------------------------------------------------------- posts */
+
+/* Phones: the filter starts the row and the archive icon ends it. */
+@media (max-width: 560px) {
+  .posts .section-title-actions,
+  .videos .section-title-actions {
+    flex-basis: 100%;
+  }
+
+  .posts .section-title-actions > .pill-button:last-child,
+  .videos .section-title-actions > .pill-button:last-child {
+    margin-left: auto;
+  }
+}
 
 /*
  * Up to three columns read left to right; a row's notes share its height,

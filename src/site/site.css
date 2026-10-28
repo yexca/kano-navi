@@ -500,6 +500,25 @@
   color: #fff;
 }
 
+/* Phones fold a collapsible pill to its icon, the size of a round button. */
+@media (max-width: 560px) {
+  .pill-button.is-collapsible {
+    width: 36px;
+    height: 36px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .pill-button.is-collapsible svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .pill-button.is-collapsible .pill-label {
+    display: none;
+  }
+}
+
 .segmented {
   display: inline-flex;
   flex-wrap: wrap;

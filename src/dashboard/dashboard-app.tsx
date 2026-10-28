@@ -316,7 +316,6 @@ export function DashboardApp() {
           videos={dashboard.videos}
           featuredVideoId={featuredVideoId}
           focus={dashboard.focus}
-          channelUrl={profile.youtubeUrl}
           isLoading={isLoading}
           onOpenArchive={openVideoArchive}
           locale={locale}

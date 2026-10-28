@@ -8,7 +8,13 @@ import {
   Sparkles,
 } from "lucide-react"
 
-import { ExternalLink, followCardLink, XLogo, YouTubeLogo } from "@/site/links"
+import {
+  BilibiliLogo,
+  ExternalLink,
+  followCardLink,
+  XLogo,
+  YouTubeLogo,
+} from "@/site/links"
 import { eventDetailText } from "@/lib/event-text"
 import { mediaSrcSet } from "@/lib/media"
 import {
@@ -465,10 +471,15 @@ function ProfileCard({
   onRefresh: () => void
   t: Translator
 }) {
+  // Every X account in the link directory, main first; the profile's own
+  // account stands in when the directory has none.
+  const xUrls = resources
+    .map((resource) => resource.url || "")
+    .filter((url) => /^https:\/\/(?:www\.)?(?:x|twitter)\.com\/\w+$/u.test(url))
+  if (!xUrls.length) xUrls.push(profile.xUrl)
   const bilibili = resources.find((resource) =>
     /bilibili\.com/u.test(resource.url || ""),
   )
-  const handle = profile.xUrl.split("/").pop()
   return (
     <aside className="profile-card" aria-labelledby="profile-name">
       <div className="profile-banner">
@@ -489,16 +500,28 @@ function ProfileCard({
         </h1>
         <p className="profile-catchphrase">{t("hero.catchphrase")}</p>
         <div className="profile-links">
-          <ExternalLink className="pill-button" href={profile.xUrl}>
-            <XLogo aria-hidden="true" />@{handle}
-          </ExternalLink>
-          <ExternalLink className="pill-button" href={profile.youtubeUrl}>
+          {xUrls.map((url) => (
+            <ExternalLink key={url} className="pill-button" href={url}>
+              <XLogo aria-hidden="true" />
+              <span>@{url.split("/").pop()}</span>
+            </ExternalLink>
+          ))}
+          <ExternalLink
+            className="round-button"
+            href={profile.youtubeUrl}
+            aria-label="YouTube"
+            title="YouTube"
+          >
             <YouTubeLogo aria-hidden="true" />
-            YouTube
           </ExternalLink>
           {bilibili ? (
-            <ExternalLink className="pill-button" href={bilibili.url}>
-              bilibili
+            <ExternalLink
+              className="round-button"
+              href={bilibili.url}
+              aria-label="bilibili"
+              title="bilibili"
+            >
+              <BilibiliLogo aria-hidden="true" />
             </ExternalLink>
           ) : null}
         </div>

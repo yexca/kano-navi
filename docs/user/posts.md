@@ -13,8 +13,8 @@ it in full.
 
 ## Past Posts
 
-**Past posts** browses every post the board has stored, month by month, with
-the same account filter and per-account counts.
+**Past posts** (a clock icon on phones) browses every post the board has
+stored, month by month, with the same account filter and per-account counts.
 
 ## Related Docs
 

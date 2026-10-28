@@ -8,18 +8,17 @@ import {
   ListMusic,
   Radio,
   Sparkles,
-  Tv,
 } from "lucide-react"
 
 import { SectionTitle } from "@/site/site-shell"
-import { ExternalLink, XLogo, YouTubeLogo } from "@/site/links"
+import { BilibiliLogo, ExternalLink, XLogo, YouTubeLogo } from "@/site/links"
 import { archiveLinks, hashtags } from "../content"
 import { localizeSeedText } from "../seed-copy"
 
 function resourceIcon(url = "") {
   if (/\/\/(?:www\.)?(?:x|twitter)\.com\//u.test(url)) return XLogo
   if (/youtube\.com/u.test(url)) return YouTubeLogo
-  if (/bilibili\.com/u.test(url)) return Tv
+  if (/bilibili\.com/u.test(url)) return BilibiliLogo
   if (/twitcasting\.tv/u.test(url)) return Radio
   if (/nicovideo\.jp/u.test(url)) return ListMusic
   if (/milpr\.com/u.test(url)) return Sparkles

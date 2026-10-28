@@ -502,15 +502,19 @@ function VideoGrid({
 }: {
   videos: Video[]
   showKind: boolean
-  /** Shorts get 9:16 cards; a Shorts row keeps to one line of them. */
-  variant?: "shorts" | "shorts-row"
+  /**
+   * Shorts get 9:16 cards; a Shorts row keeps to one line of them. A preview
+   * is the All view's sample of a kind, which phones cut to two rows.
+   */
+  variant?: "shorts" | "shorts-row" | "preview"
   locale: Locale
   now: number
   t: Translator
 }) {
+  const isShorts = variant === "shorts" || variant === "shorts-row"
   return (
     <ol
-      className={`video-grid${variant ? " is-shorts" : ""}${variant === "shorts-row" ? " is-row" : ""}`}
+      className={`video-grid${isShorts ? " is-shorts" : ""}${variant === "shorts-row" ? " is-row" : ""}${variant === "preview" ? " is-preview" : ""}`}
     >
       {videos.map((video) => (
         <VideoCard
@@ -526,7 +530,7 @@ function VideoGrid({
   )
 }
 
-/** Archives the All view shows: two rows of four on wide screens. */
+/** Archives the All view shows: two rows of four on wide screens, two on phones. */
 const ALL_ARCHIVES = 8
 /** Shorts the All view shows: one row of six; narrower rows show fewer. */
 const ALL_SHORTS = 6
@@ -539,7 +543,6 @@ export function VideoShelf({
   videos,
   featuredVideoId,
   focus,
-  channelUrl,
   isLoading,
   onOpenArchive,
   locale,
@@ -549,7 +552,6 @@ export function VideoShelf({
   videos: Video[]
   featuredVideoId: string | null
   focus: Dashboard["focus"]
-  channelUrl: string
   isLoading: boolean
   onOpenArchive: () => void
   locale: Locale
@@ -648,6 +650,7 @@ export function VideoShelf({
             <VideoGrid
               videos={archives}
               showKind={false}
+              variant="preview"
               locale={locale}
               now={now}
               t={t}
@@ -767,17 +770,15 @@ export function VideoShelf({
         ) : null}
         <button
           type="button"
-          className="pill-button"
+          className="pill-button is-collapsible"
           onClick={onOpenArchive}
           aria-haspopup="dialog"
+          aria-label={t("videos.archive")}
+          title={t("videos.archive")}
         >
           <History aria-hidden="true" />
-          {t("videos.archive")}
+          <span className="pill-label">{t("videos.archive")}</span>
         </button>
-        <ExternalLink className="pill-button" href={`${channelUrl}/videos`}>
-          {t("videos.openChannel")}
-          <ArrowUpRight aria-hidden="true" />
-        </ExternalLink>
       </SectionTitle>
       {body}
     </section>

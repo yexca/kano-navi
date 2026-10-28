@@ -16,8 +16,9 @@ latest video as a small card.
 ## Profile Card
 
 Beside the ticket, the profile card shows Kano's banner, avatar, name,
-catchphrase, main links, and counts, together with the snapshot time and a
-reload button.
+catchphrase, and counts, together with the snapshot time and a reload button.
+Its links lead to both X accounts by handle and to the YouTube channel and
+bilibili space by their icons.
 
 ## Links
 

@@ -33,9 +33,14 @@ export function CalendarSubscribe({ t }: { t: Translator }) {
   return (
     <DropdownMenu onOpenChange={(open) => open || setCopy("idle")}>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="pill-button">
+        <button
+          type="button"
+          className="pill-button is-collapsible"
+          aria-label={t("schedule.subscribe")}
+          title={t("schedule.subscribe")}
+        >
           <CalendarPlus aria-hidden="true" />
-          {t("schedule.subscribe")}
+          <span className="pill-label">{t("schedule.subscribe")}</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="subscribe-menu">

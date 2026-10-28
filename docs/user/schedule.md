@@ -16,15 +16,15 @@ with a link to the original post.
 
 ## Month View
 
-**Month view** opens a month grid with compact entries (dots on phones).
-Move between months, pick a date to list its entries, and show that date's
-week on the board.
+**Month view** (a calendar icon on phones) opens a month grid with compact
+entries (dots on phones). Move between months, pick a date to list its
+entries, and show that date's week on the board.
 
 ## Calendar Subscription
 
-**Subscribe** adds the schedule to a calendar app, or copies the
-subscription link. The calendar covers the past month and the next three
-months and follows the language you picked on the site; your calendar app
+**Subscribe** (a calendar-plus icon on phones) adds the schedule to a calendar
+app, or copies the subscription link. The calendar covers the past month and
+the next three months and follows the language you picked on the site; your calendar app
 decides how often it refreshes. Timed entries appear in your calendar's own time
 zone, and entries without a time stay single all-day entries on their Japan
 date. Cancelled entries are marked as cancelled, and uncertain ones as

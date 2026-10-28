@@ -9,7 +9,6 @@ import {
   Sparkles,
   Star,
   StarOff,
-  Tv,
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
@@ -32,6 +31,7 @@ import {
   TranslationBacklog,
   TranslationCell,
 } from "@/admin/views/translation-parts"
+import { BilibiliIcon } from "@/admin/views/run-parts"
 import { VideoEditor } from "@/admin/views/video-editor"
 
 /** Only local, already cached media is shown; never a remote CDN URL. */
@@ -186,7 +186,7 @@ function VideoCard({
             {t("admin.videos.featured")}
           </Badge>
         ) : bilibili ? (
-          <Badge tone="sky" icon={Tv}>
+          <Badge tone="sky" icon={BilibiliIcon}>
             {t("admin.videos.source.bilibili")}
           </Badge>
         ) : null}

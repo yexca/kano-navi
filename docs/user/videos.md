@@ -13,9 +13,9 @@ follows.
 
 ## Archives and Shorts
 
-Below the lead, stream archives appear as a grid of large thumbnails (a
-swipeable row on phones), followed by a row of Shorts. An **All / Streams /
-Works / Shorts** filter shows one kind at a time.
+Below the lead, stream archives appear as a grid of large thumbnails (two rows
+of two on phones), followed by a row of Shorts. An **All / Streams / Works /
+Shorts** filter shows one kind at a time.
 
 A video that also has a bilibili upload carries a two-platform mark and a link
 for each platform. Chinese readers open such past videos on bilibili first;
@@ -25,7 +25,8 @@ wording.
 
 ## Past Videos
 
-**Past videos** browses every stored video month by month.
+**Past videos** (a clock icon on phones) browses every stored video month by
+month.
 
 ## Related Docs
 

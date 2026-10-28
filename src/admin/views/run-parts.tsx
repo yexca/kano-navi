@@ -8,7 +8,6 @@ import {
   Languages,
   RadioTower,
   Sparkles,
-  Tv,
   TriangleAlert,
   X,
 } from "lucide-react"
@@ -24,12 +23,16 @@ import type { Run } from "@/admin/types"
 import type { Translator } from "@/types"
 import { StatusBadge, Spinner } from "@/admin/ui"
 import { cn } from "@/lib/utils"
-import { YouTubeLogo } from "@/site/links"
+import { BilibiliLogo, YouTubeLogo } from "@/site/links"
 
-// lucide-react 1.x has no brand icons. The board's logo takes lucide's
-// default 24px size so unstyled icon slots render it the same way.
+// lucide-react 1.x has no brand icons. The board's logos take lucide's
+// default 24px size so unstyled icon slots render them the same way.
 function YouTubeIcon(props: SVGProps<SVGSVGElement>) {
   return <YouTubeLogo width={24} height={24} {...props} />
+}
+
+export function BilibiliIcon(props: SVGProps<SVGSVGElement>) {
+  return <BilibiliLogo width={24} height={24} {...props} />
 }
 
 /** Lucide icons and the YouTube logo, used as `<Icon aria-hidden />`. */
@@ -38,7 +41,7 @@ type StepIcon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>
 export const stepIcons: Record<string, StepIcon> = {
   x: AtSign,
   youtube: YouTubeIcon,
-  bilibili: Tv,
+  bilibili: BilibiliIcon,
   media: ImageDown,
   schedule: Sparkles,
   translate: Languages,

@@ -15,6 +15,17 @@
   its one day instead of across two.
 - The **Subscribe** menu lists only its two actions, without the Japan-time
   and hourly-update note.
+- The schedule header puts **Subscribe** and **Month view** first and the week
+  arrows with **Today** last, set slightly apart. On phones those two, **Past
+  posts** and **Past videos** shrink to icons so each section's controls fit
+  on one row, and the video filter drops its counts.
+- The video section no longer has an **Open channel** button; the profile
+  card links the channel.
+- Stream archives on phones are two rows of two instead of a sideways row.
+- The profile card links both X accounts by handle, and YouTube and bilibili
+  by icon.
+- bilibili links use the bilibili television mark on the board and in the
+  operator console.
 
 </details>
 

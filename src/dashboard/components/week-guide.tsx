@@ -624,16 +624,18 @@ export function WeekGuide({
         title={t("schedule.title")}
         note={t("schedule.note")}
       >
+        <CalendarSubscribe t={t} />
         <button
           type="button"
-          className="pill-button"
+          className="pill-button is-collapsible"
           onClick={onOpenMonth}
           aria-haspopup="dialog"
+          aria-label={t("schedule.openMonth")}
+          title={t("schedule.openMonth")}
         >
           <CalendarDays aria-hidden="true" />
-          {t("schedule.openMonth")}
+          <span className="pill-label">{t("schedule.openMonth")}</span>
         </button>
-        <CalendarSubscribe t={t} />
         <div className="guide-nav" role="group" aria-label={label}>
           <button
             type="button"

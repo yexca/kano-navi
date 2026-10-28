@@ -1,10 +1,11 @@
 import { useState, type SubmitEvent } from "react"
-import { KeyRound, Plus, ShieldAlert, Tv } from "lucide-react"
+import { KeyRound, Plus, ShieldAlert } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { AdminVideo, Sources } from "@/admin/types"
 import { Badge, Button, Facts, Field, Panel } from "@/admin/ui"
 import { useAdmin } from "@/admin/use-admin-data"
+import { BilibiliIcon } from "@/admin/views/run-parts"
 
 /**
  * The Bilibili account on the Sources page, beside its timer (which shows the
@@ -41,7 +42,7 @@ export function BilibiliSource({
   }
   return (
     <Panel
-      icon={Tv}
+      icon={BilibiliIcon}
       title={t("admin.bilibili.title")}
       description={t("admin.bilibili.description")}
       actions={
