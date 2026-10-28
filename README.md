@@ -1,164 +1,135 @@
-<div align="center">
-  <img src="public/assets/kano-avatar.jpg" alt="Kano Mahoro" width="96">
-  <h1>Kano Navi</h1>
-  <p><strong>Kano Mahoro's updates, schedules, and journey — in one place.</strong></p>
-  <p>
-    <a href="https://github.com/yexca/kano-navi/actions/workflows/ci.yml"><img src="https://github.com/yexca/kano-navi/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-    <a href="https://github.com/yexca/kano-navi/actions/workflows/release.yml"><img src="https://github.com/yexca/kano-navi/actions/workflows/release.yml/badge.svg" alt="Release"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License: AGPL v3"></a>
-  </p>
-  <p>
-    <a href="https://kano.yexca.net/"><strong>Live site</strong></a> ·
-    <a href="#features">Features</a> ·
-    <a href="#quick-start-with-docker">Quick start</a> ·
-    <a href="docs/README.md">Documentation</a> ·
-    <a href="https://github.com/yexca/kano-navi/releases">Releases</a>
-  </p>
-</div>
+<p align="center">
+  <img src="public/assets/kano-avatar.jpg" width="112" alt="Kano Mahoro">
+</p>
 
-Kano Navi is an unofficial, self-hosted fan board for **Kano Mahoro (鹿乃まほろ)**.
-Catch the next stream, follow recent X and YouTube activity, and explore her
-public history from 2010 onward. The interface supports Japanese, English, and
-Simplified Chinese, with light and dark themes and layouts for desktop and mobile.
+<h1 align="center">Kano Navi</h1>
 
-## Preview
+<p align="center">
+  <b>Kano Mahoro's next stream, schedule, posts, and journey, in one place.</b><br>
+  An unofficial fan board, published as What’s Kano Up To?
+</p>
 
-Visit **[Kano Navi](https://kano.yexca.net/)** or explore the
-[journey and visual archive](https://kano.yexca.net/history).
-The screenshots show a fresh local instance; source feeds populate after a workflow runs.
+<p align="center">
+  <a href="https://kano.yexca.net/"><img alt="Live site" src="https://img.shields.io/badge/live-kano.yexca.net-d94a5a"></a>
+  <a href="https://github.com/yexca/kano-navi/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/yexca/kano-navi"></a>
+  <a href="https://github.com/yexca/kano-navi/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/yexca/kano-navi/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/github/license/yexca/kano-navi"></a>
+</p>
 
-![Kano Navi dashboard in light theme](docs/assets/readme/dashboard.jpg)
+Kano Navi gathers the public activity of **Kano Mahoro (鹿乃まほろ)** into one
+page: what airs next, the week's schedule, recent posts on X, streams and
+works on YouTube, and her journey since 2010. It reads in English, Japanese,
+and Simplified Chinese, in light and dark themes, on phones and desktops.
+
+**[Visit kano.yexca.net](https://kano.yexca.net/)**
+
+![The Kano Navi board in the light theme](docs/assets/readme/dashboard.jpg)
+
+> [!NOTE]
+> Kano Navi is an independent fan project with no official affiliation or
+> endorsement. Original announcements always take precedence; see the
+> [Disclaimer](#disclaimer).
+
+## Features
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>⏰ What's next</h3>
+      A ticket for the next stream or event with its Japan time, your local
+      time, and a countdown, switching to <b>On air</b> while a stream is
+      live.
+    </td>
+    <td width="50%" valign="top">
+      <h3>📅 Weekly schedule</h3>
+      A Monday-first program guide and a month view, with each entry marked
+      <b>Auto-detected</b> or <b>Confirmed</b>. <b>Subscribe</b> adds it to
+      your calendar app.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>💬 Posts on X</h3>
+      Recent posts from both accounts, with images, quoted posts, an account
+      filter, and a month-by-month archive.
+    </td>
+    <td width="50%" valign="top">
+      <h3>🎬 Streams and works</h3>
+      The featured or newest work, upcoming reservations, stream archives, and
+      Shorts, with bilibili links for works uploaded there too.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🌱 Journey</h3>
+      Milestones from her first covers in 2010 to today, filtered by
+      identity, plus a visual archive with sources and credits.
+    </td>
+    <td width="50%" valign="top">
+      <h3>🌏 Your language</h3>
+      English, Japanese, and Simplified Chinese, with video titles in your
+      language when a translation exists.
+    </td>
+  </tr>
+</table>
 
 <details>
 <summary>Journey page preview</summary>
 
-![Kano Navi journey page in light theme](docs/assets/readme/history.jpg)
+![The Kano Navi Journey page in the light theme](docs/assets/readme/history.jpg)
 
 </details>
 
-## Features
+The [User guide](docs/user/index.md) describes every section of the site.
 
-| Area                     | What you can do                                                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Status board             | See the next stream or event, a Japan-time countdown, and recent activity at a glance.                                |
-| Weekly schedule          | Browse a seven-day program guide or a month grid, with labels for automatic extraction and manual confirmation.       |
-| X & YouTube              | Read posts from both X accounts, browse uploads and scheduled streams, and highlight a Featured video.                |
-| Journey & visual archive | Explore milestones by identity and year, and browse bundled images with source links and credits.                     |
-| Operator console         | Run or schedule update workflows, curate events, manage profile media, and configure optional AI schedule extraction. |
-| MCP integration          | Read public snapshots and use separately authenticated controls to start automatic jobs.                              |
+## How It Works
 
-## Quick start with Docker
+The server collects public posts and videos on a schedule, reads schedule
+entries from posts and schedule images, and keeps the result as a local
+snapshot. Visitors always read that snapshot, so the board stays fast and keeps
+the last known state when a platform is unavailable. See
+[How it works](docs/how-it-works.md).
 
-Requires **Docker with Linux containers and Docker Compose**.
-
-1. Save [docker-compose.yml](docker-compose.yml) and [.env.example](.env.example)
-   in the same directory. Copy `.env.example` to `.env`.
-2. Edit `.env`: keep `APP_MODE=production` and set `ADMIN_PASSWORD` to a password
-   with at least **12 characters after trimming surrounding whitespace**. Set
-   `LLM_SECRETS_KEY` to a random, non-blank value and retain it across restarts.
-   The key is required even without AI providers; missing or whitespace-only
-   values refuse startup before SQLite opens.
-3. Start the application:
-
-   ```bash
-   docker compose up -d
-   ```
-
-Open **[Kano Navi at localhost:7657](http://localhost:7657/)**.
-The operator console is at `/admin`; enter that path directly and sign in with
-the password you configured.
-
-Compose pulls `yexca/kano-navi:latest`. The `./data` directory keeps your database,
-cached media, and operator settings across upgrades. Run `docker compose up -d`
-again to pull an update and replace the container.
-
-For a pinned release, GHCR images, custom ports, or a reverse proxy, see
-[Docker deployment](docs/operations/docker.md).
-
-### First launch
-
-The profile, milestones, resource links, and history images are available immediately.
-X posts, YouTube videos, schedules, and AI providers start empty.
-
-- Open `/admin` → Sources and use **Run now** on X and YouTube (or Sync everything) to populate the board.
-- Turn on each source's timer on the Sources page if you want regular updates.
-- For optional AI schedule extraction, add OpenAI-compatible or Anthropic
-  providers, models, and detection routes in the console. API hosts can omit
-  `/v1`. See [configuration](docs/operations/configuration.md) for setup.
-
-## How updates work
-
-Workflows collect public content on the server, cache its media, and write a local
-SQLite snapshot. Page loads and the board's reload button read that snapshot;
-they do not start platform or model requests. If a source fails, the last known
-snapshot remains available.
-
-Manual schedule edits and deletions are protected from automatic overwrites or
-resurrection. Source availability determines freshness, and the original
-platform pages remain authoritative. See [sources](docs/architecture/sources.md)
-and [workflows](docs/architecture/workflows.md) for coverage and fetch limits.
-
-## Develop locally
-
-Requires **Go 1.26+** for the backend, **Node.js 24.22.1+ in the 24 LTS line**
-and **npm 10+** for the frontend, and Git.
-
-```bash
-git clone https://github.com/yexca/kano-navi.git
-cd kano-navi
-npm ci
-cp .env.example .env
+```mermaid
+flowchart LR
+  X["X posts"] --> S[("Board snapshot")]
+  YT["YouTube and bilibili"] --> S
+  S --> B["Board · Journey · About"]
+  S --> C["Calendar and video feeds"]
 ```
 
-For local development, set `APP_MODE=development` in `.env` to enable password-free
-admin access, and `WORKFLOW_SCHEDULER_ENABLED=0` to disable the source timers.
-Set a non-blank `LLM_SECRETS_KEY` before starting; development and preview also
-require it. Then run:
+## Run Your Own
 
-```bash
-npm run dev
-```
-
-`npm run dev` builds and starts the Go backend and serves the frontend through
-Vite; both share [localhost:7657](http://localhost:7657/).
-In PowerShell, use `Copy-Item .env.example .env` for the copy step.
-See [local development](docs/development/local-dev.md) for build, preview, and
-Docker development instructions.
-
-The project uses **React · TypeScript · Vite · Tailwind CSS** for the frontend
-and **Go · SQLite** for the backend, shipped as one static binary.
-GNU Make is the validation entry point:
-
-```bash
-make check             # Installed-dependency checks, build, and isolated API smoke
-make ci                # Locked installation plus all checks and Docker runtime validation
-make sensitive-check   # Sensitive-information scan
-```
-
-These checks do not run live source synchronization. See
-[testing and CI](docs/development/testing.md) for focused targets and prerequisites.
+Most fans only need the [live site](https://kano.yexca.net/). To run an
+instance yourself, see [Docker deployment](docs/operations/docker.md) and
+[Configuration](docs/operations/configuration.md). To work on the code, start
+with [Local development](docs/development/local-dev.md) and the
+[agent guide](AGENTS.md).
 
 ## Documentation
 
-| Looking for…                                | Start here                                                               |
-| ------------------------------------------- | ------------------------------------------------------------------------ |
-| Project scope and page behavior             | [Overview](docs/overview.md)                                             |
-| Deployment, configuration, and backups      | [Operations](docs/operations/index.md)                                   |
-| API, data model, sources, and media         | [Architecture](docs/architecture/index.md)                               |
-| History image sources and credits           | [History & visual archive](docs/product/history.md)                      |
-| Development, checks, and contribution rules | [Development](docs/development/index.md) · [Agent guide](AGENTS.md)      |
-| Security boundaries and reporting           | [Security policy](SECURITY.md) · [Security docs](docs/security/index.md) |
+- [User guide](docs/user/index.md): the board, schedule, posts, videos, and
+  Journey.
+- [How it works](docs/how-it-works.md) and [Architecture](docs/architecture/index.md):
+  data flow and system boundaries.
+- [Operations](docs/operations/index.md): running an instance.
+- [Development](docs/development/index.md): local setup, testing, and releases.
+- [Security](SECURITY.md), including how to report a vulnerability.
+- [Documentation index](docs/README.md): every public document.
 
-Browse the [documentation index](docs/README.md) for the full guide.
+## Disclaimer
 
-## Credits & license
+- Kano Navi is an independent fan project. It is not affiliated with or
+  endorsed by Kano Mahoro, her agency, X, YouTube, or bilibili.
+- Every post, video, and event links to its original public page, which is
+  always authoritative.
+- Artwork, artist names, and other third-party content keep their original
+  rights; the code license does not grant rights to them. Image sources and
+  credits are recorded in the
+  [history archive](docs/development/history-archive.md).
 
-Created by [yexca](https://github.com/yexca). The application's `/about` page lists
-the development credits and technology stack.
+## License
 
-Project code is licensed under [GNU AGPL v3](LICENSE). Artwork, artist names, and
-other third-party content retain their original rights; the code license does
-not grant rights to those materials. Image sources and recorded credits are
-documented in the [history archive](docs/product/history.md).
-
-Kano Navi is an independent fan project with no official affiliation or endorsement.
+Created by [yexca](https://github.com/yexca). Kano Navi is free software
+licensed under the [GNU Affero General Public License v3.0](LICENSE). The
+About page lists the development credits and technology stack.

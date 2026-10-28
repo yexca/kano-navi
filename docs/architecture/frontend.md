@@ -14,7 +14,7 @@ language before the first paint so no load flashes the other theme. History copy
 static; verified fixed images ship in `public/assets/history/` and `dist/`.
 `scripts/package-history-media.ts` updates these files from a local reference
 archive without network requests.
-See [History and visual archive](../product/history.md). The three public
+See [History archive maintenance](../development/history-archive.md). The three public
 pages share `src/site/`: `site-shell.tsx` (header with page navigation and
 Japan clock, footer, skip link, section title, empty and loading states;
 narrow screens show the site name and fold the page links into a menu behind
@@ -276,8 +276,8 @@ beside them.
 
 - [Design and interaction](../development/design.md)
 - [Testing](../development/testing.md)
-- [Product overview](../overview.md)
-- [History and visual archive](../product/history.md)
+- [User guide](../user/index.md)
+- [History archive maintenance](../development/history-archive.md)
 
 ## Polling and Calendar Recovery
 

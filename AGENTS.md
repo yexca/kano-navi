@@ -5,7 +5,7 @@ This repository is an unofficial status board for Kano Mahoro (鹿乃まほろ).
 Read these first:
 
 - `README.md`
-- `docs/overview.md`
+- `docs/how-it-works.md`
 - `docs/architecture/core-boundaries.md`
 
 Before changing an area, read its docs. Backend paths are relative to
@@ -13,7 +13,7 @@ Before changing an area, read its docs. Backend paths are relative to
 
 | Area                                  | Main paths                                                                                         | Docs                                                                                                |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Public UI and history                 | src/site/, src/dashboard/, src/history/, src/about/, src/components/ui/                            | `docs/architecture/frontend.md`, `docs/development/design.md`, `docs/product/history.md`            |
+| Public UI and history                 | src/site/, src/dashboard/, src/history/, src/about/, src/components/ui/                            | `docs/architecture/frontend.md`, `docs/development/design.md`, `docs/user/index.md`                 |
 | Operator UI and requests              | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                                          | `docs/architecture/frontend.md`, `docs/architecture/admin-api.md`                                   |
 | Entry point, commands, image          | cmd/kano-go/, ../Dockerfile                                                                        | `docs/architecture/backend.md`, `docs/operations/docker.md`                                         |
 | API, authentication, projections, MCP | internal/httpapi/, internal/adminapi/, internal/adminauth/, internal/mcpapi/, internal/publicview/ | `docs/architecture/backend.md`, `docs/architecture/public-api.md`, `docs/architecture/admin-api.md` |
@@ -22,7 +22,7 @@ Before changing an area, read its docs. Backend paths are relative to
 | Jobs, steps, timers                   | internal/jobs/, internal/workflow/                                                                 | `docs/architecture/workflows.md`                                                                    |
 | Model routing and extraction          | internal/schedule/, internal/llmadmin/, internal/secretstore/                                      | `docs/architecture/sources.md`, `docs/operations/configuration.md`                                  |
 | Dynamic and profile media             | internal/mediadownload/, internal/contentadmin/, internal/httpapi/media.go                         | `docs/architecture/media-cache.md`                                                                  |
-| Fixed history packaging               | ../scripts/package-history-media.ts, ../public/assets/history/                                     | `docs/product/history.md`                                                                           |
+| Fixed history packaging               | ../scripts/package-history-media.ts, ../public/assets/history/                                     | `docs/development/history-archive.md`                                                               |
 | Outbound HTTP, auth, secrets, privacy | any of the above                                                                                   | `SECURITY.md`, `docs/development/security.md`, `docs/operations/security.md`                        |
 | Tests                                 | ../tests/, `*_test.go`                                                                             | `docs/development/testing.md`                                                                       |
 | Commits and releases                  | package.json version, docs/history/                                                                | `docs/development/commit-and-release.md`                                                            |
@@ -129,6 +129,11 @@ there. Where each topic belongs is in
 - State each rule or fact in one place and link to it instead of restating it.
   Keep one topic per architecture document; add a new document to its index
   rather than growing an unrelated one.
+- The [User guide](docs/user/index.md) and `README.md` describe features as
+  visitors see them: no file paths, endpoints, schema, or implementation
+  detail. When visitor-visible behavior changes, update the matching user page.
+  How the system works belongs in [How it works](docs/how-it-works.md) and the
+  architecture, operations, and development docs.
 - Documentation, including `README.md`, is English only.
 - `.env.example` owns the complete variable inventory; document new fields in
   [Configuration](docs/operations/configuration.md) and their affected
