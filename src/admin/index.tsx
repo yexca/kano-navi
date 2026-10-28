@@ -18,6 +18,7 @@ import {
   LockKeyhole,
   LogOut,
   Radio,
+  ScanText,
   UserRound,
   Workflow,
 } from "lucide-react"
@@ -28,7 +29,8 @@ import { errorMessage, renderMessage, type Message } from "@/admin/api"
 import type { Overview } from "@/admin/types"
 import { Badge, Button, Spinner, Toasts } from "@/admin/ui"
 import { AdminContext, useAdminData } from "@/admin/use-admin-data"
-import { ModelsView } from "@/admin/views/models"
+import { DetectionView } from "@/admin/views/detection"
+import { LlmView } from "@/admin/views/llm"
 import { OverviewView } from "@/admin/views/overview"
 import { PostsView } from "@/admin/views/posts"
 import { ProfileView } from "@/admin/views/profile"
@@ -81,7 +83,13 @@ const views: ViewEntry[] = [
   { id: "profile", group: "data", icon: UserRound, component: ProfileView },
   { id: "runs", group: "system", icon: Workflow, component: RunsView },
   { id: "sources", group: "system", icon: Radio, component: SourcesView },
-  { id: "models", group: "system", icon: Bot, component: ModelsView },
+  {
+    id: "detection",
+    group: "system",
+    icon: ScanText,
+    component: DetectionView,
+  },
+  { id: "llm", group: "system", icon: Bot, component: LlmView },
 ]
 const groups = ["today", "data", "system"] as const
 
@@ -98,6 +106,8 @@ function readHash() {
     .split("/")
   if (view === "content")
     return { view: legacyContent[tab] || "posts", tab: "" }
+  // Models & detection became two views; old links open the model setup.
+  if (view === "models") return { view: "llm", tab: "" }
   return views.some((entry) => entry.id === view)
     ? { view, tab }
     : { view: "overview", tab: "" }
@@ -236,9 +246,11 @@ export function AdminApp() {
   const navigate = useCallback((view: string, tab = "") => {
     if (!views.some((entry) => entry.id === view)) return
     const hash = `#${view}${tab ? `/${tab}` : ""}`
+    // A tab inside the same view keeps the scroll position.
+    const sameView = readHash().view === view
     if (window.location.hash !== hash) window.history.pushState(null, "", hash)
     setLocation({ view, tab })
-    window.scrollTo({ top: 0 })
+    if (!sameView) window.scrollTo({ top: 0 })
   }, [])
 
   if (!data.session) {

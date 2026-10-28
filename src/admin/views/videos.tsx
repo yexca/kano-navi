@@ -203,40 +203,46 @@ function VideoCard({
           translation={video.translation}
           onChanged={onTranslated}
         />
-        <div className="adm-actions">
+      </div>
+      <footer className="adm-video-actions">
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={Pencil}
+          onClick={() => onEdit(video)}
+        >
+          {t("admin.videos.edit")}
+        </Button>
+        {featured ? (
           <Button
             size="sm"
             variant="ghost"
-            icon={Pencil}
-            onClick={() => onEdit(video)}
+            icon={StarOff}
+            onClick={() => onFeature(null)}
           >
-            {t("admin.videos.edit")}
+            {t("admin.videos.unfeature")}
           </Button>
-          {featured ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={StarOff}
-              onClick={() => onFeature(null)}
-            >
-              {t("admin.videos.unfeature")}
-            </Button>
-          ) : bilibili ? null : (
-            <Button size="sm" icon={Star} onClick={() => onFeature(video)}>
-              {t("admin.videos.feature")}
-            </Button>
-          )}
-          <a
-            className="adm-link"
-            href={video.url}
-            target="_blank"
-            rel="noreferrer"
+        ) : bilibili ? null : (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Star}
+            onClick={() => onFeature(video)}
           >
-            {t("admin.videos.open")}
-            <ExternalLink aria-hidden />
-          </a>
-        </div>
-      </div>
+            {t("admin.videos.feature")}
+          </Button>
+        )}
+        <a
+          className="adm-icon-button"
+          href={video.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={t("admin.videos.open")}
+          title={t("admin.videos.open")}
+        >
+          <ExternalLink aria-hidden />
+        </a>
+      </footer>
     </article>
   )
 }

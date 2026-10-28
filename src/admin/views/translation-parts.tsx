@@ -9,8 +9,9 @@ import type {
   TranslationLocale,
   TranslationOwner,
 } from "@/admin/types"
-import { Badge, Button, IconButton, Modal, type Tone } from "@/admin/ui"
+import { Badge, Button, Modal, type Tone } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
+import { cn } from "@/lib/utils"
 
 // Translations of X post text and YouTube video titles: readers see a manual
 // translation, then a platform's, then a model's. Posts and videos share
@@ -42,39 +43,70 @@ function localeTone(entry: AdminTranslationLocale): Tone {
   return "neutral"
 }
 
-/** One chip per target locale, plus the machine step's pending or failed state. */
+/**
+ * One button per owner: a chip for each target locale, coloured by where its
+ * text comes from, plus the machine step's queued or failed state. It opens
+ * the editor on the locale that was clicked.
+ */
 export function TranslationStatus({
   translation,
+  onOpen,
 }: {
   translation: AdminTranslation | null | undefined
+  onOpen?: (locale: TranslationLocale) => void
 }) {
   const { t } = useAppSettings()
   if (!translation) return null
   return (
-    <span className="adm-chip-row adm-translation-status">
-      {translation.locales.map((entry) => (
-        <Badge
-          key={entry.locale}
-          tone={localeTone(entry)}
-          icon={entry.manualStale ? TriangleAlert : undefined}
-          className="adm-translation-chip"
-        >
-          <span
-            title={
-              entry.manualStale
-                ? t("admin.translation.manualStale")
-                : entry.text || undefined
-            }
-          >
-            {localeShort[entry.locale]} ·{" "}
-            {t(
-              entry.status === "translated"
-                ? originKey(entry)
-                : `admin.translation.status.${entry.status}`,
-            )}
-          </span>
-        </Badge>
-      ))}
+    <span className="adm-translation-status">
+      <span
+        className="adm-translation-pill"
+        role={onOpen ? "group" : undefined}
+        aria-label={onOpen ? t("admin.translation.edit") : undefined}
+      >
+        {translation.locales.map((entry) => {
+          const label = t(
+            entry.status === "translated"
+              ? originKey(entry)
+              : `admin.translation.status.${entry.status}`,
+          )
+          const title = [
+            `${t(`admin.translation.locale.${entry.locale}`)} · ${label}`,
+            entry.manualStale ? t("admin.translation.manualStale") : "",
+            entry.text || "",
+          ]
+            .filter(Boolean)
+            .join("\n")
+          const content = (
+            <>
+              <i className="adm-dot" aria-hidden />
+              <b>{localeShort[entry.locale]}</b>
+              <span>{label}</span>
+              {entry.manualStale ? <TriangleAlert aria-hidden /> : null}
+            </>
+          )
+          return onOpen ? (
+            <button
+              key={entry.locale}
+              type="button"
+              className={cn(`adm-tone-${localeTone(entry)}`)}
+              title={title}
+              aria-label={`${t("admin.translation.edit")}: ${title}`}
+              onClick={() => onOpen(entry.locale)}
+            >
+              {content}
+            </button>
+          ) : (
+            <span
+              key={entry.locale}
+              className={cn(`adm-tone-${localeTone(entry)}`)}
+              title={title}
+            >
+              {content}
+            </span>
+          )
+        })}
+      </span>
       {translation.requested ? (
         <Badge tone="honey">{t("admin.translation.requested")}</Badge>
       ) : null}
@@ -126,7 +158,8 @@ function LocaleEditor({
   return (
     <section className="adm-translation-locale">
       <header>
-        <label htmlFor={fieldId}>
+        {/* The selected tab already names the locale on screen. */}
+        <label htmlFor={fieldId} className="adm-visually-hidden">
           {t(`admin.translation.locale.${entry.locale}`)}
         </label>
         <Badge tone={localeTone(entry)}>
@@ -136,21 +169,15 @@ function LocaleEditor({
               : `admin.translation.status.${entry.status}`,
           )}
         </Badge>
+        {entry.origin === "machine" && entry.machineAt ? (
+          <small className="adm-muted">
+            {t("admin.translation.machineBy", {
+              model: entry.model || "—",
+              time: formatRelative(entry.machineAt, locale),
+            })}
+          </small>
+        ) : null}
       </header>
-      {entry.machine && entry.origin !== "machine" ? (
-        <p className="adm-translation-reference">
-          <span>{t("admin.translation.origin.machine")}</span>
-          {entry.machine}
-        </p>
-      ) : null}
-      {entry.origin === "machine" && entry.machineAt ? (
-        <p className="adm-field-hint">
-          {t("admin.translation.machineBy", {
-            model: entry.model || "—",
-            time: formatRelative(entry.machineAt, locale),
-          })}
-        </p>
-      ) : null}
       {entry.manualStale ? (
         <p className="adm-inline-error">
           <TriangleAlert aria-hidden />
@@ -159,12 +186,39 @@ function LocaleEditor({
       ) : null}
       <textarea
         id={fieldId}
-        rows={3}
+        rows={5}
         lang={entry.locale}
         value={draft}
+        placeholder={t("admin.translation.placeholder")}
         onChange={(event) => setDraft(event.target.value)}
       />
-      <div className="adm-row-actions">
+      {entry.machine && entry.origin !== "machine" ? (
+        <figure className="adm-translation-reference">
+          <figcaption>{t("admin.translation.machineReference")}</figcaption>
+          <p>{entry.machine}</p>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setDraft(entry.machine || "")}
+          >
+            {t("admin.translation.useMachine")}
+          </Button>
+        </figure>
+      ) : null}
+      <div className="adm-translation-actions">
+        {entry.manual !== null ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={X}
+            busy={busy === "clear"}
+            onClick={() =>
+              run("clear", () => api.clearTranslation(owner, id, entry.locale))
+            }
+          >
+            {t("admin.translation.clearManual")}
+          </Button>
+        ) : null}
         <Button
           size="sm"
           variant="primary"
@@ -179,29 +233,21 @@ function LocaleEditor({
         >
           {t("admin.translation.saveManual")}
         </Button>
-        {entry.manual !== null ? (
-          <Button
-            size="sm"
-            icon={X}
-            busy={busy === "clear"}
-            onClick={() =>
-              run("clear", () => api.clearTranslation(owner, id, entry.locale))
-            }
-          >
-            {t("admin.translation.clearManual")}
-          </Button>
-        ) : null}
       </div>
     </section>
   )
 }
 
-/** Edit an owner's manual translations and queue a fresh machine pass. */
+/**
+ * Edit an owner's manual translations and queue a fresh machine pass: the
+ * original beside one locale at a time, picked from tabs.
+ */
 export function TranslationEditor({
   owner,
   id,
   original,
   translation,
+  initialLocale,
   onClose,
   onChanged,
 }: {
@@ -209,12 +255,16 @@ export function TranslationEditor({
   id: string
   original: string
   translation: AdminTranslation
+  initialLocale?: TranslationLocale
   onClose: () => void
   onChanged: (translation: AdminTranslation) => void
 }) {
   const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const [current, setCurrent] = useState(translation)
+  const [active, setActive] = useState<TranslationLocale>(
+    initialLocale || translation.locales[0]?.locale || "en",
+  )
   const [busy, setBusy] = useState(false)
   const changed = (next: AdminTranslation) => {
     setCurrent(next)
@@ -229,6 +279,8 @@ export function TranslationEditor({
     setBusy(false)
     if (result) changed({ ...current, requested: true })
   }
+  const entry =
+    current.locales.find((item) => item.locale === active) || current.locales[0]
   return (
     <Modal
       open
@@ -237,37 +289,75 @@ export function TranslationEditor({
       title={t("admin.translation.title")}
       onClose={onClose}
       footer={
-        <Button icon={RotateCcw} busy={busy} onClick={retranslate}>
-          {t("admin.translation.retranslate")}
-        </Button>
+        <>
+          <span className="adm-muted">
+            {current.requested
+              ? t("admin.translation.requestedHint")
+              : t("admin.translation.precedence")}
+          </span>
+          <Button
+            icon={RotateCcw}
+            busy={busy}
+            disabled={current.requested}
+            onClick={retranslate}
+          >
+            {t("admin.translation.retranslate")}
+          </Button>
+        </>
       }
     >
-      <figure className="adm-translation-original">
-        <figcaption>
-          {t("admin.translation.original")}
-          {current.sourceLanguage
-            ? ` · ${t(`admin.translation.language.${current.sourceLanguage}`)}`
-            : ""}
-        </figcaption>
-        <blockquote>{original}</blockquote>
-      </figure>
-      <p className="adm-field-hint">{t("admin.translation.precedence")}</p>
-      {current.locales.map((entry) => (
-        <LocaleEditor
-          key={entry.locale}
-          owner={owner}
-          id={id}
-          entry={entry}
-          onChanged={changed}
-        />
-      ))}
+      <div className="adm-translation-layout">
+        <figure className="adm-translation-original">
+          <figcaption>
+            {t("admin.translation.original")}
+            {current.sourceLanguage
+              ? ` · ${t(`admin.translation.language.${current.sourceLanguage}`)}`
+              : ""}
+          </figcaption>
+          <blockquote>{original}</blockquote>
+        </figure>
+        <div className="adm-translation-side">
+          <div
+            className="adm-translation-tabs"
+            role="tablist"
+            aria-label={t("admin.translation.title")}
+          >
+            {current.locales.map((item) => (
+              <button
+                key={item.locale}
+                type="button"
+                role="tab"
+                aria-selected={item.locale === entry?.locale}
+                className={cn(
+                  `adm-tone-${localeTone(item)}`,
+                  item.locale === entry?.locale && "is-active",
+                )}
+                onClick={() => setActive(item.locale)}
+              >
+                <i className="adm-dot" aria-hidden />
+                {t(`admin.translation.locale.${item.locale}`)}
+                {item.manualStale ? <TriangleAlert aria-hidden /> : null}
+              </button>
+            ))}
+          </div>
+          {entry ? (
+            <LocaleEditor
+              key={entry.locale}
+              owner={owner}
+              id={id}
+              entry={entry}
+              onChanged={changed}
+            />
+          ) : null}
+        </div>
+      </div>
     </Modal>
   )
 }
 
 /**
- * The translation chips of a post or video, with the button that opens its
- * editor. Videos use it the same way with owner "video" and the title.
+ * The translation chips of a post or video; each opens the editor on its
+ * locale. Videos use it the same way with owner "video" and the title.
  */
 export function TranslationCell({
   owner,
@@ -282,28 +372,23 @@ export function TranslationCell({
   translation: AdminTranslation | null | undefined
   onChanged: () => void
 }) {
-  const { t } = useAppSettings()
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState<TranslationLocale | null>(null)
   const [local, setLocal] = useState(translation)
   useEffect(() => setLocal(translation), [translation])
   if (!local) return null
   return (
     <span className="adm-translation-cell">
-      <TranslationStatus translation={local} />
-      <IconButton
-        icon={Languages}
-        label={t("admin.translation.edit")}
-        onClick={() => setEditing(true)}
-      />
+      <TranslationStatus translation={local} onOpen={setEditing} />
       {editing ? (
         <TranslationEditor
           owner={owner}
           id={id}
           original={original}
           translation={local}
+          initialLocale={editing}
           onChanged={setLocal}
           onClose={() => {
-            setEditing(false)
+            setEditing(null)
             onChanged()
           }}
         />

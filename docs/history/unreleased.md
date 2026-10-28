@@ -21,6 +21,30 @@
 <details>
 <summary><strong>Operator console</strong></summary>
 
+- Models & detection is split into two views. **Detection** holds the stage
+  switches and the keyword list, edited as chips (Enter or a comma adds one,
+  Backspace removes the last), and shows which model each stage calls first.
+  **LLM** holds the schedule and translation queues side by side and the
+  providers as a list beside the selected provider's models. Queue changes
+  save at once; models are added from a searchable picker and reordered by
+  dragging or the arrows, and each queue marks the model a stage uses first.
+  The provider dialog holds only the connection; a new provider with a key
+  lists its models straight away. Old `#models` links open LLM.
+- Runs lists its history first; **Run steps once** opens a dialog grouped
+  into sources and processing, with steps disabled in the process greyed
+  out. An opened run starts with what went wrong, step by step, in words,
+  then shows each step's counts as labelled numbers, failed counts
+  highlighted and per-attempt model calls in a table.
+- Sources starts with one card per source: its timer state, next and last
+  run, last successful read, the timer switch and **Run now**. Selecting a
+  card shows that source's timer, window fetch and YouTube push and live
+  settings.
+- Schedule and Posts filters are labelled pills with one date range and a
+  clear button that counts the active filters.
+- Translation chips open the editor on the clicked language; the editor
+  shows the original beside one language at a time.
+- Video cards keep their actions on one row at the foot of each card.
+
 - The post list shows a post's quoted post read-only in its own cell, apart
   from the post's images: author, time, wording, cached thumbnails or the
   unavailable state. An operator can hide the quote from the public board,

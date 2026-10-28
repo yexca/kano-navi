@@ -55,9 +55,9 @@ video show `PlatformLinks` in that order and an `aria-hidden`
 in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`
 registers the views (Overview, Review queue, Schedule, Posts, Videos, Profile
-images, Runs, Sources, Models & detection) and renders the shell
+images, Runs, Sources, Detection, LLM) and renders the shell
 with hash routing (`#view/tab`; a `#content/<tab>` link opens the matching
-view); `use-admin-data.ts` owns every
+view and a `#models` link opens LLM); `use-admin-data.ts` owns every
 [Admin API](admin-api.md) call, the session and the overview poll that tracks
 the active run; `api.ts` is the transport and error mapping; `types.ts` holds
 the wire shapes; `ui.tsx` the console primitives (buttons, panels, native
@@ -250,12 +250,20 @@ they never require a browser CDN request. The license ships in
 name, or stable ID to identify a mark; unknown custom providers retain their
 initial. Removing a preset does not delete saved providers.
 
-The provider dialog lists presets beside the connection form. Model discovery
-there is an explicit operator action: it saves the connection first, so a
-new provider exists before its key is used, and later saves in the same dialog
-update that row. There is no default model: on save, ticked models join the
-catalog and models marked for the queue are appended to its end. The models
-dialog queues, dequeues and tests one catalog model at a time.
+The LLM view shows the schedule and translation queues side by side, then the
+providers as a list beside the selected provider's detail. A queue change
+(add from the model picker, drag or move, remove) is saved at once and rolls
+back when the server refuses it; each queue marks the model each stage calls
+first. The provider dialog holds only the connection, with the presets above
+it; there is no default model. Saving a new provider with a key selects it and
+lists its models, an explicit operator action. The detail adds ticked models
+to the catalog, edits their tags, turns them on or off, puts them in either
+queue and tests them one at a time.
+
+List filters in the console are one row of pills, one per filter, with a
+date range pill and a clear button that appears while a filter narrows the
+list. Run details explain stored error codes in words and keep the code
+beside them.
 
 ## Related Docs
 

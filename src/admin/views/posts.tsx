@@ -20,7 +20,10 @@ import type { AdminPost, AdminPostImage, Sources } from "@/admin/types"
 import {
   Badge,
   Button,
+  DateRange,
   Empty,
+  FilterReset,
+  FilterSelect,
   IconButton,
   Loading,
   Modal,
@@ -383,18 +386,20 @@ function PostTableRow({
   )
 }
 
+const blankFilters = {
+  search: "",
+  account: "",
+  llm: "",
+  media: "",
+  translation: "",
+  from: "",
+  to: "",
+}
+
 function PostList({ sources }: { sources: Sources | undefined }) {
   const { t } = useAppSettings()
   const { api } = useAdmin()
-  const [filters, setFilters] = useState({
-    search: "",
-    account: "",
-    llm: "",
-    media: "",
-    translation: "",
-    from: "",
-    to: "",
-  })
+  const [filters, setFilters] = useState(blankFilters)
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
   const posts = useResource(
@@ -405,6 +410,9 @@ function PostList({ sources }: { sources: Sources | undefined }) {
     setFilters((current) => ({ ...current, ...patch }))
     setPage(1)
   }
+  const active = (
+    Object.keys(blankFilters) as (keyof typeof blankFilters)[]
+  ).filter((key) => filters[key] !== blankFilters[key]).length
   return (
     <>
       <form
@@ -420,28 +428,29 @@ function PostList({ sources }: { sources: Sources | undefined }) {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onBlur={() => search !== filters.search && update({ search })}
             placeholder={t("admin.posts.search")}
             aria-label={t("admin.posts.search")}
           />
         </label>
-        <select
+        <FilterSelect
+          label={t("admin.posts.account")}
           value={filters.account}
-          onChange={(e) => update({ account: e.target.value })}
-          aria-label={t("admin.posts.account")}
+          onChange={(account) => update({ account })}
         >
-          <option value="">{t("admin.posts.anyAccount")}</option>
+          <option value="">{t("admin.filter.any")}</option>
           {sources?.x.accounts.map(({ account }) => (
             <option key={account} value={account}>
               @{account}
             </option>
           ))}
-        </select>
-        <select
+        </FilterSelect>
+        <FilterSelect
+          label={t("admin.posts.llm")}
           value={filters.llm}
-          onChange={(e) => update({ llm: e.target.value })}
-          aria-label={t("admin.posts.llm")}
+          onChange={(llm) => update({ llm })}
         >
-          <option value="">{t("admin.posts.anyLlm")}</option>
+          <option value="">{t("admin.filter.any")}</option>
           {[
             "never",
             "pending",
@@ -454,55 +463,49 @@ function PostList({ sources }: { sources: Sources | undefined }) {
               {t(`admin.status.${status}`)}
             </option>
           ))}
-        </select>
-        <select
+        </FilterSelect>
+        <FilterSelect
+          label={t("admin.posts.media")}
           value={filters.media}
-          onChange={(e) => update({ media: e.target.value })}
-          aria-label={t("admin.posts.media")}
+          onChange={(media) => update({ media })}
         >
-          <option value="">{t("admin.posts.anyMedia")}</option>
+          <option value="">{t("admin.filter.any")}</option>
           <option value="present">{t("admin.posts.withMedia")}</option>
           <option value="missing">{t("admin.posts.withoutMedia")}</option>
-        </select>
-        <select
+        </FilterSelect>
+        <FilterSelect
+          label={t("admin.translation.filter")}
           value={filters.translation}
-          onChange={(e) => update({ translation: e.target.value })}
-          aria-label={t("admin.translation.filter")}
+          onChange={(translation) => update({ translation })}
         >
-          <option value="">{t("admin.translation.anyStatus")}</option>
+          <option value="">{t("admin.filter.any")}</option>
           {["incomplete", "complete", "requested"].map((status) => (
             <option key={status} value={status}>
               {t(`admin.translation.filter.${status}`)}
             </option>
           ))}
-        </select>
-        <div className="adm-filter-dates">
-          <label className="adm-field">
-            <span className="adm-field-label">
-              {t("admin.schedule.filter.from")}
-            </span>
-            <input
-              type="date"
-              value={filters.from}
-              onChange={(e) => update({ from: e.target.value })}
-              aria-label={t("admin.schedule.filter.from")}
-            />
-          </label>
-          <label className="adm-field">
-            <span className="adm-field-label">
-              {t("admin.schedule.filter.to")}
-            </span>
-            <input
-              type="date"
-              value={filters.to}
-              min={filters.from || undefined}
-              onChange={(e) => update({ to: e.target.value })}
-              aria-label={t("admin.schedule.filter.to")}
-            />
-          </label>
-        </div>
-        <TranslationBacklog owner="post" onQueued={() => void posts.reload()} />
+        </FilterSelect>
+        <DateRange
+          from={filters.from}
+          to={filters.to}
+          onChange={(range) => update(range)}
+        />
+        <FilterReset
+          count={active}
+          onReset={() => {
+            setSearch("")
+            update(blankFilters)
+          }}
+        />
       </form>
+      <div className="adm-list-bar">
+        <span className="adm-muted">
+          {posts.data
+            ? t("admin.pager.total", { total: posts.data.total })
+            : ""}
+        </span>
+        <TranslationBacklog owner="post" onQueued={() => void posts.reload()} />
+      </div>
       {!posts.data ? (
         <Loading />
       ) : posts.data.items.length ? (

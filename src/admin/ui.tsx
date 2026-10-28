@@ -8,10 +8,13 @@ import {
   type ReactNode,
 } from "react"
 import {
+  CalendarRange,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   LoaderCircle,
+  RotateCcw,
   TriangleAlert,
   X,
 } from "lucide-react"
@@ -256,15 +259,25 @@ export function Switch({
   label,
   description,
   disabled,
+  compact,
 }: {
   checked: boolean
   onChange: (value: boolean) => void
   label: ReactNode
   description?: ReactNode
   disabled?: boolean
+  /** Only the track; the label stays for tooltips and readers. */
+  compact?: boolean
 }) {
   return (
-    <label className={cn("adm-switch", disabled && "is-disabled")}>
+    <label
+      className={cn(
+        "adm-switch",
+        disabled && "is-disabled",
+        compact && "is-compact",
+      )}
+      title={compact && typeof label === "string" ? label : undefined}
+    >
       <input
         type="checkbox"
         role="switch"
@@ -273,7 +286,7 @@ export function Switch({
         onChange={(event) => onChange(event.target.checked)}
       />
       <span className="adm-switch-track" aria-hidden />
-      <span className="adm-switch-text">
+      <span className={compact ? "adm-visually-hidden" : "adm-switch-text"}>
         <strong>{label}</strong>
         {description ? <small>{description}</small> : null}
       </span>
@@ -480,5 +493,254 @@ export function Facts({ items }: { items: [ReactNode, ReactNode][] }) {
         </div>
       ))}
     </dl>
+  )
+}
+
+/** A highlighted note: an icon, an optional title and its body. */
+export function Callout({
+  tone = "neutral",
+  icon: IconComponent,
+  title,
+  children,
+  className,
+}: {
+  tone?: Tone
+  icon?: Icon
+  title?: ReactNode
+  children?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("adm-callout", `adm-tone-${tone}`, className)}>
+      {IconComponent ? <IconComponent aria-hidden /> : null}
+      <div>
+        {title ? <strong>{title}</strong> : null}
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// --- filter bars -------------------------------------------------------------
+// A list's filters read as one row of pills: each names what it filters, and
+// one that narrows the list is highlighted so the active filters stand out.
+
+/** A native select drawn as a labelled pill. */
+export function FilterSelect({
+  label,
+  value,
+  onChange,
+  active = value !== "",
+  children,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  /** Whether the value narrows the list; by default any non-empty value. */
+  active?: boolean
+  children: ReactNode
+}) {
+  return (
+    <label className={cn("adm-filter-pill", active && "is-active")}>
+      <span className="adm-filter-pill-label" aria-hidden>
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={label}
+      >
+        {children}
+      </select>
+      <ChevronDown aria-hidden />
+    </label>
+  )
+}
+
+/** A checkbox drawn as a pill. */
+export function FilterToggle({
+  checked,
+  onChange,
+  children,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  children: ReactNode
+}) {
+  return (
+    <label className={cn("adm-filter-pill is-toggle", checked && "is-active")}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      {children}
+    </label>
+  )
+}
+
+/** Inclusive from and to dates in one pill; either end may stay open. */
+export function DateRange({
+  from,
+  to,
+  onChange,
+}: {
+  from: string
+  to: string
+  onChange: (range: { from?: string; to?: string }) => void
+}) {
+  const { t } = useAppSettings()
+  return (
+    <div
+      className={cn(
+        "adm-filter-pill adm-date-range",
+        (from || to) && "is-active",
+      )}
+      role="group"
+      aria-label={t("admin.filter.dates")}
+    >
+      <CalendarRange aria-hidden />
+      <input
+        type="date"
+        value={from}
+        className={from ? undefined : "is-empty"}
+        max={to || undefined}
+        onChange={(event) => onChange({ from: event.target.value })}
+        aria-label={t("admin.schedule.filter.from")}
+      />
+      <span aria-hidden>–</span>
+      <input
+        type="date"
+        value={to}
+        className={to ? undefined : "is-empty"}
+        min={from || undefined}
+        onChange={(event) => onChange({ to: event.target.value })}
+        aria-label={t("admin.schedule.filter.to")}
+      />
+    </div>
+  )
+}
+
+/** Shown only while a filter differs from the default. */
+export function FilterReset({
+  count,
+  onReset,
+}: {
+  count: number
+  onReset: () => void
+}) {
+  const { t } = useAppSettings()
+  if (!count) return null
+  return (
+    <button type="button" className="adm-filter-reset" onClick={onReset}>
+      <RotateCcw aria-hidden />
+      {t("admin.filter.reset", { count })}
+    </button>
+  )
+}
+
+// --- tag input ---------------------------------------------------------------
+
+const tagSeparators = /[\n,，、]/u
+
+/**
+ * A list of short values edited as chips: Enter or a comma adds what is
+ * typed, Backspace in the empty field removes the last chip, and pasting a
+ * list adds each entry. Duplicates are ignored without regard to case.
+ */
+export function TagInput({
+  value,
+  onChange,
+  label,
+  placeholder,
+  max,
+  maxLength,
+}: {
+  value: string[]
+  onChange: (value: string[]) => void
+  label: string
+  placeholder?: string
+  max?: number
+  maxLength?: number
+}) {
+  const { t } = useAppSettings()
+  const [draft, setDraft] = useState("")
+  const input = useRef<HTMLInputElement>(null)
+  const full = max !== undefined && value.length >= max
+  const add = (text: string) => {
+    const seen = new Set(value.map((item) => item.toLowerCase()))
+    const next = [...value]
+    for (const part of text.split(tagSeparators)) {
+      const item = part.trim().slice(0, maxLength)
+      if (!item || seen.has(item.toLowerCase())) continue
+      if (max !== undefined && next.length >= max) break
+      seen.add(item.toLowerCase())
+      next.push(item)
+    }
+    if (next.length !== value.length) onChange(next)
+    setDraft("")
+  }
+  const remove = (index: number) => {
+    onChange(value.filter((_, at) => at !== index))
+    input.current?.focus()
+  }
+  return (
+    <div
+      className={cn("adm-tag-input", full && "is-full")}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) input.current?.focus()
+      }}
+    >
+      {value.map((item, index) => (
+        <span key={item} className="adm-tag">
+          <span>{item}</span>
+          <button
+            type="button"
+            aria-label={t("admin.tags.remove", { tag: item })}
+            title={t("admin.tags.remove", { tag: item })}
+            onClick={() => remove(index)}
+          >
+            <X aria-hidden />
+          </button>
+        </span>
+      ))}
+      <input
+        ref={input}
+        value={draft}
+        aria-label={label}
+        placeholder={
+          full ? t("admin.tags.full", { max: max ?? 0 }) : placeholder
+        }
+        maxLength={maxLength}
+        onChange={(event) => {
+          const text = event.target.value
+          // An input method composing Japanese or Chinese text keeps its draft.
+          const composing = (event.nativeEvent as InputEvent).isComposing
+          if (!composing && tagSeparators.test(text)) add(text)
+          else setDraft(text)
+        }}
+        onCompositionEnd={(event) => {
+          const text = event.currentTarget.value
+          if (tagSeparators.test(text)) add(text)
+        }}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return
+          if (event.key === "Enter") {
+            event.preventDefault()
+            add(draft)
+          } else if (event.key === "Backspace" && !draft && value.length) {
+            event.preventDefault()
+            remove(value.length - 1)
+          }
+        }}
+        onPaste={(event) => {
+          const text = event.clipboardData.getData("text")
+          if (!tagSeparators.test(text)) return
+          event.preventDefault()
+          add(`${draft}${text}`)
+        }}
+        onBlur={() => add(draft)}
+      />
+    </div>
   )
 }

@@ -26,8 +26,12 @@ import {
   Badge,
   Button,
   ConfirmButton,
+  DateRange,
   Empty,
   Field,
+  FilterReset,
+  FilterSelect,
+  FilterToggle,
   IconButton,
   Loading,
   Modal,
@@ -291,10 +295,11 @@ const blankFilters = {
 export function ScheduleView(_: ViewProps) {
   const { t, locale } = useAppSettings()
   const { api, act } = useAdmin()
-  const [filters, setFilters] = useState({
+  // The list opens on today onward; clearing the filters shows every date.
+  const [filters, setFilters] = useState(() => ({
     ...blankFilters,
     from: japanToday(),
-  })
+  }))
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<AdminEvent | null | undefined>(
@@ -315,6 +320,9 @@ export function ScheduleView(_: ViewProps) {
     setPage(1)
   }
   const data = events.data
+  const active = (
+    Object.keys(blankFilters) as (keyof typeof blankFilters)[]
+  ).filter((key) => filters[key] !== blankFilters[key]).length
 
   return (
     <div className="adm-view">
@@ -345,74 +353,62 @@ export function ScheduleView(_: ViewProps) {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              onBlur={() => search !== filters.search && update({ search })}
               placeholder={t("admin.schedule.search")}
               aria-label={t("admin.schedule.search")}
             />
           </label>
-          <select
+          <FilterSelect
+            label={t("admin.schedule.filter.provenance")}
             value={filters.provenance}
-            onChange={(e) => update({ provenance: e.target.value })}
-            aria-label={t("admin.schedule.filter.provenance")}
+            onChange={(provenance) => update({ provenance })}
           >
-            <option value="">{t("admin.schedule.filter.anySource")}</option>
+            <option value="">{t("admin.filter.any")}</option>
             <option value="automatic">{t("admin.event.automatic")}</option>
             <option value="manual">{t("admin.event.manual")}</option>
-          </select>
-          <select
+          </FilterSelect>
+          <FilterSelect
+            label={t("admin.schedule.filter.cancellation")}
             value={filters.cancellation}
-            onChange={(e) => update({ cancellation: e.target.value })}
-            aria-label={t("admin.schedule.filter.cancellation")}
+            onChange={(cancellation) => update({ cancellation })}
           >
-            <option value="">{t("admin.schedule.filter.anyState")}</option>
+            <option value="">{t("admin.filter.any")}</option>
             <option value="none">{t("admin.schedule.cancel.none")}</option>
             <option value="llm_suspected">{t("admin.event.suspected")}</option>
             <option value="manual_confirmed">
               {t("admin.event.cancelled")}
             </option>
-          </select>
-          <select
+          </FilterSelect>
+          <FilterSelect
+            label={t("admin.schedule.filter.merge")}
             value={filters.merge}
-            onChange={(e) => update({ merge: e.target.value })}
-            aria-label={t("admin.schedule.filter.merge")}
+            onChange={(merge) => update({ merge })}
           >
             <option value="">{t("admin.schedule.filter.anyMerge")}</option>
             <option value="visible">
               {t("admin.schedule.filter.visible")}
             </option>
             <option value="merged">{t("admin.schedule.filter.merged")}</option>
-          </select>
-          <input
-            type="date"
-            value={filters.from}
-            onChange={(e) => update({ from: e.target.value })}
-            aria-label={t("admin.schedule.filter.from")}
+          </FilterSelect>
+          <DateRange
+            from={filters.from}
+            to={filters.to}
+            onChange={(range) => update(range)}
           />
-          <input
-            type="date"
-            value={filters.to}
-            onChange={(e) => update({ to: e.target.value })}
-            aria-label={t("admin.schedule.filter.to")}
-          />
-          <label className="adm-check">
-            <input
-              type="checkbox"
-              checked={filters.deleted}
-              onChange={(e) => update({ deleted: e.target.checked })}
-            />
+          <FilterToggle
+            checked={filters.deleted}
+            onChange={(deleted) => update({ deleted })}
+          >
             {t("admin.schedule.filter.deleted")}
-          </label>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
+          </FilterToggle>
+          <FilterReset
+            count={active}
+            onReset={() => {
               setSearch("")
               update(blankFilters)
             }}
-          >
-            {t("admin.schedule.filter.allDates")}
-          </Button>
+          />
         </form>
-
         {!data ? (
           <Loading />
         ) : data.items.length ? (

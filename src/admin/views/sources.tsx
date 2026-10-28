@@ -1,20 +1,17 @@
-import {
-  useEffect,
-  useId,
-  useState,
-  type ReactNode,
-  type SubmitEvent,
-} from "react"
+import { useEffect, useState, type ReactNode, type SubmitEvent } from "react"
 import {
   CalendarClock,
+  ChevronRight,
   Download,
   History,
+  Info,
   KeyRound,
   Play,
   Radio,
   RadioTower,
   RotateCw,
   Save,
+  ShieldAlert,
   Tv,
 } from "lucide-react"
 
@@ -51,6 +48,8 @@ import {
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { BilibiliSource } from "@/admin/views/bilibili-parts"
 import { stepIcons } from "@/admin/views/run-parts"
+import { cn } from "@/lib/utils"
+import type { Translator } from "@/types"
 
 /**
  * How past windows are read: the source API with its credential, the public
@@ -221,23 +220,167 @@ const skipFlags: Record<ScheduleSource, string> = {
 const sameSync = (a: SourceSync | null, b: SourceSync | null) =>
   JSON.stringify(a) === JSON.stringify(b)
 
-/** A source's own timer: on or off, its interval and, for X and YouTube, how
- * much each run reads. Run now submits the same chain once without moving
- * the next timed run. */
-function SchedulePanel({
+/** Why a source's timer is not running, or null while it runs. */
+function timerBlock(
+  schedule: SourceSchedule,
+  timersOff: boolean,
+  t: Translator,
+) {
+  if (schedule.skipped)
+    return t("admin.timer.skipped", { flag: skipFlags[schedule.source] })
+  if (timersOff) return t("admin.timer.schedulerOff")
+  return null
+}
+
+/**
+ * A source at a glance: whether its timer runs and when, how the last run
+ * went, the timer switch and Run now. Selecting the card shows the source's
+ * settings below.
+ */
+function SourceCard({
   schedule,
-  facts,
+  lastSuccess,
+  chips,
+  selected,
+  onSelect,
   onChange,
 }: {
   schedule: SourceSchedule
-  facts: [ReactNode, ReactNode][]
+  lastSuccess: string | null | undefined
+  chips?: ReactNode
+  selected: boolean
+  onSelect: () => void
   onChange: (schedule: SourceSchedule) => void
 }) {
   const { t, locale } = useAppSettings()
   const { api, act, start, overview } = useAdmin()
+  const [busy, setBusy] = useState("")
+  const source = schedule.source
+  const Icon = stepIcons[source] || Tv
+  const timersOff = overview ? !overview.scheduler.enabled : false
+  const blocked = timerBlock(schedule, timersOff, t)
+  const running = schedule.enabled && !blocked
+  const toggle = async (enabled: boolean) => {
+    setBusy("toggle")
+    const next = await act(
+      () => api.updateSourceSchedule(source, { enabled }),
+      "admin.notice.scheduleSaved",
+    )
+    setBusy("")
+    if (next) onChange(next)
+  }
+  const runNow = async () => {
+    setBusy("run")
+    await start({ kind: "source", source })
+    setBusy("")
+  }
+  const when = (value: string | null | undefined) =>
+    value ? (
+      <time dateTime={value} title={formatDateTime(value, locale)}>
+        {formatRelative(value, locale)}
+      </time>
+    ) : (
+      "—"
+    )
+  return (
+    <article
+      className={cn(
+        "adm-source-card",
+        selected && "is-selected",
+        schedule.skipped && "is-skipped",
+      )}
+    >
+      <button
+        type="button"
+        className="adm-source-card-head"
+        aria-pressed={selected}
+        onClick={onSelect}
+      >
+        <span className="adm-source-icon">
+          <Icon aria-hidden />
+        </span>
+        <span className="adm-source-name">
+          <strong>{t(`admin.step.${source}`)}</strong>
+          <small>
+            {running
+              ? t("admin.timer.on", {
+                  interval: formatInterval(schedule.intervalMinutes, t),
+                })
+              : schedule.enabled && blocked
+                ? t("admin.sources.timerBlocked")
+                : t("admin.sources.timerOff")}
+          </small>
+        </span>
+        <ChevronRight className="adm-source-card-chevron" aria-hidden />
+      </button>
+      <dl className="adm-source-facts">
+        <div>
+          <dt>{t("admin.timer.nextRun")}</dt>
+          <dd>{running ? when(schedule.nextRunAt) : "—"}</dd>
+        </div>
+        <div>
+          <dt>{t("admin.timer.lastRun")}</dt>
+          <dd>
+            {schedule.lastRun ? (
+              <>
+                <StatusBadge status={schedule.lastRun.status} />
+                {when(schedule.lastRun.at)}
+              </>
+            ) : (
+              t("admin.timer.never")
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("admin.sources.lastSuccess")}</dt>
+          <dd>{when(lastSuccess)}</dd>
+        </div>
+      </dl>
+      {chips ? <span className="adm-chip-row">{chips}</span> : null}
+      {blocked ? (
+        <p className="adm-source-note">
+          <Info aria-hidden />
+          {blocked}
+        </p>
+      ) : null}
+      <footer>
+        <Switch
+          checked={schedule.enabled}
+          disabled={schedule.skipped || busy !== ""}
+          onChange={toggle}
+          label={t("admin.timer.enable")}
+        />
+        <Button
+          size="sm"
+          icon={Play}
+          busy={busy === "run"}
+          disabled={
+            schedule.skipped || busy !== "" || Boolean(overview?.activeRun)
+          }
+          onClick={runNow}
+          title={t("admin.timer.runNowHint")}
+        >
+          {t("admin.timer.runNow")}
+        </Button>
+      </footer>
+    </article>
+  )
+}
+
+/** A source's timer settings: its interval and, for X and YouTube, how much
+ * each run reads. Saving keeps the timer on or off as it is. */
+function TimerPanel({
+  schedule,
+  onChange,
+}: {
+  schedule: SourceSchedule
+  onChange: (schedule: SourceSchedule) => void
+}) {
+  const { t } = useAppSettings()
+  const { api, act } = useAdmin()
   const [minutes, setMinutes] = useState(schedule.intervalMinutes)
   const [sync, setSync] = useState(schedule.sync)
-  const [busy, setBusy] = useState("")
+  const [busy, setBusy] = useState(false)
   const syncKey = JSON.stringify(schedule.sync)
   useEffect(
     () => setMinutes(schedule.intervalMinutes),
@@ -246,17 +389,6 @@ function SchedulePanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => setSync(schedule.sync), [syncKey])
   const source = schedule.source
-  const timersOff = overview ? !overview.scheduler.enabled : false
-  const running = schedule.enabled && !schedule.skipped && !timersOff
-  const save = async (body: Parameters<typeof api.updateSourceSchedule>[1]) => {
-    setBusy(body.enabled === undefined ? "save" : "toggle")
-    const next = await act(
-      () => api.updateSourceSchedule(source, body),
-      "admin.notice.scheduleSaved",
-    )
-    setBusy("")
-    if (next) onChange(next)
-  }
   const options = [...new Set([...intervals, minutes])]
     .filter(
       (value) =>
@@ -269,15 +401,6 @@ function SchedulePanel({
   const limit = sync ? (sync.mode === "count" ? sync.count : sync.max) : 0
   const dirty =
     minutes !== schedule.intervalMinutes || !sameSync(sync, schedule.sync)
-  const runNow = async () => {
-    setBusy("run")
-    await start({ kind: "source", source })
-    setBusy("")
-  }
-  const when = (value: string | null | undefined) =>
-    value
-      ? `${formatDateTime(value, locale)} · ${formatRelative(value, locale)}`
-      : null
   return (
     <Panel
       level={3}
@@ -286,38 +409,24 @@ function SchedulePanel({
       description={t(`admin.timer.description.${source}`, {
         floor: formatInterval(schedule.minIntervalMinutes, t),
       })}
-      actions={
-        running ? (
-          <Badge tone="leaf">
-            {t("admin.timer.on", {
-              interval: formatInterval(schedule.intervalMinutes, t),
-            })}
-          </Badge>
-        ) : (
-          <Badge>{t("admin.push.off")}</Badge>
-        )
-      }
     >
       <form
         className="adm-form"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault()
-          save({ intervalMinutes: minutes, ...(sync ? { sync } : {}) })
+          setBusy(true)
+          const next = await act(
+            () =>
+              api.updateSourceSchedule(source, {
+                intervalMinutes: minutes,
+                ...(sync ? { sync } : {}),
+              }),
+            "admin.notice.scheduleSaved",
+          )
+          setBusy(false)
+          if (next) onChange(next)
         }}
       >
-        <Switch
-          checked={schedule.enabled}
-          disabled={schedule.skipped || busy !== ""}
-          onChange={(enabled) => save({ enabled })}
-          label={t("admin.timer.enable")}
-          description={
-            schedule.skipped
-              ? t("admin.timer.skipped", { flag: skipFlags[source] })
-              : timersOff
-                ? t("admin.timer.schedulerOff")
-                : t("admin.timer.enableHint")
-          }
-        />
         <Field label={t("admin.timer.interval")}>
           <select
             value={minutes}
@@ -331,27 +440,28 @@ function SchedulePanel({
           </select>
         </Field>
         {sync ? (
-          <div className="adm-form-row is-top">
-            <Field
+          <>
+            <Segmented
               label={t("admin.timer.sync")}
-              hint={t(`admin.timer.syncHint.${sync.mode}`)}
-            >
-              <select
-                value={sync.mode}
-                onChange={(e) =>
-                  setSync(
-                    e.target.value === "count"
-                      ? { mode: "count", count: limit }
-                      : { mode: "incremental", max: limit },
-                  )
-                }
-              >
-                <option value="incremental">
-                  {t("admin.fetch.mode.incremental")}
-                </option>
-                <option value="count">{t("admin.fetch.mode.count")}</option>
-              </select>
-            </Field>
+              value={sync.mode}
+              onChange={(mode) =>
+                setSync(
+                  mode === "count"
+                    ? { mode: "count", count: limit }
+                    : { mode: "incremental", max: limit },
+                )
+              }
+              options={[
+                {
+                  value: "incremental",
+                  label: t("admin.fetch.mode.incremental"),
+                },
+                { value: "count", label: t("admin.fetch.mode.count") },
+              ]}
+            />
+            <p className="adm-field-hint">
+              {t(`admin.timer.syncHint.${sync.mode}`)}
+            </p>
             <Field
               label={t(`admin.timer.syncLimit.${sync.mode}.${source}`)}
               hint={t(`admin.timer.syncLimitHint.${source}`)}
@@ -372,88 +482,25 @@ function SchedulePanel({
                 required
               />
             </Field>
-          </div>
+          </>
         ) : null}
         <div className="adm-form-actions">
-          <Button
-            size="sm"
-            icon={Play}
-            busy={busy === "run"}
-            disabled={
-              schedule.skipped || busy !== "" || Boolean(overview?.activeRun)
-            }
-            onClick={runNow}
-            title={t("admin.timer.runNowHint")}
-          >
-            {t("admin.timer.runNow")}
-          </Button>
+          {dirty ? (
+            <span className="adm-muted">{t("admin.models.unsaved")}</span>
+          ) : null}
           <Button
             type="submit"
             size="sm"
+            variant="primary"
             icon={Save}
-            busy={busy === "save"}
-            disabled={!dirty || busy !== ""}
+            busy={busy}
+            disabled={!dirty}
           >
             {t("admin.action.save")}
           </Button>
         </div>
-        <Facts
-          items={[
-            [
-              t("admin.timer.nextRun"),
-              running ? when(schedule.nextRunAt) : null,
-            ],
-            [
-              t("admin.timer.lastRun"),
-              schedule.lastRun ? (
-                <span className="adm-chip-row">
-                  <StatusBadge status={schedule.lastRun.status} />
-                  <time
-                    dateTime={schedule.lastRun.at}
-                    title={formatDateTime(schedule.lastRun.at, locale)}
-                  >
-                    {formatRelative(schedule.lastRun.at, locale)}
-                  </time>
-                </span>
-              ) : (
-                t("admin.timer.never")
-              ),
-            ],
-            ...facts,
-          ]}
-        />
       </form>
     </Panel>
-  )
-}
-
-/** One source: its heading, then its panels side by side. */
-function SourceSection({
-  source,
-  hint,
-  chips,
-  children,
-}: {
-  source: ScheduleSource
-  hint: string
-  chips?: ReactNode
-  children: ReactNode
-}) {
-  const { t } = useAppSettings()
-  const id = useId()
-  const Icon = stepIcons[source] || Tv
-  return (
-    <section className="adm-source" aria-labelledby={id}>
-      <header className="adm-source-header">
-        <h2 id={id}>
-          <Icon aria-hidden />
-          {t(`admin.step.${source}`)}
-        </h2>
-        {chips ? <span className="adm-chip-row">{chips}</span> : null}
-        <p>{hint}</p>
-      </header>
-      <div className="adm-grid is-two">{children}</div>
-    </section>
   )
 }
 
@@ -741,63 +788,42 @@ function LiveProbePanel({
   )
 }
 
-export function SourcesView(_: ViewProps) {
+const sourceIds: ScheduleSource[] = ["x", "youtube", "bilibili"]
+
+export function SourcesView({ tab, navigate }: ViewProps) {
   const { t, locale } = useAppSettings()
   const { api, overview } = useAdmin()
   const sources = useResource(() => api.sources(), [])
   const data = sources.data
-  const when = (value: string | null | undefined) =>
-    value
-      ? `${formatDateTime(value, locale)} · ${formatRelative(value, locale)}`
+  const selected = sourceIds.includes(tab as ScheduleSource)
+    ? (tab as ScheduleSource)
+    : "x"
+  const setSchedule = (next: SourceSchedule) =>
+    data &&
+    sources.setData({
+      ...data,
+      schedules: data.schedules.map((entry) =>
+        entry.source === next.source ? next : entry,
+      ),
+    })
+  const schedule = (source: ScheduleSource) =>
+    data?.schedules.find((entry) => entry.source === source)
+  const blockedUntil =
+    data?.bilibili.blockedUntil &&
+    Date.parse(data.bilibili.blockedUntil) > Date.now()
+      ? data.bilibili.blockedUntil
       : null
-  const schedule = (source: ScheduleSource) => {
-    const found = data?.schedules.find((entry) => entry.source === source)
-    return found ? (
-      <SchedulePanel
-        schedule={found}
-        facts={
-          source === "bilibili"
-            ? [
-                [
-                  t("admin.bilibili.lastSuccess"),
-                  when(data?.bilibili.lastSuccessAt),
-                ],
-                [
-                  t("admin.bilibili.backoff"),
-                  data?.bilibili.blockedUntil &&
-                  Date.parse(data.bilibili.blockedUntil) > Date.now()
-                    ? t("admin.bilibili.blockedUntil", {
-                        time: formatDateTime(
-                          data.bilibili.blockedUntil,
-                          locale,
-                        ),
-                      })
-                    : t("admin.bilibili.notBlocked"),
-                ],
-              ]
-            : [
-                [
-                  t("admin.sources.lastSuccess"),
-                  when(overview?.sources[source].lastSuccessAt),
-                ],
-              ]
-        }
-        onChange={(next) =>
-          data &&
-          sources.setData({
-            ...data,
-            schedules: data.schedules.map((entry) =>
-              entry.source === next.source ? next : entry,
-            ),
-          })
-        }
-      />
+  const chips = (source: ScheduleSource) => {
+    if (!data) return null
+    return source === "bilibili" && blockedUntil ? (
+      <Badge tone="danger" icon={ShieldAlert}>
+        {t("admin.bilibili.blockedUntil", {
+          time: formatDateTime(blockedUntil, locale),
+        })}
+      </Badge>
     ) : null
   }
-  const skipped = (source: ScheduleSource) =>
-    data?.schedules.find((entry) => entry.source === source)?.skipped ? (
-      <Badge>{t("admin.overview.skipped")}</Badge>
-    ) : null
+  const current = schedule(selected)
   return (
     <div className="adm-view">
       <PageHeader
@@ -808,48 +834,76 @@ export function SourcesView(_: ViewProps) {
         <Loading />
       ) : (
         <>
-          <SourceSection
-            source="x"
-            hint={t("admin.sources.x.hint")}
-            chips={skipped("x")}
+          <div className="adm-source-cards">
+            {sourceIds.map((source) => {
+              const found = schedule(source)
+              return found ? (
+                <SourceCard
+                  key={source}
+                  schedule={found}
+                  lastSuccess={
+                    source === "bilibili"
+                      ? data.bilibili.lastSuccessAt
+                      : overview?.sources[source].lastSuccessAt
+                  }
+                  chips={chips(source)}
+                  selected={selected === source}
+                  onSelect={() => navigate("sources", source)}
+                  onChange={setSchedule}
+                />
+              ) : null
+            })}
+          </div>
+          <section
+            className="adm-source-detail"
+            aria-label={t("admin.sources.settingsFor", {
+              source: t(`admin.step.${selected}`),
+            })}
           >
-            {schedule("x")}
-            <FetchPanel source="x" sources={data} />
-          </SourceSection>
-          <SourceSection
-            source="youtube"
-            hint={t("admin.sources.youtube.hint")}
-            chips={skipped("youtube")}
-          >
-            {schedule("youtube")}
-            <FetchPanel source="youtube" sources={data} />
-            <PushPanel
-              push={data.youtube.push}
-              onChange={(push) =>
-                sources.setData({ ...data, youtube: { ...data.youtube, push } })
-              }
-            />
-            <LiveProbePanel
-              probe={data.youtube.liveProbe}
-              onChange={(liveProbe) =>
-                sources.setData({
-                  ...data,
-                  youtube: { ...data.youtube, liveProbe },
-                })
-              }
-            />
-          </SourceSection>
-          <SourceSection
-            source="bilibili"
-            hint={t("admin.sources.bilibili.hint")}
-            chips={skipped("bilibili")}
-          >
-            {schedule("bilibili")}
-            <BilibiliSource
-              status={data.bilibili}
-              onAdded={() => void sources.reload()}
-            />
-          </SourceSection>
+            <header className="adm-source-header">
+              <h2>
+                {t("admin.sources.settingsFor", {
+                  source: t(`admin.step.${selected}`),
+                })}
+              </h2>
+              <p>{t(`admin.sources.${selected}.hint`)}</p>
+            </header>
+            <div className="adm-grid is-two">
+              {current ? (
+                <TimerPanel schedule={current} onChange={setSchedule} />
+              ) : null}
+              {selected === "bilibili" ? (
+                <BilibiliSource
+                  status={data.bilibili}
+                  onAdded={() => void sources.reload()}
+                />
+              ) : (
+                <FetchPanel source={selected} sources={data} />
+              )}
+              {selected === "youtube" ? (
+                <>
+                  <PushPanel
+                    push={data.youtube.push}
+                    onChange={(push) =>
+                      sources.setData({
+                        ...data,
+                        youtube: { ...data.youtube, push },
+                      })
+                    }
+                  />
+                  <LiveProbePanel
+                    probe={data.youtube.liveProbe}
+                    onChange={(liveProbe) =>
+                      sources.setData({
+                        ...data,
+                        youtube: { ...data.youtube, liveProbe },
+                      })
+                    }
+                  />
+                </>
+              ) : null}
+            </div>
+          </section>
         </>
       )}
     </div>
