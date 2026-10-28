@@ -68,13 +68,19 @@ type mergeEvent struct {
 	mergedInto, mergeSource                                                     string
 	start                                                                       time.Time
 	hasStart, locked                                                            bool
+	// held events hold a merge another owner made, such as an operator's;
+	// merging them away would chain that merge behind a hidden event.
+	held bool
 }
 
 func (e mergeEvent) stream() bool { return e.eventType == "stream" || e.eventType == "member" }
 func (e mergeEvent) overlay() bool {
 	return e.cancellation == "llm_suspected" || e.cancellation == "manual_confirmed"
 }
-func (e mergeEvent) protected() bool { return e.locked || e.provenance == "manual" }
+
+// protected events are never merged away: manual or locked ones, and those
+// holding another owner's merge.
+func (e mergeEvent) protected() bool { return e.locked || e.provenance == "manual" || e.held }
 
 // ruleOwned events have no merge decision or one the reconciler made.
 func (e mergeEvent) ruleOwned() bool { return e.mergeSource == "" || e.mergeSource == MergeSourceRule }
@@ -127,7 +133,8 @@ func noticeCompatible(source, target mergeEvent) bool {
 //     exactly one date-only and one timed stream, into that stream. A YouTube
 //     event never merges into an X entry.
 //
-// Manual or locked events are never merged away. Events with a cancellation
+// Manual or locked events, and events holding another owner's merge, are
+// never merged away, so no merge points at a merged event. Events with a cancellation
 // overlay, and merges into an overlaid target, keep their current state.
 // Several plausible targets leave the event unmerged. Rule-owned decisions
 // are recomputed from the current rows, so the step is idempotent and a merge
@@ -176,7 +183,7 @@ func (s *Store) ReconcileEventMerges(ctx context.Context, now time.Time) (MergeC
 		}
 		target := desired[event.id]
 		// A cancellation overlay freezes the decision on either side of it,
-		// but a manual or locked event is never left merged away.
+		// but a protected event is never left merged away.
 		if !event.protected() && (event.overlay() || current != "" && byID[current].overlay()) {
 			target = current
 		}
@@ -214,8 +221,9 @@ func (s *Store) ReconcileEventMerges(ctx context.Context, now time.Time) (MergeC
 }
 
 func loadMergeEvents(ctx context.Context, tx *sql.Tx, from, to string) ([]mergeEvent, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id,source,title,starts_on,COALESCE(starts_at,''),time_precision,COALESCE(event_type,'event'),provenance,manual_locked,COALESCE(cancellation_status,'none'),COALESCE(merged_into,''),COALESCE(merge_source,'')
-		FROM events WHERE deleted_at IS NULL AND starts_on BETWEEN ? AND ? ORDER BY starts_on,id`, from, to)
+	rows, err := tx.QueryContext(ctx, `SELECT id,source,title,starts_on,COALESCE(starts_at,''),time_precision,COALESCE(event_type,'event'),provenance,manual_locked,COALESCE(cancellation_status,'none'),COALESCE(merged_into,''),COALESCE(merge_source,''),
+		EXISTS(SELECT 1 FROM events m WHERE m.merged_into=events.id AND m.deleted_at IS NULL AND COALESCE(m.merge_source,'')<>?)
+		FROM events WHERE deleted_at IS NULL AND starts_on BETWEEN ? AND ? ORDER BY starts_on,id`, MergeSourceRule, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -224,11 +232,11 @@ func loadMergeEvents(ctx context.Context, tx *sql.Tx, from, to string) ([]mergeE
 	for rows.Next() {
 		var e mergeEvent
 		var startsAt, precision string
-		var locked int
-		if err = rows.Scan(&e.id, &e.source, &e.title, &e.startsOn, &startsAt, &precision, &e.eventType, &e.provenance, &locked, &e.cancellation, &e.mergedInto, &e.mergeSource); err != nil {
+		var locked, held int
+		if err = rows.Scan(&e.id, &e.source, &e.title, &e.startsOn, &startsAt, &precision, &e.eventType, &e.provenance, &locked, &e.cancellation, &e.mergedInto, &e.mergeSource, &held); err != nil {
 			return nil, err
 		}
-		e.locked, e.precision = locked != 0, precision
+		e.locked, e.held, e.precision = locked != 0, held != 0, precision
 		if start, ok := parseMergeInstant(startsAt); ok && precision != "unknown" {
 			e.start, e.hasStart = start, true
 		}

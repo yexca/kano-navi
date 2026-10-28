@@ -819,6 +819,8 @@ export const adminMessages = {
     "admin.error.tooLarge": "The upload is too large.",
     "admin.error.mergeConflict":
       "An operator already merged another upload into this video. Undo that merge first.",
+    "admin.error.eventMergeConflict":
+      "An operator already merged another entry into this one. Undo that merge first.",
     "admin.error.notFound": "That record no longer exists.",
     "admin.error.bilibiliBlocked":
       "Bilibili is asking this server for a captcha. Reads resume after {time}.",
@@ -1770,6 +1772,8 @@ export const adminMessages = {
     "admin.error.tooLarge": "上传的文件太大。",
     "admin.error.mergeConflict":
       "已有管理员把另一个投稿合并到这个视频，请先撤销那次合并。",
+    "admin.error.eventMergeConflict":
+      "已有管理员把另一个条目合并到这个条目，请先撤销那次合并。",
     "admin.error.notFound": "该记录已不存在。",
     "admin.error.bilibiliBlocked":
       "哔哩哔哩正在要求本服务器完成验证码，{time} 后恢复读取。",

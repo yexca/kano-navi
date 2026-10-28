@@ -231,8 +231,9 @@ that the reconciler never changes. The target must be another visible event:
 itself, a merged or a deleted target, or a missing `into`, answers `400`; a
 missing or deleted `{id}` answers `404`. Rule merges into the merged event are
 released with it, and an operator's or another owner's merge into it answers
-`409 {"error":"merge_conflict"}`, so no merge points at a merged event.
-Repeating the same merge changes nothing. `unmerge` shows a merged event again
+`409 {"error":"event_merge_conflict"}`, so no merge points at a merged event.
+Repeating the same merge changes nothing. Deleting the target undoes the
+operator merges into it, as `unmerge` would. `unmerge` shows a merged event again
 as a durable operator decision (`mergeSource = manual` without a target) that
 the reconciler never overrides; an event that is not merged answers `400`.
 Editing or confirming a rule-merged event also shows it again, because a

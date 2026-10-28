@@ -86,6 +86,7 @@ const errorKeys: Record<string, string> = {
   database_unavailable: "admin.error.unavailable",
   request_too_large: "admin.error.tooLarge",
   merge_conflict: "admin.error.mergeConflict",
+  event_merge_conflict: "admin.error.eventMergeConflict",
 }
 
 /** Operator-facing text for a failed request. Validation messages from the

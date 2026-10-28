@@ -267,3 +267,44 @@ func TestManualMergeIsDurable(t *testing.T) {
 		t.Fatalf("unmerge=%v %s", err, f.state("x-chat"))
 	}
 }
+
+func TestReconcileKeepsAnEventHoldingAnOperatorMerge(t *testing.T) {
+	f := newMergeFixture(t)
+	ctx := context.Background()
+	f.add("x-notice", "x", "コンペ", "2026-10-09", "19:00", "stream")
+	f.add("x-plan", "x", "予定", "2026-10-09", "", "stream")
+	if _, err := f.s.MergeEvent(ctx, "x-plan", "x-notice"); err != nil {
+		t.Fatal(err)
+	}
+	// The YouTube reservation arrives after the operator's merge. Merging the
+	// notice into it would leave the operator's merge behind a hidden event.
+	f.add("y2", "youtube", "【VALORANT】コンペ", "2026-10-09", "19:01:35", "stream")
+	f.reconcile()
+	f.expect(map[string]string{"x-plan": "x-notice|manual|manual", "x-notice": unmerged})
+	// A rule merge of an event that already holds such a merge is released.
+	f.exec(`UPDATE events SET merged_into='y2',merge_source='rule',merge_reason='rule_b:youtube_start' WHERE id='x-notice'`)
+	if counts := f.reconcile(); counts.Released != 1 || f.state("x-notice") != unmerged {
+		t.Fatalf("reconcile=%+v %s", counts, f.state("x-notice"))
+	}
+}
+
+func TestDeletingAnEventShowsEverythingMergedIntoIt(t *testing.T) {
+	f := newMergeFixture(t)
+	ctx := context.Background()
+	f.add("y1", "youtube", "【雑談】ただいま", "2026-10-09", "19:00:00", "stream")
+	f.add("x-notice", "x", "雑談", "2026-10-09", "19:00", "stream")
+	f.add("x-plan", "x", "予定", "2026-10-09", "", "stream", "manual_locked=1")
+	f.reconcile()
+	if _, err := f.s.MergeEvent(ctx, "x-plan", "y1"); err != nil {
+		t.Fatal(err)
+	}
+	f.expect(map[string]string{"x-notice": "y1|rule|rule_b:youtube_start", "x-plan": "y1|manual|manual"})
+	if _, err := f.s.DeleteManualEvent(ctx, "y1"); err != nil {
+		t.Fatal(err)
+	}
+	// The operator's merge is undone as an unmerge would, so the reconciler
+	// leaves the entry where it is.
+	f.expect(map[string]string{"x-notice": unmerged, "x-plan": "|manual|unmerged_from:y1"})
+	f.reconcile()
+	f.expect(map[string]string{"x-notice": unmerged, "x-plan": "|manual|unmerged_from:y1"})
+}

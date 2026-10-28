@@ -183,7 +183,7 @@ func TestOperatorMergesAnEventIntoAnother(t *testing.T) {
 		t.Fatal("merge must bump the revision")
 	}
 	// The merged event already holds a duplicate, so it cannot be merged away.
-	if code, payload = c.call(t, "POST", "/api/admin/events/youtube-AAAAAAAAAAA/merge", `{"into":"x-other"}`); code != 409 || payload["error"] != "merge_conflict" {
+	if code, payload = c.call(t, "POST", "/api/admin/events/youtube-AAAAAAAAAAA/merge", `{"into":"x-other"}`); code != 409 || payload["error"] != "event_merge_conflict" {
 		t.Fatalf("conflict=%d %v", code, payload)
 	}
 	for body, want := range map[string]int{

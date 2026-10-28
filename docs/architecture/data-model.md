@@ -390,13 +390,18 @@ reservation refresh, keep the merge. `merge_source` names the owner:
   (`backend-go/internal/store/sqlite/event_merge.go`). It recomputes its own
   decisions from the current rows on every run, so it is idempotent and
   releases a merge whose target was deleted, merged or moved to another
-  date, or whose event became manual or locked. Deleting an event releases
-  the rule merges into it in the same transaction, so a duplicate older than
-  the reconciler's window is shown again; other owners' merges stay.
+  date, or whose event became manual or locked or now holds another owner's
+  merge. An event holding another owner's merge is never merged away, so no
+  merge points at a merged event. Deleting an event releases the rule merges
+  into it in the same transaction, so a duplicate older than the
+  reconciler's window is shown again.
 - `manual`: an operator decision (`merge_reason` `manual`), which the rules
   never change. `merge_source = manual` with a null `merged_into` is an undone
-  merge; the reconciler never merges that event again.
-- Any other owner is left untouched by the rules in the same way.
+  merge; the reconciler never merges that event again. Deleting the target
+  undoes an operator merge into it (`merge_reason` `unmerged_from:<id>`), so
+  no entry stays hidden behind a tombstone.
+- Any other owner is left untouched by the rules in the same way, and its
+  merges stay when their target is deleted.
 
 The rules consider active, non-deleted events from 30 days before to 60 days
 after the current Japan date:

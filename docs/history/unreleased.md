@@ -34,7 +34,7 @@
 
 - A schedule entry can be merged into another entry from the day before to
   the day after; automatic merging keeps the decision, and the list can undo
-  it.
+  it. Deleting the chosen entry undoes the merge, so nothing stays hidden.
 
 </details>
 

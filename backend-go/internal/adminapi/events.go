@@ -201,7 +201,7 @@ func writeEventError(w http.ResponseWriter, err error) {
 	case errors.Is(err, sqlite.ErrEventMergeInvalid):
 		httpx.WriteError(w, httpx.Invalid("an event can only be merged into another visible, unmerged event"))
 	case errors.Is(err, sqlite.ErrEventMergeConflict):
-		httpx.WriteCode(w, http.StatusConflict, "merge_conflict")
+		httpx.WriteCode(w, http.StatusConflict, "event_merge_conflict")
 	case errors.Is(err, sqlite.ErrReadOnly):
 		httpx.ReadOnly(w)
 	case errors.Is(err, sql.ErrNoRows):
