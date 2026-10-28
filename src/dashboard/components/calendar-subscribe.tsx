@@ -5,8 +5,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAppSettings } from "@/app-settings"
@@ -41,8 +39,6 @@ export function CalendarSubscribe({ t }: { t: Translator }) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="subscribe-menu">
-        <DropdownMenuLabel>{t("schedule.subscribeNote")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <a href={urls.webcal}>
             <CalendarPlus aria-hidden="true" />

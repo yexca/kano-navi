@@ -13,6 +13,8 @@
   (`X-WR-TIMEZONE` is gone) and marks all-day entries with
   `X-MICROSOFT-CDO-ALLDAYEVENT:TRUE`, so Outlook shows an all-day entry on
   its one day instead of across two.
+- The **Subscribe** menu lists only its two actions, without the Japan-time
+  and hourly-update note.
 
 </details>
 

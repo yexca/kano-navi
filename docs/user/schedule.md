@@ -24,8 +24,8 @@ week on the board.
 
 **Subscribe** adds the schedule to a calendar app, or copies the
 subscription link. The calendar covers the past month and the next three
-months in Japan time, refreshes about every hour, and follows the language
-you picked on the site. Timed entries appear in your calendar's own time
+months and follows the language you picked on the site; your calendar app
+decides how often it refreshes. Timed entries appear in your calendar's own time
 zone, and entries without a time stay single all-day entries on their Japan
 date. Cancelled entries are marked as cancelled, and uncertain ones as
 tentative.
