@@ -124,7 +124,10 @@ it checks that same-revision live-state expiry refreshes the loaded calendar
 and archive pages atomically, queues a refresh behind pagination, and retains
 known pages on failure or cancellation. `tests/polling.test.ts` uses controlled
 timers to check retry cadence, its cap, deadlines, overlapping-work
-prevention, stale responses and disposal. `tests/history-media.test.ts` checks
+prevention, stale responses and disposal. `tests/latest-wins.test.ts` checks
+that LLM queue saves keep one request in flight per queue, send only the
+latest waiting order and drop edits made on top of a refused save.
+`tests/history-media.test.ts` checks
 the history catalog, the shipped image bytes and packaging validation. No
 timing thresholds enter CI.
 

@@ -24,6 +24,7 @@ import {
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import { formatRelative } from "@/admin/format"
+import { createLatestWins } from "@/admin/latest-wins"
 import {
   describeTarget,
   inferenceEndpoint,
@@ -1179,26 +1180,51 @@ export function LlmView({ tab, navigate }: ViewProps) {
   const catalog = useResource(() => api.llm(), [])
   const [editing, setEditing] = useState<Provider | null | undefined>(undefined)
   const [created, setCreated] = useState("")
-  const data = catalog.data
+  // Queue edits show at once as drafts over the last server-confirmed
+  // catalog. Each route sends one save at a time, latest edit first; a
+  // refusal drops the draft, which rolls the queue back to what was stored.
+  const [drafts, setDrafts] = useState<
+    Partial<Record<QueueRoute, RouteTarget[]>>
+  >({})
+  const latest = useRef({ api, act, setData: catalog.setData })
+  latest.current = { api, act, setData: catalog.setData }
+  const [sendQueue] = useState(() =>
+    createLatestWins<QueueRoute, RouteTarget[]>({
+      send: async (route, targets) =>
+        (
+          await latest.current.act(
+            () => latest.current.api.updateQueue(targets, route),
+            "admin.notice.queueSaved",
+          )
+        )?.queue,
+      confirmed: (route, queue) =>
+        latest.current.setData(
+          (current) => current && { ...current, [queueKey(route)]: queue },
+        ),
+      settled: (route) =>
+        setDrafts((current) => {
+          const next = { ...current }
+          delete next[route]
+          return next
+        }),
+    }),
+  )
+  const saveQueue = (route: QueueRoute, targets: RouteTarget[]) => {
+    setDrafts((current) => ({ ...current, [route]: targets }))
+    return sendQueue(route, targets)
+  }
+  const data = useMemo(
+    () =>
+      catalog.data && {
+        ...catalog.data,
+        ...(drafts.schedule ? { queue: drafts.schedule } : {}),
+        ...(drafts.translate ? { translationQueue: drafts.translate } : {}),
+      },
+    [catalog.data, drafts],
+  )
   const selected =
     data?.providers.find((provider) => provider.id === tab) ||
     data?.providers[0]
-  // Queue edits apply at once and roll back when the server refuses them.
-  const saveQueue = async (route: QueueRoute, targets: RouteTarget[]) => {
-    const key = queueKey(route)
-    const previous = catalog.data
-    catalog.setData((current) => current && { ...current, [key]: targets })
-    const result = await act(
-      () => api.updateQueue(targets, route),
-      "admin.notice.queueSaved",
-    )
-    if (result)
-      catalog.setData(
-        (current) => current && { ...current, [key]: result.queue },
-      )
-    else catalog.setData(previous)
-    return Boolean(result)
-  }
   return (
     <div className="adm-view">
       <PageHeader

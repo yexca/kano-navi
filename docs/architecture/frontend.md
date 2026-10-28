@@ -275,9 +275,11 @@ initial. Removing a preset does not delete saved providers.
 
 The LLM view shows the schedule and translation queues side by side, then the
 providers as a list beside the selected provider's detail. A queue change
-(add from the model picker, drag or move, remove) is saved at once and rolls
-back when the server refuses it; each queue marks the model each stage calls
-first. The provider dialog holds only the connection, with the presets above
+(add from the model picker, drag or move, remove) shows at once and is saved
+in order: each queue has at most one save in flight, and edits made meanwhile
+collapse into the latest order, sent next. A refused save returns the queue to
+its last stored order and drops the edits that followed it. Each queue marks
+the model each stage calls first. The provider dialog holds only the connection, with the presets above
 it; there is no default model. Saving a new provider with a key selects it and
 lists its models, an explicit operator action. The detail adds ticked models
 to the catalog, edits their tags, turns them on or off, puts them in either

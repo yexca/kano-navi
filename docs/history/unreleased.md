@@ -58,7 +58,8 @@
   Backspace removes the last), and shows which model each stage calls first.
   **LLM** holds the schedule and translation queues side by side and the
   providers as a list beside the selected provider's models. Queue changes
-  save at once; models are added from a searchable picker and reordered by
+  save at once, one save per queue at a time with quick edits collapsed into
+  the latest order; models are added from a searchable picker and reordered by
   dragging or the arrows, and each queue marks the model a stage uses first.
   The provider dialog holds only the connection; a new provider with a key
   lists its models straight away. Old `#models` links open LLM.
