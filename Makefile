@@ -20,6 +20,7 @@ GO_LDFLAGS = -X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-frontend
 .PHONY: audit npm-audit npm-audit-production npm-audit-signatures go-audit
 .PHONY: smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
+.PHONY: ci-plan ci-results test-ci-plan
 
 help:
 	@$(NODE) scripts/make-help.ts
@@ -111,6 +112,17 @@ test-sensitive:
 test-frontend:
 	$(NPM) run test:frontend
 
+# GitHub Actions planning: CI_TIER and CI_BASE_SHA select the jobs, and
+# CI_PLAN with CI_RESULTS hold the Gate's inputs.
+ci-plan:
+	$(NODE) scripts/ci-plan.ts plan
+
+ci-results:
+	$(NODE) scripts/ci-plan.ts check
+
+test-ci-plan:
+	$(NODE) --test scripts/ci-plan.test.ts
+
 smoke:
 	$(NODE) scripts/smoke.ts
 
@@ -137,7 +149,7 @@ production-smoke:
 	$(NODE) scripts/production-smoke.ts $(DOCKER_IMAGE)
 
 # Narrow checks use the existing locked installation and never fetch source data.
-ci-style: format-check go-format-check docs-check actionlint test-sensitive sensitive-check
+ci-style: format-check go-format-check docs-check actionlint test-sensitive test-ci-plan sensitive-check
 
 ci-backend: go-lint go-vet go-race
 

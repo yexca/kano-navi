@@ -1,0 +1,24 @@
+name: Full
+
+# Complete validation of one commit: every push to main, and any branch or tag
+# on request from the Actions page.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer commit on the same ref supersedes a running validation.
+concurrency:
+  group: kano-full-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full:
+    name: Full
+    uses: ./.github/workflows/validate.yml
+    with:
+      tier: full

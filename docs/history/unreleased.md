@@ -82,3 +82,15 @@
   releases linked as the post's own.
 
 </details>
+
+<details>
+<summary><strong>Runtime and development</strong></summary>
+
+- GitHub Actions validation is split into the `PR` and `Full` workflows,
+  which share the jobs in `validate.yml`. A pull request runs only the jobs
+  its changed paths reach, and the single `PR / Gate` check decides whether it
+  may merge. Every push to `main` and every release tag still runs every job,
+  reported as `Full / Gate` and `Verify release / Gate`. Branch rulesets that
+  required checks of the `CI` workflow must require `PR / Gate` instead.
+
+</details>
