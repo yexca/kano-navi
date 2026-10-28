@@ -15,7 +15,7 @@ import {
 } from "@/app-settings"
 import type { PageMessages } from "@/i18n"
 import { DashboardApp } from "@/dashboard/dashboard-app"
-import { inPlaceUrl, pagePath } from "@/lib/page-path"
+import { historyMove, inPlaceUrl, pagePath } from "@/lib/page-path"
 import "./index.css"
 
 declare global {
@@ -176,9 +176,13 @@ function usePageNavigation() {
   const [path, setPath] = useState(() => pagePath(window.location.pathname))
 
   useEffect(() => {
+    let shownPath = pagePath(window.location.pathname)
+    // Other pages always load on their own, so they keep the browser's scroll
+    // restoration and their own fragment moves.
+    const inPlace = publicPages.includes(shownPath)
     // The browser would restore an entry's scroll before the page it belongs
     // to is back on screen, so entries keep their own position instead.
-    window.history.scrollRestoration = "manual"
+    if (inPlace) window.history.scrollRestoration = "manual"
     const scrolls = new Map<string, number>()
     const saved: unknown = window.history.state?.kanoScroll
     let entry = String(window.history.state?.kanoEntry ?? newEntry())
@@ -186,10 +190,9 @@ function usePageNavigation() {
       { ...window.history.state, kanoEntry: entry },
       "",
     )
-    let shownPath = pagePath(window.location.pathname)
     let ticket = 0
     let stopSettling = () => {}
-    if (typeof saved === "number" && saved > 0) {
+    if (inPlace && typeof saved === "number" && saved > 0) {
       stopSettling = settleScroll(saved)
     }
 
@@ -271,15 +274,20 @@ function usePageNavigation() {
     }
 
     const onPopState = (event: PopStateEvent) => {
+      const url = new URL(window.location.href)
+      const next = pagePath(url.pathname)
+      const move = historyMove(shownPath, next, publicPages)
+      if (move === "stay") return
+      if (move === "load") {
+        window.location.reload()
+        return
+      }
       stopSettling()
       window.clearTimeout(saveTimer)
       scrolls.set(entry, window.scrollY)
       entry = String(event.state?.kanoEntry ?? newEntry())
-      const url = new URL(window.location.href)
-      const next = pagePath(url.pathname)
       const top: unknown = scrolls.get(entry) ?? event.state?.kanoScroll
-      if (!publicPages.includes(next)) window.location.reload()
-      else if (next !== shownPath || typeof top === "number")
+      if (next !== shownPath || typeof top === "number")
         void show(url, typeof top === "number" ? top : 0)
     }
 
@@ -295,8 +303,10 @@ function usePageNavigation() {
     document.addEventListener("pointerover", onIntent, { passive: true })
     document.addEventListener("focusin", onIntent)
     window.addEventListener("popstate", onPopState)
-    window.addEventListener("pagehide", remember)
-    window.addEventListener("scroll", onScroll, { passive: true })
+    if (inPlace) {
+      window.addEventListener("pagehide", remember)
+      window.addEventListener("scroll", onScroll, { passive: true })
+    }
     return () => {
       stopSettling()
       window.clearTimeout(saveTimer)

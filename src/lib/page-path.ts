@@ -33,3 +33,18 @@ export function inPlaceUrl(
   const samePage = url.pathname === here.pathname && url.search === here.search
   return samePage && url.hash ? null : url
 }
+
+/**
+ * What a back or forward move from the shown page to `next` does: moves
+ * between `pages` swap the page in place, a move that keeps another page
+ * (such as /admin switching its own views by fragment) stays with that page,
+ * and anything else loads the other document.
+ */
+export function historyMove(
+  shown: string,
+  next: string,
+  pages: readonly string[],
+): "show" | "stay" | "load" {
+  if (pages.includes(shown)) return pages.includes(next) ? "show" : "load"
+  return next === shown ? "stay" : "load"
+}

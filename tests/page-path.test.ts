@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { inPlaceUrl, pagePath } from "../src/lib/page-path.ts"
+import { historyMove, inPlaceUrl, pagePath } from "../src/lib/page-path.ts"
 
 test("page paths drop trailing slashes", () => {
   assert.equal(pagePath("/"), "/")
@@ -43,4 +43,21 @@ test("other pages, origins and addresses load normally", () => {
   )
   assert.equal(inPlaceUrl("mailto:fan@example.com", board, pages), null)
   assert.equal(inPlaceUrl("/history", "not a page address", pages), null)
+})
+
+test("back and forward swap public pages in place", () => {
+  assert.equal(historyMove("/history", "/", pages), "show")
+  assert.equal(historyMove("/", "/about", pages), "show")
+  assert.equal(historyMove("/history", "/history", pages), "show")
+})
+
+test("a fragment move within another page stays with that page", () => {
+  assert.equal(historyMove("/admin", "/admin", pages), "stay")
+  assert.equal(historyMove("/missing", "/missing", pages), "stay")
+})
+
+test("moves to or from another page load that document", () => {
+  assert.equal(historyMove("/admin", "/", pages), "load")
+  assert.equal(historyMove("/", "/admin", pages), "load")
+  assert.equal(historyMove("/missing", "/history", pages), "load")
 })

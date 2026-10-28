@@ -9,7 +9,9 @@ loads while the current page stays on screen (hovering or focusing a link
 starts that load), then the pages cross-fade under a fixed header with the
 View Transition API. Back and forward restore each entry's scroll position,
 including after a reload. `/admin`, other paths, modified clicks and links
-with a target load normally, and `index.html` applies the saved theme and
+with a target load normally; back and forward within `/admin` or another path
+stay with that page, which keeps the browser's own scroll restoration and
+handles its fragment moves (the console's views), and `index.html` applies the saved theme and
 language before the first paint so no load flashes the other theme. History copy and image metadata are
 static; verified fixed images ship in `public/assets/history/` and `dist/`.
 `scripts/package-history-media.ts` updates these files from a local reference
