@@ -205,8 +205,9 @@ files leave active hash/MIME unavailable and cannot be served; a subsequent
 startup can recover them after a valid selected file is restored. When active
 hash/MIME changes, the repair increments the persistent `dashboard_revision`
 once in the same transaction as all selected metadata updates. An unchanged
-startup does not increment it. Existing revision polling therefore reloads the
-repaired public profile snapshot, including its versioned avatar URL.
+startup does not increment it. Open boards therefore follow the revision and
+reload the repaired public profile snapshot, including its versioned avatar
+URL.
 Schedule image reviews add `llm_input_fingerprint` for content/configuration
 cache validation; a review without one is rechecked when next scanned. Automatic
 review writes update LLM columns only. Image responses compare the captured

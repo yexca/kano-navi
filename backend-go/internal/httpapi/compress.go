@@ -10,7 +10,13 @@ import (
 
 const compressThreshold = 1024
 
-var compressedPublicReads = map[string]bool{"/api/dashboard": true, "/api/dashboard/revision": true, "/api/health": true}
+// compressedPublicReads are the public JSON reads whose bodies depend only on
+// the stored snapshot and the query, never on credentials. The revision
+// stream /api/dashboard/events is not one of them: gzip would buffer it.
+var compressedPublicReads = map[string]bool{
+	"/api/dashboard": true, "/api/dashboard/revision": true, "/api/health": true,
+	"/api/calendar": true, "/api/posts": true, "/api/videos": true,
+}
 
 var gzipWriters = sync.Pool{New: func() any {
 	writer, _ := gzip.NewWriterLevel(nil, 5)

@@ -22,7 +22,7 @@ the `kano-seal.tsx` deer seal),
 `media-dialog.tsx` (the native modal image viewer), `links.tsx` (external
 links and platform marks), and `site.css` (shell, controls, tone classes and
 the dialog). The board lives in `src/dashboard/`: `use-dashboard.ts` owns the
-snapshot request and revision polling, `format.ts` owns Japan-time and
+snapshot request and the revision stream, `format.ts` owns Japan-time and
 event-status helpers, `content.ts` holds static public links, and
 `components/` renders the next-up stage and profile card, the week guide,
 the post wall, the video shelf, and the link directory, plus
@@ -59,7 +59,7 @@ images, Runs, Sources, Detection, LLM) and renders the shell
 with hash routing (`#view/tab`; a `#content/<tab>` link opens the matching
 view and a `#models` link opens LLM); `use-admin-data.ts` owns every
 [Admin API](admin-api.md) call, the session and the overview poll that tracks
-the active run; `api.ts` is the transport and error mapping; `types.ts` holds
+the active run while the console is visible; `api.ts` is the transport and error mapping; `types.ts` holds
 the wire shapes; `ui.tsx` the console primitives (buttons, panels, native
 modal dialog, toasts); `views/` one file per section; and `admin.css` styles
 them with `adm-` prefixed selectors. `src/components/ui/` contains
@@ -173,13 +173,27 @@ every seed row.
 The dashboard hook coordinates one current request. Snapshot refreshes share an
 in-flight promise; a manual refresh cancels an older revision read, and stale
 completions cannot install state. A 15-second deadline covers headers and JSON
-consumption. Polling uses a completion-scheduled timer, normally every 8 seconds,
-with failed requests backing off through 8/16/32/60 seconds. Failed first loads
-and failed reloads retry snapshots, preserving a previously loaded snapshot.
-Hidden pages pause polling; visibility/focus events coalesce into a prompt
-revision check while respecting failure backoff and a one-second minimum gap.
-Unmount aborts requests and removes deadlines, polling and wake listeners.
-The 30-second local time derivation below runs separately.
+consumption.
+
+While the page is visible the hook keeps an `EventSource` on the
+[revision stream](public-api.md#revision-stream). A pushed revision that
+differs from the snapshot's reads the snapshot after a random delay of up to
+three seconds, so the boards that hear one change do not all read at once; an
+unchanged one refreshes a stale calendar. A change pushed while a snapshot
+read is in flight is compared once that read ends. Between changes a
+completion-scheduled timer only revalidates the snapshot once a minute, since
+time-derived fields such as `liveStatus` expire without a revision change.
+EventSource reconnects by itself after a drop, and the reconnected stream
+resends the current revision. A refused stream, or three errors without a
+message between them, hands over to revision polling every 30 seconds; the
+stream is tried again after five minutes of polling. Failed requests back off
+through 8/16/32/60 seconds. Failed first loads and failed reloads retry
+snapshots, preserving a previously loaded snapshot. A hidden page closes the
+stream and pauses its timer; becoming visible reopens the stream, whose first
+message is the current revision, and visibility/focus events coalesce into a
+prompt check while respecting failure backoff and a one-second minimum gap.
+Unmount closes the stream, aborts requests and removes deadlines, timers and
+wake listeners. The 30-second local time derivation below runs separately.
 
 ## Time-dependent Snapshot State
 
@@ -228,8 +242,8 @@ At the end instant the video yields to later focus candidates. This derived vide
 three-hour grace ends exactly three hours after the start. Confirmed cancellation flags prevent local
 rederivation from restoring a cancelled reservation. Selected-media startup
 repairs follow the [durable revision contract](data-model.md#event-precedence),
-so existing revision polling reloads a changed avatar URL without increasing
-full-snapshot request frequency. This requires no source
+so the board's revision follow-up reloads a changed avatar URL without
+increasing full-snapshot request frequency. This requires no source
 synchronization or external request.
 
 ## Installable App
@@ -287,9 +301,10 @@ uses the 15-second deadline and refresh deduplication described above. All reque
 are cancelled on unmount and reject superseded responses. Automatic polls wait for an active request rather
 than starting overlapping work. Their timer is scheduled after settlement,
 including failure, with exponential backoff capped at 60 seconds. Public polls
-pause while hidden. A failed initial snapshot retries even before
-any revision has been recorded; manual retry is available. Admin 401 stops
-polling and requires login. Failed initial admin loads also retry.
+pause while hidden, and so does the admin overview poll, which reads at once
+when the console becomes visible again. A failed initial snapshot retries even
+before any revision has been recorded; manual retry is available. Admin 401
+stops polling and requires login. Failed initial admin loads also retry.
 
 The board's calendar shows one week; its selected week lives in
 `use-dashboard.ts`. It reads
@@ -303,17 +318,18 @@ from page one, with at most three attempts under the shared request deadline.
 Failed or repeatedly changing reads retain the complete known generation for retry;
 they never append pages from different revisions. Every successful full board
 snapshot, including its visible minute refresh and manual reload, refreshes the
-calendar. Active calendar work finishes first, and later revision polls consume
-any pending time refresh or calendar revision.
+calendar. Active calendar work finishes first, and later revision checks,
+pushed or polled, consume any pending time refresh or calendar revision.
 Only a week without a loaded snapshot shows the loading placeholder; a refresh
 of the shown week keeps its days or empty-week note in place and swaps the data
 when it arrives, so a quiet week does not flicker on each refresh.
 Adjacent-date hints support jumping to stored activity in either direction.
 
-Snapshot and calendar reads use `cache: "no-cache"`: the browser revalidates
-its stored copy with the response's
+Snapshot, calendar and archive reads use `cache: "no-cache"`: the browser
+revalidates its stored copy with the response's
 [ETag](public-api.md#public-snapshot-contract) and receives a bodiless 304 when
-nothing changed, so the minute refresh costs little when the board is quiet.
+nothing changed, so the minute refresh, and an open dialog's reread after it,
+cost little when the board is quiet.
 
 The month dialogs read through `useArchive` in `use-dashboard.ts`, only
 while one is open: the schedule reads the Monday-first weeks covering the month

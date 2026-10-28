@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -42,7 +43,7 @@ func TestPostArchiveReadsAJapanMonthNewestFirst(t *testing.T) {
 		INSERT INTO app_settings (key,value,updated_at) VALUES ('dashboard_revision','4','');`)
 
 	recorder := request(t, handler, http.MethodGet, "/api/posts?from=2026-10-01&to=2026-10-31&pageSize=2")
-	if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != "no-store" {
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != "no-cache" || !strings.HasPrefix(recorder.Header().Get("ETag"), `W/"`) {
 		t.Fatalf("status=%d headers=%v body=%s", recorder.Code, recorder.Header(), recorder.Body)
 	}
 	if strings.Contains(recorder.Body.String(), "private") || strings.Contains(recorder.Body.String(), "raw") {
@@ -112,7 +113,7 @@ func TestVideoArchiveUsesTheScheduledOrPublishedTime(t *testing.T) {
 		 ('video-undated','youtube','Undated',NULL,NULL,'https://www.youtube.com/watch?v=undated','video',0,NULL,NULL,NULL);`)
 
 	recorder := request(t, handler, http.MethodGet, "/api/videos?from=2026-10-01&to=2026-10-31")
-	if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != "no-store" {
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != "no-cache" || !strings.HasPrefix(recorder.Header().Get("ETag"), `W/"`) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body)
 	}
 	if strings.Contains(recorder.Body.String(), "private") {
@@ -142,5 +143,38 @@ func TestVideoArchiveUsesTheScheduledOrPublishedTime(t *testing.T) {
 	}
 	if bad := request(t, handler, http.MethodGet, "/api/videos?from=2026-02-30&to=2026-03-01"); bad.Code != http.StatusBadRequest {
 		t.Fatalf("invalid range status=%d", bad.Code)
+	}
+}
+
+func TestVideoArchiveValidatorFollowsTimeDerivedFields(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,scheduled_at,url,kind,is_upcoming) VALUES
+		 ('video-reserved','youtube','Reserved','2026-10-18T12:00:00Z','2026-10-25T12:00:00Z','https://www.youtube.com/watch?v=reserved','upcoming',1)`)
+	store, err := sqlite.OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	now := time.Date(2026, 10, 25, 11, 0, 0, 0, time.UTC)
+	handler := NewHandlerWithClock(store, func() time.Time { return now })
+	read := func(ifNoneMatch string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/videos?from=2026-10-01&to=2026-10-31", nil)
+		if ifNoneMatch != "" {
+			req.Header.Set("If-None-Match", ifNoneMatch)
+		}
+		handler.ServeHTTP(recorder, req)
+		return recorder
+	}
+	before := read("")
+	if revalidated := read(before.Header().Get("ETag")); revalidated.Code != http.StatusNotModified || revalidated.Body.Len() != 0 {
+		t.Fatalf("unchanged archive: status=%d body=%s", revalidated.Code, revalidated.Body)
+	}
+	// The reservation's start passes without a stored write.
+	now = now.Add(5 * time.Hour)
+	after := read(before.Header().Get("ETag"))
+	if after.Code != http.StatusOK || after.Header().Get("ETag") == before.Header().Get("ETag") ||
+		!strings.Contains(before.Body.String(), `"isUpcoming":true`) || !strings.Contains(after.Body.String(), `"isUpcoming":false`) {
+		t.Fatalf("expired reservation: status=%d etag=%s body=%s", after.Code, after.Header().Get("ETag"), after.Body)
 	}
 }

@@ -435,12 +435,29 @@ export function useAdminData() {
   }, [api, fail])
 
   const authenticated = Boolean(session?.authenticated)
+  // The overview poll runs while the console is visible; a hidden page stops
+  // it, and becoming visible reads at once and polls again.
   useEffect(() => {
     if (!authenticated) return undefined
-    void refreshOverview().catch(fail)
-    return startPolling(refreshOverview, {
-      delay: () => (activeRef.current ? 1500 : 8000),
-    })
+    let stop: (() => void) | undefined
+    const follow = () => {
+      if (document.visibilityState === "hidden") {
+        stop?.()
+        stop = undefined
+        return
+      }
+      if (stop) return
+      void refreshOverview().catch(fail)
+      stop = startPolling(refreshOverview, {
+        delay: () => (activeRef.current ? 1500 : 8000),
+      })
+    }
+    follow()
+    document.addEventListener("visibilitychange", follow)
+    return () => {
+      document.removeEventListener("visibilitychange", follow)
+      stop?.()
+    }
   }, [authenticated, refreshOverview, fail])
 
   const login = useCallback(

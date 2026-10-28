@@ -304,7 +304,7 @@ func (s *Store) mediaVersionURL(ctx context.Context, mediaID, hash string) (stri
 	var cachePath string
 	err := s.db.QueryRowContext(ctx, `SELECT cache_path FROM media_assets WHERE id=?1 AND status='ready' AND sha256=?2 AND cache_path IS NOT NULL
  UNION ALL SELECT cache_path FROM media_versions WHERE media_id=?1 AND sha256=?2 LIMIT 1`, mediaID, hash).Scan(&cachePath)
-	if err != nil || !s.cacheFileExists(cachePath) {
+	if err != nil || !s.cacheFileExists(ctx, cachePath) {
 		return "", false
 	}
 	return "/media/" + mediaID + "?v=" + hash, true

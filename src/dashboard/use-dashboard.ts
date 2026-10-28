@@ -120,15 +120,29 @@ async function readLoadedPages<T extends PagedSnapshot>(
   throw new Error("Snapshot changed during refresh")
 }
 
-const REVISION_POLL_MS = 8000
+/** Revision polling, used only while the revision stream is unavailable. */
+const REVISION_POLL_MS = 30000
+/** First retry after a failed read; it doubles up to MAX_RETRY_MS. */
+const RETRY_MS = 8000
 const REQUEST_TIMEOUT_MS = 15000
 const MAX_RETRY_MS = 60000
+/** Time-derived projections such as liveStatus expire without a revision. */
+const SNAPSHOT_MS = 60000
+/** Pushed changes spread their snapshot reads over this window. */
+const PUSH_JITTER_MS = 3000
+/** Stream errors without a message in between before polling takes over. */
+const STREAM_FAILURES = 3
+/** How long polling stands in before the stream is tried again. */
+const STREAM_RETRY_MS = 300000
+const REVISION_STREAM_URL = "/api/dashboard/events"
 type LoadResult = { ok: true } | { ok: false; error: Error }
 
 /**
  * Reads the stored dashboard snapshot and follows the durable revision
- * counter, so MCP or admin changes appear without a manual reload. Nothing
- * here reaches an external platform.
+ * counter, so MCP or admin changes appear without a manual reload. The
+ * server pushes revision changes over an EventSource stream while the page
+ * is visible; when the stream is unavailable the hook polls the revision
+ * instead. Nothing here reaches an external platform.
  */
 export function useDashboard(now = Date.now()) {
   const [dashboard, setDashboard] = useState(emptyDashboard)
@@ -273,20 +287,101 @@ export function useDashboard(now = Date.now()) {
       controller: AbortController
       promise: Promise<LoadResult>
     } | null = null
+    // The revision stream, while open or reconnecting. Without it the hook
+    // polls the revision; pollUntil holds polling after the stream failed.
+    let stream: EventSource | null = null
+    let streamErrors = 0
+    let pollUntil = 0
+    let pushTimer: number | undefined
+    // A change pushed during a snapshot read is checked when the read ends.
+    let pushedRevision: number | null = null
+    let pushPending = false
 
     const clearTimer = () => {
       if (timer !== undefined) window.clearTimeout(timer)
       timer = undefined
     }
     const retryDelay = () =>
-      Math.min(MAX_RETRY_MS, REVISION_POLL_MS * 2 ** Math.max(0, failures - 1))
+      failures
+        ? Math.min(MAX_RETRY_MS, RETRY_MS * 2 ** (failures - 1))
+        : stream
+          ? SNAPSHOT_MS
+          : REVISION_POLL_MS
     const schedule = (delay = retryDelay()) => {
       clearTimer()
       if (hasLoaded && !needsSnapshot && failures === 0)
-        delay = Math.min(delay, Math.max(0, loadedAt + 60000 - Date.now()))
+        delay = Math.min(
+          delay,
+          Math.max(0, loadedAt + SNAPSHOT_MS - Date.now()),
+        )
       nextCheckAt = Date.now() + delay
       if (active && document.visibilityState !== "hidden")
         timer = window.setTimeout(check, delay)
+    }
+    const calendarStale = (value: number) =>
+      (calendarRefreshRef.current || value !== calendarRef.current.revision) &&
+      !scope.busy("calendar") &&
+      !calendarRetryRef.current
+
+    const clearPush = () => {
+      if (pushTimer !== undefined) window.clearTimeout(pushTimer)
+      pushTimer = undefined
+    }
+    // Every open board hears a change at once; a random delay spreads their
+    // snapshot reads.
+    const pushSnapshot = () => {
+      if (pushTimer !== undefined) return
+      pushTimer = window.setTimeout(() => {
+        pushTimer = undefined
+        if (!active || document.visibilityState === "hidden") return
+        if (flight?.kind === "snapshot") pushPending = true
+        else void start("snapshot")
+      }, Math.random() * PUSH_JITTER_MS)
+    }
+    const onPushedRevision = (value: number) => {
+      pushedRevision = value
+      if (flight?.kind === "snapshot") pushPending = true
+      else if (revision == null || value !== revision) pushSnapshot()
+      else if (calendarStale(value)) void loadCalendar()
+    }
+    const closeStream = () => {
+      stream?.close()
+      stream = null
+      clearPush()
+    }
+    const openStream = () => {
+      if (
+        stream ||
+        typeof EventSource !== "function" ||
+        !active ||
+        document.visibilityState === "hidden" ||
+        Date.now() < pollUntil
+      )
+        return
+      const source = new EventSource(REVISION_STREAM_URL)
+      stream = source
+      source.onmessage = (event) => {
+        if (stream !== source) return
+        streamErrors = 0
+        const value = Number(event.data)
+        if (Number.isSafeInteger(value)) onPushedRevision(value)
+      }
+      source.onerror = () => {
+        if (stream !== source) return
+        streamErrors++
+        // EventSource reconnects by itself after a dropped connection, and
+        // the reconnected stream resends the current revision. A refused
+        // stream stays closed; that or repeated drops hand over to polling.
+        if (
+          source.readyState === EventSource.CLOSED ||
+          streamErrors >= STREAM_FAILURES
+        ) {
+          closeStream()
+          streamErrors = 0
+          pollUntil = Date.now() + STREAM_RETRY_MS
+          if (!flight) schedule()
+        }
+      }
     }
 
     // One deadline includes headers and JSON body consumption. Aborting also
@@ -382,13 +477,7 @@ export function useDashboard(now = Date.now()) {
               void loadCalendar()
           } else {
             changed = revision == null || Number(payload.revision) !== revision
-            if (
-              !changed &&
-              (calendarRefreshRef.current ||
-                Number(payload.revision) !== calendarRef.current.revision) &&
-              !scope.busy("calendar") &&
-              !calendarRetryRef.current
-            )
+            if (!changed && calendarStale(Number(payload.revision)))
               void loadCalendar()
           }
           failures = 0
@@ -409,6 +498,13 @@ export function useDashboard(now = Date.now()) {
             flight = null
             if (changed) void start("snapshot")
             else schedule()
+            if (kind === "snapshot" && pushPending) {
+              pushPending = false
+              if (pushedRevision != null && pushedRevision !== revision)
+                pushSnapshot()
+              else if (pushedRevision != null && calendarStale(pushedRevision))
+                void loadCalendar()
+            }
           }
         }
       })()
@@ -418,15 +514,29 @@ export function useDashboard(now = Date.now()) {
 
     function check() {
       if (!active || document.visibilityState === "hidden" || flight) return
-      void start(
-        needsSnapshot || revision == null || Date.now() - loadedAt >= 60000
-          ? "snapshot"
-          : "revision",
+      openStream()
+      if (
+        needsSnapshot ||
+        revision == null ||
+        Date.now() - loadedAt >= SNAPSHOT_MS
       )
+        void start("snapshot")
+      // The stream reports changes; between them only the minute's
+      // revalidation is due.
+      else if (stream) schedule()
+      else void start("revision")
     }
     const wake = () => {
       clearTimer()
-      if (!active || document.visibilityState === "hidden" || flight) return
+      if (!active) return
+      // A hidden page holds no stream; a visible one reconnects, and the
+      // stream's first message is the current revision.
+      if (document.visibilityState === "hidden") {
+        closeStream()
+        return
+      }
+      openStream()
+      if (flight) return
       // Visibility + focus often arrive together. Coalesce them, and preserve
       // failure backoff so repeated focus cannot turn an outage into a storm.
       const due = failures ? nextCheckAt : lastStartedAt + 1000
@@ -434,6 +544,7 @@ export function useDashboard(now = Date.now()) {
     }
     reloadRef.current = () => start("snapshot")
     void start("snapshot")
+    openStream()
     document.addEventListener("visibilitychange", wake)
     window.addEventListener("focus", wake)
     return () => {
@@ -441,6 +552,7 @@ export function useDashboard(now = Date.now()) {
       scope.dispose()
       generation++
       clearTimer()
+      closeStream()
       flight?.controller.abort(new Error("Page unmounted"))
       reloadRef.current = async () => ({
         ok: false,
@@ -464,7 +576,7 @@ export function useDashboard(now = Date.now()) {
         const result = await loadCalendar()
         if (!result?.ok) throw new Error("calendar_unavailable")
       },
-      { delay: () => REVISION_POLL_MS },
+      { delay: () => RETRY_MS },
     )
     return () => {
       stop()

@@ -36,17 +36,45 @@ status, isActive, and publicUrl. Cache paths, source references, download
 errors, and candidate metadata remain available through authenticated admin
 reads. Per-source counters, raw fetch errors, job IDs, and internal source
 item IDs stay in the guarded admin API. `GET /api/dashboard/revision` reports
-a small revision hint without external work. Timestamps are parseable ISO 8601
-strings; display and date-window boundaries use Asia/Tokyo.
+a small revision hint without external work, and
+[`/api/dashboard/events`](#revision-stream) pushes the same number as it
+changes. Timestamps are parseable ISO 8601 strings; display and date-window
+boundaries use Asia/Tokyo.
 
-`/api/dashboard` and `/api/calendar` send `Cache-Control: no-cache` and a weak
-ETag, a SHA-256 prefix of the uncompressed JSON body. The dashboard's tag
-leaves out `meta.generatedAt`, which changes on every read; the other
-time-derived fields are included, so the tag changes with them as well as with
-stored data. A matching `If-None-Match`, weak or strong, answers 304 without a
-body, and the client keeps its stored copy, including that copy's
-`generatedAt`. Because the tag is weak it validates the gzip and identity
-encodings alike. `/api/dashboard/revision` is `no-store`.
+`/api/dashboard`, `/api/calendar`, `/api/posts` and `/api/videos` send
+`Cache-Control: no-cache` and a weak ETag, a SHA-256 prefix of the
+uncompressed JSON body. The dashboard's tag leaves out `meta.generatedAt`,
+which changes on every read; the other time-derived fields, such as
+`isUpcoming` and `liveStatus` in every one of these reads, are included, so
+the tag changes with them as well as with stored data. A matching
+`If-None-Match`, weak or strong, answers 304 without a body, and the client
+keeps its stored copy, including that copy's `generatedAt`. Because the tag is
+weak it validates the gzip and identity encodings alike.
+`/api/dashboard/revision` is `no-store`.
+
+## Revision Stream
+
+`GET /api/dashboard/events` is a `text/event-stream` of the dashboard
+revision. On connect it sends `retry: 5000` and the current revision as one
+`data:` line, then one `data:` event for each later change, and a comment
+every 25 seconds so proxies keep a quiet stream open. An event carries only
+the revision number, the value `/api/dashboard/revision` already reports;
+snapshot data, job IDs, counters and errors never travel on it. A client that
+reconnects receives the current revision again, so it cannot miss a change.
+
+One watcher goroutine in the serving process reads the stored revision every
+second while at least one stream is open and offers each change to every
+stream; it stops with the last stream. Reading the stored value covers every
+writer, including `kano-go sync` and other processes that write SQLite
+directly. A stream answers `Cache-Control: no-store, no-transform` and
+`X-Accel-Buffering: no` and is never compressed. The listener's read and
+write timeouts do not end it; each write instead has its own 10-second
+deadline, so a client that stops reading releases its stream. At most 1,000
+streams are open at once: another one answers 503 `stream_unavailable` with
+`Retry-After`, and a database failure before the stream starts answers 503
+`database_unavailable`. Shutdown ends every stream before the listener
+closes. The [reverse-proxy settings](../operations/docker.md#reverse-proxy)
+the stream needs are with the deployment guide.
 
 Media responses follow the [media HTTP contract](media-cache.md#http-contract).
 Selected profile media uses `/media/profile/avatar` and
@@ -81,8 +109,10 @@ focus candidates and retain streams with explicit longer durations; an absent
 end gives streams and memberships the strictly less-than-three-hour grace
 period, while other YouTube activities such as premieres need an explicit
 future end. Video/event association uses indexed primary, source-evidence and
-normalized URL identities, rather than scanning events for each video. Media
-is resolved only for returned owners. Event and media growth therefore does
+normalized URL identities, in one query for all returned videos rather than
+scanning events for each video. Media is resolved only for returned owners:
+their media rows and post links are read in batched queries, and each
+directory of the media cache is resolved once per read. Event and media growth therefore does
 not enlarge a homepage response. Full event totals and upcoming counts are
 separate SQL aggregates; calendar pagination preserves access to every
 activity instead of dropping later rows.
@@ -108,8 +138,10 @@ dates outside the range that hold an item. The optional post `account`
 filter is one X handle, compared without case, and also narrows the totals and
 adjacent dates; `accountCounts` always counts the range's posts per lowercase
 handle. An invalid range returns 400 `invalid_range` and an invalid handle
-400 `invalid_account`. Reads are `no-store`, are not compressed and never
-fetch platforms. The board's month dialogs use them with the calendar.
+400 `invalid_account`. Reads revalidate through their
+[ETags](#public-snapshot-contract), negotiate gzip like the other public JSON
+reads and never fetch platforms. The board's month dialogs use them with the
+calendar.
 
 ## Public Feeds
 

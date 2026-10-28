@@ -44,9 +44,10 @@ successful snapshot while a source is unavailable.
 4. A maintainer or an authorized MCP client starts an asynchronous job. The
    single-flight job manager writes a `sync_runs` row with `job_id` and
    `triggered_by`; a failed source retains the previous snapshot.
-5. Completion increments `dashboard_revision`. The public page polls the small
-   revision endpoint and reloads its stored snapshot; page refresh never starts
-   an external fetch.
+5. Completion increments `dashboard_revision`. The server pushes the new
+   revision to open public pages over its revision stream (or a page polls the
+   small revision endpoint when the stream is unavailable), and the page
+   reloads its stored snapshot; page refresh never starts an external fetch.
 6. A maintainer who opens `/admin` can change the model, the independent board
    and message stages, the shared model queue's priority order, capability flags,
    Featured video, or curate events. Those changes go through the local API and

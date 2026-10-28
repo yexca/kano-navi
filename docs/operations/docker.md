@@ -26,6 +26,8 @@ enable its timer on the Sources page to populate source data. Fixed history
 images are already bundled. Existing `./data` snapshots and provider
 configuration survive upgrades.
 
+## Reverse Proxy
+
 Behind an HTTPS reverse proxy, preserve `Sec-Fetch-Site` from browser requests
 and forward `X-Forwarded-Proto: https` so session cookies receive `Secure`.
 Same-origin browser mutations work even if the proxy rewrites Host. Clients
@@ -37,6 +39,20 @@ a proxy is not required for gzip. Preserve `Content-Encoding`, `Vary` and
 validators and avoid recompressing an already encoded response. Exclude admin,
 authentication, MCP and runtime media from any additional proxy compression.
 Preserve the admin/MCP `no-transform` directive.
+
+Open boards follow changes over the
+[revision stream](../architecture/public-api.md#revision-stream)
+`/api/dashboard/events`, a long-lived `text/event-stream` response. Pass it
+through unbuffered and uncompressed: nginx honours the stream's
+`X-Accel-Buffering: no`, and other proxies need response buffering turned off
+for the path. The stream sends a comment every 25 seconds, so a proxy read or
+idle timeout of 60 seconds or more keeps it open; a shorter one only makes the
+browser reconnect. Count one open connection per visible board tab in the
+proxy's connection limits. When the stream cannot be kept open, boards fall
+back to asking for the revision every 30 seconds and keep working.
+
+## Build and Maintenance
+
 Deploy `dist/` together with its `.vite/manifest.json`: manifest-listed hashed
 JS/CSS is immutable for one year, while HTML and fixed assets revalidate.
 Keep earlier hashed files available during a rolling deployment when possible;

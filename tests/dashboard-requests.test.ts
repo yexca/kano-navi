@@ -21,7 +21,11 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
     )
     // Keep Vite's real watcher/optimizer timers outside the mocked clock.
     await vite.close()
-    const setup = async (context: TestContext, controlCalendar = false) => {
+    const setup = async (
+      context: TestContext,
+      controlCalendar = false,
+      withStream = false,
+    ) => {
       context.mock.timers.enable({
         apis: ["Date", "setTimeout"],
         now: new Date("2025-01-01T00:00:00Z"),
@@ -34,11 +38,41 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
         window: globalThis.window,
         document: globalThis.document,
         act: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
+        EventSource: (globalThis as any).EventSource,
       }
+      // Without an EventSource the hook polls, as it does when the stream
+      // is unavailable.
+      const streams: FakeEventSource[] = []
+      class FakeEventSource {
+        static CONNECTING = 0
+        static OPEN = 1
+        static CLOSED = 2
+        readyState = 0
+        onmessage: ((event: { data: string }) => void) | null = null
+        onerror: (() => void) | null = null
+        url: string
+        constructor(url: string) {
+          this.url = url
+          streams.push(this)
+        }
+        close() {
+          this.readyState = 2
+        }
+        async emit(revision: number) {
+          this.readyState = 1
+          await act(async () => this.onmessage?.({ data: String(revision) }))
+        }
+        async fail(refused = false) {
+          this.readyState = refused ? 2 : 0
+          await act(async () => this.onerror?.())
+        }
+      }
+      if (withStream) context.mock.method(Math, "random", () => 0.5)
       Object.assign(globalThis, {
         window: win,
         document: doc,
         IS_REACT_ACT_ENVIRONMENT: true,
+        EventSource: withStream ? FakeEventSource : undefined,
       })
       const requests: {
         url: string
@@ -124,11 +158,13 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
           window: previous.window,
           document: previous.document,
           IS_REACT_ACT_ENVIRONMENT: previous.act,
+          EventSource: previous.EventSource,
         })
       }
       return {
         requests,
         calendarRequests,
+        streams,
         respondCalendar,
         doc,
         win,
@@ -202,7 +238,7 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
           assert.equal(fixture.calendarRequests.length, 2)
           assert.equal(fixture.calendarRequests[1].signal.aborted, false)
           await fixture.respondCalendar(1, calendarPage(2, "live"))
-          await fixture.tick(8000)
+          await fixture.tick(30000)
           await fixture.respond(2, { revision: 1 })
           assert.equal(fixture.calendarRequests.length, 3)
           await fixture.respondCalendar(2, calendarPage(1, null, true))
@@ -310,7 +346,7 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
         const fixture = await setup(context)
         try {
           await fixture.respond(0, snapshot(1))
-          await fixture.tick(8000)
+          await fixture.tick(30000)
           assert.match(fixture.requests[1].url, /revision\?since=1$/)
           let first: Promise<unknown> | undefined
           let second: Promise<unknown> | undefined
@@ -330,7 +366,7 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
             "Snapshot 3",
           )
           assert.equal(fixture.requests.length, 3)
-          await fixture.tick(8000)
+          await fixture.tick(30000)
           assert.match(fixture.requests[3].url, /revision\?since=3$/)
           await fixture.respond(3, { revision: 4 })
           assert.equal(fixture.requests.length, 5)
@@ -410,16 +446,17 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
         try {
           await fixture.respond(0, snapshot(1))
           await fixture.respondCalendar(0, calendarPage(1, "live"))
-          for (let index = 1; index <= 7; index++) {
-            await fixture.tick(8000)
-            assert.match(fixture.requests[index].url, /revision\?since=1$/)
-            await fixture.respond(index, { revision: 1 })
-          }
-          await fixture.tick(3999)
-          assert.equal(fixture.requests.length, 8)
+          // Without a revision stream, the revision is polled every 30s.
+          await fixture.tick(29999)
+          assert.equal(fixture.requests.length, 1)
           await fixture.tick(1)
-          assert.equal(fixture.requests[8].url, "/api/dashboard?days=3")
-          await fixture.respond(8, snapshot(1))
+          assert.match(fixture.requests[1].url, /revision\?since=1$/)
+          await fixture.respond(1, { revision: 1 })
+          await fixture.tick(29999)
+          assert.equal(fixture.requests.length, 2)
+          await fixture.tick(1)
+          assert.equal(fixture.requests[2].url, "/api/dashboard?days=3")
+          await fixture.respond(2, snapshot(1))
           assert.equal(fixture.current().snapshotVersion, 2)
           assert.equal(fixture.calendarRequests.length, 2)
           await fixture.respondCalendar(1, calendarPage(1, null))
@@ -446,6 +483,160 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
         assert.equal(fixture.requests.length, 1)
       },
     )
+
+    const urls = (fixture: { requests: { url: string }[] }) =>
+      fixture.requests.map((request) => request.url)
+
+    await t.test(
+      "a pushed change reads the snapshot after a jitter, and nothing polls the revision",
+      async (context) => {
+        const fixture = await setup(context, false, true)
+        try {
+          assert.equal(fixture.streams.length, 1)
+          assert.equal(fixture.streams[0].url, "/api/dashboard/events")
+          await fixture.respond(0, snapshot(1))
+          await fixture.streams[0].emit(1)
+          // Only the minute's revalidation runs between changes.
+          await fixture.tick(59999)
+          assert.equal(fixture.requests.length, 1)
+          await fixture.tick(1)
+          assert.equal(fixture.requests[1].url, "/api/dashboard?days=3")
+          await fixture.respond(1, snapshot(1))
+          await fixture.streams[0].emit(2)
+          await fixture.streams[0].emit(2)
+          await fixture.tick(1499)
+          assert.equal(fixture.requests.length, 2)
+          await fixture.tick(1)
+          assert.equal(fixture.requests[2].url, "/api/dashboard?days=3")
+          await fixture.respond(2, snapshot(2))
+          assert.equal(
+            fixture.current().dashboard.profile.displayName,
+            "Snapshot 2",
+          )
+          await fixture.tick(10000)
+          assert.equal(fixture.requests.length, 3)
+          assert.ok(urls(fixture).every((url) => !url.includes("revision")))
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a change pushed during a snapshot read is read once that read ends",
+      async (context) => {
+        const fixture = await setup(context, false, true)
+        try {
+          await fixture.streams[0].emit(2)
+          await fixture.respond(0, snapshot(1))
+          await fixture.tick(1500)
+          assert.equal(fixture.requests[1].url, "/api/dashboard?days=3")
+          await fixture.streams[0].emit(2)
+          await fixture.respond(1, snapshot(2))
+          await fixture.tick(3000)
+          assert.equal(fixture.requests.length, 2)
+          assert.equal(
+            fixture.current().dashboard.profile.displayName,
+            "Snapshot 2",
+          )
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a hidden page closes the stream; a visible one reconnects and checks once",
+      async (context) => {
+        const fixture = await setup(context, false, true)
+        try {
+          await fixture.respond(0, snapshot(1))
+          await fixture.streams[0].emit(1)
+          fixture.doc.visibilityState = "hidden"
+          fixture.doc.dispatchEvent(new Event("visibilitychange"))
+          assert.equal(fixture.streams[0].readyState, 2)
+          await fixture.tick(120000)
+          assert.equal(fixture.requests.length, 1)
+          assert.equal(fixture.streams.length, 1)
+          fixture.doc.visibilityState = "visible"
+          fixture.doc.dispatchEvent(new Event("visibilitychange"))
+          fixture.win.dispatchEvent(new Event("focus"))
+          assert.equal(fixture.streams.length, 2)
+          await fixture.tick(0)
+          assert.equal(fixture.requests[1].url, "/api/dashboard?days=3")
+          await fixture.streams[1].emit(1)
+          await fixture.respond(1, snapshot(1))
+          await fixture.tick(5000)
+          assert.equal(fixture.requests.length, 2)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "repeated stream errors fall back to 30s revision polling until the stream is retried",
+      async (context) => {
+        const fixture = await setup(context, false, true)
+        try {
+          await fixture.respond(0, snapshot(1))
+          await fixture.streams[0].emit(1)
+          // A message between errors means the stream recovered.
+          await fixture.streams[0].fail()
+          await fixture.streams[0].fail()
+          await fixture.streams[0].emit(1)
+          await fixture.streams[0].fail()
+          await fixture.streams[0].fail()
+          assert.notEqual(fixture.streams[0].readyState, 2)
+          await fixture.streams[0].fail()
+          assert.equal(fixture.streams[0].readyState, 2)
+          await fixture.tick(29999)
+          assert.equal(fixture.requests.length, 1)
+          await fixture.tick(1)
+          assert.match(fixture.requests[1].url, /revision\?since=1$/)
+          // Polling answers every check until the stream is due again.
+          for (let elapsed = 30000; elapsed < 300000; elapsed += 30000) {
+            const index = fixture.requests.length - 1
+            await fixture.respond(
+              index,
+              fixture.requests[index].url.includes("revision")
+                ? { revision: 1 }
+                : snapshot(1),
+            )
+            assert.equal(fixture.streams.length, 1)
+            await fixture.tick(30000)
+          }
+          assert.equal(fixture.streams.length, 2)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a refused stream hands over to polling at once",
+      async (context) => {
+        const refused = await setup(context, false, true)
+        try {
+          await refused.respond(0, snapshot(1))
+          await refused.streams[0].fail(true)
+          await refused.tick(30000)
+          assert.match(refused.requests[1].url, /revision\?since=1$/)
+        } finally {
+          await refused.unmount()
+        }
+      },
+    )
+
+    await t.test("unmount closes the revision stream", async (context) => {
+      const fixture = await setup(context, false, true)
+      await fixture.respond(0, snapshot(1))
+      await fixture.unmount()
+      assert.equal(fixture.streams[0].readyState, 2)
+      await fixture.streams[0].emit(2)
+      await fixture.tick(5000)
+      assert.equal(fixture.requests.length, 1)
+    })
   } finally {
     await vite.close()
   }

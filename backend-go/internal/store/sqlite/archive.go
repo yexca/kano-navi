@@ -96,6 +96,7 @@ func (s *Store) GetPostArchive(ctx context.Context, from, to, account string, pa
 	if s == nil || s.db == nil {
 		return nil, ErrUnavailable
 	}
+	ctx = withReadMemo(ctx)
 	start, end, err := archiveBounds(from, to)
 	if err != nil {
 		return nil, err
@@ -162,6 +163,9 @@ func (s *Store) GetPostArchive(ctx context.Context, from, to, account string, pa
 	}
 	// Media resolution runs its own queries; release this cursor first.
 	_ = rows.Close()
+	if err = s.prefetchPostRows(ctx, postRows); err != nil {
+		return nil, err
+	}
 	items := make([]Post, 0, len(postRows))
 	for _, row := range postRows {
 		post, mapErr := s.mapPost(ctx, row)
@@ -198,6 +202,7 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 	if s == nil || s.db == nil {
 		return nil, ErrUnavailable
 	}
+	ctx = withReadMemo(ctx)
 	start, end, err := archiveBounds(from, to)
 	if err != nil {
 		return nil, err
@@ -252,17 +257,16 @@ func (s *Store) GetVideoArchive(ctx context.Context, from, to string, page, page
 		return nil, dbErr(err)
 	}
 	_ = rows.Close()
+	if err = s.resolveVideoThumbnails(ctx, items); err != nil {
+		return nil, err
+	}
+	cancelled, err := s.cancelledVideos(ctx, items)
+	if err != nil {
+		return nil, err
+	}
 	for i := range items {
 		items[i].IsUpcoming = videoUpcoming(items[i], now)
-		ref, refErr := s.resolveMedia(ctx, items[i].ThumbnailURL)
-		if refErr != nil {
-			return nil, refErr
-		}
-		items[i].ThumbnailID, items[i].ThumbnailStatus, items[i].ThumbnailSourceURL = ref.ID, ref.Status, ref.SourceURL
-		items[i].ThumbnailURL = ref.PublicURL
-		if items[i].IsCancelled, err = s.videoCancelled(ctx, items[i]); err != nil {
-			return nil, err
-		}
+		items[i].IsCancelled = cancelled[items[i].ID]
 	}
 
 	if err = s.pinVideoThumbnails(ctx, items); err != nil {

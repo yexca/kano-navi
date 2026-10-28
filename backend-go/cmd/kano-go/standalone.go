@@ -122,6 +122,9 @@ func runStandalone(cfg config.Config) int {
 		PublicOrigin: cfg.PublicOrigin,
 	})
 	server := httpapi.NewServer(httpapi.RequestLog(httpapi.Compress(handler), os.Stdout), cfg)
+	// Revision streams stay open until the client leaves; end them when
+	// shutdown begins so it can finish.
+	server.RegisterOnShutdown(handler.CloseStreams)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	failed := make(chan error, 1)

@@ -172,7 +172,9 @@ func main() {
 		}
 		adminHandler = adminapi.New(options)
 	}
-	server := httpapi.NewServer(httpapi.RequestLog(httpapi.NewHandlerWithAdmin(store, nil, adminHandler), os.Stdout), cfg)
+	handler := httpapi.NewHandlerWithAdmin(store, nil, adminHandler)
+	server := httpapi.NewServer(httpapi.RequestLog(handler, os.Stdout), cfg)
+	server.RegisterOnShutdown(handler.CloseStreams)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)

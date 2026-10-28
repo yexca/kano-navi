@@ -153,8 +153,10 @@ disposable database.
 ## Text Transfer and Static Caching
 
 Compression precedes the response handlers. Successful GET/HEAD public
-dashboard, revision and health JSON, plus build HTML/JavaScript/CSS, negotiate
-gzip through `Accept-Encoding`. Bodies below 1 KiB remain uncompressed. The
+dashboard, revision, health, calendar, post archive and video archive JSON,
+plus build HTML/JavaScript/CSS, negotiate gzip through `Accept-Encoding`. The
+[revision stream](public-api.md#revision-stream) is never compressed, since
+gzip would hold its events back. Bodies below 1 KiB remain uncompressed. The
 listener does not produce Brotli or deflate; clients that advertise only those
 receive the identity representation. `Vary: Accept-Encoding` also accompanies
 eligible identity and conditional responses. Existing weak ETags validate the
@@ -182,10 +184,19 @@ public feeds, `/api/calendar.ics` and `/api/feed.xml`, whose subscription
 fetchers (Google Calendar's among them) honour it. `/index.html` is the file
 itself, which the frontend shows as the board. A missing/invalid manifest
 falls back to revalidation. Dynamic media retains its independent version/hash
-validation and caching. The server keeps no dashboard response cache; the
-dashboard and calendar reads are revalidated by the browser through their
-[ETags](public-api.md#public-snapshot-contract), and the revision read is
-`no-store`.
+validation and caching. The server keeps no dashboard response cache, because
+the projection compares event and video times with the exact clock; the
+dashboard, calendar and archive reads are revalidated by the browser through
+their [ETags](public-api.md#public-snapshot-contract), and the revision read
+and the revision stream are `no-store`.
+
+## Listener Timeouts
+
+The listener's read and write timeouts (15 seconds each, `-read-timeout` and
+`-write-timeout`) bound every response except the
+[revision stream](public-api.md#revision-stream). Shutdown ends the open
+revision streams first, then waits for the remaining requests up to
+`-shutdown-timeout` (10 seconds).
 
 ## Share Tags
 

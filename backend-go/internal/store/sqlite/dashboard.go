@@ -299,6 +299,7 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 	if days > 30 {
 		days = 30
 	}
+	ctx = withReadMemo(ctx)
 	windowStart := now.Add(-time.Duration(days) * 24 * time.Hour).UTC().Format(time.RFC3339Nano)
 	postRows, err := s.queryPosts(ctx, windowStart)
 	if err != nil {
@@ -306,6 +307,13 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 	}
 	latestPost, err := s.queryLatestPost(ctx)
 	if err != nil {
+		return nil, err
+	}
+	prefetch := postRows[:len(postRows):len(postRows)]
+	if latestPost != nil {
+		prefetch = append(prefetch, *latestPost)
+	}
+	if err = s.prefetchPostRows(ctx, prefetch); err != nil {
 		return nil, err
 	}
 	posts := make([]Post, 0, len(postRows))
@@ -353,56 +361,34 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 	if err != nil {
 		return nil, err
 	}
-	for i := range videos {
-		linked, linkErr := s.queryLinkedEvent(ctx, videos[i], now)
-		if linkErr != nil {
-			return nil, linkErr
-		}
-		if linked != nil {
-			videos[i].EndsAt = linked.EndsAt
-			if !containsEvent(events, linked.ID) {
-				events = append(events, *linked)
-			}
-		}
-		ref, refErr := s.resolveMedia(ctx, videos[i].ThumbnailURL)
-		if refErr != nil {
-			return nil, refErr
-		}
-		videos[i].ThumbnailID, videos[i].ThumbnailStatus, videos[i].ThumbnailSourceURL = ref.ID, ref.Status, ref.SourceURL
-		videos[i].ThumbnailURL = ref.PublicURL
-	}
 	if featuredID != nil && !containsVideo(videos, *featuredID) {
 		featured, getErr := s.getVideo(ctx, *featuredID, liveCutoff)
 		if getErr != nil {
 			return nil, getErr
 		}
 		if featured != nil {
-			ref, refErr := s.resolveMedia(ctx, featured.ThumbnailURL)
-			if refErr != nil {
-				return nil, refErr
-			}
-			featured.ThumbnailID, featured.ThumbnailStatus, featured.ThumbnailSourceURL = ref.ID, ref.Status, ref.SourceURL
-			featured.ThumbnailURL = ref.PublicURL
 			videos = append(videos, *featured)
+		}
+	}
+	// Each returned video adopts its linked event's end, and that event joins
+	// the board's list.
+	linkedEvents, err := s.queryLinkedEvents(ctx, videos, now)
+	if err != nil {
+		return nil, err
+	}
+	if err = s.resolveVideoThumbnails(ctx, videos); err != nil {
+		return nil, err
+	}
+	for i := range videos {
+		if linked := linkedEvents[videos[i].ID]; linked != nil {
+			videos[i].EndsAt = linked.EndsAt
+			if !containsEvent(events, linked.ID) {
+				events = append(events, *linked)
+			}
 		}
 	}
 	if err = s.pinVideoThumbnails(ctx, videos); err != nil {
 		return nil, err
-	}
-	if featuredID != nil {
-		for i := range videos {
-			if videos[i].ID != *featuredID {
-				continue
-			}
-			if linked, linkErr := s.queryLinkedEvent(ctx, videos[i], now); linkErr != nil {
-				return nil, linkErr
-			} else if linked != nil {
-				videos[i].EndsAt = linked.EndsAt
-				if !containsEvent(events, linked.ID) {
-					events = append(events, *linked)
-				}
-			}
-		}
 	}
 	live := map[string]*string{}
 	for i := range videos {
@@ -505,11 +491,12 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 		return nil, err
 	}
 
+	cancelled, err := s.cancelledVideos(ctx, videos)
+	if err != nil {
+		return nil, err
+	}
 	for i := range videos {
-		videos[i].IsCancelled, err = s.videoCancelled(ctx, videos[i])
-		if err != nil {
-			return nil, err
-		}
+		videos[i].IsCancelled = cancelled[videos[i].ID]
 	}
 	postRefs := []*Post{latest}
 	for i := range posts {
@@ -726,58 +713,74 @@ func (s *Store) mapQuote(ctx context.Context, postID string, stored sql.NullStri
 	return &q, nil
 }
 
+// postMediaColumns are scanPostMedia's columns of a media link joined with
+// its asset.
+const postMediaColumns = `ml.media_id,ml.position,ml.alt,ma.source_url,ma.cache_path,ma.mime_type,ma.byte_size,ma.sha256,NULLIF(ma.width,0),NULLIF(ma.height,0),ma.status`
+
 func (s *Store) queryPostMedia(ctx context.Context, id, role string) ([]PostMedia, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT ml.media_id,ml.position,ml.alt,ma.source_url,ma.cache_path,ma.mime_type,ma.byte_size,ma.sha256,NULLIF(ma.width,0),NULLIF(ma.height,0),ma.status FROM media_links ml LEFT JOIN media_assets ma ON ma.id=ml.media_id WHERE ml.owner_type='post' AND ml.owner_id=? AND ml.role=? ORDER BY ml.position ASC`, id, role)
+	if memo := readMemoFrom(ctx); memo != nil && memo.postsLoaded[id] {
+		return append([]PostMedia{}, memo.postLinks[postLinkKey(id, role)]...), nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+postMediaColumns+` FROM media_links ml LEFT JOIN media_assets ma ON ma.id=ml.media_id WHERE ml.owner_type='post' AND ml.owner_id=? AND ml.role=? ORDER BY ml.position ASC`, id, role)
 	if err != nil {
 		return nil, dbErr(err)
 	}
 	defer rows.Close()
 	out := []PostMedia{}
 	for rows.Next() {
-		var mid string
-		var pos int64
-		var alt, src, cp, mime, sha sql.NullString
-		var bs, w, h sql.NullInt64
-		var status sql.NullString
-		if err := rows.Scan(&mid, &pos, &alt, &src, &cp, &mime, &bs, &sha, &w, &h, &status); err != nil {
-			return nil, dbErr(err)
+		media, ok, err := s.scanPostMedia(ctx, rows)
+		if err != nil {
+			return nil, err
 		}
-		if !src.Valid || !status.Valid {
-			continue
+		if ok {
+			out = append(out, media)
 		}
-		asset := mediaAsset{ID: mid, SourceURL: src.String, Status: status.String}
-		if src.Valid {
-			asset.SourceURL = src.String
-		}
-		if cp.Valid {
-			asset.CachePath = &cp.String
-		}
-		if mime.Valid {
-			asset.MIMEType = &mime.String
-		}
-		if bs.Valid {
-			asset.ByteSize = &bs.Int64
-		}
-		if sha.Valid {
-			asset.SHA256 = &sha.String
-		}
-		if w.Valid {
-			asset.Width = &w.Int64
-		}
-		if h.Valid {
-			asset.Height = &h.Int64
-		}
-		ref := s.mediaReference(asset)
-		if ref == nil {
-			continue
-		}
-		var ap *string
-		if alt.Valid {
-			ap = &alt.String
-		}
-		out = append(out, PostMedia{ID: ref.ID, URL: ref.PublicURL, Status: ref.Status, SourceURL: ref.SourceURL, Alt: ap, Position: pos, Width: ref.Width, Height: ref.Height})
 	}
 	return out, rows.Err()
+}
+
+// scanPostMedia reads one postMediaColumns row, after any leading columns
+// passed in lead. A link without a usable asset reports false.
+func (s *Store) scanPostMedia(ctx context.Context, row scanner, lead ...any) (PostMedia, bool, error) {
+	var mid string
+	var pos int64
+	var alt, src, cp, mime, sha sql.NullString
+	var bs, w, h sql.NullInt64
+	var status sql.NullString
+	if err := row.Scan(append(lead, &mid, &pos, &alt, &src, &cp, &mime, &bs, &sha, &w, &h, &status)...); err != nil {
+		return PostMedia{}, false, dbErr(err)
+	}
+	if !src.Valid || !status.Valid {
+		return PostMedia{}, false, nil
+	}
+	asset := mediaAsset{ID: mid, SourceURL: src.String, Status: status.String}
+	if cp.Valid {
+		asset.CachePath = &cp.String
+	}
+	if mime.Valid {
+		asset.MIMEType = &mime.String
+	}
+	if bs.Valid {
+		asset.ByteSize = &bs.Int64
+	}
+	if sha.Valid {
+		asset.SHA256 = &sha.String
+	}
+	if w.Valid {
+		asset.Width = &w.Int64
+	}
+	if h.Valid {
+		asset.Height = &h.Int64
+	}
+	ref := s.mediaReference(ctx, asset)
+	if ref == nil {
+		return PostMedia{}, false, nil
+	}
+	var ap *string
+	if alt.Valid {
+		ap = &alt.String
+	}
+	return PostMedia{ID: ref.ID, URL: ref.PublicURL, Status: ref.Status, SourceURL: ref.SourceURL, Alt: ap, Position: pos, Width: ref.Width, Height: ref.Height}, true, nil
 }
 
 func (s *Store) queryDashboardEvents(ctx context.Context, from, to string, now time.Time) ([]DashboardEvent, error) {
@@ -933,32 +936,6 @@ func (s *Store) getVideo(ctx context.Context, id string, liveCutoff time.Time) (
 	v.IsShort = nullBool(short)
 	return &v, nil
 }
-func (s *Store) queryLinkedEvent(ctx context.Context, v Video, now time.Time) (*DashboardEvent, error) {
-	q := `SELECT id,source,title,detail,starts_on,starts_at,ends_at,timezone,time_precision,status,event_type,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_at,updated_at FROM events e WHERE e.deleted_at IS NULL AND (e.id='youtube-'||? OR (e.source='youtube' AND e.source_item_id=?) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=?) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(?))) ORDER BY ABS(julianday(e.starts_at)-julianday(?)),e.id ASC LIMIT 1`
-	rows, err := s.db.QueryContext(ctx, q, v.ID, v.ID, v.ID, v.URL, stringValue(v.ScheduledAt))
-	if err != nil {
-		return nil, dbErr(err)
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		return nil, nil
-	}
-	e, err := scanEvent(rows, now)
-	if err != nil {
-		return nil, err
-	}
-	return &e, nil
-}
-
-func (s *Store) videoCancelled(ctx context.Context, video Video) (bool, error) {
-	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||? OR (e.source='youtube' AND e.source_item_id=?) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=?) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(?)))`, video.ID, video.ID, video.ID, video.URL).Scan(&n)
-	if err != nil {
-		return false, dbErr(err)
-	}
-	return n > 0, nil
-}
-
 func (s *Store) queryFocus(ctx context.Context) (*Focus, error) {
 	var f Focus
 	var vid, dl, desc, img, u, su, up sql.NullString
@@ -1061,6 +1038,9 @@ func (s *Store) queryScheduleAssets(ctx context.Context, from, to string) ([]Ass
 		return nil, dbErr(err)
 	}
 	_ = rows.Close()
+	if err = s.prefetchAssetMedia(ctx, assets); err != nil {
+		return nil, err
+	}
 	out := []Asset{}
 	for _, a := range assets {
 		ref, e := s.resolveMedia(ctx, a.URL)
@@ -1096,6 +1076,9 @@ func (s *Store) queryOtherAssets(ctx context.Context) ([]Asset, error) {
 		return nil, dbErr(err)
 	}
 	_ = rows.Close()
+	if err = s.prefetchAssetMedia(ctx, assets); err != nil {
+		return nil, err
+	}
 	out := []Asset{}
 	for _, a := range assets {
 		ref, e := s.resolveMedia(ctx, a.URL)
@@ -1235,7 +1218,7 @@ func (s *Store) queryProfileMedia(ctx context.Context) (ProfileMediaSlots, error
 		if err := rows.Scan(&id, &slot, &source, &su, &cp, &sha, &mime, &status, &active); err != nil {
 			return out, dbErr(err)
 		}
-		pm := s.profileMedia(id, slot, source, su, cp, sha, mime, status.String, active != 0)
+		pm := s.profileMedia(ctx, id, slot, source, su, cp, sha, mime, status.String, active != 0)
 		switch slot {
 		case "avatar":
 			out.Avatar = pm
@@ -1245,13 +1228,13 @@ func (s *Store) queryProfileMedia(ctx context.Context) (ProfileMediaSlots, error
 	}
 	return out, rows.Err()
 }
-func (s *Store) profileMedia(id, slot, source string, su, cp, sha, mime sql.NullString, status string, active bool) *ProfileMedia {
+func (s *Store) profileMedia(ctx context.Context, id, slot, source string, su, cp, sha, mime sql.NullString, status string, active bool) *ProfileMedia {
 	var sourceURL *string
 	if su.Valid {
 		sourceURL = &su.String
 	}
 	pm := &ProfileMedia{ID: id, Slot: slot, Source: source, SourceURL: sourceURL, Status: status, IsActive: active}
-	if active && cp.Valid && safeHash(sha.String) && s.cacheFileExists(cp.String) && sha.Valid {
+	if active && cp.Valid && safeHash(sha.String) && s.cacheFileExists(ctx, cp.String) && sha.Valid {
 		v := "/media/profile/" + slot + "?v=" + sha.String
 		pm.PublicURL = &v
 		pm.Status = "ready"
@@ -1361,10 +1344,16 @@ func (s *Store) resolveMedia(ctx context.Context, source *string) (*mediaReferen
 	if norm == "" {
 		return &mediaReference{Status: "missing"}, nil
 	}
-	var a mediaAsset
-	var cp, mime, sha sql.NullString
-	var bs, w, h sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT id,source_url,cache_path,mime_type,byte_size,sha256,NULLIF(width,0),NULLIF(height,0),status FROM media_assets WHERE source_url=?`, norm).Scan(&a.ID, &a.SourceURL, &cp, &mime, &bs, &sha, &w, &h, &a.Status)
+	if memo := readMemoFrom(ctx); memo != nil {
+		if a, known := memo.assets[norm]; known {
+			if a == nil {
+				id := sha256Hex(norm)
+				return &mediaReference{ID: &id, Status: "pending", SourceURL: &norm}, nil
+			}
+			return s.mediaReference(ctx, *a), nil
+		}
+	}
+	a, err := scanMediaAsset(s.db.QueryRowContext(ctx, `SELECT id,source_url,cache_path,mime_type,byte_size,sha256,NULLIF(width,0),NULLIF(height,0),status FROM media_assets WHERE source_url=?`, norm))
 	if errors.Is(err, sql.ErrNoRows) {
 		id := sha256Hex(norm)
 		return &mediaReference{ID: &id, Status: "pending", SourceURL: &norm}, nil
@@ -1372,32 +1361,14 @@ func (s *Store) resolveMedia(ctx context.Context, source *string) (*mediaReferen
 	if err != nil {
 		return nil, dbErr(err)
 	}
-	if cp.Valid {
-		a.CachePath = &cp.String
-	}
-	if mime.Valid {
-		a.MIMEType = &mime.String
-	}
-	if bs.Valid {
-		a.ByteSize = &bs.Int64
-	}
-	if sha.Valid {
-		a.SHA256 = &sha.String
-	}
-	if w.Valid {
-		a.Width = &w.Int64
-	}
-	if h.Valid {
-		a.Height = &h.Int64
-	}
-	return s.mediaReference(a), nil
+	return s.mediaReference(ctx, a), nil
 }
-func (s *Store) mediaReference(a mediaAsset) *mediaReference {
+func (s *Store) mediaReference(ctx context.Context, a mediaAsset) *mediaReference {
 	if a.ID == "" {
 		return nil
 	}
 	r := &mediaReference{Status: a.Status, SourceURL: strPtr(a.SourceURL), MIMEType: a.MIMEType, ByteSize: a.ByteSize, Width: a.Width, Height: a.Height}
-	if a.Status == "ready" && a.CachePath != nil && a.SHA256 != nil && safeHash(*a.SHA256) && s.safeDataPath(*a.CachePath) && s.cacheFileExists(*a.CachePath) {
+	if a.Status == "ready" && a.CachePath != nil && a.SHA256 != nil && safeHash(*a.SHA256) && s.cacheFileExists(ctx, *a.CachePath) {
 		r.Status = "ready"
 		r.ID = &a.ID
 		v := "/media/" + a.ID + "?v=" + *a.SHA256
@@ -1409,13 +1380,6 @@ func (s *Store) mediaReference(a mediaAsset) *mediaReference {
 	return r
 }
 
-func (s *Store) cacheFileExists(relative string) bool {
-	if !s.safeDataPath(relative) {
-		return false
-	}
-	info, err := os.Stat(filepath.Join(s.dataRoot, filepath.FromSlash(relative)))
-	return err == nil && info.Mode().IsRegular()
-}
 func (s *Store) safeDataPath(relative string) bool {
 	if filepath.IsAbs(relative) {
 		return false

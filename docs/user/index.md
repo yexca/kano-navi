@@ -31,7 +31,8 @@ The About page introduces the project, its credits, and its license.
 The board shows what it last collected from X and YouTube; it is not a live
 feed. On the board, a small dot in the header shows the state of that
 snapshot, and the profile card shows when it was taken, with a reload button
-that loads the latest one.
+that loads the latest one. An open board picks up a newly stored snapshot by
+itself within a few seconds, without a reload.
 When a platform is unavailable, the board keeps showing what it already
 knows.
 

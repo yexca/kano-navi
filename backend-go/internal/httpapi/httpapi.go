@@ -30,6 +30,8 @@ type Handler struct {
 	// publicOrigin is the normalized PUBLIC_ORIGIN or empty; the Atom feed
 	// uses it for absolute links.
 	publicOrigin string
+	// streams pushes revision changes to /api/dashboard/events.
+	streams *revisionHub
 }
 
 // Standalone carries everything the single-process owner serves beyond the
@@ -47,7 +49,7 @@ type Standalone struct {
 }
 
 // NewStandaloneHandler serves the whole product from this process.
-func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, options Standalone) http.Handler {
+func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, options Standalone) *Handler {
 	if now == nil {
 		now = time.Now
 	}
@@ -59,6 +61,7 @@ func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, options Sta
 		mcp:          options.MCP,
 		websub:       options.WebSub,
 		publicOrigin: options.PublicOrigin,
+		streams:      newRevisionHub(store.GetDashboardRevision),
 	}
 }
 
@@ -73,11 +76,11 @@ func NewHandlerWithClock(store *sqlite.Store, now func() time.Time) http.Handler
 
 // NewHandlerWithAdmin serves the public reads plus an operator API handler,
 // which read-only mode attaches once its admin configuration is valid.
-func NewHandlerWithAdmin(store *sqlite.Store, now func() time.Time, admin http.Handler) http.Handler {
+func NewHandlerWithAdmin(store *sqlite.Store, now func() time.Time, admin http.Handler) *Handler {
 	if now == nil {
 		now = time.Now
 	}
-	return &Handler{store: store, now: now, admin: admin}
+	return &Handler{store: store, now: now, admin: admin, streams: newRevisionHub(store.GetDashboardRevision)}
 }
 
 func NewServer(handler http.Handler, cfg config.Config) *http.Server {
@@ -116,6 +119,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.revision(w, r)
+	case "/api/dashboard/events":
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w, http.MethodGet)
+			return
+		}
+		h.revisionEvents(w, r)
 	case "/api/dashboard":
 		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
@@ -124,6 +133,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.dashboard(w, r)
 	case "/api/calendar":
+		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
 			writeMethodNotAllowed(w, http.MethodGet)
 			return
@@ -134,12 +144,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/feed.xml":
 		h.atomFeed(w, r)
 	case "/api/posts":
+		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
 			writeMethodNotAllowed(w, http.MethodGet)
 			return
 		}
 		h.posts(w, r)
 	case "/api/videos":
+		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {
 			writeMethodNotAllowed(w, http.MethodGet)
 			return

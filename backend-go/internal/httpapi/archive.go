@@ -57,7 +57,7 @@ func (h *Handler) posts(w http.ResponseWriter, r *http.Request) {
 	}
 	payload := archivePayload(page, publicview.PublicPost)
 	payload["accountCounts"] = page.AccountCounts
-	writeJSON(w, http.StatusOK, payload, "no-store")
+	writeRevalidatedJSON(w, r, payload, nil)
 }
 
 // videos serves the video archive: stored videos whose scheduled or published
@@ -70,5 +70,7 @@ func (h *Handler) videos(w http.ResponseWriter, r *http.Request) {
 		writeArchiveError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, archivePayload(page, publicview.PublicVideo), "no-store")
+	// The body includes the time-derived fields (isUpcoming, liveStatus), so
+	// its ETag changes when they expire as well as with stored data.
+	writeRevalidatedJSON(w, r, archivePayload(page, publicview.PublicVideo), nil)
 }

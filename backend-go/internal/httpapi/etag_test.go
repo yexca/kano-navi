@@ -20,6 +20,8 @@ func TestPolledReadsRevalidateAcrossEncodings(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		testutil.Exec(t, path, `INSERT INTO posts (id,source,type,text,published_at,url) VALUES (?,?,?,?,?,?)`,
 			fmt.Sprintf("post-%d", i), "x", "daily", strings.Repeat("synthetic ", 20), "2026-10-10T12:00:00.000Z", fmt.Sprintf("https://x.com/kano_2525/status/%d", i))
+		testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,url,kind,is_upcoming) VALUES (?,?,?,?,?,?,0)`,
+			fmt.Sprintf("video-%d", i), "youtube", strings.Repeat("synthetic ", 20), "2026-10-10T12:00:00.000Z", fmt.Sprintf("https://www.youtube.com/watch?v=synthetic%d", i), "video")
 	}
 	testutil.Exec(t, path, `INSERT INTO events (id,source,title,starts_on,starts_at,timezone,time_precision,status,event_type,provenance,manual_locked,cancellation_status,cancellation_evidence,created_at,updated_at) VALUES ('stream','x','Stream','2026-10-11','2026-10-11T20:00:00+09:00','Asia/Tokyo','exact','scheduled','stream','automatic',0,'none','','','')`)
 	store, err := sqlite.OpenReadOnly(path)
@@ -60,13 +62,15 @@ func TestPolledReadsRevalidateAcrossEncodings(t *testing.T) {
 		return response, body
 	}
 
-	for _, path := range []string{"/api/dashboard?days=3", "/api/calendar?from=2026-10-05&to=2026-10-11"} {
-		identity, _ := get(path, "", "")
+	for _, path := range []string{"/api/dashboard?days=3", "/api/calendar?from=2026-10-05&to=2026-10-11",
+		"/api/posts?from=2026-10-01&to=2026-10-31", "/api/videos?from=2026-10-01&to=2026-10-31"} {
+		identity, body := get(path, "", "")
 		etag := identity.Header.Get("ETag")
-		if identity.StatusCode != http.StatusOK || identity.Header.Get("Cache-Control") != "no-cache" || !strings.HasPrefix(etag, `W/"`) {
+		if identity.StatusCode != http.StatusOK || identity.Header.Get("Cache-Control") != "no-cache" || !strings.HasPrefix(etag, `W/"`) ||
+			identity.Header.Get("Vary") != "Accept-Encoding" {
 			t.Fatalf("%s identity: status=%d headers=%v", path, identity.StatusCode, identity.Header)
 		}
-		if path == "/api/dashboard?days=3" {
+		if len(body) >= compressThreshold {
 			gzipped, _ := get(path, "gzip", "")
 			if gzipped.Header.Get("Content-Encoding") != "gzip" || gzipped.Header.Get("ETag") != etag || gzipped.Header.Get("Vary") != "Accept-Encoding" {
 				t.Fatalf("%s gzip: headers=%v", path, gzipped.Header)

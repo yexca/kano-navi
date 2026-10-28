@@ -26,11 +26,19 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
         now: new Date("2025-01-01T00:00:00Z"),
       })
       const win = Object.assign(new EventTarget(), { setTimeout, clearTimeout })
+      const doc = Object.assign(new EventTarget(), {
+        visibilityState: "visible",
+      })
       const previous = {
         window: globalThis.window,
+        document: globalThis.document,
         act: (globalThis as any).IS_REACT_ACT_ENVIRONMENT,
       }
-      Object.assign(globalThis, { window: win, IS_REACT_ACT_ENVIRONMENT: true })
+      Object.assign(globalThis, {
+        window: win,
+        document: doc,
+        IS_REACT_ACT_ENVIRONMENT: true,
+      })
       type Pending = {
         path: string
         method: string
@@ -102,10 +110,12 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
         await act(async () => root.unmount())
         Object.assign(globalThis, {
           window: previous.window,
+          document: previous.document,
           IS_REACT_ACT_ENVIRONMENT: previous.act,
         })
       }
       return {
+        doc,
         requests,
         all,
         open,
@@ -172,6 +182,34 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
           await fixture.tick(1499)
           assert.equal(fixture.all("/overview").length, 2)
           await fixture.tick(1)
+          assert.equal(fixture.all("/overview").length, 3)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a hidden console stops the overview poll and a visible one resumes it at once",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          await fixture.respond(fixture.open("/session"), signedIn)
+          await fixture.respond(fixture.open("/overview"), overview())
+          fixture.doc.visibilityState = "hidden"
+          await act(async () => {
+            fixture.doc.dispatchEvent(new Event("visibilitychange"))
+          })
+          await fixture.tick(120000)
+          assert.equal(fixture.all("/overview").length, 1)
+          fixture.doc.visibilityState = "visible"
+          await act(async () => {
+            fixture.doc.dispatchEvent(new Event("visibilitychange"))
+            fixture.doc.dispatchEvent(new Event("visibilitychange"))
+          })
+          assert.equal(fixture.all("/overview").length, 2)
+          await fixture.respond(fixture.open("/overview"), overview())
+          await fixture.tick(8000)
           assert.equal(fixture.all("/overview").length, 3)
         } finally {
           await fixture.unmount()

@@ -1,5 +1,12 @@
 # Unreleased
 
+> [!NOTE]
+> Open boards follow changes over `/api/dashboard/events`, a long-lived
+> `text/event-stream` response. A reverse proxy must pass it unbuffered and
+> uncompressed, with a read timeout of 60 seconds or more; see
+> [Reverse proxy](../operations/docker.md#reverse-proxy). Where the stream
+> cannot stay open, boards ask for the revision every 30 seconds.
+
 <details>
 <summary><strong>Public pages</strong></summary>
 
@@ -21,6 +28,20 @@
 - `/api/dashboard` and `/api/calendar` send a weak ETag with
   `Cache-Control: no-cache` instead of `no-store`, and the board revalidates
   them, so an unchanged board answers its minute refresh with a bodiless 304.
+- The board hears about changes from the server instead of asking for the
+  revision every 8 seconds: `GET /api/dashboard/events` sends the revision
+  on connect and on each change, and an open board reads the new snapshot a
+  random 0–3 seconds later. A hidden tab closes the stream and a visible one
+  reopens it. Without the stream the board asks every 30 seconds. A visible
+  tab on a quiet board makes about 120 requests an hour (the minute's
+  snapshot and calendar revalidation, both bodiless 304s) instead of about 570.
+- `/api/posts` and `/api/videos` send a weak ETag with
+  `Cache-Control: no-cache` instead of `no-store`, and they and
+  `/api/calendar` are gzip-compressed, so an open month dialog's minute
+  reread is a bodiless 304.
+- The board's snapshot read resolves its media in batched queries and checks
+  each cache directory once, so `/api/dashboard` answers, 304 included, in a
+  fraction of its former time.
 
 </details>
 
@@ -60,6 +81,8 @@
 - Translation chips open the editor on the clicked language; the editor
   shows the original beside one language at a time.
 - Video cards keep their actions on one row at the foot of each card.
+- The overview stops polling while the console's tab is hidden and reads at
+  once when it is shown again.
 
 - The post list shows a post's quoted post read-only in its own cell, apart
   from the post's images: author, time, wording, cached thumbnails or the

@@ -19,7 +19,7 @@ func RequestLog(next http.Handler, output io.Writer) http.Handler {
 		next.ServeHTTP(measured, r)
 		route := "unmatched"
 		switch r.URL.Path {
-		case "/api/health", "/api/dashboard/revision", "/api/dashboard", "/api/calendar", "/api/posts", "/api/videos", "/api/websub/youtube":
+		case "/api/health", "/api/dashboard/revision", "/api/dashboard/events", "/api/dashboard", "/api/calendar", "/api/posts", "/api/videos", "/api/websub/youtube":
 			route = r.URL.Path
 		default:
 			switch {
@@ -71,6 +71,14 @@ func (w *responseMetrics) Write(body []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(body)
 	w.bytes += int64(n)
 	return n, err
+}
+
+// Flush passes a streaming handler's flush to the wrapped writer.
+func (w *responseMetrics) Flush() {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	_ = http.NewResponseController(w.ResponseWriter).Flush()
 }
 
 func (w *responseMetrics) Unwrap() http.ResponseWriter { return w.ResponseWriter }

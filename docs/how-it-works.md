@@ -53,8 +53,12 @@ flowchart LR
 3. Page loads, the reload button, and revision checks only read the stored
    snapshot through the local API. They never contact X, YouTube, or a model
    provider.
-4. Each completed workflow advances a small revision number; open pages poll
-   it and reload the snapshot when it changes.
+4. Each completed workflow or operator change advances a small revision
+   number. The server watches it and pushes each change to open pages over a
+   stream, and a page then reloads the snapshot; when the stream is
+   unavailable, pages ask for the revision every 30 seconds instead. A page
+   also revalidates its snapshot once a minute, because times such as a
+   stream's start pass without a stored change.
 
 The profile, milestones, resource links, and the Journey images ship with the
 code. Source snapshots and LLM providers start empty on a fresh installation.
