@@ -8,7 +8,9 @@ Links between the three public pages open in place: the next page's code
 loads while the current page stays on screen (hovering or focusing a link
 starts that load), then the pages cross-fade under a fixed header with the
 View Transition API. Back and forward restore each entry's scroll position,
-including after a reload. `/admin`, other paths, modified clicks and links
+including after a reload and for the entries the browser adds for fragment
+links within a page; a remembered position wins over the address's fragment.
+`/admin`, other paths, modified clicks and links
 with a target load normally; back and forward within `/admin` or another path
 stay with that page, which keeps the browser's own scroll restoration and
 handles its fragment moves (the console's views), and `index.html` applies the saved theme and

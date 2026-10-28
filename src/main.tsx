@@ -205,13 +205,20 @@ function usePageNavigation() {
         "",
       )
     }
+    // The position the last scroll event saw. A fragment link moves the page
+    // before that move's scroll event, so this is still the position of the
+    // entry being left.
+    let liveTop = window.scrollY
     // A reload starts from the entry's state, so save once scrolling rests.
     const onScroll = () => {
+      liveTop = window.scrollY
       window.clearTimeout(saveTimer)
       saveTimer = window.setTimeout(remember, 250)
     }
 
-    const show = async (url: URL, top: number) => {
+    // A remembered position wins over the address's fragment; without one the
+    // page opens at its fragment, or at the top.
+    const show = async (url: URL, top: number | null) => {
       const next = pagePath(url.pathname)
       const current = ++ticket
       try {
@@ -225,11 +232,16 @@ function usePageNavigation() {
       shownPath = next
       const commit = () => {
         flushSync(() => setPath(next))
-        const target = url.hash
-          ? document.getElementById(decodeURIComponent(url.hash.slice(1)))
-          : null
+        const target =
+          top === null && url.hash
+            ? document.getElementById(decodeURIComponent(url.hash.slice(1)))
+            : null
         if (target) target.scrollIntoView({ behavior: "instant" })
-        else window.scrollTo({ top, behavior: samePage ? "smooth" : "instant" })
+        else
+          window.scrollTo({
+            top: top ?? 0,
+            behavior: samePage ? "smooth" : "instant",
+          })
       }
       if (samePage || !document.startViewTransition || reducedMotion?.matches) {
         commit()
@@ -270,7 +282,7 @@ function usePageNavigation() {
         entry = newEntry()
         window.history.pushState({ kanoEntry: entry }, "", url.href)
       }
-      void show(url, 0)
+      void show(url, null)
     }
 
     const onPopState = (event: PopStateEvent) => {
@@ -284,11 +296,15 @@ function usePageNavigation() {
       }
       stopSettling()
       window.clearTimeout(saveTimer)
-      scrolls.set(entry, window.scrollY)
-      entry = String(event.state?.kanoEntry ?? newEntry())
+      scrolls.set(entry, liveTop)
+      // The browser makes a fragment link's entry; it gets its own id.
+      const known: unknown = event.state?.kanoEntry
+      entry = String(known ?? newEntry())
+      if (known == null)
+        window.history.replaceState({ ...event.state, kanoEntry: entry }, "")
       const top: unknown = scrolls.get(entry) ?? event.state?.kanoScroll
       if (next !== shownPath || typeof top === "number")
-        void show(url, typeof top === "number" ? top : 0)
+        void show(url, typeof top === "number" ? top : null)
     }
 
     // Start loading a page as soon as a pointer or focus reaches its link.
