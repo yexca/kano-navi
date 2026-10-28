@@ -154,7 +154,8 @@ disposable database.
 
 Compression precedes the response handlers. Successful GET/HEAD public
 dashboard, revision, health, calendar, post archive and video archive JSON,
-plus build HTML/JavaScript/CSS, negotiate gzip through `Accept-Encoding`. The
+the [calendar and Atom feeds](public-api.md#public-feeds), plus build
+HTML/JavaScript/CSS, negotiate gzip through `Accept-Encoding`. The
 [revision stream](public-api.md#revision-stream) is never compressed, since
 gzip would hold its events back. Bodies below 1 KiB remain uncompressed. The
 listener does not produce Brotli or deflate; clients that advertise only those

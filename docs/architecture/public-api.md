@@ -190,14 +190,17 @@ rendering picks the language. A non-English Atom feed declares `xml:lang`, has
 the feed ID `urn:kano-navi:feed:<lang>` and its self link keeps the `lang`
 query.
 
-Both answer `GET` and `HEAD`, never fetch platforms or models, and send
-`Cache-Control: public, max-age=600` with an ETag that names the language and
-the build version, so an upgrade's rewording is not hidden by a cached copy.
-The calendar's ETag adds the dashboard revision and the Japan date, which
-decide its content (only `DTSTAMP` follows the clock). The Atom feed also
-depends on the clock, since a reservation turns into an aired video when its
-time passes, so its ETag adds a hash of the rendered body. A matching
-`If-None-Match` answers 304. A database failure answers 503 without an ETag.
+Both answer `GET` and `HEAD`, never fetch platforms or models, negotiate gzip
+like the [public JSON reads](backend.md#text-transfer-and-static-caching), and
+send `Cache-Control: public, max-age=600` with a weak ETag that validates both
+encodings. The ETag names the language, the build version (so an upgrade's
+rewording is not hidden by a cached copy) and a hash of the rendered body.
+Every calendar `DTSTAMP` is the start of today's Japan date, so the
+calendar changes only with the snapshot, the date and the build; its ETag
+also names the dashboard revision. The Atom feed also follows the clock,
+since a reservation turns into an aired video when its time passes. A
+matching `If-None-Match` answers 304. A database failure answers 503 without
+an ETag.
 The routes sit under `/api/`, so the development proxy and the
 [read-only mode](backend.md#read-only-mode) serve them unchanged.
 

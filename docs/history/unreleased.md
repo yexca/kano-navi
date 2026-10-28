@@ -39,6 +39,11 @@
   `Cache-Control: no-cache` instead of `no-store`, and they and
   `/api/calendar` are gzip-compressed, so an open month dialog's minute
   reread is a bodiless 304.
+- The calendar subscription `/api/calendar.ics` stamps its events with the
+  start of today's Japan date instead of the request time, so a calendar app
+  polling an unchanged schedule gets a bodiless 304 instead of the whole
+  file. It and the Atom feed `/api/feed.xml` are gzip-compressed and send a
+  weak ETag that validates both encodings.
 - The board's snapshot read resolves its media in batched queries and checks
   each cache directory once, so `/api/dashboard` answers, 304 included, in a
   fraction of its former time.

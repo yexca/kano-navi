@@ -23,8 +23,9 @@ var japan = time.FixedZone("JST", 9*60*60)
 // as the board does and the fixed strings come from the locale's messages.
 // Times are UTC; date-only and unknown-time events become all-day entries on
 // their Japan date. LAST-MODIFIED and SEQUENCE follow the stored update time
-// so clients replace a changed entry.
-func Calendar(events []sqlite.DashboardEvent, now time.Time, locale Locale) []byte {
+// so clients replace a changed entry. Every DTSTAMP is stamp, which the caller
+// keeps steady between polls so an unchanged document keeps its validator.
+func Calendar(events []sqlite.DashboardEvent, stamp time.Time, locale Locale) []byte {
 	var b strings.Builder
 	line := func(name, value string) { writeFolded(&b, name+":"+value) }
 	line("BEGIN", "VCALENDAR")
@@ -36,7 +37,7 @@ func Calendar(events []sqlite.DashboardEvent, now time.Time, locale Locale) []by
 	line("X-WR-TIMEZONE", "Asia/Tokyo")
 	line("REFRESH-INTERVAL;VALUE=DURATION", "PT1H")
 	line("X-PUBLISHED-TTL", "PT1H")
-	stamp := now.UTC().Format("20060102T150405Z")
+	dtstamp := stamp.UTC().Format("20060102T150405Z")
 	for _, e := range events {
 		day, err := time.ParseInLocation("2006-01-02", e.StartsOn, japan)
 		if err != nil {
@@ -44,7 +45,7 @@ func Calendar(events []sqlite.DashboardEvent, now time.Time, locale Locale) []by
 		}
 		line("BEGIN", "VEVENT")
 		line("UID", escapeText(e.ID+"@kano-navi"))
-		line("DTSTAMP", stamp)
+		line("DTSTAMP", dtstamp)
 		if updated, ok := parseInstant(&e.UpdatedAt); ok {
 			line("LAST-MODIFIED", updated.UTC().Format("20060102T150405Z"))
 			line("SEQUENCE", strconv.FormatInt(sequence(updated), 10))

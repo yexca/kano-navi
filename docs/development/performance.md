@@ -32,8 +32,9 @@ nothing into the repository.
   `posts_url_published_at_idx` index on `posts(url, published_at DESC)`,
   without a temporary sort. Startup adds the index to older snapshots, and
   the schema upgrade tests check that it exists.
-- Public dashboard, revision and health JSON and the build's text files are
-  gzip-compressed; admin, authentication, MCP and runtime media are not.
+- Public dashboard, revision and health JSON, the calendar and Atom feeds
+  and the build's text files are gzip-compressed; admin, authentication,
+  MCP and runtime media are not.
   Hashed build files are immutable and everything else revalidates. HTTP
   tests cover encoding negotiation, validators, 304, HEAD and ranges. The
   rules are in the

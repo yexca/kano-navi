@@ -10,12 +10,15 @@ import (
 
 const compressThreshold = 1024
 
-// compressedPublicReads are the public JSON reads whose bodies depend only on
-// the stored snapshot and the query, never on credentials. The revision
-// stream /api/dashboard/events is not one of them: gzip would buffer it.
-var compressedPublicReads = map[string]bool{
-	"/api/dashboard": true, "/api/dashboard/revision": true, "/api/health": true,
-	"/api/calendar": true, "/api/posts": true, "/api/videos": true,
+// compressedPublicReads maps the public reads whose bodies depend only on the
+// stored snapshot and the query, never on credentials, to the content type
+// they are compressed as. The revision stream /api/dashboard/events is not
+// one of them: gzip would buffer it.
+var compressedPublicReads = map[string]string{
+	"/api/dashboard": "application/json", "/api/dashboard/revision": "application/json",
+	"/api/health": "application/json", "/api/calendar": "application/json",
+	"/api/posts": "application/json", "/api/videos": "application/json",
+	"/api/calendar.ics": "text/calendar", "/api/feed.xml": "application/atom+xml",
 }
 
 var gzipWriters = sync.Pool{New: func() any {
@@ -94,8 +97,8 @@ func (c *compressWriter) shouldCompress(status int) bool {
 	}
 	contentType, _, _ := strings.Cut(header.Get("Content-Type"), ";")
 	contentType = strings.ToLower(strings.TrimSpace(contentType))
-	if compressedPublicReads[c.path] {
-		return contentType == "application/json"
+	if want, ok := compressedPublicReads[c.path]; ok {
+		return contentType == want
 	}
 	for _, prefix := range []string{"/api", "/media", "/mcp"} {
 		if c.path == prefix || strings.HasPrefix(c.path, prefix+"/") {

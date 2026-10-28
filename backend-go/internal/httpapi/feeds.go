@@ -37,6 +37,8 @@ var feedJapan = time.FixedZone("JST", 9*60*60)
 // and sets the shared feed headers. It reports false when the response is
 // already written.
 func (h *Handler) feedPreamble(w http.ResponseWriter, r *http.Request) (time.Time, feeds.Locale, bool) {
+	// The feeds negotiate gzip, so every answer varies by encoding.
+	w.Header().Set("Vary", "Accept-Encoding")
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		writeMethodNotAllowed(w, "GET, HEAD")
 		return time.Time{}, "", false
@@ -47,9 +49,11 @@ func (h *Handler) feedPreamble(w http.ResponseWriter, r *http.Request) (time.Tim
 }
 
 // feedETag names one feed variant. The build version is part of it, so an
-// upgrade that rewords a feed is not hidden behind a cached copy.
+// upgrade that rewords a feed is not hidden behind a cached copy. The tag is
+// weak because gzip changes the transferred bytes; it validates the
+// uncompressed body across encodings.
 func feedETag(kind string, locale feeds.Locale, state string) string {
-	return `"` + kind + "-" + string(locale) + "-" + buildinfo.Version + "-" + state + `"`
+	return `W/"` + kind + "-" + string(locale) + "-" + buildinfo.Version + "-" + state + `"`
 }
 
 // notModified sets the ETag and answers a matching conditional request,
@@ -81,9 +85,6 @@ func (h *Handler) calendarFeed(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// The calendar body includes DTSTAMP, so build the body before evaluating a
-	// conditional request. Its ETag must identify the complete representation,
-	// including the clock-derived stamp.
 	revision, err := h.store.GetDashboardRevision(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "")
@@ -96,7 +97,10 @@ func (h *Handler) calendarFeed(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "no-store")
 		return
 	}
-	body := feeds.Calendar(events, now, locale)
+	// DTSTAMP is the start of today's Japan date, so the body changes only
+	// with the snapshot, the date and the build, and a poll in between is
+	// answered 304.
+	body := feeds.Calendar(events, today, locale)
 	sum := sha256.Sum256(body)
 	state := strconv.FormatInt(revision, 10) + "-" + hex.EncodeToString(sum[:12])
 	if notModified(w, r, feedETag("ics", locale, state)) {

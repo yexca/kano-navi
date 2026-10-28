@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"compress/gzip"
 	"encoding/xml"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -61,12 +63,12 @@ func TestCalendarFeed(t *testing.T) {
 		"BEGIN:VCALENDAR\r\n", "X-WR-TIMEZONE:Asia/Tokyo\r\n",
 		// A stream without an end lasts an hour; LAST-MODIFIED and SEQUENCE
 		// follow updated_at (whole seconds since 2020-01-01T00:00:00Z).
-		"UID:feed-timed@kano-navi\r\nDTSTAMP:20261027T030000Z\r\nLAST-MODIFIED:20261026T093000Z\r\nSEQUENCE:215170200\r\nDTSTART:20261028T110000Z\r\nDTEND:20261028T120000Z\r\nSUMMARY:Night\\, stream\\; part 2\r\n",
+		"UID:feed-timed@kano-navi\r\nDTSTAMP:20261026T150000Z\r\nLAST-MODIFIED:20261026T093000Z\r\nSEQUENCE:215170200\r\nDTSTART:20261028T110000Z\r\nDTEND:20261028T120000Z\r\nSUMMARY:Night\\, stream\\; part 2\r\n",
 		"URL:https://example.invalid/post\r\nSTATUS:CONFIRMED\r\n", "Confirmed by the site maintainer.",
 		"DTSTART;VALUE=DATE:20261029\r\nDTEND;VALUE=DATE:20261030\r\n",
 		// Another timed event without an end lasts half an hour, and one
 		// without a parseable update time has no SEQUENCE.
-		"UID:feed-suspect@kano-navi\r\nDTSTAMP:20261027T030000Z\r\nDTSTART:20261030T110000Z\r\nDTEND:20261030T113000Z\r\n", "STATUS:TENTATIVE\r\n",
+		"UID:feed-suspect@kano-navi\r\nDTSTAMP:20261026T150000Z\r\nDTSTART:20261030T110000Z\r\nDTEND:20261030T113000Z\r\n", "STATUS:TENTATIVE\r\n",
 		// A stored end is kept.
 		"DTSTART:20261031T110000Z\r\nDTEND:20261031T130000Z\r\n", "STATUS:CANCELLED\r\n",
 		"END:VCALENDAR\r\n",
@@ -81,7 +83,7 @@ func TestCalendarFeed(t *testing.T) {
 		}
 	}
 	etag := response.Header().Get("ETag")
-	if !strings.HasPrefix(etag, `"ics-en-`+buildinfo.Version+`-7-`) {
+	if !strings.HasPrefix(etag, `W/"ics-en-`+buildinfo.Version+`-7-`) {
 		t.Fatalf("etag %q", etag)
 	}
 	conditional := httptest.NewRequest(http.MethodGet, "/api/calendar.ics", nil)
@@ -99,28 +101,78 @@ func TestCalendarFeed(t *testing.T) {
 	}
 }
 
-func TestCalendarFeedETagChangesWithClockStamp(t *testing.T) {
-	var now time.Time
-	handler := NewHandlerWithClock(feedStore(t), func() time.Time { return now })
-	get := func(etag string) *httptest.ResponseRecorder {
-		request := httptest.NewRequest(http.MethodGet, "/api/calendar.ics", nil)
-		if etag != "" {
-			request.Header.Set("If-None-Match", etag)
+// feedGet requests a feed with an optional Accept-Encoding and If-None-Match.
+func feedGet(handler http.Handler, path, encoding, etag string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodGet, path, nil)
+	if encoding != "" {
+		request.Header.Set("Accept-Encoding", encoding)
+	}
+	if etag != "" {
+		request.Header.Set("If-None-Match", etag)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	return response
+}
+
+// feedEncodings checks that a feed's identity and gzip answers carry the same
+// weak validator, that gzip decodes to the identity body and that either
+// encoding revalidates the tag without a body. It returns the tag.
+func feedEncodings(t *testing.T, handler http.Handler, path string) string {
+	t.Helper()
+	identity := feedGet(handler, path, "", "")
+	etag := identity.Header().Get("ETag")
+	if identity.Code != http.StatusOK || identity.Header().Get("Content-Encoding") != "" || identity.Header().Get("Vary") != "Accept-Encoding" ||
+		!strings.HasPrefix(etag, `W/"`) || identity.Body.Len() < compressThreshold {
+		t.Fatalf("%s identity status=%d headers=%v length=%d", path, identity.Code, identity.Header(), identity.Body.Len())
+	}
+	gzipped := feedGet(handler, path, "gzip", "")
+	if gzipped.Code != http.StatusOK || gzipped.Header().Get("Content-Encoding") != "gzip" || gzipped.Header().Get("ETag") != etag ||
+		gzipped.Header().Get("Vary") != "Accept-Encoding" {
+		t.Fatalf("%s gzip status=%d headers=%v", path, gzipped.Code, gzipped.Header())
+	}
+	reader, err := gzip.NewReader(gzipped.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded, _ := io.ReadAll(reader); string(decoded) != identity.Body.String() {
+		t.Fatalf("%s gzip body differs from the identity body", path)
+	}
+	feedRevalidates(t, handler, path, etag)
+	return etag
+}
+
+// feedRevalidates checks that both encodings answer etag with a bodiless 304.
+func feedRevalidates(t *testing.T, handler http.Handler, path, etag string) {
+	t.Helper()
+	for _, encoding := range []string{"", "gzip"} {
+		unchanged := feedGet(handler, path, encoding, etag)
+		if unchanged.Code != http.StatusNotModified || unchanged.Body.Len() != 0 || unchanged.Header().Get("ETag") != etag ||
+			unchanged.Header().Get("Content-Encoding") != "" || unchanged.Header().Get("Vary") != "Accept-Encoding" {
+			t.Fatalf("%s %q revalidation status=%d headers=%v", path, encoding, unchanged.Code, unchanged.Header())
 		}
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		return response
 	}
+}
+
+func TestCalendarFeedRevalidatesWithinAJapanDayAcrossEncodings(t *testing.T) {
+	var now time.Time
+	handler := Compress(NewHandlerWithClock(feedStore(t), func() time.Time { return now }))
 	now = time.Date(2026, 10, 27, 3, 0, 0, 0, time.UTC)
-	first := get("")
-	if first.Code != http.StatusOK {
-		t.Fatalf("first status=%d", first.Code)
+	etag := feedEncodings(t, handler, "/api/calendar.ics")
+	// Later the same Japan day the tag still holds.
+	now = time.Date(2026, 10, 27, 14, 59, 59, 0, time.UTC)
+	feedRevalidates(t, handler, "/api/calendar.ics", etag)
+	// The next Japan day moves the window and DTSTAMP.
+	now = time.Date(2026, 10, 27, 15, 0, 0, 0, time.UTC)
+	next := feedGet(handler, "/api/calendar.ics", "", etag)
+	if next.Code != http.StatusOK || next.Header().Get("ETag") == etag || !strings.Contains(next.Body.String(), "DTSTAMP:20261027T150000Z\r\n") {
+		t.Fatalf("next day status=%d etag=%q", next.Code, next.Header().Get("ETag"))
 	}
-	now = now.Add(time.Minute)
-	second := get(first.Header().Get("ETag"))
-	if second.Code != http.StatusOK || second.Header().Get("ETag") == first.Header().Get("ETag") || second.Body.String() == first.Body.String() {
-		t.Fatalf("clock change was cached: first=%d/%q second=%d/%q", first.Code, first.Header().Get("ETag"), second.Code, second.Header().Get("ETag"))
-	}
+}
+
+func TestAtomFeedRevalidatesAcrossEncodings(t *testing.T) {
+	handler := Compress(feedHandler(t, time.Date(2026, 10, 27, 3, 0, 0, 0, time.UTC)))
+	feedEncodings(t, handler, "/api/feed.xml")
 }
 
 func TestAtomFeed(t *testing.T) {

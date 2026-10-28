@@ -32,6 +32,14 @@ func TestCompressOnlyPublicReadsAndBuildText(t *testing.T) {
 		"/api/videos": func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]string{"value": large}, "")
 		},
+		"/api/calendar.ics": func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+			_, _ = w.Write([]byte(large))
+		},
+		"/api/feed.xml": func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
+			_, _ = w.Write([]byte(large))
+		},
 		"/api/dashboard/events": func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = w.Write([]byte(": " + large + "\n\n"))
@@ -84,7 +92,7 @@ func TestCompressOnlyPublicReadsAndBuildText(t *testing.T) {
 	}
 	for path, compressed := range map[string]bool{
 		"/api/dashboard": true, "/assets/app.js": true, "/api/calendar": true, "/api/posts": true, "/api/videos": true,
-		"/api/dashboard/revision": false, "/api/admin/config": false, "/api/dashboard/events": false, "/mcp": false,
+		"/api/calendar.ics": true, "/api/feed.xml": true, "/api/dashboard/revision": false, "/api/admin/config": false, "/api/dashboard/events": false, "/mcp": false,
 		"/media/synthetic": false, "/assets/photo.jpg": false, "/cookie": false, "/missing": false,
 	} {
 		response, body := fetch("GET", path, "Accept-Encoding", "gzip, br")
