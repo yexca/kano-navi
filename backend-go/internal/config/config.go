@@ -116,7 +116,7 @@ func Parse(args []string) (Config, error) {
 			c.ListenAddress = ":" + strconv.Itoa(standalonePort(os.Getenv("PORT")))
 		}
 		// Operator requests may wait on a provider test, a profile download
-		// or a 15 MiB upload, which the sidecar's read/write bounds would cut.
+		// or a 15 MiB upload, which the read-only mode's bounds would cut.
 		if !explicit["read-timeout"] {
 			c.ReadTimeout = 60 * time.Second
 		}

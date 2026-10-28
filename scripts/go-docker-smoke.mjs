@@ -137,8 +137,8 @@ try {
   // The server assigns manual event IDs; a client-supplied ID is ignored.
   const eventId = (await event.json()).event.id
   assert.match(eventId, /^manual-[0-9a-f-]{36}$/u)
-  // Saved workflows are retired (ADR-0003); a one-off step run replaces them.
-  // These sidecar flags wire no schedule adapter, so the step is blocked.
+  // A one-off step run (ADR-0003). These read-only mode flags wire no
+  // schedule adapter, so the step is blocked.
   const submitted = await send("/api/admin/runs", "POST", {
     kind: "workflow",
     steps: ["schedule"],

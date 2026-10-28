@@ -380,7 +380,7 @@ func TestExtractionEnvironmentDefaults(t *testing.T) {
 		"SCHEDULE_MESSAGE_ALL_POSTS":  "1",
 	}})
 	config := h.ok(http.MethodGet, "/extraction", nil, http.StatusOK)
-	// The legacy switch does not turn the all-posts option off.
+	// schedule_extraction_enabled does not turn the all-posts option off.
 	equal(t, "all posts", config.JSON["messageAllPosts"], true)
 	equal(t, "keyword stage", config.JSON["keywordEnabled"], false)
 	equal(t, "vision stage", config.JSON["visionEnabled"], false)

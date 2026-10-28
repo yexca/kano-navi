@@ -56,7 +56,7 @@ in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`
 registers the views (Overview, Review queue, Schedule, Posts, Videos, Profile
 images, Runs, Sources, Models & detection) and renders the shell
-with hash routing (`#view/tab`; older `#content/<tab>` links open the matching
+with hash routing (`#view/tab`; a `#content/<tab>` link opens the matching
 view); `use-admin-data.ts` owns every
 [Admin API](admin-api.md) call, the session and the overview poll that tracks
 the active run; `api.ts` is the transport and error mapping; `types.ts` holds
@@ -95,8 +95,8 @@ English is the base locale. Every message exists in English, a key missing
 from Japanese or Simplified Chinese falls back to it, and a browser language
 that is none of the three selects it. Stored records are not interface copy:
 event status codes and the generated YouTube details become labels through
-`src/lib/event-text.ts`, which also reads the Chinese text earlier releases
-stored, while other details and operator notes show as stored (see
+`src/lib/event-text.ts`, which also reads the stored legacy Chinese values,
+while other details and operator notes show as stored (see
 [Stored event text](data-model.md#stored-event-text)).
 
 A post that quotes another status (`post.quote`, see
@@ -151,7 +151,7 @@ lists the server's [resized copies](media-cache.md#resized-copies) below an
 image's known width, and each card passes a `sizes` hint for its layout. The
 full-image viewer, profile media and bundled assets keep their single URL.
 The schedule header's Subscribe menu (`calendar-subscribe.tsx`) offers the
-[calendar feed](backend.md#public-feeds) as a `webcal:` link and a copyable
+[calendar feed](public-api.md#public-feeds) as a `webcal:` link and a copyable
 `https` address built by `src/lib/feeds.ts` from the page's origin. Both carry
 the reader's language as `?lang=ja` or `?lang=zh-CN`; English keeps the bare
 path. The settings provider points `index.html`'s Atom and calendar discovery
@@ -172,7 +172,7 @@ and failed reloads retry snapshots, preserving a previously loaded snapshot.
 Hidden pages pause polling; visibility/focus events coalesce into a prompt
 revision check while respecting failure backoff and a one-second minimum gap.
 Unmount aborts requests and removes deadlines, polling and wake listeners.
-The separate 30-second local time derivation remains unchanged.
+The 30-second local time derivation below runs separately.
 
 ## Time-dependent Snapshot State
 
@@ -181,8 +181,8 @@ The profile card shows separate X and YouTube successful-read times from
 updates that warning without a request. Missing timestamps, and ones more
 than five minutes ahead of the local clock (a visitor clock slightly behind
 the server still shows a fresh read), remain waiting. One unread source makes
-a known snapshot partial, and API or failed-run warnings take priority. Older
-payloads without per-source metadata fall back to `meta.fetchedAt`. This is a
+a known snapshot partial, and API or failed-run warnings take priority. A
+payload without per-source metadata falls back to `meta.fetchedAt`. This is a
 display threshold, not a synchronization timer.
 
 The board rederives event/video availability, counts, and focus candidates from
@@ -211,8 +211,8 @@ it the compact layout; `pickCompanion` then adds the latest video beneath a
 compact ticket unless it is the same link. Both read `summary.latestVideo`,
 which `deriveDashboardAt` recomputes as the newest non-upcoming video that is
 not a Short (`isShort === true`), unless it is the featured video
-(`featuredVideoIdOf`: `meta.featuredVideoId`, or the focus video of an older
-snapshot). An unknown format stays eligible, and when every recent upload is a
+(`featuredVideoIdOf`: `meta.featuredVideoId`, or the focus video of a
+snapshot without that field). An unknown format stays eligible, and when every recent upload is a
 Short the stage shows no latest video. The play mark appears only on
 YouTube or Twitch links; X links read as an announcement.
 Matching needs no protected source item IDs or additional public API fields.
@@ -234,7 +234,7 @@ the icons in `public/assets/icons/`: a 32 px favicon, 192 and 512 px icons, a
 512 px maskable icon with the avatar inside the 80% safe zone on the
 avatar's own pink, and a 180 px `apple-touch-icon`. They are resized copies of
 the bundled `public/assets/kano-avatar.jpg` and follow its provenance; the
-theme-color metas still switch between the light and dark backgrounds.
+theme-color metas switch between the light and dark backgrounds.
 There is no service worker or offline mode: an installed app loads the same
 pages, which read the live local API. The Go static server serves
 `.webmanifest` as `application/manifest+json` and, like other unhashed public
@@ -251,7 +251,7 @@ name, or stable ID to identify a mark; unknown custom providers retain their
 initial. Removing a preset does not delete saved providers.
 
 The provider dialog lists presets beside the connection form. Model discovery
-there is still an explicit operator action: it saves the connection first, so a
+there is an explicit operator action: it saves the connection first, so a
 new provider exists before its key is used, and later saves in the same dialog
 update that row. There is no default model: on save, ticked models join the
 catalog and models marked for the queue are appended to its end. The models
@@ -272,8 +272,8 @@ uses the 15-second deadline and refresh deduplication described above. All reque
 are cancelled on unmount and reject superseded responses. Automatic polls wait for an active request rather
 than starting overlapping work. Their timer is scheduled after settlement,
 including failure, with exponential backoff capped at 60 seconds. Public polls
-continue to pause while hidden. A failed initial snapshot retries even before
-any revision has been recorded; manual retry remains available. Admin 401 stops
+pause while hidden. A failed initial snapshot retries even before
+any revision has been recorded; manual retry is available. Admin 401 stops
 polling and requires login. Failed initial admin loads also retry.
 
 The board's calendar shows one week; its selected week lives in
@@ -295,7 +295,7 @@ Adjacent-date hints support jumping to stored activity in either direction.
 The month dialogs read through `useArchive` in `use-dashboard.ts`, only
 while one is open: the schedule reads the Monday-first weeks covering the month
 from `/api/calendar`, and past posts and videos read the month's own days from
-[`/api/posts` and `/api/videos`](backend.md#bounded-public-archives). They
+[`/api/posts` and `/api/videos`](public-api.md#bounded-public-archives). They
 follow the same rules as the calendar: pages of one revision are appended, a
 later page from another revision rereads the loaded pages atomically (up to
 three attempts under the 12-second deadline), and a board revision change
@@ -304,7 +304,7 @@ their loaded pages after each successful full board snapshot, even at the same
 revision, so expired live states disappear there too. A snapshot arriving during
 an archive read or pagination waits for that work to settle before refreshing;
 a failed refresh keeps the complete known prefix and retries on the next board
-snapshot. Post archives continue to follow stored revisions. These refreshes
+snapshot. Post archives follow stored revisions. These refreshes
 share the board's visibility pause and snapshot backoff rather than starting a
 separate archive timer. Changing the month or the post
 account, or closing the dialog, cancels the read and discards late pages.

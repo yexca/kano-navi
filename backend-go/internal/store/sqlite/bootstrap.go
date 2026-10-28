@@ -24,7 +24,7 @@ var publicStaticSeed []byte
 
 // OpenInitialized creates a fresh current-schema database or seeds missing
 // static records in an existing current-schema snapshot. It never reconstructs
-// unknown/legacy tables, clears snapshots, or changes provider configuration.
+// unknown tables, clears snapshots, or changes provider configuration.
 func OpenInitialized(filename string, adminWrites, workflowWrites bool) (*Store, error) {
 	return openInitialized(filename, adminWrites, workflowWrites, false)
 }

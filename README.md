@@ -14,7 +14,6 @@
     <a href="docs/README.md">Documentation</a> ·
     <a href="https://github.com/yexca/kano-navi/releases">Releases</a>
   </p>
-  <p>English · <a href="README.zh-cn.md">简体中文</a></p>
 </div>
 
 Kano Navi is an unofficial, self-hosted fan board for **Kano Mahoro (鹿乃まほろ)**.

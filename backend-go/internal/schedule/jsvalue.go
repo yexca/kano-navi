@@ -14,10 +14,10 @@ import (
 	"unicode/utf8"
 )
 
-// The TypeScript extractor hashes and stores values produced by
+// Stored fingerprints and rows are defined by the JavaScript semantics of
 // JSON.stringify, String(), slice() and trim(). The helpers in this file
-// reproduce those JavaScript semantics so fingerprints and stored rows stay
-// byte-compatible with what the original service wrote.
+// reproduce those semantics so fingerprints and stored rows stay
+// byte-identical.
 //
 // JSON values are modelled as: nil (null), bool, float64, string, []any and
 // *object (insertion ordered). A missing property is reported through the
@@ -452,7 +452,7 @@ func utf16Length(s string) int {
 
 // sliceUTF16 mirrors value.slice(0, limit), which counts UTF-16 code units. A
 // surrogate pair cut in half becomes U+FFFD, matching how the lone surrogate
-// was encoded when Node hashed or stored the string as UTF-8.
+// is encoded when a JavaScript string is hashed or stored as UTF-8.
 func sliceUTF16(s string, limit int) string {
 	if limit <= 0 {
 		return ""

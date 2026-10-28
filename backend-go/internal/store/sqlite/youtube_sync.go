@@ -299,7 +299,7 @@ func writeYoutubeVideos(ctx context.Context, tx *sql.Tx, videos []ytsource.Video
 			}
 			typeName, detail, status := youtubeEventFields(v)
 			eventID := "youtube-" + v.ID
-			// Reuse legacy evidence identities, including locked rows and deleted
+			// Reuse stored evidence identities, including locked rows and deleted
 			// rows. A new canonical ID must not resurrect a different old ID.
 			var existingID string
 			identityErr := tx.QueryRowContext(ctx, `SELECT id FROM events WHERE source='youtube' AND source_item_id=? AND source_key='reservation' UNION ALL SELECT e.id FROM event_sources es JOIN events e ON e.id=es.event_id WHERE es.source='youtube' AND es.source_item_id=? AND es.source_key='reservation' LIMIT 1`, v.ID, v.ID).Scan(&existingID)

@@ -22,8 +22,9 @@ To use the equivalent GHCR image, set
 
 Fresh deployments start with empty X/YouTube snapshots and no LLM providers.
 Add providers and the model queue in `/admin`, then use a source's Run now or
-enable its timer on the Sources page to populate source data. Fixed history images are already bundled. Existing `./data` snapshots
-and provider configuration survive upgrades.
+enable its timer on the Sources page to populate source data. Fixed history
+images are already bundled. Existing `./data` snapshots and provider
+configuration survive upgrades.
 
 Behind an HTTPS reverse proxy, preserve `Sec-Fetch-Site` from browser requests
 and forward `X-Forwarded-Proto: https` so session cookies receive `Secure`.
@@ -60,17 +61,16 @@ docker compose run --rm kano sync
 docker compose run --rm kano migrate-llm
 ```
 
-### Upgrading from a TypeScript release
+### Upgrades and rollback
 
-Releases up to 0.1.3 shipped a Node image. The Go image accepts the same
-environment and `/app/data` volume, so `docker-compose.yml` and `.env` are
-unchanged. Back up `./data`, then update as usual; the first start upgrades
-the snapshot in place and keeps every record, provider and workflow. Provider
-keys stay readable with the same `LLM_SECRETS_KEY`.
-
-To roll back, stop the container and pin the previous image with
-`KANO_IMAGE=yexca/kano-navi:0.1.3`. Only one service may own a snapshot at a
-time. See [Go backend](../architecture/go-standalone.md#rollback).
+Back up `./data` as described in
+[Backup and recovery](database.md#backup-and-recovery) before starting a new
+image. The first start upgrades the snapshot in place and keeps every record,
+provider and manual decision; provider keys stay readable with the same
+`LLM_SECRETS_KEY`. To roll back, stop the service, restore the `./data` backup
+taken before the upgrade, set `KANO_IMAGE` to the previous image tag and start
+it again. Only one service may own a snapshot at a time. Upgrade notes for
+each release are in the [release history](../history/index.md).
 
 Version tags run the Release workflow, which builds once and publishes the
 same image to Docker Hub and GHCR with version, major/minor, and `latest` tags.

@@ -86,8 +86,8 @@ func defaultSourceSchedule(source string, floor int) SourceSchedule {
 	return schedule
 }
 
-// hasSourceSchedules reports the table, which a read-only snapshot written
-// by an earlier release lacks.
+// hasSourceSchedules reports the table, which a read-only snapshot that has
+// not been upgraded lacks.
 func (s *Store) hasSourceSchedules(ctx context.Context) (bool, error) {
 	var n int
 	if s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='source_schedules'`).Scan(&n) != nil {
@@ -340,8 +340,8 @@ func (s *Store) planSourceSchedule(ctx context.Context, tx *sql.Tx, source strin
 
 // PrepareSourceSchedules runs at every start of the process that owns the
 // timers. floor is BILIBILI_MIN_INTERVAL_MINUTES: a stored Bilibili interval
-// below a raised floor is raised to it. Saved workflows are retired without a
-// migration (ADR-0003), so nothing else is moved.
+// below a raised floor is raised to it. Timers live only in source_schedules
+// (ADR-0003), so nothing else is moved.
 func (s *Store) PrepareSourceSchedules(ctx context.Context, floor int, now time.Time) error {
 	tx, err := s.workflowTx(ctx)
 	if err != nil {

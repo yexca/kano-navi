@@ -1,102 +1,162 @@
-# Backend and HTTP
+# Backend
 
-## API: `backend-go/cmd/kano-go` and `internal/httpapi`
+The backend is the Go module in `backend-go/`. `kano-go serve` runs the public
+API, the operator console, workflows and timers, schedule extraction, MCP and
+the built frontend from one process, against the SQLite snapshot and the
+`data/` tree. Releases, the published image, local development and CI all run
+it; no Node runtime is shipped. Node is the frontend build toolchain only.
 
-The backend is the Go service described in [Go backend](go-standalone.md).
-`cmd/kano-go` validates credentials, opens the runtime database and starts
-the listener; `internal/httpapi` builds the handler around an injected store,
-exposes the health and dashboard read endpoints and serves `dist/` in
-production. In development and bundle preview Vite serves the frontend and
-proxies `/api`, `/media`, and `/mcp` to the same backend with the browser's
-Host header, keeping authentication, media access, and MCP control on one
-origin. The site defaults to port `7657`; development and preview refuse to
-switch ports when it is occupied.
-Responses should remain stable and sanitized; do not expose
-`raw_json`, stack traces, credentials, or absolute local paths to the browser.
-Ready runtime media is served only through the opaque-ID `/media/:id` route.
+Public HTTP and MCP contracts are in [Public API](public-api.md); operator
+routes are in the [Admin API](admin-api.md).
 
-The [Admin API](admin-api.md) (`internal/adminapi`, with routes contributed by
-`internal/llmadmin`, `internal/contentadmin` and the YouTube `websub` package)
-exposes the session, the console overview, runs, source timers and their
-Run now, source windows, events, schedule images, posts, videos, profile media, extraction
-settings, providers, the model catalog and the model queue. Mutating requests reject
-cross-site Fetch Metadata. Browser `Sec-Fetch-Site: same-origin` requests remain
-valid when a reverse proxy rewrites Host or terminates HTTPS; other requests
-with an `Origin` must match the observed local origin. Production also requires
-the HttpOnly admin session and SameSite cookie.
-The server defaults to `APP_MODE=production` and validates the admin password
-and requires a non-blank `LLM_SECRETS_KEY` in every mode before opening or
-seeding SQLite. An explicit `APP_MODE=development` bypasses
-authentication for local work. Production uses in-memory HttpOnly cookie sessions;
-restarting the process invalidates all sessions. The API exposes provider-key availability, never plaintext or ciphertext.
+## Commands
 
-## YouTube WebSub Callback: `/api/websub/youtube`
+```text
+kano-go serve        Serve the whole site (API, console, workflows, MCP, frontend)
+kano-go seed         Create the database if missing and add missing static records
+kano-go sync         Run one full synchronization and exit
+kano-go migrate-llm  Seal OPENAI_API_KEY as the key of the openai-default provider
+kano-go healthcheck  Probe the local service and exit
+```
 
-The route is active only while YouTube push is enabled in `/admin`
-(`/api/admin/sources/youtube/push`); otherwise it answers like an unknown API path. It
-answers Google's hub verification for this channel's topic and accepts signed
-Atom notifications, which only wake a queued YouTube sync. See
-[Sources](sources.md#websub-push) for the settings, verification, signature,
-debounce and queue rules.
+Every command reads `.env` from the working directory; variables already in
+the environment win. `-database` overrides `data/database/kano.sqlite`, and
+`serve` also accepts `-static` (default `dist`) and `-listen` (default `PORT`,
+`7657`). `seed -overwrite` restores the shipped profile, timeline and resource
+wording; it never touches source snapshots, events, media or providers.
+`migrate-llm -force` replaces an already stored key.
 
-## MCP Boundary: `/mcp`
+From the repository root:
 
-`/mcp` uses stateless Streamable HTTP. `dashboard_read`, `schedule_list`,
-`posts_list`, and `health_read` are public read-only tools and do not require a
-credential. Control tools are only registered for requests carrying
-`Authorization: Bearer <MCP_CONTROL_TOKEN>`: they can advance a dashboard
-revision, start or inspect an asynchronous sync, or run the automatic schedule
-scan. The token is independent of `ADMIN_PASSWORD` and browser sessions.
+```bash
+make build   # frontend into dist/
+make start   # builds backend-go/bin/kano-go and runs `kano-go serve`
+make seed    # or: make sync
+```
 
-The endpoint deliberately has no tool for manual event confirmation, editing,
-deletion, bulk approval, profile-media selection/upload, SQL, file paths, DOM
-commands, or arbitrary URL proxying. Human confirmation remains a human-only
-workflow at `/admin`.
+The npm scripts `start`, `seed`, `sync` and `migrate:llm` run the same commands
+through `scripts/run-app.mjs`. In the image, `docker compose run --rm kano sync`
+(or `seed`, `migrate-llm`) runs a command against the mounted `/app/data`.
 
-## Public Snapshot Contract
+`kano-go sync` uses the same executor and SQLite single-flight reservation as
+the service. If the service is already synchronizing, the command reports a
+busy queue instead of starting a second run.
 
-GET /api/health returns service status, the current ISO timestamp, and a
-whitelisted synchronization summary; it does not return a database path or label. GET /api/dashboard?days=3
-clamps days to 1 through 30 and returns profile, summary, posts, events, videos,
-focus, timeline, resources, schedule assets, media status, and metadata.
-Posts are those published within the window plus, however old, the eight
-newest, at most 100; MCP `dashboard_read` and `posts_list` read the same list.
-counts.posts counts the window only. The summary contains nextEvent, nextStream, latestVideo, latestPost, and counts;
-latestPost survives an empty requested window. latestVideo is the stage's
-fallback: the newest non-upcoming video that is not a Short, unless the
-operator featured that Short; a video of unknown format stays eligible.
-Metadata includes configured X accounts and the Featured video ID.
+## Development
 
-`meta.sourceFetchedAt` contains only `x` and `youtube` ISO timestamps or null,
-derived from successful incremental or recent source reads. Historical range
-backfills do not refresh it; recent-window pages are capped at the window's
-end time. Timeline recent/count windows also retain their successful head-page
-read time, so resuming old pages does not refresh the source. Older timeline
-checkpoints without that time remain unknown. Media-only runs, cursor cleanup
-and API reads do not advance these source timestamps. Internal account
-IDs, checkpoints and fetch errors remain protected.
+`make dev` builds the backend, starts it on `127.0.0.1:KANO_API_PORT` (default
+`7658`) and starts Vite on `PORT`. Vite serves the frontend with hot reload and
+proxies `/api`, `/media` and `/mcp` to the backend with the browser's Host
+header, so authentication, media and MCP stay on one origin. `make preview`
+does the same with the built bundle. Restart after changing Go source. The site
+defaults to port `7657`; development and preview refuse to switch ports when it
+is occupied.
 
-backend-go/internal/publicview owns shared public event, synchronization, and
-selected profile-media projections for HTTP and MCP. A public sync summary contains only
-id, source, start/finish times, status, and a fixed status message. Public profile
-slots contain only id, slot, source, sourceUrl, status, isActive, and publicUrl.
-Cache paths, source references, download errors, and candidate metadata remain
-available through authenticated admin reads.
-Per-source counters, raw fetch errors, job IDs, and internal source item IDs
-stay in the guarded admin API. GET /api/dashboard/revision reports a small
-revision hint without external work. Timestamps are parseable ISO 8601 strings;
-display and date-window boundaries use Asia/Tokyo.
+## Startup Order
 
-Media responses follow the [media HTTP contract](media-cache.md#http-contract).
-Selected profile media uses /media/profile/avatar and /media/profile/banner.
+1. `ADMIN_PASSWORD` (production default, at least 12 non-padding characters)
+   and a non-blank `LLM_SECRETS_KEY` are validated before SQLite is opened.
+2. A missing database is created from the embedded schema
+   (`internal/store/sqlite/bootstrap.sql`) and public static seeds. Source
+   snapshots, Featured data and providers start empty.
+3. An existing snapshot is upgraded in one transaction
+   (`internal/store/sqlite/schema_upgrade.go`): missing tables, columns and
+   indexes are added from the embedded schema, followed by the backfills
+   (schedule periods, post account handles, focus video IDs, provider
+   capabilities and retries, the route-target copy, default catalog models,
+   and the merge of per-stage routes into the single model queue). An `events`
+   table without event sources is rebuilt in place: every row keeps its ID,
+   gains its Japan calendar date and becomes its own source evidence, and
+   events curated from X are locked. Nothing else is dropped or cleared. A
+   database without the core tables is refused unchanged.
+4. Missing static seed rows are inserted; existing rows and settings are kept.
+5. The selected avatar and banner are reconciled with the files on disk
+   (`active_sha256`, `active_mime_type`), bumping the dashboard revision only
+   when something changed.
+6. Interrupted workflow runs are recovered, and a stored Bilibili interval
+   below `BILIBILI_MIN_INTERVAL_MINUTES` is raised to it. No timers are seeded;
+   [source schedules](workflows.md#source-schedules) hold them.
+7. The timer starts unless `WORKFLOW_SCHEDULER_ENABLED=0`. It submits due
+   source schedules, earliest first.
+
+## Package Ownership
+
+| Area                                           | Package                                                         |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| Entry point and commands                       | `cmd/kano-go`                                                   |
+| Public reads, feeds, media, health             | `internal/httpapi`, `internal/feeds`, `internal/publicview`     |
+| Session, login, origin guard                   | `internal/adminauth`                                            |
+| Admin route table, overview, events, lists     | `internal/adminapi` + `internal/store/sqlite`                   |
+| Runs, source schedules, source fetch           | `internal/adminapi`, `internal/jobs`, `internal/workflow`       |
+| Historical source windows                      | `internal/source/history`, `internal/workflow/history_steps.go` |
+| Extraction, providers, models, routes          | `internal/llmadmin`                                             |
+| Profile media, schedule images, post reprocess | `internal/contentadmin`                                         |
+| Schedule extraction step                       | `internal/schedule`                                             |
+| `/mcp`                                         | `internal/mcpapi`                                               |
+| Built frontend and SPA fallback                | `internal/httpapi/static.go`                                    |
+
+`cmd/kano-go` validates credentials, opens the runtime database and starts the
+listener; `internal/httpapi` builds the handler around an injected store.
+`internal/adminapi` owns the single `/api/admin` route table described in the
+[Admin API](admin-api.md). Feature packages (`internal/llmadmin`,
+`internal/contentadmin` and the YouTube `websub` package) implement
+`httpx.AdminModule` by returning their routes; the router authenticates the
+session, applies the origin guard and refuses writes to a read-only database
+before a module handler runs.
+
+Responses stay stable and sanitized: `raw_json`, stack traces, credentials and
+absolute local paths never reach the browser. Ready runtime media is served
+only through the opaque-ID `/media/:id` route.
+
+## Authentication and Origin
+
+The server defaults to `APP_MODE=production`, validates the admin password and
+requires a non-blank `LLM_SECRETS_KEY` in every mode before opening or seeding
+SQLite. An explicit `APP_MODE=development` bypasses authentication for local
+work. Production uses in-memory HttpOnly, SameSite cookie sessions; restarting
+the process invalidates all sessions. The API exposes provider-key
+availability, never plaintext or ciphertext.
+
+Mutating requests reject cross-site Fetch Metadata. Browser
+`Sec-Fetch-Site: same-origin` requests remain valid when a reverse proxy
+rewrites Host or terminates HTTPS; other requests with an `Origin` must match
+the observed local origin.
+
+## Jobs and Workflows
+
+The console's job list is a projection of durable workflow runs. Every run is
+ad hoc and names its kind of work with a reserved ID: `@sync`, `@scan`,
+`@fetch` (fetch windows and one-off step runs), `@translate`, `@live` and
+`@source-<source>` (a source's chain, from its timer or Run now). All of them
+share the SQLite single-flight reservation, so a second start answers `409`
+with `busy` and the active run.
+
+Jobs survive a restart and are recovered. Every job reports per-step progress.
+A failed X or YouTube step is recorded and the remaining steps still run; the
+job finishes as partial, or failed when no step succeeded. Steps disabled
+through `SKIP_X`, `SKIP_YOUTUBE`, `SKIP_MEDIA` or `SKIP_LLM` are recorded as
+skipped. Each step's counters are merged into the job's `sync_runs.counts_json`
+row. The step catalog, queue, timers and fetch windows are described in
+[Workflows](workflows.md).
+
+## Read-Only Mode
+
+Run with flags only and no command, the binary opens an existing snapshot in
+SQLite `mode=ro` on `:7658` and serves the public reads without migrations,
+seeds or writes. `backend-go/Dockerfile` packages this mode, and
+`scripts/go-docker-smoke.mjs` (part of `make go-check`) mounts a synthetic
+`data/` tree read-only and verifies that no database sidecar, WAL, journal or
+directory is created. Its `-enable-*` and `-initialize` flags are
+development test switches: they require `APP_MODE=development` and a
+disposable database.
 
 ## Text Transfer and Static Caching
 
 Compression precedes the response handlers. Successful GET/HEAD public
 dashboard, revision and health JSON, plus build HTML/JavaScript/CSS, negotiate
 gzip through `Accept-Encoding`. Bodies below 1 KiB remain uncompressed. The
-listener does not produce Brotli or deflate, which releases up to 0.1.3 also
-offered. `Vary: Accept-Encoding` also accompanies
+listener does not produce Brotli or deflate; clients that advertise only those
+receive the identity representation. `Vary: Accept-Encoding` also accompanies
 eligible identity and conditional responses. Existing weak ETags validate the
 uncompressed representation across encodings; 304 and HEAD have no compressed
 body. Range responses, non-success responses, already encoded bodies and
@@ -106,9 +166,9 @@ Admin/authentication responses, MCP (including streams and reflected protocol
 inputs), runtime media and images are excluded. Public JSON compression is
 credential-independent and contains no secrets or reflected free-text request
 input. Do not extend this allowlist to secret-bearing/reflected responses or
-apply unconditional compression at a reverse proxy.
-Admin and MCP additionally send `Cache-Control: no-store, no-transform` so
-intermediaries also have an explicit transformation prohibition.
+apply unconditional compression at a reverse proxy. Admin and MCP additionally
+send `Cache-Control: no-store, no-transform` so intermediaries also have an
+explicit transformation prohibition.
 
 Only content-hashed JS/CSS in `dist/assets` listed in Vite's
 `dist/.vite/manifest.json` receive `public, max-age=31536000, immutable`.
@@ -122,136 +182,15 @@ public feeds, `/api/calendar.ics` and `/api/feed.xml`, whose subscription
 fetchers (Google Calendar's among them) honour it. `/index.html` is the file
 itself, which the frontend shows as the board. A missing/invalid manifest
 falls back to revalidation. Dynamic media retains its independent version/hash
-validation and caching. Dashboard/revision remain `no-store`; this does not
-introduce a dashboard response cache.
-
-## Related Docs
-
-- [Data model](data-model.md)
-- [Workflows](workflows.md)
-- [Deployment security](../operations/security.md)
-- [Secure development](../development/security.md)
-
-## Bounded Public Calendar
-
-`GET /api/calendar?from=2026-10-05&to=2026-10-11&page=1&pageSize=100`
-reads an inclusive range of at most 42 Japan dates (six Monday-first weeks,
-enough for a month grid), with 1–100 events per page in stable chronological
-order. It returns sanitized `items` / `events`,
-`total`, `totalPages`, `hasNext`, `dayCounts`, `revision`, matching approved
-schedule images and `adjacent.previous` / `adjacent.next` event dates. Invalid
-ranges return 400. Every read uses the same public event projection as the
-board, including the trusted `liveStatus` of an event's linked video; it does
-not fetch platforms or models. MCP `schedule_list` remains the
-bounded, paginated history reader; `dashboard_read` shares the bounded snapshot.
-Events merged into another event are excluded from every one of these reads,
-including totals, day counts, adjacent dates and summary candidates (see
-[Duplicate merging](data-model.md#duplicate-merging)).
-
-Dashboard SQL selects up to 100 recent post previews plus the latest-post
-fallback, up to 100 current-week event previews plus 30 upcoming and 30 live
-focus candidates and at most one linked event per returned video, and bounded
-video candidates plus Featured selection and the latest completed video.
-Live event eligibility is applied before the 30-row limit: cancelled and suspected
-cancellations, tombstones, non-stream activities and expired streams do not consume
-the shortlist. Eligible live events use ascending start instants and stable ID ties,
-matching the frontend focus ordering, including streams spanning earlier weeks.
-Known end times remove finished streams before limiting focus candidates and
-retain streams with explicit longer durations; an absent end gives streams and
-memberships the strictly less-than-three-hour grace period, while other YouTube
-activities such as premieres need an explicit future end. Video/event association uses indexed primary,
-source-evidence and normalized URL identities, rather than scanning events for each
-historical video. Media is resolved only for returned owners. Historical
-event and media growth therefore does not enlarge a homepage response.
-Full event totals and upcoming counts are separate SQL aggregates; calendar
-pagination preserves access to every activity instead of dropping later rows.
-
-JSON parser failures return `invalid_json` (400), excessive bodies return
-`request_too_large` (413), and unsupported encodings return 415. The global
-handler logs only a fixed event/code/status object, including unexpected errors;
-it never serializes error messages, stacks, raw bodies, headers or keys.
-
-## Bounded Public Archives
-
-`GET /api/posts?from=2026-10-01&to=2026-10-31&page=1&pageSize=30&account=kano_2525`
-and `GET /api/videos?from=2026-10-01&to=2026-10-31&page=1&pageSize=30` read
-the stored posts or videos of an inclusive range of at most 42 Japan dates,
-newest first, with 1–50 items per page (30 by default) and stable ID ties.
-A post's time is its publication; a video's is its scheduled start, or its
-publication without one. Undated videos are not listed. Both return sanitized
-`items` in the dashboard's post and video projections (resolved ready media,
-no raw JSON), `page`, `pageSize`, `total`, `totalPages`, `hasNext`,
-`revision` and `adjacent.previous` / `adjacent.next`, the nearest Japan
-dates outside the range that hold an item. The optional post `account`
-filter is one X handle, compared without case, and also narrows the totals and
-adjacent dates; `accountCounts` always counts the range's posts per lowercase
-handle. An invalid range returns 400 `invalid_range` and an invalid handle
-400 `invalid_account`. Reads are `no-store`, are not compressed and never
-fetch platforms. The board's month dialogs use them with the calendar.
-
-## Public Feeds
-
-`GET /api/calendar.ics` is an iCalendar (RFC 5545) subscription of the events
-dated 30 days before to 90 days after today's Japan date, at most 500 events,
-each once: events from today on fill the cap first and the most recent past
-events take what is left. They are read through the same bounded calendar pages and event projection as
-`/api/calendar`. Times are UTC; an event without a time, or of `unknown`
-precision, is an all-day entry on its Japan date. A timed event without a
-stored end after its start lasts an hour when it is a stream (the `stream` and
-`member` types the board treats as streams) and half an hour otherwise, since
-RFC 5545 would make it zero-length. A UID is the public event ID with
-`@kano-navi`. `LAST-MODIFIED` is the event's stored `updated_at`, and
-`SEQUENCE` is that time in whole seconds since 2020-01-01 UTC, so it grows
-whenever the event is written and clients replace a changed entry; an event
-without a parseable update time has neither. `STATUS` is `CANCELLED` only
-for a cancelled status or an operator's confirmation (`manual_confirmed`),
-`TENTATIVE` for a suspected
-cancellation or a `tentative` status, and `CONFIRMED` otherwise. The
-description carries the event's detail, its provenance and its public link;
-only absolute HTTP(S) links are written. Text is escaped and lines are folded
-at 75 octets without splitting a character.
-
-`GET /api/feed.xml` is an Atom 1.0 feed of at most 50 YouTube videos and
-reservations dated 30 days before to 11 days after today, newest first. An
-entry is dated by its publication (a future time is dated at the start of
-today's Japan day until it passes, so the entry does not move between polls),
-says when a reservation is scheduled, and links the video and any
-merged platform copy. Entry and feed IDs are `urn:kano-navi:` URNs. The
-server never builds links from the request's `Host`: with `PUBLIC_ORIGIN` the
-feed links the site absolutely and adds a `rel="self"` link to
-`/api/feed.xml`; without it the site link stays `/` and there is no self link.
-
-Both take an optional `lang` query, `en`, `ja` or `zh-CN`; a missing or
-unknown value is the English base, so the bare paths stay English. Titles
-resolve [translations](data-model.md#translations) the way the board does:
-Japanese readers get the source wording, and English and Chinese readers get
-the locale's translation when one exists (an event only through its linked
-video's title). The fixed wording the server writes — the calendar and feed
-names (the board's `site.name`), the event descriptions' provenance and
-unofficial notes, the generated YouTube details (`YouTube Live`,
-`YouTube Premiere` and their legacy forms) and the Atom subtitle and
-summaries — comes from a small table in `backend-go/internal/feeds/locale.go`.
-Stored data is unchanged: only rendering picks the language. A non-English
-Atom feed declares `xml:lang`, has the feed ID `urn:kano-navi:feed:<lang>`
-and its self link keeps the `lang` query.
-
-Both answer `GET` and `HEAD`, never fetch platforms or models, and send
-`Cache-Control: public, max-age=600` with an ETag that names the language and
-the build version, so an upgrade's rewording is not hidden by a cached copy.
-The calendar's ETag adds the dashboard revision and the Japan date, which
-decide its content (only `DTSTAMP` follows the clock). The Atom feed also
-depends on the clock, since a reservation turns into an aired video when its
-time passes, so its ETag adds a hash of the rendered body. A matching
-`If-None-Match` answers 304. A database failure answers 503 without an ETag.
-The routes sit under `/api/`, so the development proxy and the read-only
-sidecar serve them unchanged.
+validation and caching. Dashboard/revision remain `no-store`; there is no
+dashboard response cache.
 
 ## Share Tags
 
 `index.html` carries static Open Graph and Twitter card tags (site name,
 description, the bundled banner) and `rel="alternate"` links to both feeds.
-Those tags describe the board. When the standalone server serves `index.html`
-for `/history` or `/about`, it replaces the page's `<title>`, `description`,
+Those tags describe the board. When the server serves `index.html` for
+`/history` or `/about`, it replaces the page's `<title>`, `description`,
 `og:title`, `og:description` and `og:url` (and Twitter title and description
 tags, if present) with that page's English title, description and path; the
 route table `spaPages` in `backend-go/internal/httpapi/static.go` holds them
@@ -260,5 +199,13 @@ file's own tags. Link previews need absolute URLs, which a static file cannot
 know, so the server then rewrites the page's root-relative `content="/..."`
 values to the optional `PUBLIC_ORIGIN` (HTML-escaped, although configuration
 already accepts only a DNS name or IP address as its host). Without it the
-tags stay relative.
-Nothing else in the build is rewritten.
+tags stay relative. Nothing else in the build is rewritten.
+
+## Related Docs
+
+- [Public API](public-api.md)
+- [Admin API](admin-api.md)
+- [Data model](data-model.md)
+- [Workflows](workflows.md)
+- [Deployment security](../operations/security.md)
+- [Secure development](../development/security.md)

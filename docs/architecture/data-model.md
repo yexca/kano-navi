@@ -2,19 +2,31 @@
 
 ## SQLite Snapshot
 
-The database file is `data/database/kano.sqlite`. On startup the server creates the
-directory, schema, and missing seed records. The current tables are:
+The database file is `data/database/kano.sqlite`. `kano-go serve`, `seed` and
+`sync` open it through `OpenStandalone`
+(`backend-go/internal/store/sqlite/schema_upgrade.go`), which creates the
+directory and then, in one transaction:
 
-The development Go service can now do fresh initialization with `-initialize`
-using its embedded canonical SQL and public static seed. It retains existing
-current-schema records when reseeded, validates unknown schemas before writes,
-and keeps external snapshots and LLM catalogs empty. Full legacy upgrades still
-belong to the TypeScript initializer. See
-[Go source workflows and media downloads](go-source-workflows.md).
+- gives a file without tables the canonical schema embedded from
+  `bootstrap.sql`;
+- upgrades an existing snapshot to that schema. A snapshot must contain
+  `profiles`, `posts`, `events`, `videos`, `app_settings` and `sync_runs`;
+  anything else is rejected before any write. Missing tables, columns (with
+  their declared defaults) and indexes are added, and the backfills described
+  in this document run. A required column without a default fails the open
+  instead of being guessed. The only rebuild is described in
+  [Seed versus Synchronization](#seed-versus-synchronization); no column is
+  dropped and no snapshot is cleared;
+- verifies the required columns and inserts missing static seed records.
+
+The [workflow tables](#workflow-tables) are then created or verified in their
+own transaction, and the selected profile media is reconciled with its files
+(see [Event Precedence](#event-precedence)). The tables are:
 
 | Table                    | Purpose                                                                                                |
 | ------------------------ | ------------------------------------------------------------------------------------------------------ |
 | `profiles`               | Name, bio, avatar, banner, and official entry points                                                   |
+| `profile_media`          | Avatar and banner candidates, their downloads, and the operator's selected file                        |
 | `posts`                  | X posts, account source, publication time, engagement counts, media, and the quoted status             |
 | `events`                 | Unified schedules, provenance, confidence, manual locks, tombstones, and duplicate merges              |
 | `event_sources`          | Source post/reservation identities attached to each event                                              |
@@ -36,8 +48,9 @@ belong to the TypeScript initializer. See
 | `llm_providers`          | OpenAI-compatible or Anthropic endpoints, Text/Image capabilities, health, and encrypted keys          |
 | `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)  |
 | `llm_route_targets`      | The ordered provider + model failover queue (`route = 'schedule'`) shared by every extraction stage    |
-| `llm_route_providers`    | Legacy provider-only routes, copied once into `llm_route_targets` and no longer written                |
-| `workflows`              | Retired saved workflows (ADR-0003): kept in the schema, created empty, never read or written           |
+| `llm_route_providers`    | Provider-only routes that startup copies once into `llm_route_targets`; nothing else writes them       |
+| `source_schedules`       | Each source's timer and sync setting                                                                   |
+| `workflows`              | Saved workflow definitions (ADR-0003): kept in the schema, created empty, never read or written        |
 | `translations`           | Manual, platform, and machine translations of post text and video titles per target locale             |
 | `translation_states`     | Per-post/video machine translation state: source hash and language, last attempt, operator request     |
 
@@ -45,67 +58,93 @@ The API maps snake_case columns to camelCase and removes `raw_json`. The
 frontend must not depend on database fields that are not declared in the API
 response.
 
-The development Go executor adds `workflow_migrations`, `workflow_runs`,
-`workflow_run_steps`, `workflow_step_attempts` and `workflow_leases` through
-atomic additive upgrades. Schema version 2 freezes a run's source windows in
-`source_lookback_json` and records real adapters in `adapter_capability` while
-preserving the v1 capability column and all prior attempts. `workflow_runs.source_sync_json` freezes how a run's source steps read
-([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)); `{}` reads as
-each step's incremental default. Saved workflows are retired
-([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)): the
-`workflows` table and its columns, including `source_sync_json` and
-`source_lookback_json`, stay in the schema and a fresh installation creates
-the table empty, but nothing reads or writes it. Runs keep their
-`workflow_id`; an older run whose ID named a saved workflow shows in the
-history with that ID as a retired workflow, without joining `workflows`.
-The additive
-`source_schedules` table holds each source's timer
+Remote media URL columns (`posts.media_url`, `videos.thumbnail_url`,
+`focus.image_url` and the like) keep the addresses the source reported; they
+are never browser URLs. The dashboard maps them through `media_assets`: a
+ready file becomes `/media/<opaque-id>`, a tracked static file remains
+`/assets/...`, and an unready remote file becomes `null` with an explicit
+status. See [Media cache](media-cache.md) for the file layout, lifecycle, and
+downloader boundary.
+
+### Workflow Tables
+
+`backend-go/internal/store/sqlite/workflow_migrations.go` creates the durable
+run queue with `CREATE TABLE IF NOT EXISTS` and adds missing columns, then
+checks that every table has the columns its recorded version requires:
+
+| Table                    | Purpose                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `workflow_migrations`    | Applied workflow schema versions (current: 3); a newer recorded version fails the open                 |
+| `workflow_runs`          | One row per run: `workflow_id`, status, trigger/execution source, idempotency key, times, cancellation |
+| `workflow_run_steps`     | Ordered steps of a run: status, error code, retryability, `capability` and `adapter_capability`        |
+| `workflow_step_attempts` | Every attempt of a step, kept across retries                                                           |
+| `workflow_leases`        | The single `global` lease (owner, expiry, generation) that fences source and media writes              |
+
+A run freezes how its source steps read: `source_sync_json` holds the
+per-source sync ([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md);
+`{}` reads as each step's incremental default), `fetch_windows_json` an
+operator's [fetch windows](workflows.md#fetch-windows-and-historical-backfill)
+and `source_lookback_json` the days of a recent window. A partial unique
+index admits one queued or running run at a time. `capability` keeps its
+constrained values (`synthetic`, `x_recent`, `capability_not_migrated`);
+`adapter_capability` names the adapter that runs the step (`x_recent`,
+`youtube_recent`, `bilibili_recent`, `youtube_live`, `media_download`,
+`schedule_extract`, `text_translate` or `event_reconcile`), and a step with
+neither finishes `blocked`. `recovery_count` counts how often a run was
+queued again by a retry or by recovery from an expired lease.
+
+`source_schedules` holds each source's timer
 ([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)): `source`
 (`x`, `youtube` or `bilibili`, the primary key), `enabled`,
 `interval_minutes`, `sync_json` (`{"x": SourceSync}` or `{"youtube":
 SourceSync}`; `{}` for Bilibili and as the default), `next_run_at` and
-`updated_at`. A missing row reads as that source's disabled default. No
-migration moves workflow timers to it (see
-[Workflows](workflows.md#saved-workflows-are-retired)). These columns and the table are added without a version bump, so earlier Go
-releases still open the database. These tables are
-optional for ordinary TypeScript snapshots and Go public reads. See
-[Go source workflows and media downloads](go-source-workflows.md) for ownership,
-lease fencing, compatibility, identity repair and verification.
-
-Remote media URL columns are retained as migration-era source fields. The
-dashboard maps them through `media_assets`: a ready file becomes
-`/media/<opaque-id>`, a tracked static file remains `/assets/...`, and an
-unready remote file becomes `null` with an explicit status.
-
-See [Media cache](media-cache.md) for the file layout, lifecycle, and downloader
-boundary.
+`updated_at`. A missing row reads as that source's disabled default (see
+[Source schedules](workflows.md#source-schedules)). The `workflows` table and
+its columns, including `source_sync_json` and `source_lookback_json`, stay in
+the schema; nothing reads or writes them. Every new run has an ad hoc
+`workflow_id` starting with `@`; a stored run whose `workflow_id` names a
+saved workflow shows in the history with that ID, without joining
+`workflows`.
 
 ## Seed versus Synchronization
 
-`backend-go/internal/store/sqlite/static-seed.json` initializes the static
-profile, milestone timeline, and resource directory. New environments have no X posts, events, YouTube videos,
-Featured item, schedule assets, or LLM providers/models/routes. `kano-go seed` (`npm run seed`)
-only fills missing static IDs by default; it does not recreate deleted providers.
-`kano-go sync` (`npm run sync`) reads public sources and upserts updated records. Neither command
-silently deletes existing snapshots or operator-configured providers.
+`backend-go/internal/store/sqlite/static-seed.json` holds the static profile,
+milestone timeline, and resource directory. Every open inserts the static IDs
+that are missing, plus the `dashboard_revision`, the default `x_accounts`
+and the `llm_route_targets_migrated` marker when absent. New environments
+have no X posts, events, YouTube videos, Featured item, schedule assets, or
+LLM providers/models/routes.
+`kano-go seed` (`npm run seed`) creates or upgrades the database and fills
+missing static IDs; `-overwrite` restores the shipped profile, timeline and
+resource wording and increments the dashboard revision. Seeding never touches
+source snapshots, events, media, or operator configuration and does not
+recreate deleted providers. `kano-go sync` (`npm run sync`) reads public
+sources and upserts updated records. Neither command silently deletes
+existing snapshots or operator-configured providers.
 
-Startup also fills missing static IDs, including the first-album milestone.
-The 2010 seed moves after that milestone only when its original title, detail,
-and sort order still match; operator edits and ordering are preserved.
+Startup also updates a seeded timeline or resource row whose wording or order
+still exactly matches an outdated shipped value; operator edits and ordering
+are preserved. The 2010 entry moves after the first-album milestone only when
+its original title, detail, and sort order still match.
 
-Media assets add `retry_attempts` and `next_retry_at` through additive startup
-upgrades. Failed downloads preserve cached bytes and retry state on source
-rediscovery. Successful downloads and 304 revalidations clear that state.
-See [Media cache](media-cache.md#lifecycle) for retry eligibility and bounds.
+Media assets have `retry_attempts` and `next_retry_at`. Failed downloads
+preserve cached bytes and retry state on source rediscovery. Successful
+downloads and 304 revalidations clear that state. See
+[Media cache](media-cache.md#lifecycle) for retry eligibility and bounds.
 
 Timeline-window checkpoints keep `headFetchedAt` in `sync_state.metadata_json`
 after a successful newest-page read. Resumed pages retain it, and cursor-only
-cleanup preserves `last_success_at`. Legacy checkpoints without a head time
-cannot establish public source freshness.
+cleanup preserves `last_success_at`. A checkpoint without a head time cannot
+establish public source freshness.
 
-Legacy `events` and `focus` tables are migrated in place. Existing X schedule
-rows are treated as manually curated and locked; existing YouTube reservations
-remain automatic. The migration does not clear snapshots.
+An `events` table without `starts_on` (one source per event and no calendar
+date) is rebuilt into `events` and `event_sources`: every row keeps its ID and
+becomes its own source evidence, X schedule rows become manual and locked, and
+YouTube reservations stay automatic. When startup adds `focus.video_id`,
+each row receives it from the YouTube identity of its URL; a post without `account_handle`
+receives the handle in its URL. Automatic, unlocked YouTube events with a
+start time and `unknown` precision become `exact`. None of these steps clears
+a snapshot.
 
 ## Event Precedence
 
@@ -153,15 +192,14 @@ Videos have additive `live_status` (`upcoming`, `live`, `ended` or null) and
 `live_checked_at` columns, written by every successful watch-page check,
 including the [live-status probe](sources.md#live-status-probe). The
 dashboard projects only a sanitized `liveStatus`: `ended` always, `live` and
-`upcoming` while younger than two probe intervals. Older snapshots receive
-the columns empty on upgrade.
+`upcoming` while younger than two probe intervals. Startup adds the columns
+empty to existing snapshots.
 
 Selected profile-media rows have additive `active_sha256` and
 `active_mime_type` columns describing the selected file independently of the
 latest candidate download. `download_status` and `last_download_at` record the
 latest attempt; `last_error` remains diagnostic. Every startup reconciles active
-hash/MIME from the actual selected file, including databases previously upgraded
-with candidate metadata. It preserves candidate metadata, the manual selection,
+hash/MIME from the actual selected file, whatever the stored values. It preserves candidate metadata, the manual selection,
 and unrelated snapshots/settings. Missing, unsafe, oversized, or unsupported
 files leave active hash/MIME unavailable and cannot be served; a subsequent
 startup can recover them after a valid selected file is restored. When active
@@ -170,7 +208,7 @@ once in the same transaction as all selected metadata updates. An unchanged
 startup does not increment it. Existing revision polling therefore reloads the
 repaired public profile snapshot, including its versioned avatar URL.
 Schedule image reviews add `llm_input_fingerprint` for content/configuration
-cache validation; legacy reviews are rechecked when next scanned. Automatic
+cache validation; a review without one is rechecked when next scanned. Automatic
 review writes update LLM columns only. Image responses compare the captured
 `assets.asset_version`, URL and media hash inside a transaction; replacement,
 including replacing and restoring the same URL, invalidates a waiting response.
@@ -179,8 +217,9 @@ Manual verdicts, reasons and decision timestamps survive concurrent model work.
 Schedule assets keep publication in `updated_at` separately from inclusive
 `period_start` / `period_end`, with `period_basis` (`explicit`, `relative`,
 `unknown`, or `legacy`). `week_start` is the Monday of the applicable start,
-not the publication week. Additive migration copies existing week values to a
-seven-day `legacy` period without asserting that those old dates were verified.
+not the publication week. When startup adds the period columns, it copies
+each schedule asset's `week_start` into a seven-day `legacy` period, which does
+not assert that those dates were verified.
 Manual correction stores separate `manual_period_start`, `manual_period_end`,
 and `manual_period_reason`; it preserves the inferred values, source and review.
 Registration of the same image retains that correction. A different image URL
@@ -225,17 +264,17 @@ additive columns, `NULL` by default.
 Startup adds `quote_json` additively. It then fills it for every X post
 whose `raw_json` names a quoted status (an object under `qrt`, `quote`,
 `quotedTweet` or `quoted_tweet`, or a `qrtURL`) and still has no
-projection, and moves the quoted images that earlier releases linked as
-the post's own. Those releases linked the post's own images first and the
-quoted status's after them, all as `post-image`; a `post-image` link moves to
+projection, and moves quoted images stored as the post's own. Such a post
+lists its own images first and the quoted status's after them, all as
+`post-image`; a `post-image` link moves to
 `quote-image` when its image is one of the quote's and not one the post's
 `raw_json` declares as its own, so the remaining own links keep their
 positions, and an image both declare stays the post's. `media_url` then
 names the first own image or `NULL`. The step reads only rows without a
 projection, so it is idempotent; it never clears a post or another link,
 and it increments the dashboard revision when it changes a row. A timeline
-page that lists a stored post again leaves it unchanged, so a post stored
-before the upgrade gets its quote from this step; any later detail refresh
+page that lists a stored post again leaves it unchanged, so a stored post
+without a projection gets its quote from this step; any later detail refresh
 rewrites it from the source.
 
 The dashboard reads a bounded current-week/focus selection, not all history.
@@ -266,12 +305,12 @@ or `YouTube Premiere`, which the interface reads as codes and translates, or
 the model's summary, shown as written. Titles keep their source wording.
 The labels and the codes they cover live in `src/lib/event-text.ts`.
 
-Earlier releases stored Chinese display text (`已预约`, `会员限定`, `直播中`,
-`已完成`, `待确认` and `YouTube Live / 预约`-style details). Startup replaces it
-with the codes and English wording on rows synchronization owns (automatic,
-unlocked, not deleted) and increments the dashboard revision when a row
-changes. Manual locks and tombstones keep their text; the frontend reads those
-legacy values as the same codes and wording.
+Startup replaces Chinese display text in stored events (`已预约`, `会员限定`,
+`直播中`, `已完成`, `待确认` and `YouTube Live / 预约`-style details) with the
+codes and English wording on rows synchronization owns (automatic, unlocked,
+not deleted) and increments the dashboard revision when a row changes. Manual
+locks and tombstones keep their text; the frontend reads those legacy values
+as the same codes and wording.
 
 ## Translations
 
@@ -352,8 +391,7 @@ reservation refresh, keep the merge. `merge_source` names the owner:
 - `manual`: an operator decision. `merge_source = manual` with a null
   `merged_into` is an undone merge; the reconciler never merges that event
   again.
-- Any other owner (reserved for a later model adjudication) is left untouched
-  by the rules in the same way.
+- Any other owner is left untouched by the rules in the same way.
 
 The rules consider active, non-deleted `stream`/`member` events from 30 days
 before to 60 days after the current Japan date:
@@ -415,11 +453,11 @@ other upload, `NULL` while unknown (see [Sources](sources.md#shorts)).
 `manual_is_short` is the operator's correction with the same values and
 `NULL` for none; synchronization never writes it. Public readers add
 `isShort = COALESCE(manual_is_short, is_short)` as `true`, `false` or `null`,
-and the board treats only `true` as a Short. Older rows stay unknown rather
-than being guessed from their length.
+and the board treats only `true` as a Short. A row without a verdict stays
+unknown rather than being guessed from its length.
 `is_premiere` is the stored premiere verdict of a YouTube reservation: 1 for
 a premiere (a `release` event), 0 for live content, `NULL` while no check
-could tell, which includes every row stored before the column existed (see
+could tell, which is also what the upgrade gives existing rows (see
 [Sources](sources.md#youtube)). It is never derived from the kind.
 Startup adds the columns, both tables and `video_revisions_video_idx` to
 existing snapshots without rewriting videos or media rows.
@@ -458,8 +496,7 @@ Effective titles (`COALESCE(manual_title, title)`) are compared. Several
 complete matches, or one video claimed by several uploads, leave the upload
 unmerged and are counted as `ambiguous`. A YouTube video receives at most
 one upload: a video an operator merged an upload into is no rule target. A
-video read before lengths were stored has no `duration_seconds`, so its
-upload is left to the operator. A Short of the same song, published another
+video without `duration_seconds` leaves its upload to the operator. A Short of the same song, published another
 day or with another length, never matches.
 
 Whenever a merge is written or a merged upload's effective title changes (a
@@ -480,13 +517,14 @@ without rewriting videos.
 Startup additively creates `posts_url_published_at_idx` on
 `posts(url, published_at DESC)` for the correlated schedule-image source-text
 lookup. Existing rows, reviews, manual labels, locks/tombstones, provider routes,
-and settings remain in place. The lookup still chooses the latest stored source
+and settings remain in place. The lookup chooses the latest stored source
 wording (including `raw_json.search_text`) and applies the existing text/image
 and manual-review gates. The index is non-unique because multiple stored records
 can share a source URL.
 
-backend-go/internal/store/sqlite owns the schema (`bootstrap.sql`) and the
-additive upgrade behavior (`schema_upgrade.go`). Update this
+backend-go/internal/store/sqlite owns the schema (`bootstrap.sql`), the
+additive upgrade behavior (`schema_upgrade.go`) and the workflow tables
+(`workflow_migrations.go`). Update this
 contract, seed behavior, and relevant tests together. Never silently drop
 columns, rebuild an existing database from seed data, clear snapshots, or
 recreate deleted providers. See [Database operations](../operations/database.md).
@@ -513,13 +551,17 @@ LLM providers store an explicit `text`/`image` capability array in
 `capabilities_json` and a protocol (`openai-responses`,
 `openai-chat-completions`, or `anthropic-messages`). No schema rebuild is needed
 to store Anthropic providers. The same capability and route rules apply to all
-protocols. The
-`vision_capable` field remains a derived migration field for old
-clients. Every stage shares one priority queue; the startup upgrade folds the
-older per-stage `schedule_message`, `schedule_board`, and `schedule_vision`
-targets into it in that order, keeping the first position of a repeated
-provider + model pair. `post_llm_states.route` still records which detection
-path (`schedule_message` or `schedule_board`) handled a post.
+protocols.
+`vision_capable` (API `visionCapable`) is derived from the `image`
+capability; a provider write without `capabilities` may send `visionCapable`
+instead. `llm_providers.model` is written empty and never read: providers have
+no default model. Every stage shares one priority queue. Startup folds any
+per-stage `schedule_message`, `schedule_board`, and `schedule_vision` targets
+into it in that order, keeping the first position of a repeated provider +
+model pair, and once (marker `llm_default_model_retired`) turns a target
+that followed a provider's default model into a target naming that model.
+`post_llm_states.route` records which detection path (`schedule_message` or
+`schedule_board`) handled a post.
 
 `post_llm_states.failure_count` counts consecutive failed extractions of the
 input named by `failure_fingerprint` (a hash of the post's input fingerprint
@@ -527,13 +569,12 @@ and the ordered targets that were tried), and `next_attempt_at` is the ISO
 time the automatic scan may try it again; a positive count with a null
 `next_attempt_at` means automatic retries stopped. A success or uncertain
 outcome, cached or not, and an operator reprocess request reset all three
-(`0`, `NULL`, `NULL`); the startup upgrade adds them to existing snapshots
-with those values, so older failures are retried once more before backing
-off. See [Extraction failure backoff](sources.md#extraction-failure-backoff).
+(`0`, `NULL`, `NULL`); startup adds them to existing snapshots with those
+values, so a stored failure is retried once more before backing off. See [Extraction failure backoff](sources.md#extraction-failure-backoff).
 
 `internal/httpapi/media.go` and `internal/store/sqlite/media.go` own cache-root
 path validation and serving; `internal/store/sqlite/source_write.go` owns
-source URL identities. `internal/mediadownload` performs bounded downloads
+source URL identities (see [Media cache](media-cache.md#database-model)). `internal/mediadownload` performs bounded downloads
 from the X and YouTube image hosts and promotes verified files to ready cache
 rows.
 

@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// The TypeScript service normalizes links with the WHATWG URL class before it
-// hashes or stores them. net/url serializes several inputs differently, so
+// Links are normalized with WHATWG URL semantics before they are hashed or
+// stored. net/url serializes several inputs differently, so
 // this file implements the subset that matters for http(s) links: scheme and
 // host lowercasing, default ports, dot segments and the percent-encode sets.
 // Non-ASCII hosts are lowercased but not converted to punycode, and unusual

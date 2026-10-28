@@ -33,8 +33,8 @@ func TestSchedulerRunsOnlySourceSchedulesEarliestFirst(t *testing.T) {
 	ctx := context.Background()
 	clock := time.Date(2026, 3, 2, 3, 10, 0, 0, time.UTC)
 	now := func() time.Time { return clock }
-	// A timed saved workflow from an earlier release is retired: it is
-	// never read, run or changed (ADR-0003).
+	// A timed row in the workflows table is never read, run or changed
+	// (ADR-0003).
 	const retired = `INSERT INTO workflows(id,name,steps_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES('sweep','Sweep','["translate"]',1,15,'2026-03-02T03:00:00.000Z','2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`
 	testutil.Exec(t, p, retired)
 	enable := func(source string, interval int, sync *sqlite.SourceSync) {

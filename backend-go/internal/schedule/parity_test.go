@@ -13,12 +13,10 @@ import (
 	"testing"
 )
 
-// testdata/parity.json was recorded from the original TypeScript extractor
-// against the same synthetic posts, providers and canned model replies used
-// here, before that implementation was removed. It is a frozen reference: the
-// Go step must keep sending byte-identical requests and leaving byte-identical
-// identities, fingerprints and stored JSON behind, so rows written by earlier
-// releases stay compatible.
+// testdata/parity.json is a frozen reference recorded against the same
+// synthetic posts, providers and canned model replies used here: the step must
+// keep sending byte-identical requests and leaving byte-identical identities,
+// fingerprints and stored JSON behind, so stored rows stay compatible.
 type parityData struct {
 	First    map[string]any `json:"first"`
 	Requests []struct {
@@ -294,7 +292,7 @@ var mediaParityQueries = map[string]string{
 }
 
 // The image fixture covers what the text one cannot: media identities, the
-// legacy cache namespace, capability filtering, image request bodies, pending
+// data/cache/media namespace, capability filtering, image request bodies, pending
 // media, and schedule image verification with its fingerprint, provider
 // failover and duplicate propagation.
 func TestParityWithTypeScriptImagePaths(t *testing.T) {
@@ -345,8 +343,8 @@ func TestParityWithTypeScriptImagePaths(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// The original writer used the legacy `sha256/` namespace, which lives
-		// below data/cache/media.
+		// The fixture's files use the `sha256/` namespace below
+		// data/cache/media, which readers still serve.
 		target := filepath.Join(f.store.DataRoot(), "cache", "media", filepath.FromSlash(file.RelativePath))
 		if err = os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			t.Fatal(err)

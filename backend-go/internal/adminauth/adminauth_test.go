@@ -65,7 +65,7 @@ func TestReloginWithExistingCookieAndSessionPolicy(t *testing.T) {
 	for _, cookie := range []*http.Cookie{first, second} {
 		r := httptest.NewRequest("GET", "/api/admin/events", nil)
 		r.AddCookie(cookie)
-		// TypeScript keeps prior sessions until logout/expiry. Go does too.
+		// A new login keeps prior sessions until logout or expiry.
 		rec := httptest.NewRecorder()
 		auth.Require(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })).ServeHTTP(rec, r)
 		if rec.Code != 204 {

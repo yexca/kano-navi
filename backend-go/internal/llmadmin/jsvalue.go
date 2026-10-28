@@ -193,8 +193,8 @@ func jsNumber(value any) (float64, bool) {
 	}
 }
 
-// compactJSON is JSON.stringify for values stored in SQLite: no HTML escaping
-// so rows stay byte-compatible with the ones the TypeScript server wrote.
+// compactJSON is JSON.stringify for values stored in SQLite: no HTML escaping,
+// so stored rows keep one byte-exact form.
 func compactJSON(value any) string {
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)

@@ -420,7 +420,7 @@ func TestScheduleImageVerificationApprovesAsset(t *testing.T) {
 
 func TestScheduleAssetWithoutImageIsSettledOnce(t *testing.T) {
 	f, _ := boardFixture(t)
-	// The legacy compatibility alias names no image and has no media row; a
+	// The weekly-schedule alias names no image and has no media row; a
 	// URL-less row an operator already labelled keeps its label.
 	f.exec(`INSERT INTO assets (id, kind, url, week_start, period_basis) VALUES ('weekly-schedule', 'schedule', '', '2026-04-20', 'legacy')`)
 	f.exec(`INSERT INTO assets (id, kind, url, week_start, period_basis) VALUES ('schedule-2026-04-13', 'schedule', '', '2026-04-13', 'legacy')`)

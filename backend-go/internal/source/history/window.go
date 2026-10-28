@@ -27,7 +27,7 @@ const (
 	MaxCount = 200
 
 	day = 24 * time.Hour
-	// isoLayout matches the timestamps earlier releases stored in checkpoints.
+	// isoLayout is the timestamp form stored in checkpoints.
 	isoLayout = "2006-01-02T15:04:05.000Z"
 )
 
@@ -175,7 +175,7 @@ func (w Window) Contains(value string) bool {
 }
 
 // checkpointKey identifies one selection per account. The serialization is
-// the one earlier releases hashed, so their checkpoints keep resuming.
+// fixed, so a stored checkpoint keeps resuming.
 func (w Window) checkpointKey(account string) string {
 	selection := "before"
 	switch w.Mode {

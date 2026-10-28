@@ -1,5 +1,5 @@
-// Package dotenv loads a local .env file for the standalone process, the way
-// the Node entry point did through dotenv/config. Variables already present in
+// Package dotenv loads a local .env file for the standalone process and the
+// maintenance commands. Variables already present in
 // the environment always win, so container and shell configuration is never
 // overridden by a file.
 package dotenv

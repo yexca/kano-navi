@@ -92,8 +92,8 @@ func TestSourceSchedulesAPI(t *testing.T) {
 	if code, payload = c.call(t, "PUT", "/api/admin/sources/bilibili/schedule", `{"enabled":true}`); code != 200 || payload["nextRunAt"] != "2026-03-02T06:00:00.000Z" {
 		t.Fatalf("bilibili=%d %v", code, payload)
 	}
-	// Enabled source schedules are the overview's timers; a retired timed
-	// workflow is not counted.
+	// Enabled source schedules are the overview's timers; a timed row in
+	// the workflows table is not counted.
 	c.exec(t, `INSERT INTO workflows(id,name,steps_json,schedule_enabled,interval_minutes,next_run_at,created_at,updated_at) VALUES('sweep','Sweep','["translate"]',1,15,'2026-03-02T03:05:00.000Z','2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`)
 	_, payload = c.call(t, "GET", "/api/admin/overview", "")
 	if timers := payload["timers"].(map[string]any); timers["scheduled"] != float64(2) || timers["nextRunAt"] != "2026-03-02T03:20:00.000Z" {

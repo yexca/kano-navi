@@ -11,8 +11,8 @@ import (
 	"testing"
 )
 
-// olderSnapshot builds a current database and then removes what an earlier
-// release did not have yet, leaving operator data in the old shape.
+// olderSnapshot builds a current database and then removes what the upgrade
+// adds, leaving operator data in the shape the upgrade starts from.
 func olderSnapshot(t *testing.T) (string, string) {
 	t.Helper()
 	root, err := filepath.EvalSymlinks(t.TempDir())
@@ -296,7 +296,7 @@ func TestStandaloneMergesStageRoutesIntoOneQueue(t *testing.T) {
 		return got.String
 	}
 	// Message, then board, then vision; a repeated provider/model pair keeps
-	// its first position. Targets that followed the retired provider default
+	// its first position. Targets that followed the provider default
 	// name that model, so beta/b-1 keeps the earlier slot, and gamma, which
 	// never had a default, is dropped.
 	want := "schedule:beta/b-1:0,schedule:beta/b-vision:2,schedule:alpha/a-1:3"

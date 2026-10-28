@@ -10,8 +10,8 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
-// LegacyProviderID is the provider that used to read its key from the
-// environment.
+// LegacyProviderID is the provider whose key `kano-go migrate-llm` seals from
+// OPENAI_API_KEY.
 const LegacyProviderID = "openai-default"
 
 var (

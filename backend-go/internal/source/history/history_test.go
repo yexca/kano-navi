@@ -128,7 +128,7 @@ func TestParseAndResolveWindows(t *testing.T) {
 	if count.checkpointKey(testAccount) == (Window{Mode: ModeCount, Count: 20}).checkpointKey(testAccount) {
 		t.Fatal("count windows share a checkpoint")
 	}
-	// Keys match the hashes earlier releases stored, so their checkpoints resume.
+	// Keys are fixed hashes, so stored checkpoints resume.
 	for want, selection := range map[string]Window{
 		testAccount + ":6db7d803e74f1ffa7d8f5adc": before,
 		testAccount + ":541ec09360c48abab075a5c9": {Mode: ModeRecent, Days: 7},

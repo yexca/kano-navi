@@ -12,7 +12,7 @@
 | `PORT`                          | `7657`               | Shared frontend/API port for development, preview, and production |
 | `KANO_API_PORT`                 | `7658`               | Development only: loopback port of the backend behind Vite        |
 | `KANO_WATCH_POLLING`            | `0`                  | Development only: `1` makes Vite poll a mounted checkout          |
-| `SCHEDULE_EXTRACTION_ENABLED`   | `1`                  | Initial legacy default for independent schedule stages            |
+| `SCHEDULE_EXTRACTION_ENABLED`   | `1`                  | Default for stage flags without a stored or environment value     |
 | `SCHEDULE_KEYWORD_ENABLED`      | `1`                  | Enable keyword candidate selection                                |
 | `SCHEDULE_VISION_ENABLED`       | `1`                  | Enable schedule-board LLM extraction                              |
 | `SCHEDULE_MESSAGE_ENABLED`      | `1`                  | Enable single-message schedule detection                          |
@@ -59,7 +59,7 @@ lowercased; a path, query, credentials, or a host that is not a DNS name or
 IP address with an optional port fail startup). It only completes the link-preview tags of
 `index.html` (see [Share tags](../architecture/backend.md#share-tags)) and the
 Atom feed's site and self links (see
-[Public feeds](../architecture/backend.md#public-feeds)); it grants no access
+[Public feeds](../architecture/public-api.md#public-feeds)); it grants no access
 and is not an admin origin.
 
 Docker Compose also uses `KANO_IMAGE` (default
@@ -77,7 +77,8 @@ and replace the value when it expires or the account signs out.
 `.env.example` is the complete non-secret inventory. `ADMIN_PASSWORD` and
 `LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, `BILIBILI_SESSDATA`, and provider API keys are credentials;
 never place real values in source code, SQLite plaintext, URLs, API responses,
-or logs. `OPENAI_API_KEY` is accepted only by the one-time migration command.
+or logs. `OPENAI_API_KEY` is accepted only by the one-time
+`kano-go migrate-llm` command.
 
 Configure local values in the ignored .env or deployment environment. Changes
 to environment-only credentials require a server restart. Provider hosts,
@@ -98,10 +99,9 @@ environment variable, as are `-static` and `-listen`. `KANO_API_PORT` is read
 only by `make dev`/`make preview` and Vite; production serves everything on
 `PORT`.
 
-Run with flags only and no command, the binary is a read-only sidecar on
-`:7658`; its `-enable-*` flags require `APP_MODE=development` and a disposable
-database. Only `make go-check` uses this mode, for its read-only container
-smoke.
+Run with flags only and no command, the binary serves public reads from an
+existing snapshot without writing it; only `make go-check` uses this mode. See
+[Read-only mode](../architecture/backend.md#read-only-mode).
 
 Set `LLM_SECRETS_KEY` before starting development, preview, or production, even
 when no provider has been added. Missing, empty, or whitespace-only values
@@ -115,16 +115,15 @@ and save it only in the ignored environment file or deployment secret store.
 
 `kano-go serve` starts the timer process unless
 `WORKFLOW_SCHEDULER_ENABLED=0`, which stops the source schedules and the
-live-status probe; the variable keeps its name so existing deployments keep
-working. Manual runs from /admin, including each source's Run now, still
-work. Page requests and admin reads never start a
+live-status probe. Manual runs from /admin, including each source's Run now,
+work either way. Page requests and admin reads never start a
 timer or a run. Each source's timer is an operator setting, not an
 environment variable: `/admin` → Sources turns it on or off and sets its
 interval and read mode, stored in the `source_schedules` table (X 30 minutes
 and YouTube 60 by default, 15 minutes through seven days; Bilibili 180 by
 default, never below `BILIBILI_MIN_INTERVAL_MINUTES`). `SKIP_X`,
 `SKIP_YOUTUBE` and `SKIP_BILIBILI` keep that source's timer from running.
-Saved workflows and their timers are removed
+Per-source timers are the only timed sync
 ([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)). See
 [Workflows](../architecture/workflows.md#source-schedules).
 

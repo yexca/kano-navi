@@ -26,7 +26,7 @@ const (
 
 	// MaxRetries is the fixed three-request provider contract.
 	MaxRetries = 2
-	// DefaultScheduleModel is the fallback for the legacy llm_model setting.
+	// DefaultScheduleModel is the fallback for the llm_model setting.
 	DefaultScheduleModel = "gpt-4o-mini"
 
 	protocolResponses = "openai-responses"
@@ -301,8 +301,8 @@ func normalizeCapabilities(values []any) []string {
 	return out
 }
 
-// storedCapabilities reads capabilities_json with the legacy vision flag as
-// the fallback for rows that predate the explicit set.
+// storedCapabilities reads capabilities_json with the vision_capable flag as
+// the fallback for rows without an explicit set.
 func storedCapabilities(raw string, legacyVision bool) []string {
 	values, _ := listValues(raw)
 	if out := normalizeCapabilities(values); len(out) > 0 {

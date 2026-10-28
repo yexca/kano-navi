@@ -20,8 +20,8 @@ var (
 
 // WorkflowDefinition is what one run executes. Every run is ad hoc: its ID
 // names the kind of work (AdhocSyncWorkflow, SourceScheduleWorkflow, ...)
-// and nothing is saved apart from the run. Saved workflows are retired
-// (ADR-0003); their table stays in the schema, unread.
+// and nothing is saved apart from the run (ADR-0003); the workflows table stays
+// in the schema, unread.
 type WorkflowDefinition struct {
 	ID    string
 	Steps []string

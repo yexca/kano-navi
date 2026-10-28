@@ -247,7 +247,7 @@ func writeScheduleCandidate(ctx context.Context, tx *sql.Tx, c xsource.ScheduleC
 type XRecentState struct {
 	PendingIDs []string
 	// PendingRetries is the failure state of pending IDs, from
-	// metadata_json.pendingRetries; older rows have none.
+	// metadata_json.pendingRetries; a row without it has none.
 	PendingRetries map[string]xsource.PendingRetry
 	KnownIDs       map[string]bool
 	// CursorID is the newest successfully stored status of the account.

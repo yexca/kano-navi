@@ -8,7 +8,7 @@ and origin guards, and the shared response conventions. Feature packages
 they do not route paths themselves.
 
 MCP (`/mcp`) is a separate boundary with its own projections and never reuses
-these routes. See [Backend](backend.md#mcp-boundary-mcp).
+these routes. See [Public API](public-api.md#mcp-boundary-mcp).
 
 ## Conventions
 
@@ -69,7 +69,6 @@ external work:
 
 `timers` counts the enabled [source schedules](#sources) this process runs
 (not those disabled by `SKIP_*`) and the earliest planned run among them.
-Retired saved workflows are not counted.
 
 `lastSuccessAt` is the newest successful incremental read of the source
 (`sync_state.last_success_at`). `lastStep` is `{runId, status, finishedAt}` of
@@ -90,8 +89,8 @@ live-status probe, started only by its timer with `triggeredBy:
 `sourceSchedule` names the source whose chain the run is: its timer
 (`triggeredBy: "source-schedule"`) or the operator's Run now
 (`triggeredBy: "admin"`); it is null for other runs. `workflowId` is null
-for every new run. An older run of a retired saved workflow keeps that
-workflow's ID there; its name is not read.
+for ad hoc runs, which every submission creates; a stored run whose ID names
+a saved workflow reports that ID there, and its name is not read.
 
 | Method and path          | Body / query              | Result                                 |
 | ------------------------ | ------------------------- | -------------------------------------- |
@@ -121,10 +120,10 @@ startDate, endDate}` or `{mode: "count", count}` (1–200 per X account or
   page the public timeline and a YouTube `count` window reads the uploads
   listing.
 
-A busy queue answers `409` with the active run. Saved workflows are removed
+A busy queue answers `409` with the active run. There are no saved workflows
 ([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)): a
-`workflowId` in the body answers `400 invalid_input`, and the
-`/workflows` endpoints answer `404 not_found`.
+`workflowId` in the body answers `400 invalid_input`, and there are no
+`/workflows` routes (`404 not_found`).
 
 `GET /runs/steps` is the step catalog `[{id, group}]` in execution order
 (`x`, `youtube`, `bilibili` are `source`; `media`, `schedule`,

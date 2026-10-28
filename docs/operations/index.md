@@ -4,7 +4,6 @@ Runtime state belongs to the ignored data directory. Protect backups and environ
 
 - [Configuration](configuration.md)
 - [Docker deployment](docker.md)
-- [Go public-read cutover](go-public-read-cutover.md)
 - [Database and maintenance](database.md)
 - [Reliability and freshness](reliability.md)
 - [Deployment security](security.md)

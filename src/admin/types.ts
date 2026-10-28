@@ -53,7 +53,7 @@ export interface Run {
   startedAt: string | null
   finishedAt: string | null
   triggeredBy: string
-  /** The retired saved workflow an older run belongs to; new runs have none. */
+  /** The saved workflow a stored run belongs to; new runs have none. */
   workflowId: string | null
   /** The source whose chain the run is: its timer (triggeredBy
    * "source-schedule") or the operator's Run now. */

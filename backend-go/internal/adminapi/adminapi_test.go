@@ -235,8 +235,8 @@ func TestOneOffStepRunsReplaceSavedWorkflows(t *testing.T) {
 	if skipped := payload["skippedSteps"].([]any); len(skipped) != 1 || skipped[0] != "media" {
 		t.Fatalf("skipped=%v", skipped)
 	}
-	// Saved workflows are removed (ADR-0003): their endpoints are gone and a
-	// workflowId is refused.
+	// There are no saved workflows (ADR-0003): the workflow endpoints are
+	// unknown routes and a workflowId is refused.
 	for _, route := range [][2]string{{"GET", "/api/admin/workflows"}, {"POST", "/api/admin/workflows"}, {"PUT", "/api/admin/workflows/full-refresh"}, {"DELETE", "/api/admin/workflows/full-refresh"}} {
 		if code, payload := c.call(t, route[0], route[1], `{"name":"Flow","steps":["x"]}`); code != 404 || payload["error"] != "not_found" {
 			t.Fatalf("%s %s=%d %v", route[0], route[1], code, payload)
@@ -276,8 +276,8 @@ func TestOneOffStepRunsReplaceSavedWorkflows(t *testing.T) {
 	if windows := run["fetchWindows"].(map[string]any); windows["x"].(map[string]any)["count"] != float64(30) || windows["youtube"] != nil {
 		t.Fatalf("windows=%v", windows)
 	}
-	// An older run of a retired saved workflow stays in the history with its
-	// ID; the retired definition is not read.
+	// A stored run of a saved workflow stays in the history with its ID; the
+	// definition is not read.
 	c.exec(t, `INSERT INTO workflows(id,name,steps_json,created_at,updated_at) VALUES('evening','Evening','["x"]','2026-03-01T00:00:00.000Z','2026-03-01T00:00:00.000Z')`)
 	c.exec(t, `INSERT INTO workflow_runs(id,workflow_id,status,trigger_source,execution_source,created_at,started_at,finished_at) VALUES('retired-run','evening','succeeded','scheduler','scheduler','2026-03-01T00:00:00.000Z','2026-03-01T00:00:01.000Z','2026-03-01T00:00:02.000Z')`)
 	code, payload = c.call(t, "GET", "/api/admin/runs/retired-run", "")
@@ -424,7 +424,7 @@ func TestOverviewCountsWhatNeedsReview(t *testing.T) {
 	 ('p1','x','post','label','one','2026-03-01T00:00:00.000Z','https://post.example.test/1'),
 	 ('p2','x','post','label','two','2026-03-01T00:00:00.000Z','https://post.example.test/2')`)
 	c.exec(t, `INSERT INTO post_llm_states(post_id,status,reprocess_requested,updated_at) VALUES ('p1','failed',1,'2026-03-01T00:00:00.000Z'),('p2','processed',0,'2026-03-01T00:00:00.000Z')`)
-	// A legacy schedule row without an image URL has nothing to review, with or
+	// A schedule row without an image URL has nothing to review, with or
 	// without a recorded scan; an unchecked image with a URL does.
 	c.exec(t, `INSERT INTO assets(id,kind,url,period_basis) VALUES
 	 ('schedule-unchecked','schedule','https://media.example.test/board.png','inferred'),

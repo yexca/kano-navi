@@ -44,7 +44,7 @@ function targetPath(rawTarget: string): string | null {
 export function checkMarkdownLinks() {
   const files = [
     "README.md",
-    "README.zh-cn.md",
+    "backend-go/README.md",
     ...markdownFiles(path.join(repositoryRoot, "docs"), "docs"),
     "SECURITY.md",
     "AGENTS.md",
