@@ -42,7 +42,7 @@ func TestRecentFeedFailureKeepsStoredWorkAndReadsTheUploadsTab(t *testing.T) {
 	a.Now = syntheticNow
 	state := State{RefreshIDs: []string{"RRRRRRRRRRR"}, Videos: map[string]Video{"RRRRRRRRRRR": {ID: "RRRRRRRRRRR", PublishedAt: "2025-06-01T00:00:00Z"}}}
 	result, err := a.FetchRecent(context.Background(), state, 7)
-	if err != nil || feeds != 1 || result.Listing != ListingVideosPage || !slices.Equal(result.Errors, []string{"youtube_http_error"}) {
+	if err != nil || feeds != 1 || result.Listing != ListingVideosPage || !slices.Equal(result.Errors, []string{"youtube_feed_http_error"}) {
 		t.Fatalf("result=%#v feeds=%d err=%v", result, feeds, err)
 	}
 	if strings.Join(requested, ",") != "RRRRRRRRRRR,AAAAAAAAAAA,BBBBBBBBBBB" || result.Inspected != 3 {
@@ -84,7 +84,7 @@ func TestRecentFailsOnlyWhenNothingAnswers(t *testing.T) {
 			a := NewAdapter(c, Options{ChannelID: syntheticChannel, MaxDetailRequests: 5})
 			a.Now = syntheticNow
 			result, err := a.FetchRecent(context.Background(), tc.state, 7)
-			if err == nil || err.Error() != "youtube_http_error" || result.Listing != "" {
+			if err == nil || err.Error() != "youtube_feed_http_error" || result.Listing != "" {
 				t.Fatalf("result=%#v err=%v", result, err)
 			}
 		})
@@ -366,6 +366,10 @@ func TestRecentUsesUnclassifiedAPIAnswersOnlyWhenTheWatchPageFails(t *testing.T)
 	c := NewClient(&http.Client{Transport: fakeTransport(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/youtube/v3/playlistItems":
+			// The feed fails, and this channel has no Shorts playlist.
+			if strings.HasPrefix(r.URL.Query().Get("playlistId"), "UUSH") {
+				return response(404, ""), nil
+			}
 			return response(200, apiItems(`{"snippet":{"title":"ordinary upload","publishedAt":"2025-12-01T00:00:00Z"},"contentDetails":{"videoId":"ZZZZZZZZZZZ"},"status":{"privacyStatus":"public"}}`)), nil
 		case "/youtube/v3/videos":
 			ended := func(id, title string) string {
@@ -407,7 +411,7 @@ func TestRecentUsesUnclassifiedAPIAnswersOnlyWhenTheWatchPageFails(t *testing.T)
 		t.Fatalf("inspected=%v errors=%v", result.InspectedIDs, result.Errors)
 	}
 	// Each failed page is still recorded.
-	if !slices.Equal(result.Errors, []string{"youtube_http_error", "youtube_http_error", "youtube_http_error", "youtube_watch_details_incomplete", "youtube_http_error"}) {
+	if !slices.Equal(result.Errors, []string{"youtube_feed_http_error", "youtube_api_http_error", "youtube_http_error", "youtube_http_error", "youtube_watch_details_incomplete", "youtube_http_error"}) {
 		t.Fatalf("errors=%v", result.Errors)
 	}
 	details := map[string]Video{}

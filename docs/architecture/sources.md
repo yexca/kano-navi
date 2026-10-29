@@ -190,16 +190,22 @@ metadata distinguishes successful `inspected` checks from `detailRequested`
 attempts. Historical windows
 do not write this incremental metadata.
 
-The public RSS feed returns intermittent HTTP 5xx responses that clear within
-seconds, so the feed request alone is repeated up to two more times after an
-upstream 5xx (`youtube_upstream_5xx`) or a connection failure
-(`youtube_unavailable`), waiting 0.5 and then 1.5 seconds. Each try keeps the
-10-second request timeout, and cancellation stops the wait. Rate limiting
-(`youtube_rate_limited`), other 4xx responses (`youtube_http_error`), timeouts,
-redirects, and oversized bodies are never repeated. Streams and watch pages are
-requested once; their 5xx responses record `youtube_upstream_5xx`.
+Feed failures record codes with their own `youtube_feed_` prefix
+(`youtube_feed_upstream_5xx`, `youtube_feed_unavailable`,
+`youtube_feed_http_error`, `youtube_feed_timeout`,
+`youtube_feed_rate_limited`, and so on), so the run view tells them apart
+from the streams page, the uploads tab and watch pages, which keep the
+`youtube_` prefix. The public RSS feed returns intermittent HTTP 5xx
+responses that clear within seconds, so the feed request alone is repeated up
+to two more times after an upstream 5xx (`youtube_feed_upstream_5xx`) or a
+connection failure (`youtube_feed_unavailable`), waiting 0.5 and then 1.5
+seconds. Each try keeps the 10-second request timeout, and cancellation stops
+the wait. Rate limiting, other 4xx responses (`youtube_feed_http_error`),
+timeouts, redirects, and oversized bodies are never repeated. Streams and
+watch pages are requested once; their 5xx responses record
+`youtube_upstream_5xx`.
 
-The feed can also answer 404 for long stretches, so a failed listing does not
+The feed can also answer 404 for hours at a time, so a failed listing does not
 stop the step. It records the code and still works through stored detail
 work: refresh requests, the rotating queue, active reservations and due
 follow-ups. In place of the listing it reads the channel's uploads tab
@@ -317,7 +323,7 @@ creator replaces the image; see [Media cache](media-cache.md).
 
 #### Shorts
 
-The feed is the only stored signal that tells a Short apart. Each entry's
+The feed is the signal that tells a Short apart. Each entry's
 `<link rel="alternate">` points a Short to `https://www.youtube.com/shorts/<id>`
 and every other upload, stream or premiere to its `watch?v=<id>` page
 (`ytsource.Video.Short`). Only an HTTPS link on `www.youtube.com` or
@@ -328,13 +334,23 @@ new or old, after the video upsert; a verdict for a video the snapshot does
 not hold adds no row, and a changed value advances the dashboard revision.
 The stored `url` stays the canonical watch page. Watch pages, the live probe,
 historical windows and Bilibili never write `is_short`, so a later detail check
-cannot clear it. Rows the feed never listed with such a link stay `NULL`
-(unknown); the length is never used to guess. The step result's `shorts` counts the feed entries
-linked as Shorts in that run, so a feed that stops naming the format shows as
-zero. When the Data API supplies the listing, the feed is still read for
-these verdicts alone; if it fails, that run records none and reports the
-feed's code. An operator correction (`manual_is_short`) lies over the feed's verdict;
-see [Video corrections](data-model.md#video-corrections-and-history).
+cannot clear it. Rows neither the feed nor the Shorts playlist below named
+stay `NULL` (unknown); the length is never used to guess. The step result's
+`shorts` counts the uploads marked as Shorts in that run, so a feed that
+stops naming the format shows as zero.
+
+When the Data API supplies the listing, the feed is still read for these
+verdicts alone. If it fails, its code is recorded and one `playlistItems.list`
+page (one quota unit, counted in `apiRequests`) of the channel's Shorts
+playlist (`UUSH` and the channel ID after `UC`) stands in: every upload it
+names that the run listed or the snapshot holds is marked a Short (1). The
+playlist is undocumented, and an upload missing from it is not proof of a
+regular video, so it never writes 0; only the feed does. It goes to the same
+Data API destination under the same rules as the uploads playlist. A failure,
+such as the 404 of a channel without Shorts, records its `youtube_api_` code
+after the feed's, and that run marks no Shorts. Without a key, a failed feed
+marks none. An operator correction (`manual_is_short`) lies over the stored
+verdict; see [Video corrections](data-model.md#video-corrections-and-history).
 
 #### Follow-up checks and refresh requests
 
@@ -572,7 +588,8 @@ ID matches `UC` plus 22 characters and the video ID 11 characters. The Data
 API is reached only at `https://www.googleapis.com/youtube/v3/` (see
 [Data API](#data-api)). A redirect answer is reported as
 `youtube_redirect_rejected` and an oversized body as
-`youtube_response_oversized`.
+`youtube_response_oversized`, with `youtube_feed_` in place of `youtube_` for
+the feed.
 
 ### Schedule Extraction Pipeline
 

@@ -112,27 +112,43 @@ func TestGoSourceWorkflowProducesPostsReservationsAndReadableMedia(t *testing.T)
 	}
 }
 func TestYoutubeRecentFeedOutageIsRetryableDependencyFailure(t *testing.T) {
-	s, err := sqlite.OpenInitialized(filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite"), true, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	// Every public page is down and nothing is stored to recheck, so the run
-	// learns nothing: it fails as the feed's retryable outage.
-	requests := map[string]int{}
-	c := ytsource.NewClient(&http.Client{Transport: xTestRT(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Host != "www.youtube.com" {
-			t.Fatalf("unexpected request %s", r.URL)
-		}
-		requests[r.URL.Path]++
-		return &http.Response{StatusCode: 500, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
-	})})
-	c.FeedRetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
-	steps := &SourceSteps{Store: s, Youtube: ytsource.NewAdapter(c, ytsource.Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 1})}
-	_, err = steps.youtubeRecent(context.Background(), StepInput{})
-	var se *StepError
-	if !errors.As(err, &se) || se.Category != ErrDependency || !se.Retryable || requests["/feeds/videos.xml"] != 3 || requests["/channel/UCAAAAAAAAAAAAAAAAAAAAAA/videos"] != 1 {
-		t.Fatalf("err=%#v requests=%v", err, requests)
+	for _, tc := range []struct {
+		name        string
+		feed, feeds int
+		category    ErrorCategory
+	}{
+		{"feed 5xx is retried", 500, 3, ErrDependency},
+		{"feed 404", 404, 1, ErrDependency},
+		{"feed rate limit", 429, 1, ErrRateLimited},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := sqlite.OpenInitialized(filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite"), true, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			// Every public page is down and nothing is stored to recheck, so
+			// the run learns nothing: it fails as the feed's retryable outage.
+			requests := map[string]int{}
+			c := ytsource.NewClient(&http.Client{Transport: xTestRT(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Host != "www.youtube.com" {
+					t.Fatalf("unexpected request %s", r.URL)
+				}
+				requests[r.URL.Path]++
+				status := 500
+				if r.URL.Path == "/feeds/videos.xml" {
+					status = tc.feed
+				}
+				return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
+			})})
+			c.FeedRetryDelays = []time.Duration{time.Millisecond, time.Millisecond}
+			steps := &SourceSteps{Store: s, Youtube: ytsource.NewAdapter(c, ytsource.Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 1})}
+			_, err = steps.youtubeRecent(context.Background(), StepInput{})
+			var se *StepError
+			if !errors.As(err, &se) || se.Category != tc.category || !se.Retryable || requests["/feeds/videos.xml"] != tc.feeds || requests["/channel/UCAAAAAAAAAAAAAAAAAAAAAA/videos"] != 1 {
+				t.Fatalf("err=%#v requests=%v", err, requests)
+			}
+		})
 	}
 }
 
@@ -162,7 +178,7 @@ func TestYoutubeRecentFeedFailureFallsBackToTheUploadsTab(t *testing.T) {
 	yt.Now = func() time.Time { return time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC) }
 	steps := &SourceSteps{Store: s, Youtube: yt}
 	result, err := steps.youtubeRecent(context.Background(), StepInput{})
-	if err != nil || result.Status != "partial" || result.Result["listing"] != ytsource.ListingVideosPage || result.Result["inspected"] != 1 || !slices.Equal(result.Result["errors"].([]string), []string{"youtube_http_error"}) {
+	if err != nil || result.Status != "partial" || result.Result["listing"] != ytsource.ListingVideosPage || result.Result["inspected"] != 1 || !slices.Equal(result.Result["errors"].([]string), []string{"youtube_feed_http_error"}) {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
 	state, err := s.YoutubeRecentState(context.Background(), yt.Options.ChannelID)

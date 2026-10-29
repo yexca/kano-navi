@@ -480,8 +480,10 @@ described in [Sources](sources.md#follow-up-checks-and-refresh-requests).
 Public readers (dashboard, video archive, MCP) add the length as
 `durationSeconds`, null while it is unknown.
 
-`is_short` is the YouTube feed's format verdict: 1 for a Short, 0 for any
-other upload, `NULL` while unknown (see [Sources](sources.md#shorts)).
+`is_short` is the YouTube format verdict: 1 for a Short, 0 for any other
+upload, `NULL` while unknown. The feed writes both values; the Shorts
+playlist that stands in for a failed feed writes only 1 (see
+[Sources](sources.md#shorts)).
 `manual_is_short` is the operator's correction with the same values and
 `NULL` for none; synchronization never writes it. Public readers add
 `isShort = COALESCE(manual_is_short, is_short)` as `true`, `false` or `null`,

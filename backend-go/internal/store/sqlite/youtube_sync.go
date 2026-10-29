@@ -140,10 +140,10 @@ func writeYoutubeQueue(ctx context.Context, tx *sql.Tx, channel string, queue []
 	return nil
 }
 
-// writeYoutubeShorts records the feed's format verdict on stored YouTube
-// rows, after writeYoutubeVideos has added the new ones. Only the feed writes
-// is_short, so a watch-page read never clears it, and a row the feed never
-// listed with a format link stays unknown. It reports whether a row changed.
+// writeYoutubeShorts records the format verdict on stored YouTube rows, after
+// writeYoutubeVideos has added the new ones. Only the feed, or the Shorts
+// playlist in its place, writes is_short, so a watch-page read never clears
+// it, and a row neither named stays unknown. It reports whether a row changed.
 func writeYoutubeShorts(ctx context.Context, tx *sql.Tx, shorts map[string]bool) (bool, error) {
 	changed := false
 	for id, short := range shorts {

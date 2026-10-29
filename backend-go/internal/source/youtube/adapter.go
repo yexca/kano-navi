@@ -32,6 +32,8 @@ type Result struct {
 	APIRequests int
 	// Shorts is the feed's format verdict (Video.Short) for every listed
 	// entry whose alternate link named one, stored or new and of any age.
+	// When the feed fails with a key set, it holds true for the listed or
+	// stored uploads the Shorts playlist names, and no false verdicts.
 	Shorts map[string]bool
 	// Localized holds, for every video a videos.list call answered, the
 	// titles its creator localized by TitleLocales locale; an empty map means
@@ -302,7 +304,7 @@ func (a *Adapter) listUploads(ctx context.Context, result *Result, state State, 
 		uploads, held, err = a.apiUploads(ctx, result, state, list)
 		if err == nil {
 			result.Listing = ListingAPI
-			a.feedShorts(ctx, result)
+			a.feedShorts(ctx, result, uploads, state.Videos)
 			return uploads, held, nil
 		}
 		if ctx.Err() != nil {
@@ -398,8 +400,9 @@ func (a *Adapter) apiUploads(ctx context.Context, result *Result, state State, l
 }
 
 // feedShorts reads the feed for its Shorts verdicts alone, the one signal the
-// Data API listing lacks. A failure is recorded and only costs the verdicts.
-func (a *Adapter) feedShorts(ctx context.Context, result *Result) {
+// Data API listing lacks. A failure is recorded, and the Shorts playlist then
+// names the Shorts among uploads, the IDs this run listed, and stored.
+func (a *Adapter) feedShorts(ctx context.Context, result *Result, uploads []Video, stored map[string]Video) {
 	body, err := a.Client.Feed(ctx, a.Options.ChannelID)
 	var feed []Video
 	if err == nil {
@@ -408,12 +411,44 @@ func (a *Adapter) feedShorts(ctx context.Context, result *Result) {
 	if err != nil {
 		if ctx.Err() == nil {
 			result.Errors = append(result.Errors, safeError(err))
+			a.playlistShorts(ctx, result, uploads, stored)
 		}
 		return
 	}
 	for _, v := range feed {
 		if v.Short != nil {
 			result.Shorts[v.ID] = *v.Short
+		}
+	}
+}
+
+// playlistShorts marks the listed or stored uploads on the newest page of the
+// channel's Shorts playlist as Shorts. Absence from the playlist proves
+// nothing, so it never marks a regular video; only the feed does. A failure
+// is recorded and costs only the verdicts.
+func (a *Adapter) playlistShorts(ctx context.Context, result *Result, uploads []Video, stored map[string]Video) {
+	known := map[string]bool{}
+	for _, v := range uploads {
+		known[v.ID] = true
+	}
+	for id := range stored {
+		known[id] = true
+	}
+	result.APIRequests++
+	body, err := a.Client.ShortsPlaylist(ctx, a.Options.APIKey, a.Options.ChannelID)
+	var shorts []Video
+	if err == nil {
+		shorts, _, err = ParseUploadsPage(body)
+	}
+	if err != nil {
+		if ctx.Err() == nil {
+			result.Errors = append(result.Errors, safeError(err))
+		}
+		return
+	}
+	for _, v := range shorts {
+		if known[v.ID] {
+			result.Shorts[v.ID] = true
 		}
 	}
 }

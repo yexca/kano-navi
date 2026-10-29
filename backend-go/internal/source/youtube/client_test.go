@@ -167,10 +167,10 @@ func TestFeedRetriesTransientUpstreamFailures(t *testing.T) {
 	}{
 		{"500 then 200", []int{500}, 2, ""},
 		{"connection failure then 503 then 200", []int{0, 503}, 3, ""},
-		{"persistent 500", []int{500, 500, 500, 500}, 3, "youtube_upstream_5xx"},
-		{"persistent connection failure", []int{0, 0, 0}, 3, "youtube_unavailable"},
-		{"429 is not retried", []int{429, 500}, 1, "youtube_rate_limited"},
-		{"404 is not retried", []int{404, 500}, 1, "youtube_http_error"},
+		{"persistent 500", []int{500, 500, 500, 500}, 3, "youtube_feed_upstream_5xx"},
+		{"persistent connection failure", []int{0, 0, 0}, 3, "youtube_feed_unavailable"},
+		{"429 is not retried", []int{429, 500}, 1, "youtube_feed_rate_limited"},
+		{"404 is not retried", []int{404, 500}, 1, "youtube_feed_http_error"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			requests := 0
@@ -228,7 +228,10 @@ func TestOnlyTheFeedIsRetried(t *testing.T) {
 	if _, err := c.Streams(context.Background(), "UCAAAAAAAAAAAAAAAAAAAAAA"); err == nil || err.Error() != "youtube_upstream_5xx" {
 		t.Fatalf("streams err=%v", err)
 	}
-	if requests != 2 {
+	if _, err := c.VideosPage(context.Background(), "UCAAAAAAAAAAAAAAAAAAAAAA"); err == nil || err.Error() != "youtube_upstream_5xx" {
+		t.Fatalf("videos page err=%v", err)
+	}
+	if requests != 3 {
 		t.Fatalf("requests=%d", requests)
 	}
 }

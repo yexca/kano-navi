@@ -22,6 +22,7 @@ func (e *Error) Error() string { return e.Code }
 // DefaultFeedRetryDelays are the waits before the second and third feed
 // requests. The public feed returns intermittent 5xx responses that clear
 // within seconds, so a short bounded backoff avoids failing the whole step.
+// Its 404 answers can last for hours and are not repeated.
 var DefaultFeedRetryDelays = []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond}
 
 type Client struct {
@@ -40,9 +41,12 @@ func NewClient(client *http.Client) *Client {
 	copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{http: &copy, FeedRetryDelays: DefaultFeedRetryDelays}
 }
-func (c *Client) get(ctx context.Context, path string, query url.Values) ([]byte, error) {
+
+// get requests a public www.youtube.com page. Its error codes start with
+// prefix: youtube_feed for the RSS feed, youtube for every other page.
+func (c *Client) get(ctx context.Context, path string, query url.Values, prefix string) ([]byte, error) {
 	u := url.URL{Scheme: "https", Host: "www.youtube.com", Path: path, RawQuery: query.Encode()}
-	return c.do(ctx, u, "text/html,application/atom+xml", "", "youtube")
+	return c.do(ctx, u, "text/html,application/atom+xml", "", prefix)
 }
 
 // do requests one fixed destination. Error codes start with prefix; a 403 is
@@ -102,7 +106,7 @@ func (c *Client) Feed(ctx context.Context, channel string) ([]byte, error) {
 	}
 	query := url.Values{"channel_id": {channel}}
 	for attempt := 0; ; attempt++ {
-		body, err := c.get(ctx, "/feeds/videos.xml", query)
+		body, err := c.get(ctx, "/feeds/videos.xml", query, "youtube_feed")
 		if err == nil || attempt >= len(c.FeedRetryDelays) || !transient(err) {
 			return body, err
 		}
@@ -116,17 +120,18 @@ func (c *Client) Feed(ctx context.Context, channel string) ([]byte, error) {
 	}
 }
 
-// transient reports failures worth repeating: upstream 5xx and connection
-// errors. Rate limits, other 4xx, timeouts, redirects and body limits are not.
+// transient reports feed failures worth repeating: upstream 5xx and
+// connection errors. Rate limits, other 4xx, timeouts, redirects and body
+// limits are not.
 func transient(err error) bool {
 	var e *Error
-	return errors.As(err, &e) && (e.Code == "youtube_upstream_5xx" || e.Code == "youtube_unavailable")
+	return errors.As(err, &e) && (e.Code == "youtube_feed_upstream_5xx" || e.Code == "youtube_feed_unavailable")
 }
 func (c *Client) Streams(ctx context.Context, channel string) ([]byte, error) {
 	if !channelID.MatchString(channel) {
 		return nil, &Error{"youtube_invalid_channel"}
 	}
-	return c.get(ctx, "/channel/"+channel+"/streams", nil)
+	return c.get(ctx, "/channel/"+channel+"/streams", nil, "youtube")
 }
 
 // VideosPage is the channel's uploads tab, newest first. It lists IDs
@@ -135,13 +140,13 @@ func (c *Client) VideosPage(ctx context.Context, channel string) ([]byte, error)
 	if !channelID.MatchString(channel) {
 		return nil, &Error{"youtube_invalid_channel"}
 	}
-	return c.get(ctx, "/channel/"+channel+"/videos", nil)
+	return c.get(ctx, "/channel/"+channel+"/videos", nil, "youtube")
 }
 func (c *Client) Watch(ctx context.Context, id string) ([]byte, error) {
 	if !videoID.MatchString(id) {
 		return nil, &Error{"youtube_invalid_video"}
 	}
-	return c.get(ctx, "/watch", url.Values{"v": {id}})
+	return c.get(ctx, "/watch", url.Values{"v": {id}}, "youtube")
 }
 
 // MaxAPIVideos is the most IDs one videos.list call accepts.
@@ -162,7 +167,21 @@ func (c *Client) PlaylistPage(ctx context.Context, key, channel, token string) (
 	if !channelID.MatchString(channel) {
 		return nil, &Error{"youtube_invalid_channel"}
 	}
-	query := url.Values{"part": {"snippet,contentDetails,status"}, "playlistId": {"UU" + channel[2:]}, "maxResults": {"50"}}
+	return c.playlist(ctx, key, "UU"+channel[2:], token)
+}
+
+// ShortsPlaylist lists the newest page of the channel's Shorts playlist
+// ("UUSH" and the channel ID after "UC"): one quota unit. YouTube does not
+// document this playlist, so it only stands in for the feed's Shorts
+// verdicts; a channel without one answers 404.
+func (c *Client) ShortsPlaylist(ctx context.Context, key, channel string) ([]byte, error) {
+	if !channelID.MatchString(channel) {
+		return nil, &Error{"youtube_invalid_channel"}
+	}
+	return c.playlist(ctx, key, "UUSH"+channel[2:], "")
+}
+func (c *Client) playlist(ctx context.Context, key, playlist, token string) ([]byte, error) {
+	query := url.Values{"part": {"snippet,contentDetails,status"}, "playlistId": {playlist}, "maxResults": {"50"}}
 	if token != "" {
 		if !pageToken.MatchString(token) {
 			return nil, &Error{"youtube_api_invalid_response"}

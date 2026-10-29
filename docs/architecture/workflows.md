@@ -41,7 +41,7 @@ A YouTube `recent` window without a key keeps the listed uploads published
 within its days, so it cannot reach past what the feed lists. With a key the
 date search is followed by the regular recent read, which refreshes
 reservations the search API does not describe; if that read fails, the run
-is `partial` with `youtube_feed_unavailable`. A YouTube `count` window reads
+is `partial` with `youtube_recent_unavailable`. A YouTube `count` window reads
 the uploads listing like the recent step (see [YouTube](sources.md#youtube)).
 
 These requests run the chosen source and media stages through the

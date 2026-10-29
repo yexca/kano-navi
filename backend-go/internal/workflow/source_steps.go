@@ -217,11 +217,12 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 		var e *ytsource.Error
 		if errors.As(err, &e) {
 			switch e.Code {
-			case "youtube_timeout":
+			// The run fails only without a listing, so the code is the feed's.
+			case "youtube_feed_timeout":
 				category = ErrTimeout
-			case "youtube_rate_limited":
+			case "youtube_feed_rate_limited":
 				category = ErrRateLimited
-			case "youtube_unavailable", "youtube_upstream_5xx", "youtube_http_error":
+			case "youtube_feed_unavailable", "youtube_feed_upstream_5xx", "youtube_feed_http_error":
 				category = ErrDependency
 			}
 		}
@@ -370,7 +371,7 @@ func (s *SourceSteps) youtubeWindowAndFeed(ctx context.Context, in StepInput) (A
 	}
 	messages, _ := searched.Result["errors"].([]string)
 	if feedErr != nil {
-		searched.Result["errors"] = append(messages, "youtube_feed_unavailable; reservation refresh was skipped")
+		searched.Result["errors"] = append(messages, "youtube_recent_unavailable; reservation refresh was skipped")
 		searched.Status = "partial"
 		return searched, nil
 	}

@@ -934,6 +934,16 @@ export const adminMessages = {
     "admin.code.youtube_timeout": "YouTube took too long to answer.",
     "admin.code.youtube_rate_limited": "YouTube is limiting requests.",
     "admin.code.youtube_unavailable": "YouTube could not be reached.",
+    "admin.code.youtube_feed_http_error":
+      "YouTube's RSS feed answered with an error; its 404s can last for hours.",
+    "admin.code.youtube_feed_upstream_5xx":
+      "YouTube's RSS feed kept failing on YouTube's side after retries.",
+    "admin.code.youtube_feed_timeout":
+      "YouTube's RSS feed took too long to answer.",
+    "admin.code.youtube_feed_rate_limited":
+      "YouTube's RSS feed is limiting requests.",
+    "admin.code.youtube_feed_unavailable":
+      "YouTube's RSS feed could not be reached.",
     "admin.code.bilibili_risk_control":
       "Bilibili asked this server for a captcha; reads wait for the backoff to end.",
     "admin.code.source_api_request_failed": "The source API request failed.",
@@ -1878,6 +1888,13 @@ export const adminMessages = {
     "admin.code.youtube_timeout": "YouTube 响应超时。",
     "admin.code.youtube_rate_limited": "YouTube 正在限流。",
     "admin.code.youtube_unavailable": "无法访问 YouTube。",
+    "admin.code.youtube_feed_http_error":
+      "YouTube RSS 订阅源返回了错误；它的 404 可能持续数小时。",
+    "admin.code.youtube_feed_upstream_5xx":
+      "重试后 YouTube RSS 订阅源仍在 YouTube 一侧出错。",
+    "admin.code.youtube_feed_timeout": "YouTube RSS 订阅源响应超时。",
+    "admin.code.youtube_feed_rate_limited": "YouTube RSS 订阅源正在限流。",
+    "admin.code.youtube_feed_unavailable": "无法访问 YouTube RSS 订阅源。",
     "admin.code.bilibili_risk_control":
       "哔哩哔哩要求本服务器完成验证码，读取会等待退避结束。",
     "admin.code.source_api_request_failed": "来源 API 请求失败。",
