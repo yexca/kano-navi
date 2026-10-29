@@ -1,5 +1,10 @@
 # Unreleased
 
+> [!NOTE]
+> A YouTube premiere already stored as a stream stays one until an operator
+> requests a refresh of that video in `/admin`; the next YouTube run then
+> reads its watch page and turns it into a work.
+
 <details>
 <summary><strong>Synchronization and extraction</strong></summary>
 
@@ -13,6 +18,12 @@
   `youtube_*` codes the streams page, uploads tab and watch pages keep. A
   YouTube `recent` window whose reservation refresh fails reports
   `youtube_recent_unavailable`.
+- A YouTube premiere found before it starts is no longer stored as a stream
+  for good. A Data API answer without a length, or a watch page that reads as
+  live content, settles a stream verdict only once the broadcast is over, so a
+  premiere becomes a work (`release` event, title kind) after it ends. An
+  operator's refresh request reads the watch page even when the Data API
+  describes the video, which corrects a premiere already stored as a stream.
 
 </details>
 

@@ -213,9 +213,10 @@ func utcTime(value string) string {
 // before completeDetails. ok is false when the item cannot say what the video
 // is, and the watch page has to decide instead:
 //
-//   - The API has no isLiveContent. An upcoming or live premiere already has
-//     its file's length, while a stream reports P0D, so the length tells them
-//     apart until the broadcast ends.
+//   - The API has no isLiveContent. An upcoming or live broadcast with a
+//     length is a premiere, since a stream reports P0D. One without a length
+//     is left unknown: a premiere can report P0D before it ends, and a stream
+//     verdict is settled only once the broadcast is over.
 //   - After that, only the stored verdict of an earlier check tells. The
 //     kind cannot: a premiere keeps its title kind, which may be a live one.
 func fromAPI(item apiVideo, old Video) (Video, bool) {
@@ -242,11 +243,11 @@ func fromAPI(item apiVideo, old Video) (Video, bool) {
 	switch {
 	case item.Snippet.Broadcast == "upcoming":
 		v.IsUpcoming, v.LiveStatus = true, LiveStatusUpcoming
-		v.Premiere, v.PremiereKnown = length > 0, true
+		v.Premiere, v.PremiereKnown = length > 0, length > 0
 		return v, v.ScheduledAt != ""
 	case item.Snippet.Broadcast == "live" && v.EndedAt == "":
 		v.LiveNow, v.LiveStatus = true, LiveStatusLive
-		v.Premiere, v.PremiereKnown = length > 0, true
+		v.Premiere, v.PremiereKnown = length > 0, length > 0
 		return v, v.ScheduledAt != ""
 	case v.EndedAt != "":
 		v.LiveStatus = LiveStatusEnded

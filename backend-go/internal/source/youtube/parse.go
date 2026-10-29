@@ -26,9 +26,10 @@ type Video struct {
 	LiveStatus string
 	// Premiere marks a scheduled upload that is not live content.
 	// PremiereKnown says whether a check could tell: a watch page naming
-	// isLiveContent, or a Data API answer for an upcoming or live broadcast.
-	// The store keeps a known verdict for the API answer of an ended
-	// broadcast, which cannot tell.
+	// isLiveContent false, or true once the broadcast is over, or a Data API
+	// answer with a length for an upcoming or live broadcast. The store keeps
+	// a known verdict for the API answer of an ended broadcast, which cannot
+	// tell.
 	Premiere, PremiereKnown bool
 	// Unclassified marks a Data API answer for an ended broadcast that no
 	// check could call a premiere or a stream, used only when its watch page
@@ -247,10 +248,14 @@ func ParseWatch(body []byte, id string) (Video, error) {
 			v.EndedAt = t.UTC().Format(time.RFC3339Nano)
 		}
 	}
-	live := player.VideoDetails.LiveContent
-	v.PremiereKnown = found && v.ScheduledAt != "" && live != nil
-	v.Premiere = v.PremiereKnown && !*live
 	liveState(&v, player, found)
+	// isLiveContent: false always means a premiere. Before the broadcast ends
+	// a premiere can read as live content too, so a stream verdict waits for
+	// a page that reports it over.
+	if live := player.VideoDetails.LiveContent; found && v.ScheduledAt != "" && live != nil {
+		v.Premiere = !*live
+		v.PremiereKnown = v.Premiere || v.LiveStatus == LiveStatusEnded
+	}
 	if n, err := strconv.Atoi(player.VideoDetails.Length); err == nil && n > 0 && !v.IsUpcoming && !v.LiveNow {
 		v.DurationSeconds = n
 	}

@@ -69,6 +69,30 @@ func TestWatchReportsTheBroadcastState(t *testing.T) {
 	}
 }
 
+func TestWatchSettlesAStreamVerdictOnlyOnceTheBroadcastIsOver(t *testing.T) {
+	for _, tc := range []struct {
+		name, details, broadcast string
+		premiere, known          bool
+	}{
+		{name: "stream waiting room", details: `"isUpcoming":true,"isLiveContent":true`, broadcast: `{"isLiveNow":false,"startTimestamp":"2026-01-03T12:00:00+00:00"}`},
+		{name: "stream on air", details: `"isLive":true,"isLiveContent":true`, broadcast: `{"isLiveNow":true,"startTimestamp":"2026-01-03T12:00:00+00:00"}`},
+		{name: "stream over", details: `"isLiveContent":true`, broadcast: `{"isLiveNow":false,"startTimestamp":"2026-01-03T12:00:00+00:00","endTimestamp":"2026-01-03T14:00:00+00:00"}`, known: true},
+		{name: "premiere waiting room", details: `"isUpcoming":true,"isLiveContent":false`, broadcast: `{"isLiveNow":false,"startTimestamp":"2026-01-03T12:00:00+00:00"}`, premiere: true, known: true},
+		{name: "premiere on air", details: `"isLive":true,"isLiveContent":false`, broadcast: `{"isLiveNow":true,"startTimestamp":"2026-01-03T12:00:00+00:00"}`, premiere: true, known: true},
+		{name: "ordinary upload", details: `"isLiveContent":false`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := ParseWatch([]byte(watchPage("AAAAAAAAAAA", tc.details, tc.broadcast)), "AAAAAAAAAAA")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if v.Premiere != tc.premiere || v.PremiereKnown != tc.known {
+				t.Fatalf("video=%#v", v)
+			}
+		})
+	}
+}
+
 func TestLiveSignalsDoNotLoosenCompleteness(t *testing.T) {
 	for name, body := range map[string]string{
 		// A live page for another video is still rejected.

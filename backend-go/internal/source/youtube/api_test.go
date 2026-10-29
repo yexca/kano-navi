@@ -222,6 +222,74 @@ func TestEndedBroadcastTakesItsPremiereVerdictFromTheStoredCheck(t *testing.T) {
 	}
 }
 
+func TestPremiereWithoutALengthIsLeftForItsEnd(t *testing.T) {
+	items, err := ParseAPIVideos([]byte(apiItems(
+		`{"id":"UUUUUUUUUUU","snippet":{"title":"Letters - cover.","liveBroadcastContent":"upcoming"},"contentDetails":{"duration":"P0D"},"liveStreamingDetails":{"scheduledStartTime":"2026-01-03T09:00:00Z"}}`,
+		`{"id":"LLLLLLLLLLL","snippet":{"title":"Letters - cover.","liveBroadcastContent":"live"},"contentDetails":{"duration":"P0D"},"liveStreamingDetails":{"actualStartTime":"2026-01-03T09:00:10Z"}}`,
+	)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A premiere can report P0D before it ends, so no stream verdict is
+	// stored that a later answer would repeat.
+	for _, id := range []string{"UUUUUUUUUUU", "LLLLLLLLLLL"} {
+		if v, ok := fromAPI(items[id], Video{}); !ok || v.Premiere || v.PremiereKnown {
+			t.Fatalf("%s=%#v ok=%v", id, v, ok)
+		}
+	}
+}
+
+func TestRefreshRequestReadsThePageOfAClassifiedBroadcast(t *testing.T) {
+	var watched []string
+	ended := func(id string) string {
+		return `{"id":"` + id + `","snippet":{"title":"Letters - cover.","liveBroadcastContent":"none"},"contentDetails":{"duration":"PT4M5S"},"liveStreamingDetails":{"scheduledStartTime":"2026-01-02T09:00:00Z","actualStartTime":"2026-01-02T09:00:10Z","actualEndTime":"2026-01-02T09:06:10Z"}}`
+	}
+	c := NewClient(&http.Client{Transport: fakeTransport(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/youtube/v3/playlistItems":
+			return response(200, apiItems()), nil
+		case "/youtube/v3/videos":
+			return response(200, apiItems(ended("RRRRRRRRRRR"), ended("FFFFFFFFFFF"))), nil
+		case "/feeds/videos.xml":
+			return response(200, syntheticFeed()), nil
+		case "/channel/" + syntheticChannel + "/streams", "/channel/" + syntheticChannel + "/videos":
+			return response(200, ``), nil
+		case "/watch":
+			id := r.URL.Query().Get("v")
+			watched = append(watched, id)
+			if id == "FFFFFFFFFFF" {
+				return response(404, ""), nil
+			}
+			page := watchPage(id, `"isLiveContent":false,"lengthSeconds":"245"`, `{"isLiveNow":false,"startTimestamp":"2026-01-02T09:00:10+00:00","endTimestamp":"2026-01-02T09:06:10+00:00"}`)
+			return response(200, strings.Replace(page, "synthetic stream", "Letters - cover.", 1)), nil
+		}
+		t.Fatalf("unexpected request %s", r.URL)
+		return nil, nil
+	})})
+	a := NewAdapter(c, Options{ChannelID: syntheticChannel, MaxDetailRequests: 5, APIKey: "synthetic-api-key"})
+	a.Now = syntheticNow
+	// Premieres a check before their end stored as streams.
+	stored := func(id string) Video {
+		return Video{ID: id, Title: "Letters - cover.", PublishedAt: "2026-01-01T13:58:38Z", ScheduledAt: "2026-01-02T09:00:10Z", Kind: "LIVE ARCHIVE", PremiereKnown: true}
+	}
+	state := State{RefreshIDs: []string{"RRRRRRRRRRR", "FFFFFFFFFFF"}, Videos: map[string]Video{"RRRRRRRRRRR": stored("RRRRRRRRRRR"), "FFFFFFFFFFF": stored("FFFFFFFFFFF")}}
+	result, err := a.FetchRecent(context.Background(), state, 7)
+	if err != nil || strings.Join(watched, ",") != "RRRRRRRRRRR,FFFFFFFFFFF" || result.Requested != 2 || result.Inspected != 2 || !slices.Contains(result.Errors, "youtube_http_error") {
+		t.Fatalf("result=%#v watched=%v err=%v", result, watched, err)
+	}
+	got := map[string]Video{}
+	for _, v := range result.Videos {
+		got[v.ID] = v
+	}
+	// The page settles the premiere; a failed page leaves the API answer.
+	if v := got["RRRRRRRRRRR"]; !v.Premiere || !v.PremiereKnown || v.Kind != "MUSIC" || v.LiveStatus != LiveStatusEnded {
+		t.Fatalf("refreshed=%#v", v)
+	}
+	if v := got["FFFFFFFFFFF"]; v.Premiere || !v.PremiereKnown || v.Kind != "LIVE ARCHIVE" || v.EndedAt != "2026-01-02T09:06:10Z" {
+		t.Fatalf("failed page=%#v", v)
+	}
+}
+
 func TestSameImageIgnoresSizesHostsAndMissingVersions(t *testing.T) {
 	for _, c := range []struct {
 		a, b string

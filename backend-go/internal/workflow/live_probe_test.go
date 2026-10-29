@@ -129,8 +129,8 @@ func TestLiveProbeAsksTheDataAPIWhenAKeyIsSet(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 	now := time.Now().UTC()
-	// A reservation only the feed has named, and a stream a detail check
-	// already called a stream while it was on air.
+	// A reservation only the feed has named, and a stream with a stored
+	// stream verdict.
 	reservation := ytsource.Video{ID: "AAAAAAAAAAA", Title: "synthetic stream", PublishedAt: now.Add(-24 * time.Hour).Format(time.RFC3339), ScheduledAt: now.Add(-time.Minute).Format(time.RFC3339), URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", Kind: "UPCOMING LIVE", IsUpcoming: true, FeedOnly: true}
 	stream := ytsource.Video{ID: "EEEEEEEEEEE", Title: "synthetic stream", PublishedAt: now.Add(-24 * time.Hour).Format(time.RFC3339), ScheduledAt: now.Add(-2 * time.Hour).Format(time.RFC3339), URL: "https://www.youtube.com/watch?v=EEEEEEEEEEE", Kind: "LIVE ARCHIVE", LiveNow: true, LiveStatus: ytsource.LiveStatusLive, PremiereKnown: true}
 	if err = s.WriteYoutubeRecent(ctx, "UCAAAAAAAAAAAAAAAAAAAAAA", ytsource.Result{Videos: []ytsource.Video{reservation, stream}, NextCursor: "AAAAAAAAAAA", NextCursorTime: reservation.PublishedAt}); err != nil {
@@ -158,9 +158,9 @@ func TestLiveProbeAsksTheDataAPIWhenAKeyIsSet(t *testing.T) {
 		t.Fatalf("counts=%v", got.Result)
 	}
 	// The ended stream leaves the plan; the live one stays, in its live phase,
-	// with the API's start and the stream verdict.
+	// with the API's start and no verdict until it ends.
 	targets, err := s.LiveProbeTargets(ctx, clock, sqlite.LiveProbeSettings{Enabled: true, IntervalMinutes: 15})
-	if err != nil || len(targets) != 1 || targets[0].Video.ID != "AAAAAAAAAAA" || targets[0].Phase != sqlite.LivePhaseLive || !targets[0].Video.PremiereKnown || targets[0].Video.Premiere {
+	if err != nil || len(targets) != 1 || targets[0].Video.ID != "AAAAAAAAAAA" || targets[0].Phase != sqlite.LivePhaseLive || targets[0].Video.PremiereKnown || targets[0].Video.Premiere {
 		t.Fatalf("targets=%#v err=%v", targets, err)
 	}
 	dashboard, err := s.GetDashboard(ctx, 3, clock)

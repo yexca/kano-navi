@@ -227,6 +227,10 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 	// An operator's refresh request goes ahead of the rotating queue; due
 	// follow-ups come last so they never starve new discoveries.
 	eligible := append(append([]string{}, state.RefreshIDs...), state.Queue...)
+	refresh := map[string]bool{}
+	for _, id := range state.RefreshIDs {
+		refresh[id] = true
+	}
 	for _, id := range append(append(append([]string{}, streamIDs...), pageIDs...), feedIDs...) {
 		v, exists := state.Videos[id]
 		t, _ := time.Parse(time.RFC3339Nano, v.ScheduledAt)
@@ -248,6 +252,13 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 			return result, err
 		}
 		v, answered := fromAPI[id]
+		fallback, hasFallback := unclassified[id]
+		// An operator's refresh request reads the watch page while the budget
+		// allows, so it can settle a premiere verdict the API answer only
+		// repeats; that answer stands in when the page fails.
+		if answered && refresh[id] && budget > 0 {
+			fallback, hasFallback, answered = v, true, false
+		}
 		if !answered && budget == 0 {
 			continue
 		}
@@ -263,7 +274,7 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 			if err != nil {
 				result.Errors = append(result.Errors, safeError(err))
 				// The page could not decide, so what the API said still counts.
-				if v, answered = unclassified[id]; !answered {
+				if v, answered = fallback, hasFallback; !answered {
 					continue
 				}
 			}

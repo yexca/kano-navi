@@ -165,9 +165,13 @@ premieres like ordinary uploads, so the uploads a run takes are detail
 candidates as well, after stream-page discoveries. A watch
 page whose player reports `isLiveContent: false` with a start time is a
 premiere: its event is a `release` and its video keeps the title-derived kind.
+`isLiveContent: true` is a stream verdict only on a page that reports the
+broadcast over, since a premiere can read as live content before it ends.
 The verdict is stored as `videos.is_premiere` (1 for a premiere, 0 for live
 content), and a check that cannot tell, such as a page without
-`isLiveContent`, keeps the stored one for the video and its event.
+`isLiveContent` or a waiting room or broadcast on air that reads as live
+content, keeps the stored one for the video and its event. Until a verdict
+exists the video and its event are a stream.
 A finished stream or premiere writes the `endTimestamp` from its
 `liveBroadcastDetails` as the event's `ends_at`; a later check without one keeps
 the stored end. Every successful watch-page check also records the broadcast
@@ -250,9 +254,9 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   (`YOUTUBE_MAX_DETAIL_REQUESTS`) then goes to the queued IDs the API left out.
   An answer for a listed upload outside the queue only refreshes its
   [localized titles](#localized-titles).
-- The API has no `isLiveContent`. An upcoming or live premiere already has its
-  file's length while a stream reports `P0D`, so the length tells them apart
-  until the broadcast ends. An ended broadcast is classified from its stored
+- The API has no `isLiveContent`. An upcoming or live broadcast with a length
+  is a premiere, since a stream reports `P0D`; one without a length gets no
+  verdict, since a premiere can report `P0D` before it ends too. An ended broadcast is classified from its stored
   row only when an earlier detail check gave it a start time and a stored
   `is_premiere` verdict; the kind cannot tell, since a premiere keeps its
   title kind, which may be a live one. Otherwise, as for a row without a
@@ -367,7 +371,10 @@ detail budget, completeness checks and rotating queue.
 An operator can also ask for one video from `/admin` (see
 [Admin API](admin-api.md#video-corrections-and-history)). The request is
 stored as `videos.refresh_requested_at`; the next YouTube step reads that page
-before any other detail work, and a successful check clears it. A request
+before any other detail work, and a successful check clears it. The page is
+read even when the [Data API](#data-api) describes the video, so a refresh
+can settle a premiere verdict that the API answer of an ended broadcast only
+repeats; when the page fails, the API answer is used. A request
 that no successful check answers within 24 hours stops going first.
 
 Every detail check stores the player's `lengthSeconds` as
@@ -420,8 +427,8 @@ check, including the [localized titles](#localized-titles).
 `live` without an `actualEndTime` is `live` and sets `LiveNow`; an
 `actualEndTime` is `ended` and writes the event's `ends_at`. The
 `actualStartTime`, when present, is the actual start and replaces the
-reservation time, as `startTimestamp` does. The length tells an upcoming or
-live premiere from a stream, and an ended broadcast takes the stored
+reservation time, as `startTimestamp` does. A length marks an upcoming or
+live premiere, and an ended broadcast takes the stored
 `is_premiere` verdict, which the probe loads with its targets. A video's
 watch page is still read when the call fails (its code is recorded and
 every video falls back), when the answer leaves the video out, when it

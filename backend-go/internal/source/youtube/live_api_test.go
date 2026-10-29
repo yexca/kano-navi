@@ -80,8 +80,9 @@ func TestProbeAsksTheDataAPIBeforeAnyWatchPage(t *testing.T) {
 	for _, v := range result.Videos {
 		got[v.ID] = v
 	}
-	// The actual start replaces the reservation, as on the watch page.
-	if v := got["LLLLLLLLLLL"]; !v.LiveNow || v.LiveStatus != LiveStatusLive || v.IsUpcoming || v.ScheduledAt != "2026-01-03T12:04:30Z" || v.Premiere || !v.PremiereKnown || v.Kind != "LIVE ARCHIVE" || v.PublishedAt != "2026-01-02T00:00:00Z" {
+	// The actual start replaces the reservation, as on the watch page; a
+	// broadcast without a length waits for its end for a stream verdict.
+	if v := got["LLLLLLLLLLL"]; !v.LiveNow || v.LiveStatus != LiveStatusLive || v.IsUpcoming || v.ScheduledAt != "2026-01-03T12:04:30Z" || v.Premiere || v.PremiereKnown || v.Kind != "LIVE ARCHIVE" || v.PublishedAt != "2026-01-02T00:00:00Z" {
 		t.Fatalf("live=%#v", v)
 	}
 	if v := got["UUUUUUUUUUU"]; v.LiveNow || v.LiveStatus != LiveStatusUpcoming || !v.IsUpcoming || v.ScheduledAt != "2026-01-03T13:10:00Z" || v.Kind != "UPCOMING LIVE" {
