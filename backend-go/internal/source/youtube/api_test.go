@@ -103,7 +103,15 @@ func TestRecentPrefersTheDataAPIForListingAndDetails(t *testing.T) {
 			}
 			switch r.URL.Path {
 			case "/youtube/v3/playlistItems":
-				if r.URL.Query().Get("playlistId") != "UUAAAAAAAAAAAAAAAAAAAAAA" {
+				// The live playlist confirms the stored stream; the long-form
+				// one does not name the unclassified NNNNNNNNNNN.
+				switch r.URL.Query().Get("playlistId") {
+				case "UULV" + syntheticChannel[2:]:
+					return response(200, apiItems(playlistItem("EEEEEEEEEEE", "2026-01-02T10:00:00Z"))), nil
+				case "UULF" + syntheticChannel[2:]:
+					return response(200, apiItems(playlistItem("OOOOOOOOOOO", "2026-01-02T05:00:00Z"))), nil
+				case "UU" + syntheticChannel[2:]:
+				default:
 					t.Fatalf("playlist=%s", r.URL.Query().Get("playlistId"))
 				}
 				return response(200, apiItems(
@@ -155,7 +163,9 @@ func TestRecentPrefersTheDataAPIForListingAndDetails(t *testing.T) {
 		FollowUpIDs: []string{"NNNNNNNNNNN"},
 	}
 	result, err := a.FetchRecent(context.Background(), state, 7)
-	if err != nil || len(result.Errors) != 0 || result.Listing != ListingAPI || result.APIRequests != 2 || result.Discovered != 3 {
+	// The uploads playlist, videos.list, and the live and long-form playlists
+	// for the queued ended broadcasts.
+	if err != nil || len(result.Errors) != 0 || result.Listing != ListingAPI || result.APIRequests != 4 || result.Discovered != 3 {
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
 	if strings.Join(apiIDs, ",") != "PPPPPPPPPPP,LLLLLLLLLLL,OOOOOOOOOOO,EEEEEEEEEEE,NNNNNNNNNNN" {
@@ -208,16 +218,16 @@ func TestEndedBroadcastTakesItsPremiereVerdictFromTheStoredCheck(t *testing.T) {
 	item := items["PPPPPPPPPPP"]
 	start := "2026-01-02T09:00:00Z"
 	// A premiere whose title reads as a stream keeps the stored verdict.
-	v, ok := fromAPI(item, Video{ScheduledAt: start, Kind: "LIVE ARCHIVE", Premiere: true, PremiereKnown: true})
+	v, ok := fromAPI(item, Video{ScheduledAt: start, Kind: "LIVE ARCHIVE", Premiere: true, PremiereKnown: true}, listedNowhere)
 	if !ok || !v.Premiere || !v.PremiereKnown {
 		t.Fatalf("premiere=%#v ok=%v", v, ok)
 	}
-	if v, ok = fromAPI(item, Video{ScheduledAt: start, Kind: "MUSIC", PremiereKnown: true}); !ok || v.Premiere {
+	if v, ok = fromAPI(item, Video{ScheduledAt: start, Kind: "MUSIC", PremiereKnown: true}, listedNowhere); !ok || v.Premiere {
 		t.Fatalf("stream=%#v ok=%v", v, ok)
 	}
 	// A row stored before verdicts were kept, with a start time and a live
 	// kind, is left to its watch page.
-	if _, ok = fromAPI(item, Video{ScheduledAt: start, Kind: "LIVE ARCHIVE"}); ok {
+	if _, ok = fromAPI(item, Video{ScheduledAt: start, Kind: "LIVE ARCHIVE"}, listedNowhere); ok {
 		t.Fatal("an unknown verdict was guessed from the kind")
 	}
 }
@@ -233,7 +243,7 @@ func TestPremiereWithoutALengthIsLeftForItsEnd(t *testing.T) {
 	// A premiere can report P0D before it ends, so no stream verdict is
 	// stored that a later answer would repeat.
 	for _, id := range []string{"UUUUUUUUUUU", "LLLLLLLLLLL"} {
-		if v, ok := fromAPI(items[id], Video{}); !ok || v.Premiere || v.PremiereKnown {
+		if v, ok := fromAPI(items[id], Video{}, listedNowhere); !ok || v.Premiere || v.PremiereKnown {
 			t.Fatalf("%s=%#v ok=%v", id, v, ok)
 		}
 	}
@@ -401,7 +411,7 @@ func TestDataAPIParsing(t *testing.T) {
 	// An ended broadcast with no stored detail check, an upcoming one without
 	// a start and an untitled video are all left to their pages.
 	for id, item := range items {
-		if v, ok := fromAPI(item, Video{}); ok {
+		if v, ok := fromAPI(item, Video{}, listedNowhere); ok {
 			t.Fatalf("%s classified: %#v", id, v)
 		}
 	}

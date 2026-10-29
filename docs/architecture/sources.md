@@ -256,7 +256,24 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   [localized titles](#localized-titles).
 - The API has no `isLiveContent`. An upcoming or live broadcast with a length
   is a premiere, since a stream reports `P0D`; one without a length gets no
-  verdict, since a premiere can report `P0D` before it ends too. An ended broadcast is classified from its stored
+  verdict, since a premiere can report `P0D` before it ends too.
+- An ended broadcast is classified by the channel's per-format playlists.
+  When a queued video is an ended broadcast that has no stored premiere
+  verdict, the run reads the newest page of the live playlist (`UULV` and the
+  channel ID after `UC`) and of the long-form playlist (`UULF` and the
+  channel ID after `UC`), one `playlistItems.list` call and one quota unit
+  each, counted in `apiRequests`, at most once per `videos.list` call. YouTube lists
+  streams on the live playlist and premieres with ordinary uploads on the
+  long-form one, so an ended broadcast on the live playlist is a stream and one
+  on the long-form playlist is a premiere. The playlists are undocumented,
+  like the [Shorts playlist](#shorts), and are read only after the
+  end, so a listing before or during a broadcast decides nothing. A video on
+  neither page (members-only streams, Shorts, older broadcasts) or on both
+  gets no verdict from them, and a failed read records its `youtube_api_` code
+  and decides nothing. A stored premiere verdict is final and is never looked
+  up, while a stored stream verdict is looked up again and replaced when the
+  long-form playlist names the video.
+- Without such a verdict, an ended broadcast is classified from its stored
   row only when an earlier detail check gave it a start time and a stored
   `is_premiere` verdict; the kind cannot tell, since a premiere keeps its
   title kind, which may be a live one. Otherwise, as for a row without a
@@ -281,7 +298,8 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
 
 A run that finds a stored video on its first playlist page spends two quota
 units (of the default 10,000 a day), whatever the queue length; each further
-page adds one. The key is sent only in the `X-Goog-Api-Key` header to
+page adds one, and the per-format playlists two more when a queued ended
+broadcast needs them. The key is sent only in the `X-Goog-Api-Key` header to
 `https://www.googleapis.com/youtube/v3/`, with the client's 10-second timeout,
 4 MiB limit and rejected redirects. Failures record controlled codes
 (`youtube_api_forbidden` for a refused key or quota, `youtube_api_rate_limited`,
@@ -428,16 +446,18 @@ check, including the [localized titles](#localized-titles).
 `actualEndTime` is `ended` and writes the event's `ends_at`. The
 `actualStartTime`, when present, is the actual start and replaces the
 reservation time, as `startTimestamp` does. A length marks an upcoming or
-live premiere, and an ended broadcast takes the stored
+live premiere, and an ended broadcast takes the verdict of the
+per-format playlists, read as in the recent step, or else the stored
 `is_premiere` verdict, which the probe loads with its targets. A video's
 watch page is still read when the call fails (its code is recorded and
 every video falls back), when the answer leaves the video out, when it
 names no broadcast state, or when it cannot classify the video, such as an
-ended broadcast without a stored verdict or an upcoming one without a
+ended broadcast with neither verdict or an upcoming one without a
 start. If that page fails too, an ended broadcast with an API start is
 written unclassified, as in the recent step. `apiRequests` in the run
-result counts the call; `requested` counts watch pages. Each run costs one
-quota unit whatever the number of due videos, and nothing while nothing is
+result counts the calls; `requested` counts watch pages. Each run costs one
+quota unit whatever the number of due videos, two more when an ended
+broadcast needs the per-format playlists, and nothing while nothing is
 due; the probe's worst case of 30 runs an hour is 720 units a day, and
 together with a regular YouTube step every 15 minutes (two units per run)
 stays under a tenth of the default 10,000. Without a key the probe reads

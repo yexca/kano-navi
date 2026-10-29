@@ -1,9 +1,10 @@
 # Unreleased
 
 > [!NOTE]
-> A YouTube premiere already stored as a stream stays one until an operator
-> requests a refresh of that video in `/admin`; the next YouTube run then
-> reads its watch page and turns it into a work.
+> With `YOUTUBE_API_KEY` set, a YouTube premiere already stored as a stream
+> turns into a work at its next detail check, such as a follow-up check or an
+> operator's refresh request in `/admin`. Without a key, only a refresh
+> request whose watch page reads corrects it.
 
 <details>
 <summary><strong>Synchronization and extraction</strong></summary>
@@ -24,6 +25,13 @@
   premiere becomes a work (`release` event, title kind) after it ends. An
   operator's refresh request reads the watch page even when the Data API
   describes the video, which corrects a premiere already stored as a stream.
+- With `YOUTUBE_API_KEY` set, an ended YouTube broadcast is classified
+  without its watch page, which a host YouTube asks to sign in cannot read: the
+  channel's live playlist names streams and its long-form playlist names
+  premieres. When a checked ended broadcast has no premiere verdict, the run
+  reads the newest page of both (two more quota units), and the long-form
+  playlist also corrects a premiere stored as a stream. A premiere still
+  reads as a stream until it ends.
 
 </details>
 

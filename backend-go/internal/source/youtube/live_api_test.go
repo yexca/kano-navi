@@ -8,17 +8,21 @@ import (
 	"time"
 )
 
-// probeAPIClient answers videos.list with items and watch pages with page,
-// recording the IDs asked of each and checking the key stays in its header.
-func probeAPIClient(t *testing.T, items func() *http.Response, page func(id string) *http.Response, apiIDs, watched *[]string) *Client {
+// probeAPIClient answers videos.list with items, the per-format playlists
+// with lists (nil when the probe must not read them) and watch pages with
+// page, recording the IDs asked of each and checking the key stays in its
+// header.
+func probeAPIClient(t *testing.T, items func() *http.Response, lists func(playlist string) *http.Response, page func(id string) *http.Response, apiIDs, watched *[]string) *Client {
 	return NewClient(&http.Client{Transport: fakeTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "www.googleapis.com" && (r.Header.Get("X-Goog-Api-Key") != syntheticKey || strings.Contains(r.URL.String(), syntheticKey)) {
+			t.Fatalf("key not confined to the header: %s", r.URL)
+		}
 		switch {
 		case r.URL.Host == "www.googleapis.com" && r.URL.Path == "/youtube/v3/videos":
-			if r.Header.Get("X-Goog-Api-Key") != syntheticKey || strings.Contains(r.URL.String(), syntheticKey) {
-				t.Fatalf("key not confined to the header: %s", r.URL)
-			}
 			*apiIDs = append(*apiIDs, r.URL.Query().Get("id"))
 			return items(), nil
+		case r.URL.Host == "www.googleapis.com" && r.URL.Path == "/youtube/v3/playlistItems" && lists != nil:
+			return lists(r.URL.Query().Get("playlistId")), nil
 		case r.URL.Host == "www.youtube.com" && r.URL.Path == "/watch":
 			id := r.URL.Query().Get("v")
 			*watched = append(*watched, id)
@@ -46,6 +50,13 @@ func TestProbeAsksTheDataAPIBeforeAnyWatchPage(t *testing.T) {
 			broadcast("PPPPPPPPPPP", "none", "PT4M49S", `"actualStartTime":"2026-01-03T12:00:09Z","actualEndTime":"2026-01-03T12:06:55Z"`),
 			// MMMMMMMMMMM is missing from the answer.
 		))
+	}, func(playlist string) *http.Response {
+		// The live playlist confirms the stored stream; neither names the
+		// unclassified PPPPPPPPPPP.
+		if playlist == "UULV"+syntheticChannel[2:] {
+			return response(200, apiItems(playlistItem("EEEEEEEEEEE", "2026-01-03T10:00:00Z")))
+		}
+		return response(200, apiItems(playlistItem("ZZZZZZZZZZZ", "2026-01-01T00:00:00Z")))
 	}, func(id string) *http.Response {
 		if id == "PPPPPPPPPPP" {
 			return response(404, "")
@@ -68,7 +79,7 @@ func TestProbeAsksTheDataAPIBeforeAnyWatchPage(t *testing.T) {
 	if strings.Join(apiIDs, ";") != "LLLLLLLLLLL,UUUUUUUUUUU,EEEEEEEEEEE,PPPPPPPPPPP,MMMMMMMMMMM" || strings.Join(watched, ",") != "PPPPPPPPPPP,MMMMMMMMMMM" {
 		t.Fatalf("api=%v watched=%v", apiIDs, watched)
 	}
-	if result.APIRequests != 1 || result.Requested != 2 || result.Inspected != 5 || len(result.Attempted) != 5 || strings.Join(result.Errors, ",") != "youtube_http_error" {
+	if result.APIRequests != 3 || result.Requested != 2 || result.Inspected != 5 || len(result.Attempted) != 5 || strings.Join(result.Errors, ",") != "youtube_http_error" {
 		t.Fatalf("result=%#v", result)
 	}
 	// Every answered video reports its localized titles, none here; the one
@@ -109,7 +120,7 @@ func TestProbeFallsBackToWatchPagesWhenTheDataAPIFails(t *testing.T) {
 	} {
 		t.Run(code, func(t *testing.T) {
 			var apiIDs, watched []string
-			c := probeAPIClient(t, answer, func(id string) *http.Response {
+			c := probeAPIClient(t, answer, nil, func(id string) *http.Response {
 				return response(200, watchPage(id, `"isUpcoming":true,"isLiveContent":true`, `{"isLiveNow":false,"startTimestamp":"2026-01-03T13:10:00+00:00"}`))
 			}, &apiIDs, &watched)
 			a := NewAdapter(c, Options{ChannelID: syntheticChannel, MaxDetailRequests: 12, APIKey: "synthetic-api-key"})
@@ -139,7 +150,7 @@ func TestProbeReadsThePageWhenTheAPINamesNoBroadcastState(t *testing.T) {
 			`{"id":"AAAAAAAAAAA","snippet":{"title":"plain","liveBroadcastContent":"none"},"contentDetails":{"duration":"PT1M"}}`,
 			`{"id":"BBBBBBBBBBB","snippet":{"title":"no start","liveBroadcastContent":"upcoming"},"contentDetails":{"duration":"P0D"},"liveStreamingDetails":{}}`,
 		))
-	}, func(id string) *http.Response {
+	}, nil, func(id string) *http.Response {
 		return response(200, watchPage(id, `"isLiveContent":true`, `{"isLiveNow":false,"startTimestamp":"2026-01-03T10:00:00+00:00","endTimestamp":"2026-01-03T11:00:00+00:00"}`))
 	}, &apiIDs, &watched)
 	a := NewAdapter(c, Options{ChannelID: syntheticChannel, MaxDetailRequests: 12, APIKey: "synthetic-api-key"})

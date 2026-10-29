@@ -209,17 +209,40 @@ func utcTime(value string) string {
 	return t.UTC().Format(time.RFC3339Nano)
 }
 
+// formatList names the per-format uploads playlist a video was found on.
+type formatList int
+
+const (
+	listedNowhere formatList = iota
+	// listedLive is the live playlist (UULV): streams.
+	listedLive
+	// listedVideos is the long-form playlist (UULF): premieres and ordinary
+	// uploads, never streams.
+	listedVideos
+)
+
+// needsListing reports whether an answer is for an ended broadcast whose
+// verdict the per-format playlists could settle. A stored premiere verdict is
+// final, so only an unknown or a stream verdict is looked up.
+func needsListing(item apiVideo, old Video) bool {
+	return item.Live != nil && item.Live.ActualEnd != "" && strings.TrimSpace(item.Snippet.Title) != "" && !(old.PremiereKnown && old.Premiere)
+}
+
 // fromAPI turns a videos.list item into the same details a watch page gives,
-// before completeDetails. ok is false when the item cannot say what the video
-// is, and the watch page has to decide instead:
+// before completeDetails. listed is the per-format playlist the video was
+// found on, if any. ok is false when the item cannot say what the video is,
+// and the watch page has to decide instead:
 //
 //   - The API has no isLiveContent. An upcoming or live broadcast with a
 //     length is a premiere, since a stream reports P0D. One without a length
 //     is left unknown: a premiere can report P0D before it ends, and a stream
 //     verdict is settled only once the broadcast is over.
+//   - An ended broadcast on the live playlist is a stream, and one on the
+//     long-form playlist a premiere, which replaces a stored stream verdict;
+//     a stored premiere verdict is final.
 //   - After that, only the stored verdict of an earlier check tells. The
 //     kind cannot: a premiere keeps its title kind, which may be a live one.
-func fromAPI(item apiVideo, old Video) (Video, bool) {
+func fromAPI(item apiVideo, old Video, listed formatList) (Video, bool) {
 	v := Video{ID: item.ID, Title: strings.TrimSpace(item.Snippet.Title), URL: "https://www.youtube.com/watch?v=" + item.ID, PublishedAt: utcTime(item.Snippet.PublishedAt)}
 	if v.Title == "" {
 		return v, false
@@ -253,6 +276,10 @@ func fromAPI(item apiVideo, old Video) (Video, bool) {
 		v.LiveStatus = LiveStatusEnded
 	}
 	v.DurationSeconds = length
+	if v.LiveStatus == LiveStatusEnded && v.ScheduledAt != "" && listed != listedNowhere && !(old.PremiereKnown && old.Premiere) {
+		v.Premiere, v.PremiereKnown = listed == listedVideos, true
+		return v, true
+	}
 	if old.ScheduledAt == "" || !old.PremiereKnown {
 		// The watch page decides. Should it fail, an ended broadcast with a
 		// start still updates from this answer, unclassified.

@@ -180,6 +180,27 @@ func (c *Client) ShortsPlaylist(ctx context.Context, key, channel string) ([]byt
 	}
 	return c.playlist(ctx, key, "UUSH"+channel[2:], "")
 }
+
+// LivePlaylist lists the newest page of the channel's live playlist ("UULV"
+// and the channel ID after "UC"), the streams of its Live tab: one quota
+// unit. Like the Shorts playlist it is undocumented.
+func (c *Client) LivePlaylist(ctx context.Context, key, channel string) ([]byte, error) {
+	if !channelID.MatchString(channel) {
+		return nil, &Error{"youtube_invalid_channel"}
+	}
+	return c.playlist(ctx, key, "UULV"+channel[2:], "")
+}
+
+// VideosPlaylist lists the newest page of the channel's long-form playlist
+// ("UULF" and the channel ID after "UC"), the uploads of its Videos tab,
+// premieres included and streams left out: one quota unit. It is
+// undocumented too.
+func (c *Client) VideosPlaylist(ctx context.Context, key, channel string) ([]byte, error) {
+	if !channelID.MatchString(channel) {
+		return nil, &Error{"youtube_invalid_channel"}
+	}
+	return c.playlist(ctx, key, "UULF"+channel[2:], "")
+}
 func (c *Client) playlist(ctx context.Context, key, playlist, token string) ([]byte, error) {
 	query := url.Values{"part": {"snippet,contentDetails,status"}, "playlistId": {playlist}, "maxResults": {"50"}}
 	if token != "" {

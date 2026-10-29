@@ -245,7 +245,7 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 	// left in that batch goes to the newest listed uploads, whose answers
 	// only refresh their localized titles, which creators often add later.
 	batch := uniqueIDs(append(append([]string{}, result.Queue...), feedIDs...), MaxAPIVideos)
-	fromAPI, unclassified := a.apiDetails(ctx, batch, state.Videos, result.Localized, &result.APIRequests, &result.Errors)
+	fromAPI, unclassified := a.apiDetails(ctx, batch, len(result.Queue), state.Videos, result.Localized, &result.APIRequests, &result.Errors)
 	budget := a.Options.MaxDetailRequests
 	for _, id := range append([]string{}, result.Queue...) {
 		if err = ctx.Err(); err != nil {
@@ -470,9 +470,12 @@ func (a *Adapter) playlistShorts(ctx context.Context, result *Result, uploads []
 // watch pages. Ended broadcasts it could not classify are also returned as
 // unclassified, for use only when their page fails. Every video the call
 // answered, classified or not, has its localized titles put in localized.
-// The call is counted in requests; a failed one is recorded in errs and
-// answers none. The recent step and the live-status probe share it.
-func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[string]Video, localized map[string]map[string]string, requests *int, errs *[]string) (out, unclassified map[string]Video) {
+// The first checks IDs are detail checks: when one of them is an ended
+// broadcast the answer cannot settle, the per-format playlists are read too
+// (formatLists). Calls are counted in requests; a failed videos.list call is
+// recorded in errs and answers none. The recent step and the live-status
+// probe share it.
+func (a *Adapter) apiDetails(ctx context.Context, queue []string, checks int, stored map[string]Video, localized map[string]map[string]string, requests *int, errs *[]string) (out, unclassified map[string]Video) {
 	out, unclassified = map[string]Video{}, map[string]Video{}
 	if a.Options.APIKey == "" || len(queue) == 0 {
 		return out, unclassified
@@ -490,10 +493,17 @@ func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[str
 		}
 		return out, unclassified
 	}
+	listed := map[string]formatList{}
+	for _, id := range ids[:min(checks, len(ids))] {
+		if item, found := items[id]; found && needsListing(item, stored[id]) {
+			listed = a.formatLists(ctx, requests, errs)
+			break
+		}
+	}
 	for _, id := range ids {
 		if item, found := items[id]; found {
 			localized[id] = localizedTitles(item)
-			v, ok := fromAPI(item, stored[id])
+			v, ok := fromAPI(item, stored[id], listed[id])
 			switch {
 			case ok:
 				out[id] = v
@@ -503,6 +513,43 @@ func (a *Adapter) apiDetails(ctx context.Context, queue []string, stored map[str
 		}
 	}
 	return out, unclassified
+}
+
+// formatLists reads the newest page of the channel's live and long-form
+// playlists, one quota unit each, and names the playlist each listed video is
+// on. Absence proves nothing: a video on neither, or on both, is named on
+// none, and a failed read is recorded and names none.
+func (a *Adapter) formatLists(ctx context.Context, requests *int, errs *[]string) map[string]formatList {
+	out := map[string]formatList{}
+	conflicts := map[string]bool{}
+	for _, list := range []struct {
+		kind formatList
+		read func(context.Context, string, string) ([]byte, error)
+	}{{listedLive, a.Client.LivePlaylist}, {listedVideos, a.Client.VideosPlaylist}} {
+		*requests++
+		body, err := list.read(ctx, a.Options.APIKey, a.Options.ChannelID)
+		var videos []Video
+		if err == nil {
+			videos, _, err = ParseUploadsPage(body)
+		}
+		if err != nil {
+			if ctx.Err() != nil {
+				return map[string]formatList{}
+			}
+			*errs = append(*errs, safeError(err))
+			continue
+		}
+		for _, v := range videos {
+			if kind, seen := out[v.ID]; seen && kind != list.kind {
+				conflicts[v.ID] = true
+			}
+			out[v.ID] = list.kind
+		}
+	}
+	for id := range conflicts {
+		delete(out, id)
+	}
+	return out
 }
 
 // completeDetails fills what a watch page or the Data API left out from the
@@ -583,7 +630,7 @@ func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, e
 		ids = append(ids, v.ID)
 		stored[v.ID] = v
 	}
-	fromAPI, unclassified := a.apiDetails(ctx, ids, stored, result.Localized, &result.APIRequests, &result.Errors)
+	fromAPI, unclassified := a.apiDetails(ctx, ids, len(ids), stored, result.Localized, &result.APIRequests, &result.Errors)
 	for _, old := range videos {
 		if err := ctx.Err(); err != nil {
 			return result, err

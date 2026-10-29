@@ -139,10 +139,22 @@ func TestLiveProbeAsksTheDataAPIWhenAKeyIsSet(t *testing.T) {
 	clock := now.Add(16 * time.Minute)
 	end := now.Add(10 * time.Minute).Format(time.RFC3339)
 	rt := xTestRT(func(r *http.Request) (*http.Response, error) {
-		if r.URL.Host != "www.googleapis.com" || r.URL.Path != "/youtube/v3/videos" || r.Header.Get("X-Goog-Api-Key") != "synthetic-api-key" || strings.Contains(r.URL.String(), "synthetic-api-key") {
+		if r.URL.Host != "www.googleapis.com" || r.Header.Get("X-Goog-Api-Key") != "synthetic-api-key" || strings.Contains(r.URL.String(), "synthetic-api-key") {
 			t.Fatalf("probe requested %s%s", r.URL.Host, r.URL.Path)
 		}
-		body := `{"items":[{"id":"AAAAAAAAAAA","snippet":{"title":"synthetic stream","liveBroadcastContent":"live"},"contentDetails":{"duration":"P0D"},"liveStreamingDetails":{"actualStartTime":"` + reservation.ScheduledAt + `"}},` +
+		body := ""
+		switch {
+		case r.URL.Path == "/youtube/v3/playlistItems" && r.URL.Query().Get("playlistId") == "UULVAAAAAAAAAAAAAAAAAAAAAA":
+			body = `{"items":[{"snippet":{"title":"synthetic stream","publishedAt":"` + stream.ScheduledAt + `"},"contentDetails":{"videoId":"EEEEEEEEEEE"},"status":{"privacyStatus":"public"}}]}`
+		case r.URL.Path == "/youtube/v3/playlistItems" && r.URL.Query().Get("playlistId") == "UULFAAAAAAAAAAAAAAAAAAAAAA":
+			body = `{"items":[{"snippet":{"title":"synthetic upload","publishedAt":"` + stream.PublishedAt + `"},"contentDetails":{"videoId":"OOOOOOOOOOO"},"status":{"privacyStatus":"public"}}]}`
+		case r.URL.Path != "/youtube/v3/videos":
+			t.Fatalf("probe requested %s%s", r.URL.Host, r.URL.Path)
+		}
+		if body != "" {
+			return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+		}
+		body = `{"items":[{"id":"AAAAAAAAAAA","snippet":{"title":"synthetic stream","liveBroadcastContent":"live"},"contentDetails":{"duration":"P0D"},"liveStreamingDetails":{"actualStartTime":"` + reservation.ScheduledAt + `"}},` +
 			`{"id":"EEEEEEEEEEE","snippet":{"title":"synthetic stream","liveBroadcastContent":"none"},"contentDetails":{"duration":"PT2H10M"},"liveStreamingDetails":{"actualStartTime":"` + stream.ScheduledAt + `","actualEndTime":"` + end + `"}}]}`
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})
@@ -153,8 +165,9 @@ func TestLiveProbeAsksTheDataAPIWhenAKeyIsSet(t *testing.T) {
 	if err != nil || got.Status != "succeeded" {
 		t.Fatalf("result=%#v err=%v", got, err)
 	}
-	// The stored stream verdict settles the ended broadcast without its page.
-	if got.Result["apiRequests"] != 1 || got.Result["requested"] != 0 || got.Result["inspected"] != 2 || got.Result["live"] != 1 || got.Result["changed"] != true {
+	// The live playlist confirms the ended broadcast's stream verdict without
+	// its page: videos.list and the two per-format playlists.
+	if got.Result["apiRequests"] != 3 || got.Result["requested"] != 0 || got.Result["inspected"] != 2 || got.Result["live"] != 1 || got.Result["changed"] != true {
 		t.Fatalf("counts=%v", got.Result)
 	}
 	// The ended stream leaves the plan; the live one stays, in its live phase,
