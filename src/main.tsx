@@ -57,10 +57,17 @@ const routes: Record<string, () => Promise<ComponentType>> = {
     ])
     return withMessages(page.HistoryApp, copy.historyMessages)
   },
+  "/lineblog": async () => {
+    const [page, copy] = await Promise.all([
+      import("@/lineblog/lineblog-app"),
+      import("@/lineblog/lineblog-i18n"),
+    ])
+    return withMessages(page.LineblogApp, copy.lineblogMessages)
+  },
 }
 
 /** Public pages open each other in place; /admin always loads on its own. */
-const publicPages = ["/", "/history", "/about"]
+const publicPages = ["/", "/history", "/lineblog", "/about"]
 
 const loadedPages = new Map<string, ComponentType>([["/", DashboardApp]])
 const pendingPages = new Map<string, Promise<ComponentType>>()

@@ -38,7 +38,7 @@ flowchart LR
   W -- "schedule extraction" --> LLM["Configured LLM providers"]
   W --> DB[("SQLite snapshot<br/>and media cache")]
   DB --> API["Go API, feeds and MCP"]
-  API --> B["Board, Journey and About"]
+  API --> B["Board, Journey, Blog and About"]
   OP["Operator console"] --> API
 ```
 
@@ -60,8 +60,9 @@ flowchart LR
    also revalidates its snapshot once a minute, because times such as a
    stream's start pass without a stored change.
 
-The profile, milestones, resource links, and the Journey images ship with the
-code. Source snapshots and LLM providers start empty on a fresh installation.
+The profile, milestones, resource links, the Journey images, and the LINE BLOG
+archive's articles ship with the code; the archive's photos and videos are
+packaged into `data/lineblog/` from a local recovery archive. Source snapshots and LLM providers start empty on a fresh installation.
 See [Core boundaries](architecture/core-boundaries.md) for the full contract.
 
 ## Operator Console and MCP

@@ -159,6 +159,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.videos(w, r)
 	default:
 		switch {
+		case strings.HasPrefix(r.URL.Path, "/media/lineblog/"):
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				writeMethodNotAllowed(w, "GET, HEAD")
+				return
+			}
+			h.lineblogMedia(w, r, strings.TrimPrefix(r.URL.Path, "/media/lineblog/"))
 		case strings.HasPrefix(r.URL.Path, "/media/profile/"):
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {
 				writeMethodNotAllowed(w, "GET, HEAD")

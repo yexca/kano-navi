@@ -13,7 +13,7 @@ Before changing an area, read its docs. Backend paths are relative to
 
 | Area                                  | Main paths                                                                                         | Docs                                                                                                |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Public UI and history                 | src/site/, src/dashboard/, src/history/, src/about/, src/components/ui/                            | `docs/architecture/frontend.md`, `docs/development/design.md`, `docs/user/index.md`                 |
+| Public UI and history                 | src/site/, src/dashboard/, src/history/, src/lineblog/, src/about/, src/components/ui/             | `docs/architecture/frontend.md`, `docs/development/design.md`, `docs/user/index.md`                 |
 | Operator UI and requests              | src/admin/, src/admin/views/, src/admin/use-admin-data.ts                                          | `docs/architecture/frontend.md`, `docs/architecture/admin-api.md`                                   |
 | Entry point, commands, image          | cmd/kano-go/, ../Dockerfile                                                                        | `docs/architecture/backend.md`, `docs/operations/docker.md`                                         |
 | API, authentication, projections, MCP | internal/httpapi/, internal/adminapi/, internal/adminauth/, internal/mcpapi/, internal/publicview/ | `docs/architecture/backend.md`, `docs/architecture/public-api.md`, `docs/architecture/admin-api.md` |
@@ -23,6 +23,7 @@ Before changing an area, read its docs. Backend paths are relative to
 | Model routing and extraction          | internal/schedule/, internal/llmadmin/, internal/secretstore/                                      | `docs/architecture/sources.md`, `docs/operations/configuration.md`                                  |
 | Dynamic and profile media             | internal/mediadownload/, internal/contentadmin/, internal/httpapi/media.go                         | `docs/architecture/media-cache.md`                                                                  |
 | Fixed history packaging               | ../scripts/package-history-media.ts, ../public/assets/history/                                     | `docs/development/history-archive.md`                                                               |
+| LINE BLOG archive packaging           | ../scripts/package-lineblog.ts, ../src/lineblog/, internal/httpapi/lineblog.go                     | `docs/development/lineblog-archive.md`                                                              |
 | Outbound HTTP, auth, secrets, privacy | any of the above                                                                                   | `SECURITY.md`, `docs/development/security.md`, `docs/operations/security.md`                        |
 | Tests                                 | ../tests/, `*_test.go`                                                                             | `docs/development/testing.md`                                                                       |
 | Commits and releases                  | package.json version, docs/history/                                                                | `docs/development/commit-and-release.md`                                                            |
@@ -40,7 +41,7 @@ reads belong to server-side workflows and their helpers.
   run it. TypeScript is the frontend and the maintenance scripts only.
 - Page loads, refreshes, and revision requests never fetch X, YouTube, or model
   providers. A failed source retains known snapshots and records its outcome.
-- `src/main.tsx` composes `/`, `/history`, `/about`, and `/admin`. Keep board
+- `src/main.tsx` composes `/`, `/history`, `/lineblog`, `/about`, and `/admin`. Keep board
   requests in `src/dashboard/use-dashboard.ts` and admin requests in
   `src/admin/use-admin-data.ts`. Reuse React, semantic Tailwind tokens, and the
   existing UI primitives.
@@ -98,7 +99,9 @@ reads belong to server-side workflows and their helpers.
   only ready, contained opaque-ID assets.
 - The verified fixed history collection is tracked in `public/assets/history/`.
   Preserve original bytes, catalog hashes, credits, and provenance when
-  changing it.
+  changing it. LINE BLOG archive media are ignored runtime data in
+  `data/lineblog/`, packaged from the local recovery archive and listed in the
+  tracked `src/lineblog/media-catalog.json`.
 
 ## UI and Test Contracts
 

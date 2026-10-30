@@ -13,18 +13,21 @@ These pages describe what you can see and do on the site.
 - [Posts](posts.md): recent posts from both X accounts and the post archive.
 - [Videos](videos.md): streams, works, Shorts, and the video archive.
 - [Journey](journey.md): milestones since 2010 and the visual archive.
+- [LINE BLOG archive](lineblog.md): her 2015–2019 blog articles, restored
+  with their photos and videos.
 
 ## Pages and Settings
 
 Every page shares one header with the site name, the page links (Now,
-Journey, About), a live Japan-time clock, and language and theme controls.
+Journey, Line Blog, About), a live Japan-time clock, and language and theme controls.
 
 - **Languages:** English, Japanese, and Simplified Chinese. Your choice is
   remembered on this device.
 - **Themes:** light and dark, following your system until you pick one.
 - **Layouts:** every page works on phones, tablets, and desktops.
 
-The About page introduces the project, its credits, and its license.
+The About page introduces the project, credits the sources of the Line Blog
+archive and the AI models that helped build the site, and states the license.
 
 ## Freshness and Sources
 

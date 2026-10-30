@@ -3,8 +3,9 @@
 ## Presentation: `src/`
 
 `src/main.tsx` routes between the public board, the static `/history`
-page in `src/history/`, the static `/about` page in `src/about/`, and `/admin`.
-Links between the three public pages open in place: the next page's code
+page in `src/history/`, the static `/lineblog` archive in `src/lineblog/`, the
+static `/about` page in `src/about/`, and `/admin`.
+Links between the four public pages open in place: the next page's code
 loads while the current page stays on screen (hovering or focusing a link
 starts that load), then the pages cross-fade under a fixed header with the
 View Transition API. Back and forward restore each entry's scroll position,
@@ -18,8 +19,15 @@ language before the first paint so no load flashes the other theme. History copy
 static; verified fixed images ship in `public/assets/history/` and `dist/`.
 `scripts/package-history-media.ts` updates these files from a local reference
 archive without network requests.
-See [History archive maintenance](../development/history-archive.md). The three public
-pages share `src/site/`: `site-shell.tsx` (header with page navigation and
+See [History archive maintenance](../development/history-archive.md). The
+`/lineblog` articles and media catalog are static JSON written by
+`scripts/package-lineblog.ts`; the page picks an article, a month or a page
+from its query (`?article=`, `?month=`, `?page=`) and moves between them in
+place, pushing an entry whose scroll the shared navigation restores. Its
+media load from `/media/lineblog/<name>`, including the header and profile
+art of the design of the newest article shown; see
+[LINE BLOG archive maintenance](../development/lineblog-archive.md). The four
+public pages share `src/site/`: `site-shell.tsx` (header with page navigation and
 Japan clock, footer, skip link, section title, empty and loading states;
 narrow screens show the site name and fold the page links into a menu behind
 the `kano-seal.tsx` deer seal),
@@ -81,7 +89,7 @@ Shared primitives must remain independent of dashboard, history, and admin
 features. Extract cohesive helpers when needed; avoid a repository-wide move
 for a small change.
 
-`/admin`, `/history`, and `/about` use React lazy imports with independent page
+`/admin`, `/history`, `/lineblog`, and `/about` use React lazy imports with independent page
 CSS and translation chunks. The shared settings provider owns persistent theme
 and language; page message providers extend its translator without duplicating
 preferences. Shared navigation labels remain in the base dictionary. Suspense
@@ -93,7 +101,7 @@ trailing-slash routes work through the existing SPA fallback, and
 shows a localized not-found view with a link back to the board instead of the
 board itself; the server answers it with status 404, so `src/main.tsx` and
 `spaPages` in `backend-go/internal/httpapi/static.go` list the same pages.
-History/about
+History, the LINE BLOG archive and About
 remain static and never mount the dashboard hook or request its API.
 
 English is the base locale. Every message exists in English, a key missing
@@ -299,6 +307,7 @@ beside them.
 - [Testing](../development/testing.md)
 - [User guide](../user/index.md)
 - [History archive maintenance](../development/history-archive.md)
+- [LINE BLOG archive maintenance](../development/lineblog-archive.md)
 
 ## Polling and Calendar Recovery
 

@@ -14,9 +14,11 @@
   snapshots or reveals whether a signature was valid. The secret is sealed with
   `LLM_SECRETS_KEY` in SQLite and never returned by the admin API; rotate it
   from the YouTube push card, which resubscribes with the new value.
-- Cached media is runtime state. The only file read route is `/media/:id`; it
+- Cached media is runtime state. The file read routes are `/media/:id`, which
   validates an opaque database ID, a ready status, and a resolved path below the
-  cache root.
+  cache root, the selected profile media, and `/media/lineblog/<name>`, which
+  accepts only an archive name and a regular file directly inside
+  `data/lineblog/`.
 - This is a public fan-made project; the public dashboard does not collect
   visitor accounts or profiles. The production admin API uses one local session
   cookie after password authentication.

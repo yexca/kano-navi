@@ -24,6 +24,8 @@ data/
     avatar.<extension>
     banner.<extension>
     sha256/<first-two>/<content-sha256>.<extension>
+  lineblog/
+    <12-hex-name>.<jpg|png|mp4>
   cache/media/
     sha256/<first-two>/<content-sha256>.<extension>
   cache/variants/
@@ -46,6 +48,20 @@ collection ships as verified fixed files in `public/assets/history/`; it needs
 no runtime database rows. See
 [History archive maintenance](../development/history-archive.md) for packaging and
 provenance details.
+
+## LINE BLOG Archive Media
+
+`data/lineblog/` holds the recovered LINE BLOG images and videos, written only
+by the maintainer's packaging command
+([LINE BLOG archive maintenance](../development/lineblog-archive.md)). They
+have no database rows: the tracked `src/lineblog/media-catalog.json` lists
+them. `GET /media/lineblog/<name>` (and `HEAD`) opens the directory as a root
+and serves only a regular file directly inside it whose name is 12 lowercase
+hex digits and `.jpg`, `.png` or `.mp4`; the type comes from the extension.
+Responses carry `nosniff`, `default-src 'none'; sandbox`, an ETag of the name
+and size, revalidation caching, byte ranges and conditional requests. Any
+other name, a directory, a symlink or a missing file answers `404`. The
+server never writes this directory.
 
 ## Database Model
 

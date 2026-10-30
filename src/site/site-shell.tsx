@@ -13,11 +13,12 @@ import {
 import { KanoSeal } from "./kano-seal"
 import "./site.css"
 
-export type PublicPage = "board" | "history" | "about"
+export type PublicPage = "board" | "history" | "lineblog" | "about"
 
 const pages: { id: PublicPage; href: string; labelKey: string }[] = [
   { id: "board", href: "/", labelKey: "nav.now" },
   { id: "history", href: "/history", labelKey: "history.eyebrow" },
+  { id: "lineblog", href: "/lineblog", labelKey: "lineblog.label" },
   { id: "about", href: "/about", labelKey: "about.label" },
 ]
 

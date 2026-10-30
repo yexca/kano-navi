@@ -41,8 +41,8 @@ nothing into the repository.
   [backend transfer contract](../architecture/backend.md#text-transfer-and-static-caching).
 - The homepage loads only its entry chunk and stylesheet, the local avatar
   and banner, and its local dashboard and revision reads. `/admin`,
-  `/history` and `/about` and their translations are lazy chunks requested
-  only by their own pages (`src/main.tsx`).
+  `/history`, `/lineblog` and `/about` and their translations are lazy chunks
+  requested only by their own pages (`src/main.tsx`).
 
 ## Measuring a Change
 
@@ -51,10 +51,10 @@ with no build running concurrently, and compare matched results. For page
 weight, run `make ci-frontend` and compare the chunk sizes Vite reports for
 the homepage entry and each lazy page. For request behavior, serve the
 production build against a disposable development backend (see
-[Testing](testing.md#test-scope)) and review all four pages at desktop and
+[Testing](testing.md#test-scope)) and review all five pages at desktop and
 mobile widths, including direct visits, refresh, a failed snapshot read with
-automatic recovery and a failed lazy chunk with retry. Visiting `/history` or
-`/about` must not issue dashboard reads.
+automatic recovery and a failed lazy chunk with retry. Visiting `/history`,
+`/lineblog` or `/about` must not issue dashboard reads.
 
 Report results as local synthetic measurements, not production latency,
 capacity or SLA figures, and do not record them in this document.

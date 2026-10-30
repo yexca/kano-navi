@@ -15,7 +15,7 @@ test("the board's index.html is the board", () => {
   assert.equal(pagePath("/history/index.html"), "/history/index.html")
 })
 
-const pages = ["/", "/history", "/about"]
+const pages = ["/", "/history", "/lineblog", "/about"]
 const board = "https://kano.example.invalid/"
 
 test("links to public pages open in place", () => {
@@ -26,6 +26,10 @@ test("links to public pages open in place", () => {
     "/",
   )
   assert.equal(inPlaceUrl("/history#2020", board, pages)?.hash, "#2020")
+  assert.equal(
+    inPlaceUrl("/lineblog?article=1", board, pages)?.search,
+    "?article=1",
+  )
 })
 
 test("the current page's own link opens in place without a fragment", () => {

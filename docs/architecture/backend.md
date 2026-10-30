@@ -106,7 +106,9 @@ before a module handler runs.
 
 Responses stay stable and sanitized: `raw_json`, stack traces, credentials and
 absolute local paths never reach the browser. Ready runtime media is served
-only through the opaque-ID `/media/:id` route.
+only through the opaque-ID `/media/:id` route; the recovered LINE BLOG files
+in `data/lineblog/` are served by archive name through `/media/lineblog/:name`
+(see [Media cache](media-cache.md#line-blog-archive-media)).
 
 ## Authentication and Origin
 
@@ -177,8 +179,8 @@ Only content-hashed JS/CSS in `dist/assets` listed in Vite's
 `dist/.vite/manifest.json` receive `public, max-age=31536000, immutable`.
 HTML (including SPA fallback routes), fixed history images, icons and other
 files receive `public, max-age=0, must-revalidate`. A path that is neither a
-build file nor one of the frontend's pages (`/`, `/history`, `/about`,
-`/admin`, with or without a trailing slash) still receives `index.html`, which
+build file nor one of the frontend's pages (`/`, `/history`, `/lineblog`,
+`/about`, `/admin`, with or without a trailing slash) still receives `index.html`, which
 shows the frontend's not-found view, but with status 404. `robots.txt` comes
 from `public/` and disallows `/admin`, `/api/` and `/mcp` but allows the two
 public feeds, `/api/calendar.ics` and `/api/feed.xml`, whose subscription
@@ -204,7 +206,7 @@ revision streams first, then waits for the remaining requests up to
 `index.html` carries static Open Graph and Twitter card tags (site name,
 description, the bundled banner) and `rel="alternate"` links to both feeds.
 Those tags describe the board. When the server serves `index.html` for
-`/history` or `/about`, it replaces the page's `<title>`, `description`,
+`/history`, `/lineblog` or `/about`, it replaces the page's `<title>`, `description`,
 `og:title`, `og:description` and `og:url` (and Twitter title and description
 tags, if present) with that page's English title, description and path; the
 route table `spaPages` in `backend-go/internal/httpapi/static.go` holds them

@@ -128,7 +128,9 @@ prevention, stale responses and disposal. `tests/latest-wins.test.ts` checks
 that LLM queue saves keep one request in flight per queue, send only the
 latest waiting order and drop edits made on top of a refused save.
 `tests/history-media.test.ts` checks
-the history catalog, the shipped image bytes and packaging validation. No
+the history catalog, the shipped image bytes and packaging validation.
+`tests/lineblog.test.ts` packages a synthetic LINE BLOG archive and checks the
+tracked article and media catalogs and the page's query views. No
 timing thresholds enter CI.
 
 To review the real hooks and responsive UI against a backend, start an

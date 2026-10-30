@@ -16,6 +16,7 @@
     "start": "node scripts/run-app.mjs start",
     "seed": "node scripts/run-app.mjs seed",
     "history:package": "node scripts/package-history-media.ts",
+    "lineblog:package": "node scripts/package-lineblog.ts",
     "migrate:llm": "node scripts/run-app.mjs migrate-llm",
     "sync": "node scripts/run-app.mjs sync",
     "format": "prettier . --write",

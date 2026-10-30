@@ -18,7 +18,8 @@
 
 Kano Navi gathers the public activity of **Kano Mahoro (鹿乃まほろ)** into one
 page: what airs next, the week's schedule, recent posts on X, streams and
-works on YouTube, and her journey since 2010. It reads in English, Japanese,
+works on YouTube, her journey since 2010, and an archive of her 2015–2019
+LINE BLOG. It reads in English, Japanese,
 and Simplified Chinese, in light and dark themes, on phones and desktops.
 
 **[Visit kano.yexca.net](https://kano.yexca.net/)**
@@ -66,6 +67,13 @@ and Simplified Chinese, in light and dark themes, on phones and desktops.
       identity, plus a visual archive with sources and credits.
     </td>
     <td width="50%" valign="top">
+      <h3>📔 LINE BLOG archive</h3>
+      Her 2015–2019 LINE BLOG, restored from web archives with its photos and
+      videos, in the blog's own layout and with Chinese translations.
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
       <h3>🌏 Your language</h3>
       English, Japanese, and Simplified Chinese, with video titles in your
       language when a translation exists.
@@ -108,8 +116,8 @@ with [Local development](docs/development/local-dev.md) and the
 
 ## Documentation
 
-- [User guide](docs/user/index.md): the board, schedule, posts, videos, and
-  Journey.
+- [User guide](docs/user/index.md): the board, schedule, posts, videos,
+  Journey, and the LINE BLOG archive.
 - [How it works](docs/how-it-works.md) and [Architecture](docs/architecture/index.md):
   data flow and system boundaries.
 - [Operations](docs/operations/index.md): running an instance.
@@ -120,13 +128,14 @@ with [Local development](docs/development/local-dev.md) and the
 ## Disclaimer
 
 - Kano Navi is an independent fan project. It is not affiliated with or
-  endorsed by Kano Mahoro, her agency, X, YouTube, or bilibili.
+  endorsed by Kano Mahoro, her agency, X, YouTube, bilibili, or LINE.
 - Every post, video, and event links to its original public page, which is
   always authoritative.
 - Artwork, artist names, and other third-party content keep their original
   rights; the code license does not grant rights to them. Image sources and
   credits are recorded in the
-  [history archive](docs/development/history-archive.md).
+  [history archive](docs/development/history-archive.md) and the
+  [LINE BLOG archive](docs/development/lineblog-archive.md).
 
 ## License
 

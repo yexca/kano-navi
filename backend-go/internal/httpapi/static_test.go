@@ -55,12 +55,14 @@ func TestStaticSiteServesBuildWithFallbackAndContainment(t *testing.T) {
 		"/admin":                       {page, "text/html; charset=utf-8", revalidate, "synthetic"},
 		"/history/":                    {page, "text/html; charset=utf-8", revalidate, "<title>Journey · "},
 		"/about//":                     {page, "text/html; charset=utf-8", revalidate, "<title>About · "},
+		"/lineblog":                    {page, "text/html; charset=utf-8", revalidate, "<title>LINE BLOG archive · "},
 		"/robots.txt":                  {page, "text/plain; charset=utf-8", revalidate, "Disallow: /admin"},
 		"/assets/index-AbCd1234.js":    {page, "text/javascript; charset=utf-8", immutable, "console.log(1)"},
 		"/assets/unlisted-AbCd1234.js": {page, "text/javascript; charset=utf-8", revalidate, "console.log(2)"},
 		"/assets/kano-avatar.jpg":      {page, "image/jpeg", revalidate, "jpg"},
 		// Paths outside the frontend's pages still load the application, which
 		// shows its not-found view, but answer 404.
+		"/lineblog/archives/1":  {missing, "text/html; charset=utf-8", revalidate, "synthetic"},
 		"/history/2024":         {missing, "text/html; charset=utf-8", revalidate, "synthetic"},
 		"/admin/runs":           {missing, "text/html; charset=utf-8", revalidate, "synthetic"},
 		"/About":                {missing, "text/html; charset=utf-8", revalidate, "synthetic"},
