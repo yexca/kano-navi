@@ -381,7 +381,15 @@ share the board's visibility pause and snapshot backoff rather than starting a
 separate archive timer. Changing the month or the post
 account, or closing the dialog, cancels the read and discards late pages.
 Picking a day in the month grid lists its entries beside the grid (below it on
-phones) and can show that week on the board. An image viewer opened from the
+phones) and can show that week on the board. The post archive lays out full
+posts either as a masonry wall or as a single column, a choice kept in
+`localStorage` (`kano-post-archive-layout`). The masonry measures each post
+and places it, in order, under the column that ends highest
+(`masonryLayout` in `src/dashboard/post-rows.ts`), so it reads row by row
+while the cells stay in post order for keyboard and screen readers; it
+re-measures when the wall or a post resizes. A container query on the dialog
+head hides the layout switch while the wall is narrower than two masonry
+columns, where both layouts are one column. An image viewer opened from the
 post archive stacks above it; Escape closes the topmost dialog and focus
 returns to its opener.
 Images match their applicable inclusive period, without an updated-at fallback.

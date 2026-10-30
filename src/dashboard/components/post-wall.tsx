@@ -6,16 +6,18 @@ import type {
   PostQuote,
   Translator,
 } from "@/types"
-import type { ReactNode, RefObject } from "react"
+import type { CSSProperties, ReactElement, ReactNode, RefObject } from "react"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowUpRight,
   Heart,
   History,
   ImageOff,
+  LayoutDashboard,
   MessageCircle,
   MessageSquareOff,
   Repeat2,
+  Rows3,
   X,
 } from "lucide-react"
 
@@ -33,7 +35,13 @@ import {
   formatRelative,
   formatStamp,
 } from "../format"
-import { postWallCount } from "../post-rows"
+import type { MasonryLayout } from "../post-rows"
+import {
+  MASONRY_MAX_COLUMNS,
+  masonryColumns,
+  masonryLayout,
+  postWallCount,
+} from "../post-rows"
 import { ArchiveMore, ArchiveState } from "./archive-dialog"
 
 // A post's images fill a card of the post grid or the archive's masonry
@@ -615,9 +623,119 @@ export function PostArchiveFilter({
   )
 }
 
+export type PostArchiveLayout = "masonry" | "list"
+
+/** The post archive's choice between the masonry wall and a single column. */
+export function PostArchiveLayoutToggle({
+  layout,
+  setLayout,
+  t,
+}: {
+  layout: PostArchiveLayout
+  setLayout: (layout: PostArchiveLayout) => void
+  t: Translator
+}) {
+  const options = [
+    { id: "masonry", icon: LayoutDashboard, label: t("feed.layoutMasonry") },
+    { id: "list", icon: Rows3, label: t("feed.layoutList") },
+  ] as const
+  return (
+    <div
+      className="segmented is-icons"
+      role="group"
+      aria-label={t("feed.layout")}
+    >
+      {options.map(({ id, icon: Icon, label }) => (
+        <button
+          type="button"
+          key={id}
+          aria-pressed={layout === id}
+          aria-label={label}
+          title={label}
+          onClick={() => setLayout(id)}
+        >
+          <Icon aria-hidden="true" />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Full posts in up to three columns. Each post goes under the column that
+ * ends highest, so the wall reads row by row; the cells stay in post order
+ * for keyboard and screen readers, and the layout follows their measured
+ * heights as the wall resizes or a post's wording changes.
+ */
+function PostMasonry({ children }: { children: ReactElement[] }) {
+  const [wall, setWall] = useState<HTMLDivElement | null>(null)
+  const [layout, setLayout] = useState<
+    (MasonryLayout & { count: number }) | null
+  >(null)
+  const keys = children.map((child) => child.key).join()
+  useLayoutEffect(() => {
+    if (!wall) return
+    const measure = () => {
+      const count = masonryColumns(wall.clientWidth)
+      // Cell widths follow the column count, so set it before measuring.
+      wall.style.setProperty("--masonry-columns", String(count))
+      const cells = Array.from(wall.children) as HTMLElement[]
+      const next = {
+        count,
+        ...masonryLayout(
+          cells.map((cell) => cell.offsetHeight),
+          count,
+        ),
+      }
+      setLayout((current) =>
+        current &&
+        current.count === next.count &&
+        current.height === next.height &&
+        current.tops.join() === next.tops.join() &&
+        current.columns.join() === next.columns.join()
+          ? current
+          : next,
+      )
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(wall)
+    for (const cell of Array.from(wall.children)) observer.observe(cell)
+    return () => observer.disconnect()
+  }, [wall, keys])
+  return (
+    <div
+      className="post-wall is-archive is-masonry"
+      ref={setWall}
+      style={
+        {
+          "--masonry-columns": layout?.count ?? MASONRY_MAX_COLUMNS,
+          height: layout?.height,
+        } as CSSProperties
+      }
+    >
+      {children.map((child, index) => (
+        <div
+          className="post-masonry-cell"
+          key={child.key ?? index}
+          style={
+            {
+              "--masonry-column": layout?.columns[index] ?? 0,
+              top: layout?.tops[index] ?? 0,
+            } as CSSProperties
+          }
+        >
+          {child}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** The post archive dialog's body: one month of stored posts, newest first. */
 export function PostArchive({
   archive,
+  layout,
   isLoading,
   error,
   onRetry,
@@ -630,6 +748,7 @@ export function PostArchive({
   onOpenMedia,
 }: {
   archive: ArchiveSnapshot<Post> | null
+  layout: PostArchiveLayout
   isLoading: boolean
   error: Error | null
   onRetry: () => unknown
@@ -641,6 +760,19 @@ export function PostArchive({
   t: Translator
   onOpenMedia: (media: MediaItem[], index: number) => void
 }) {
+  const notes = (archive?.items || []).map((post) => (
+    <PostNote
+      key={post.id}
+      post={post}
+      avatarUrl={avatarUrl}
+      absoluteTime
+      clamp={false}
+      locale={locale}
+      now={now}
+      t={t}
+      onOpenMedia={onOpenMedia}
+    />
+  ))
   return (
     <>
       <ArchiveState
@@ -654,23 +786,11 @@ export function PostArchive({
         locale={locale}
         t={t}
       />
-      {archive?.items.length ? (
-        <div className="post-wall is-masonry">
-          {archive.items.map((post) => (
-            <PostNote
-              key={post.id}
-              post={post}
-              avatarUrl={avatarUrl}
-              absoluteTime
-              clamp={false}
-              locale={locale}
-              now={now}
-              t={t}
-              onOpenMedia={onOpenMedia}
-            />
-          ))}
-        </div>
-      ) : null}
+      {!notes.length ? null : layout === "list" ? (
+        <div className="post-wall is-archive is-list">{notes}</div>
+      ) : (
+        <PostMasonry>{notes}</PostMasonry>
+      )}
       {archive ? (
         <ArchiveMore
           hasNext={archive.hasNext}

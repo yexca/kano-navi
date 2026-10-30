@@ -96,8 +96,10 @@ export function ArchiveDialog({
         <header className="archive-dialog-head">
           <div className="archive-dialog-heading">
             <p className="kicker">{kicker}</p>
-            <h2 id="archive-dialog-title">{title}</h2>
-            {note ? <p className="section-title-note">{note}</p> : null}
+            <div className="archive-dialog-title">
+              <h2 id="archive-dialog-title">{title}</h2>
+              {note ? <p className="section-title-note">{note}</p> : null}
+            </div>
           </div>
           <button
             ref={closeRef}

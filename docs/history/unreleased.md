@@ -17,6 +17,14 @@
   a weekend today's date stays readable on the filled header.
 - On a wide screen, the header shows just the site name, a size larger, with
   a small "Unofficial" mark beside it.
+- Past posts reads row by row: the newest posts open the masonry columns left
+  to right and each later post goes under the column that ends highest,
+  instead of filling the first column before the next. A switch beside the
+  account filter shows the month as a single column instead, and the device
+  remembers the choice. Where only one column fits, as on phones, the switch
+  is hidden, and the account filter scrolls sideways on one row.
+- The month dialogs are larger on wide screens, and each shows its note on
+  the title's line.
 
 </details>
 
