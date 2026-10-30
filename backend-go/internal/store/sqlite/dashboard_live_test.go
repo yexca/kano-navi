@@ -2,11 +2,57 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/testutil"
 )
+
+func TestDashboardVideoPoolKeepsEachKindVisible(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	base := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 40; i++ {
+		id := fmt.Sprintf("work-%02d", i)
+		when := base.Add(time.Duration(i) * time.Minute).Format(time.RFC3339)
+		testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,scheduled_at,url,kind,is_short) VALUES (?,'youtube',?,?,?,?,?,?)`,
+			id, id, when, when, "https://www.youtube.com/watch?v="+id, "MUSIC", 0)
+	}
+	for i := 0; i < 40; i++ {
+		id := fmt.Sprintf("stream-%02d", i)
+		when := base.Add(time.Duration(i) * time.Minute).Format(time.RFC3339)
+		testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,scheduled_at,url,kind,is_short) VALUES (?,'youtube',?,?,?,?,?,?)`,
+			id, id, when, when, "https://www.youtube.com/watch?v="+id, "LIVE ARCHIVE", 0)
+	}
+	for i := 0; i < 20; i++ {
+		id := fmt.Sprintf("short-%02d", i)
+		when := base.Add(time.Duration(i) * time.Minute).Format(time.RFC3339)
+		testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,scheduled_at,url,kind,is_short) VALUES (?,'youtube',?,?,?,?,?,?)`,
+			id, id, when, when, "https://www.youtube.com/watch?v="+id, "VIDEO", 1)
+	}
+	store, err := OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	dashboard, err := store.GetDashboard(context.Background(), 3, time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int{"works": 0, "archives": 0, "shorts": 0}
+	for _, video := range dashboard.Videos {
+		if video.IsShort != nil && *video.IsShort {
+			counts["shorts"]++
+		} else if video.Kind != nil && *video.Kind == "LIVE ARCHIVE" {
+			counts["archives"]++
+		} else {
+			counts["works"]++
+		}
+	}
+	if len(dashboard.Videos) != 30 || counts["works"] != dashboardWorksLimit || counts["archives"] != dashboardArchivesLimit || counts["shorts"] != dashboardShortsLimit {
+		t.Fatalf("video pool=%d counts=%v", len(dashboard.Videos), counts)
+	}
+}
 
 func TestDashboardLiveShortlistGivesGraceOnlyToStreams(t *testing.T) {
 	path := testutil.NewSnapshot(t)

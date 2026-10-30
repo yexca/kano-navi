@@ -536,6 +536,8 @@ const ALL_ARCHIVES = 8
 const ALL_SHORTS = 6
 /** Reservations beside the lead; the Streams view lists every one. */
 const SIDE_RESERVATIONS = 4
+/** Earlier works stay visible beside reservations instead of being crowded out. */
+const SIDE_WORKS = 3
 /** What a filtered view shows: three rows of four, or two rows of Shorts. */
 const FILTERED_ITEMS = 12
 
@@ -586,7 +588,7 @@ export function VideoShelf({
   else if (active === "all") {
     const groups = groupVideos(videos, featuredVideoId, now)
     const reservations = groups.reservations.slice(0, SIDE_RESERVATIONS)
-    const sideWorks = groups.works.slice(0, reservations.length ? 1 : 3)
+    const sideWorks = groups.works.slice(0, SIDE_WORKS)
     const archives = groups.archives.slice(0, ALL_ARCHIVES)
     const shorts = groups.shorts.slice(0, ALL_SHORTS)
     const hasSide = Boolean(reservations.length || sideWorks.length)
