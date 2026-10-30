@@ -447,14 +447,21 @@ function RunProblems({ run }: { run: Run }) {
       const failed = typeof record.failed === "number" ? record.failed : 0
       const attempted =
         typeof record.attempted === "number" ? record.attempted : 0
+      // A bound that ended the step with work left, such as the media step's
+      // file cap, shows as its code beside the queued count.
+      const remaining =
+        typeof record.remaining === "number" ? record.remaining : 0
+      const stopped = typeof record.stopped === "string" ? record.stopped : null
       return {
         step,
-        code,
+        code: code ?? stopped,
         text: code
           ? explainCode(code, t) || t("admin.code.unknown")
           : failed
             ? t("admin.runs.problem.someFailed", { failed, attempted })
-            : t("admin.runs.problem.partial"),
+            : remaining
+              ? t("admin.runs.problem.remaining", { remaining })
+              : t("admin.runs.problem.partial"),
       }
     })
   if (!problems.length && !run.error) return null

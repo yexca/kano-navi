@@ -70,3 +70,29 @@ func TestPendingMediaRetriesTransientFailuresAndRechecksLiveThumbnails(t *testin
 		}
 	}
 }
+
+func TestRemainingMediaCountsOnlyNeverCheckedQueuedAssets(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	checked := workflowTime(time.Now().Add(-time.Hour))
+	for _, c := range []struct{ name, source, status, checked string }{
+		{"x pending", "x", "pending", ""},
+		{"youtube pending", "youtube", "pending", ""},
+		{"bilibili pending", "bilibili", "pending", ""},
+		{"checked pending", "x", "pending", checked},
+		{"ready", "x", "ready", checked},
+		{"due retry", "x", "failed", checked},
+		{"avatar", "avatar", "pending", ""},
+	} {
+		u := "https://pbs.twimg.com/media/" + c.name + ".jpg"
+		testutil.Exec(t, p, `INSERT INTO media_assets(id,source,source_url,status,last_error,last_checked_at) VALUES(?,?,?,?,CASE WHEN ?='failed' THEN 'media_timeout' END,NULLIF(?,''))`, sha256Hex(u), c.source, u, c.status, c.status, c.checked)
+	}
+	testutil.Exec(t, p, `INSERT INTO media_assets(id,source,source_url,status) VALUES('x-0123456789abcdef0123456789abcdef','x','https://pbs.twimg.com/media/legacy.jpg','pending')`)
+	if remaining, err := s.RemainingMedia(context.Background()); err != nil || remaining != 3 {
+		t.Fatalf("remaining=%d err=%v", remaining, err)
+	}
+}

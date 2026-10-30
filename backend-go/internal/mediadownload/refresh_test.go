@@ -79,7 +79,7 @@ func TestThumbnailFallsBackAndRevalidatesUntilALargerSizeAppears(t *testing.T) {
 	}
 
 	// maxres and sd were never generated, so hq is cached under the maxres URL.
-	summary, err := client.DownloadPending(ctx, store, 5)
+	summary, err := client.DownloadPending(ctx, store, Bounds{Batch: 5, Files: 5, Budget: time.Minute})
 	if err != nil || summary != (Summary{Attempted: 1, Ready: 1}) || content() != "\xff\xd8\xffsmall" {
 		t.Fatalf("first summary=%#v err=%v", summary, err)
 	}
@@ -90,7 +90,7 @@ func TestThumbnailFallsBackAndRevalidatesUntilALargerSizeAppears(t *testing.T) {
 	// An unchanged file answers 304 and leaves the board revision alone.
 	expire()
 	revision, _ := store.GetDashboardRevision(ctx)
-	summary, err = client.DownloadPending(ctx, store, 5)
+	summary, err = client.DownloadPending(ctx, store, Bounds{Batch: 5, Files: 5, Budget: time.Minute})
 	if err != nil || summary != (Summary{Attempted: 1, Unchanged: 1}) {
 		t.Fatalf("revalidation summary=%#v err=%v", summary, err)
 	}
@@ -104,7 +104,7 @@ func TestThumbnailFallsBackAndRevalidatesUntilALargerSizeAppears(t *testing.T) {
 	// Once the larger size exists it replaces the cached file.
 	expire()
 	files[u] = file{`"large"`, "\xff\xd8\xfflarge"}
-	summary, err = client.DownloadPending(ctx, store, 5)
+	summary, err = client.DownloadPending(ctx, store, Bounds{Batch: 5, Files: 5, Budget: time.Minute})
 	if err != nil || summary != (Summary{Attempted: 1, Ready: 1}) || content() != "\xff\xd8\xfflarge" {
 		t.Fatalf("upgrade summary=%#v err=%v", summary, err)
 	}
