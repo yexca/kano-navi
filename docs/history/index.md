@@ -9,6 +9,7 @@ development documents.
 ## Releases
 
 - [Unreleased changes](unreleased.md)
+- [v0.4.3](v0.4.3.md)
 - [v0.4.2](v0.4.2.md)
 - [v0.4.1](v0.4.1.md)
 - [v0.4.0](v0.4.0.md)
