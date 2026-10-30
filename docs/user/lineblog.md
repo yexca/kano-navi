@@ -22,10 +22,12 @@ with a link to the original on YouTube.
 
 ## Translation
 
-In Simplified Chinese, each paragraph is followed by its Chinese translation.
-Use **显示中文翻译** in the menu bar to hide or show the translations; the
-choice is remembered on this device. The translations come with the
-recovered archive.
+In Simplified Chinese and English, each paragraph is followed by its
+translation into that language; Japanese shows the original only. Use
+**显示中文翻译** or **Show the English translation** in the menu bar to hide or
+show the translations; the choice is remembered on this device. The Chinese
+translations come with the recovered archive; the English ones are machine
+translations of the Japanese posts.
 
 ## What Was Not Preserved
 

@@ -20,10 +20,14 @@ static; verified fixed images ship in `public/assets/history/` and `dist/`.
 `scripts/package-history-media.ts` updates these files from a local reference
 archive without network requests.
 See [History archive maintenance](../development/history-archive.md). The
-`/lineblog` articles and media catalog are static JSON written by
+`/lineblog` article index and per-article files are static JSON written by
 `scripts/package-lineblog.ts`; the page picks an article, a month or a page
 from its query (`?article=`, `?month=`, `?page=`) and moves between them in
-place, pushing an entry whose scroll the shared navigation restores. Its
+place, pushing an entry whose scroll the shared navigation restores. Each
+article file is its own build chunk: the page's code waits for the articles
+its address shows, a move keeps the current view on screen until the next
+view's articles have loaded (pointing at or focusing a link starts that
+load), and a failed load offers a reload. Its
 media load from `/media/lineblog/<name>`, including the header and profile
 art of the design of the newest article shown; see
 [LINE BLOG archive maintenance](../development/lineblog-archive.md). The four
@@ -166,10 +170,12 @@ carries its `lang` attribute. The console's
 completeness chips and translation editor are in
 `src/admin/views/translation-parts.tsx`, shared by posts and videos.
 
-Board images from the media cache load through `srcset`: `src/lib/media.ts`
-lists the server's [resized copies](media-cache.md#resized-copies) below an
-image's known width, and each card passes a `sizes` hint for its layout. The
-full-image viewer, profile media and bundled assets keep their single URL.
+Board images from the media cache, LINE BLOG archive images and the fixed
+history images load through `srcset`: `src/lib/media.ts` lists the server's
+[resized copies](media-cache.md#resized-copies) below an image's known width,
+and each card or thumbnail passes a `sizes` hint for its layout. The
+full-image viewers, profile media and other bundled assets keep their single
+URL.
 The schedule header's Subscribe menu (`calendar-subscribe.tsx`) offers the
 [calendar feed](public-api.md#public-feeds) as a `webcal:` link and a copyable
 `https` address built by `src/lib/feeds.ts` from the page's origin. Both carry

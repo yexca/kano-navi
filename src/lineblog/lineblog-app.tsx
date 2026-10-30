@@ -1,5 +1,10 @@
-import type { CSSProperties, MouseEvent, ReactNode } from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import type {
+  CSSProperties,
+  MouseEvent,
+  ReactNode,
+  SyntheticEvent,
+} from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import {
   ArrowUp,
@@ -11,15 +16,22 @@ import {
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
+import { mediaSrcSet, mediaVariantUrl } from "@/lib/media"
 import { ExternalLink, YouTubeLogo } from "@/site/links"
 import { MediaDialog, stepIndex } from "@/site/media-dialog"
-import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
+import {
+  Placeholder,
+  SiteFooter,
+  SiteHeader,
+  SkipLink,
+} from "@/site/site-shell"
 import {
   OFFICIAL_SITE,
   archiveMonths,
   articleHref,
   isEmoji,
   lineblogView,
+  loadedPost,
   meaningfulAlt,
   media,
   mediaUrl,
@@ -28,19 +40,43 @@ import {
   postDate,
   postImages,
   postMonth,
-  postThumbnail,
   posts,
 } from "./content"
 import { designFor, homeIcon, type LineblogDesign } from "./designs"
+import { loadView, viewLoaded } from "./post-files"
 import type {
   LineblogBlock,
   LineblogImage,
   LineblogInline,
   LineblogPost,
+  LineblogSummary,
 } from "./types"
 import "./lineblog.css"
 
+// The page's code waits for the posts its address shows, so the site's
+// navigation reveals it, and restores a reload's scroll, with them in place.
+await loadView(window.location.search).catch(() => undefined)
+
 const TRANSLATION_KEY = "kano-lineblog-translation"
+
+/** The translation each interface language shows; Japanese shows none. */
+const TRANSLATIONS = {
+  "zh-CN": { blocks: "zh", title: "titleZh", lang: "zh-CN" },
+  en: { blocks: "en", title: "titleEn", lang: "en" },
+} as const
+
+type Translation = (typeof TRANSLATIONS)[keyof typeof TRANSLATIONS]
+
+/** How wide each kind of picture shows (lineblog.css); viewers keep originals. */
+const SIZES = {
+  article: "(max-width: 660px) calc(100vw - 32px), 600px",
+  card: "(max-width: 560px) 76px, 112px",
+  video: "(max-width: 720px) calc(100vw - 32px), 660px",
+  profile: "(max-width: 880px) 160px, 240px",
+  recent: "60px",
+}
+/** A poster takes one address; this width suits the article column. */
+const POSTER_WIDTH = 960
 
 function readTranslation() {
   try {
@@ -54,18 +90,51 @@ function newEntry() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
 }
 
+function isLineblogPath(pathname: string) {
+  return pathname.replace(/\/+$/u, "") === "/lineblog"
+}
+
+/** The address of a link to another view of this page, if it is one. */
+function viewUrl(target: EventTarget | null) {
+  const link = (target as Element | null)?.closest?.("a[href]")
+  if (!(link instanceof HTMLAnchorElement) || link.target) return null
+  const url = new URL(link.href, window.location.href)
+  return url.origin === window.location.origin &&
+    isLineblogPath(url.pathname) &&
+    !url.hash
+    ? url
+    : null
+}
+
 /**
  * The query picks an article, a month or a page. Moving between them stays
- * in this document: the click pushes an entry and the view follows, and back
- * and forward restore the query before the site's navigation restores the
- * entry's scroll position.
+ * in this document: the click pushes an entry, and the view follows once its
+ * posts have loaded, keeping the current one on screen meanwhile. Back and
+ * forward restore the query before the site's navigation restores the
+ * entry's scroll position; a view whose posts are not loaded yet restores
+ * it again once they are. Pointing at or focusing a link starts its load.
  */
 function useLineblogLocation() {
   const [search, setSearch] = useState(() => window.location.search)
+  const ticket = useRef(0)
   useEffect(() => {
-    const onPopState = () => {
-      if (window.location.pathname.replace(/\/+$/u, "") !== "/lineblog") return
-      flushSync(() => setSearch(window.location.search))
+    const onPopState = (event: PopStateEvent) => {
+      if (!isLineblogPath(window.location.pathname)) return
+      const next = window.location.search
+      const current = ++ticket.current
+      if (viewLoaded(next)) {
+        flushSync(() => setSearch(next))
+        return
+      }
+      const top: unknown = event.state?.kanoScroll
+      const show = () => {
+        if (current !== ticket.current || window.location.search !== next)
+          return
+        flushSync(() => setSearch(next))
+        if (typeof top === "number")
+          window.scrollTo({ top, behavior: "instant" })
+      }
+      void loadView(next).then(show, show)
     }
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
@@ -81,15 +150,8 @@ function useLineblogLocation() {
       event.altKey
     )
       return
-    const link = (event.target as Element).closest?.("a[href]")
-    if (!(link instanceof HTMLAnchorElement) || link.target) return
-    const url = new URL(link.href, window.location.href)
-    if (
-      url.origin !== window.location.origin ||
-      url.pathname.replace(/\/+$/u, "") !== "/lineblog" ||
-      url.hash
-    )
-      return
+    const url = viewUrl(event.target)
+    if (!url) return
     event.preventDefault()
     if (url.href !== window.location.href) {
       window.history.replaceState(
@@ -98,13 +160,53 @@ function useLineblogLocation() {
       )
       window.history.pushState({ kanoEntry: newEntry() }, "", url.href)
     }
-    flushSync(() => setSearch(url.search))
-    const main = document.getElementById("lineblog-content")
-    if (main && main.getBoundingClientRect().top < 0)
-      main.scrollIntoView({ behavior: "instant" })
+    const current = ++ticket.current
+    const show = () => {
+      if (current !== ticket.current) return
+      flushSync(() => setSearch(url.search))
+      const main = document.getElementById("lineblog-content")
+      if (main && main.getBoundingClientRect().top < 0)
+        main.scrollIntoView({ behavior: "instant" })
+    }
+    if (viewLoaded(url.search)) show()
+    else void loadView(url.search).then(show, show)
   }, [])
 
-  return { search, onClick }
+  const onIntent = useCallback((event: SyntheticEvent<HTMLElement>) => {
+    const url = viewUrl(event.target)
+    if (url) loadView(url.search).catch(() => undefined)
+  }, [])
+
+  return { search, onClick, onIntent }
+}
+
+/**
+ * The view's posts, once loaded. Browsers keep a failed chunk load for the
+ * document, so a failed view offers a reload rather than a second request.
+ */
+function useViewPosts(search: string, shown: LineblogSummary[]) {
+  const ready = shown.every((post) => loadedPost(post.id))
+  const [, setLoaded] = useState(0)
+  const [failed, setFailed] = useState<string | null>(null)
+  useEffect(() => {
+    if (ready) return
+    let current = true
+    loadView(search).then(
+      () => {
+        if (current) setLoaded((count) => count + 1)
+      },
+      () => {
+        if (current) setFailed(search)
+      },
+    )
+    return () => {
+      current = false
+    }
+  }, [ready, search])
+  return {
+    posts: ready ? shown.map((post) => loadedPost(post.id)!) : null,
+    failed: !ready && failed === search,
+  }
 }
 
 function lineblogHref(query: Record<string, string | number> = {}) {
@@ -115,7 +217,7 @@ function lineblogHref(query: Record<string, string | number> = {}) {
   return text ? `/lineblog?${text}` : "/lineblog"
 }
 
-function articleLink(post: LineblogPost) {
+function articleLink(post: { id: string }) {
   return lineblogHref({ article: post.id })
 }
 
@@ -165,9 +267,11 @@ function MissingImage({
 function ArchiveImage({
   image,
   context,
+  sizes = SIZES.article,
 }: {
   image: LineblogImage
   context: ContentContext
+  sizes?: string
 }) {
   const { t } = useAppSettings()
   const [failed, setFailed] = useState(false)
@@ -206,6 +310,8 @@ function ArchiveImage({
     >
       <img
         src={mediaUrl(item.name)}
+        srcSet={mediaSrcSet(mediaUrl(item.name), item.width)}
+        sizes={sizes}
         alt={alt ?? t("lineblog.photo")}
         width={item.width}
         height={item.height}
@@ -278,14 +384,24 @@ function YoutubeBlock({
         <video
           controls
           preload={cover ? "none" : "metadata"}
-          poster={cover ? mediaUrl(cover.name) : undefined}
+          poster={
+            cover
+              ? mediaVariantUrl(mediaUrl(cover.name), POSTER_WIDTH)
+              : undefined
+          }
           src={mediaUrl(video.name)}
           onError={() => setFailed(true)}
         />
       ) : (
         <div className="lb-video-missing">
           {cover && !failed ? (
-            <img src={mediaUrl(cover.name)} alt="" loading="lazy" />
+            <img
+              src={mediaUrl(cover.name)}
+              srcSet={mediaSrcSet(mediaUrl(cover.name), cover.width)}
+              sizes={SIZES.video}
+              alt=""
+              loading="lazy"
+            />
           ) : null}
           <p>
             <Play aria-hidden="true" />
@@ -327,7 +443,11 @@ function CardBlock({
     <aside className="lb-card">
       {block.image?.media && media.has(block.image.media) ? (
         <div className="lb-card-image">
-          <ArchiveImage image={block.image} context={context} />
+          <ArchiveImage
+            image={block.image}
+            context={context}
+            sizes={SIZES.card}
+          />
         </div>
       ) : null}
       <div className="lb-card-copy">
@@ -358,10 +478,11 @@ function Block({
 }: {
   block: LineblogBlock
   context: ContentContext
-  translation: boolean
+  translation: Translation | null
 }) {
   switch (block.type) {
-    case "p":
+    case "p": {
+      const translated = translation && block[translation.blocks]
       return (
         <>
           {isFigureRow(block.content) ? (
@@ -374,15 +495,20 @@ function Block({
             </p>
           )}
           <RecoveryNote content={block.content} />
-          {translation && block.zh
-            ? block.zh.map((paragraph, index) => (
-                <p key={index} className="lb-zh" lang="zh-CN">
+          {translated
+            ? translated.map((paragraph, index) => (
+                <p
+                  key={index}
+                  className="lb-translation"
+                  lang={translation.lang}
+                >
                   <Inlines content={paragraph} context={context} />
                 </p>
               ))
             : null}
         </>
       )
+    }
     case "quote":
       return (
         <blockquote>
@@ -433,10 +559,11 @@ function Article({
 }: {
   post: LineblogPost
   single: boolean
-  translation: boolean
+  translation: Translation | null
 }) {
   const { t } = useAppSettings()
   const images = useMemo(() => postImages(post.blocks), [post])
+  const translatedTitle = translation && post[translation.title]
   const [open, setOpen] = useState(-1)
   const context = useMemo<ContentContext>(
     () => ({ openImage: (image) => setOpen(images.indexOf(image)) }),
@@ -450,9 +577,12 @@ function Article({
         <Title className="lb-article-title" id={titleId} lang="ja">
           {single ? post.title : <a href={articleLink(post)}>{post.title}</a>}
         </Title>
-        {translation && post.titleZh && post.titleZh !== post.title ? (
-          <p className="lb-zh lb-title-zh" lang="zh-CN">
-            {post.titleZh}
+        {translatedTitle && translatedTitle !== post.title ? (
+          <p
+            className="lb-translation lb-title-translation"
+            lang={translation.lang}
+          >
+            {translatedTitle}
           </p>
         ) : null}
         <p className="lb-article-date">
@@ -557,9 +687,9 @@ function Pager({ page, pageCount }: { page: number; pageCount: number }) {
   )
 }
 
-function ArticleNav({ post }: { post: LineblogPost }) {
+function ArticleNav({ post }: { post: LineblogSummary }) {
   const { t } = useAppSettings()
-  const { newer, older } = neighbours(post)
+  const { newer, older } = neighbours(post.id)
   return (
     <nav className="lb-article-nav" aria-label={t("lineblog.articleNav")}>
       {older ? (
@@ -613,6 +743,8 @@ function Sidebar({
         <img
           className="lb-profile-photo"
           src={mediaUrl(design.profile.media)}
+          srcSet={mediaSrcSet(mediaUrl(design.profile.media))}
+          sizes={SIZES.profile}
           alt=""
           width={240}
           height={240}
@@ -633,13 +765,15 @@ function Sidebar({
         </h2>
         <ul className="lb-recent">
           {posts.slice(0, 10).map((post) => {
-            const thumbnail = postThumbnail(post)
+            const thumbnail = post.thumbnail
             return (
               <li key={post.id}>
                 <a href={articleLink(post)}>
                   {thumbnail ? (
                     <img
                       src={mediaUrl(thumbnail)}
+                      srcSet={mediaSrcSet(mediaUrl(thumbnail))}
+                      sizes={SIZES.recent}
                       alt=""
                       width={60}
                       height={60}
@@ -689,10 +823,12 @@ function Sidebar({
 
 export function LineblogApp() {
   const { t, locale } = useAppSettings()
-  const { search, onClick } = useLineblogLocation()
+  const { search, onClick, onIntent } = useLineblogLocation()
   const view = useMemo(() => lineblogView(search), [search])
+  const loaded = useViewPosts(search, view.shown)
   const [translationOn, setTranslationOn] = useState(readTranslation)
-  const translation = locale === "zh-CN" && translationOn
+  const offered = locale === "ja" ? null : TRANSLATIONS[locale]
+  const translation = translationOn ? offered : null
 
   useEffect(() => {
     const title = view.article
@@ -734,6 +870,8 @@ export function LineblogApp() {
       id="top"
       style={designStyle}
       onClick={onClick}
+      onPointerOver={onIntent}
+      onFocus={onIntent}
     >
       <SkipLink href="#lineblog-content">{t("lineblog.skip")}</SkipLink>
       <SiteHeader page="lineblog" />
@@ -767,7 +905,7 @@ export function LineblogApp() {
             <ExternalLink href={OFFICIAL_SITE}>
               <span lang="ja">鹿乃オフィシャルサイト</span>
             </ExternalLink>
-            {locale === "zh-CN" ? (
+            {offered ? (
               <button
                 type="button"
                 className="lb-translation-toggle"
@@ -804,14 +942,32 @@ export function LineblogApp() {
             {!view.article && !view.month ? (
               <h1 className="sr-only">{t("lineblog.kicker")}</h1>
             ) : null}
-            {view.shown.map((post) => (
-              <Article
-                key={post.id}
-                post={post}
-                single={Boolean(view.article)}
-                translation={translation}
-              />
-            ))}
+            {loaded.posts ? (
+              loaded.posts.map((post) => (
+                <Article
+                  key={post.id}
+                  post={post}
+                  single={Boolean(view.article)}
+                  translation={translation}
+                />
+              ))
+            ) : loaded.failed ? (
+              <div className="lb-loading" role="alert">
+                <p>{t("lineblog.loadFailed")}</p>
+                <button
+                  type="button"
+                  className="lb-retry"
+                  onClick={() => window.location.reload()}
+                >
+                  {t("lineblog.retry")}
+                </button>
+              </div>
+            ) : (
+              <div className="lb-loading" role="status">
+                <p>{t("lineblog.loading")}</p>
+                <Placeholder lines={6} />
+              </div>
+            )}
             {view.article ? <ArticleNav post={view.article} /> : null}
             {!view.article && !view.month ? (
               <Pager page={view.page} pageCount={view.pageCount} />

@@ -8,14 +8,21 @@ packaged, and what an instance needs to show it.
 
 ## Content and Media
 
-- `src/lineblog/posts.json` holds every article, newest first: its article
+- `src/lineblog/posts/<article number>.json` holds one article: its article
   number, Japan-time publication instant, title, original address, the
   Wayback Machine capture it was recovered from, and its body as typed blocks
-  (paragraphs of text, links and images; YouTube embeds; link cards; rules).
-  Paragraphs carry the archive's Simplified Chinese translation paragraphs.
-  The shapes are in `src/lineblog/types.ts`.
+  (paragraphs of text, links and images; YouTube embeds; link cards; rules),
+  plus the media catalog entries of the files it references. Paragraphs carry
+  the archive's Simplified Chinese and English translation paragraphs. The shapes are in
+  `src/lineblog/types.ts`.
+- `src/lineblog/post-index.json` lists every article, newest first, with its
+  number, publication instant, titles and the media name of its first
+  archived picture or video cover. The page's lists, month archive, article
+  neighbours and links between articles read only this index.
 - `src/lineblog/media-catalog.json` lists each referenced media file with its
   MIME type, size, SHA-256 and, for images, the displayed width and height.
+  It is the complete catalog, including the design art; the page itself
+  reads the entries carried by each article's file.
 - The media files themselves (about 1.02 GiB: 305 images and 25 videos, two
   of them over 100 MiB) are ignored runtime data in `data/lineblog/`. They are
   too large for the repository and the image. The server reads them through
@@ -23,8 +30,16 @@ packaged, and what an instance needs to show it.
   inside that directory whose name is 12 lowercase hex digits plus `.jpg`,
   `.png` or `.mp4`, with a fixed type for the extension, `nosniff`, a
   sandboxing CSP, revalidation, byte ranges and conditional requests.
+  Images also have smaller copies, made on demand in the runtime variant
+  cache ([Resized copies](../architecture/media-cache.md#resized-copies)):
+  the recent-post thumbnails, profile photo, article pictures, link-card
+  pictures and video covers request them through `srcset` (a video poster
+  takes one 960-pixel copy), while the image viewer loads the original.
 - `src/lineblog/content.ts` derives the page views (pages of three articles,
-  months in Japan time, single articles) and the media URLs.
+  months in Japan time, single articles) from the index, and the media URLs.
+  `src/lineblog/post-files.ts` loads article files on demand: each one builds
+  into its own content-hashed chunk, so a view loads only the articles it
+  shows, and the server caches them as immutable build files.
 - The blog's own header art and profile photos, and the menu bar's Home icon,
   are archive media like the articles' pictures: nine JPEGs and one PNG in the
   recovery archive's `media/`, packaged into `data/lineblog/` and the media
@@ -68,20 +83,26 @@ tweet and one photo with no public copy.
 
 ## Packaging
 
-To rebuild the catalogs and `data/lineblog/` from the recovery archive, run:
+To rebuild the article files, index, media catalog and `data/lineblog/` from
+the recovery archive, run:
 
 ```bash
 npm run lineblog:package -- --from /path/to/Kano_LINE_Blog_Recovery
 ```
 
-The archive holds `BLOG/` (Japanese originals), `BLOG_zh-cn/` (the same
-articles with translation lines inserted), `media/`, and `media-parts/`,
+The archive holds `BLOG/` (Japanese originals), `BLOG_zh-cn/` and `BLOG_en/`
+(the same articles with Simplified Chinese or English translation lines
+inserted; the English lines are machine translations of the Japanese),
+`media/`, and `media-parts/`,
 where each video over 100 MiB is a gzip-compressed tar split into numbered
 parts. Packaging:
 
 1. Parses every article and keeps the highest retained version of each one.
-2. Matches the Chinese file's lines against the Japanese ones; inserted lines
-   become translation paragraphs of the block before them.
+2. Matches each translation file's lines against the Japanese ones; inserted
+   lines become that language's translation paragraphs of the block before
+   them. A translation file of another version than the article counts for
+   nothing, and an archive without a translation folder leaves that language
+   out.
 3. Records each `[Image source]` line on the image it follows, keeps no local
    file paths, and reduces Amazon links to their product path, dropping
    affiliate and API query parts.
@@ -91,10 +112,12 @@ parts. Packaging:
    recovered pictures in `src/lineblog/recovered.ts` go through the same
    checks. A video missing from `media/` is restored from its parts.
 5. Writes the media into `data/lineblog/` through staged renames, skipping
-   files whose bytes already match, and then writes both catalogs.
+   files whose bytes already match, and then writes the article files
+   (removing those of articles the archive no longer holds), the index and
+   the media catalog.
 
 Packaging performs no network requests and does not change the recovery
-archive. Review the catalogs and the page together when updating them.
+archive. Review the written files and the page together when updating them.
 
 ## Deployments
 
@@ -123,12 +146,14 @@ without the design art the header and profile keep a plain background.
 Run `make ci-frontend`, `make go-test`, `make docs-check` and
 `make sensitive-check`. `tests/lineblog.test.ts` packages a synthetic archive
 (translation alignment, image sources, YouTube merging, split-video
-restoration, rejection of mismatched media) and checks the tracked catalogs
-against each other, including every design's art;
+restoration, rejection of mismatched media, the index and article files) and
+checks the tracked index, article files and media catalog against each
+other, including every design's art;
 `internal/httpapi/lineblog_test.go` covers the media
 route. Browser verification covers the article list, months, single
-articles with their neighbours, back and forward, the image viewer, video
-playback, the Chinese translation switch, each design's header and profile,
+articles with their neighbours, back and forward (including after a reload),
+the image viewer, video
+playback, the translation switch in Chinese and English, each design's header and profile,
 three languages, themes, and desktop and mobile layouts.
 
 ## Related Docs

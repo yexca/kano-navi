@@ -1,0 +1,326 @@
+{
+  "post": {
+    "id": "5495607",
+    "published": "2016-04-15T12:57:52.000Z",
+    "title": "動画を投稿しました。",
+    "url": "https://lineblog.me/kano/archives/5495607.html",
+    "archive": "https://web.archive.org/web/20160418055640/http://lineblog.me/kano/archives/5495607.html",
+    "blocks": [
+      {
+        "type": "youtube",
+        "videoId": "6BXKh4f6Vhw",
+        "watch": "https://www.youtube.com/watch?v=6BXKh4f6Vhw",
+        "video": "91af2eb6035d.mp4",
+        "cover": "89d7dfaa0810.jpg",
+        "archive": "https://web.archive.org/web/20160418055640/https://www.youtube.com/watch?v=6BXKh4f6Vhw",
+        "coverSource": "https://i.ytimg.com/vi/6BXKh4f6Vhw/hqdefault.jpg"
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "こんばんは、鹿乃です。5月11日発売の「nowhere」より動画を投稿しました。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "晚上好，我是鹿乃。我发布了《nowhere》的视频，这张专辑将于5月11日发售。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Good evening, I'm Kano. I've posted a video from \"nowhere\", which comes out on May 11."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "1stシングル「Stella-rium」から約1年。こうしてまたsamさんの曲を歌い、今聴いてくださっている誰かにこの曲を届けることができてよかったです。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "距离首张单曲《Stella-rium》发布已经过去约一年。能像这样再次演唱samさんの歌曲，把这首歌送到此刻正在聆听的各位身边，真的太好了。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "It's been about a year since my 1st single \"Stella-rium\". I'm glad I got to sing sam's music again and deliver this song to whoever is listening to it right now."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "未完成だったこの曲を完成してくださったゆうゆさん、エンジニアさん、水玉子さん、そしてその機会をくださったスタッフさん、関わってくださった全ての皆さまに感謝します。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "由衷感谢把这首未完成的曲子补完的ゆうゆさん、各位工程师、水玉子さん，还有给予我这次机会的工作人员们，以及所有参与其中的每一位。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "I'm grateful to Yuyu, who completed this song that had been left unfinished, to the engineer, to Mizutamako, to the staff who gave me this opportunity, and to everyone who was involved."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "私の今までとこれからをこの曲や、アルバムにたくさんたくさんつめこみました。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "我把自己的过去与未来，都满满当当地装进了这首歌和专辑之中。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "I packed so, so much of my past and my future into this song and into the album."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "新生活に期待したり、疲れたり、色々あると思います。そんなときに聴いて、ちょっとでも元気になってもらえたらいいな。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "新的生活里有期待也有疲惫，我想大家一定各有各的境况。如果在那样的时候听到这首歌，哪怕能让大家稍微打起一点精神就好了。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "With a new life starting, you might be excited, or tired, or have all sorts of feelings. I hope that listening to it at times like that can cheer you up, even a little."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "一緒にちょっとずつでも進んでいきましょう。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "让我们哪怕只是一点点，也一起向前走吧。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Let's keep moving forward together, even if only little by little."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "みんな、ありがとう。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "大家，谢谢你们。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Everyone, thank you."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "image",
+            "alt": "【早期購入特典あり】nowhere(メーカー特典:オリジナルポストカード(汎用ver.))",
+            "source": "http://ecx.images-amazon.com/images/I/51eVw0AhK-L._SL160_.jpg",
+            "media": "48b0ee01baff.jpg"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "link",
+            "href": "http://www.amazon.co.jp/dp/B01DSN3MU0",
+            "content": [
+              {
+                "type": "text",
+                "text": "【早期購入特典あり】nowhere(メーカー特典:オリジナルポストカード(汎用ver.)) [CD]"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "鹿乃"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "2016-05-11"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "image",
+            "alt": "「nowhere」",
+            "source": "http://ecx.images-amazon.com/images/I/51prpDIVQqL._SL160_.jpg",
+            "media": "1b026b4054fb.jpg"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "link",
+            "href": "http://www.amazon.co.jp/dp/B01CSANBWS",
+            "content": [
+              {
+                "type": "text",
+                "text": "「nowhere」 [CD]"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "鹿乃"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "2016-05-11"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "鹿乃"
+          }
+        ]
+      }
+    ],
+    "titleZh": "发布了视频。",
+    "titleEn": "I posted a video."
+  },
+  "media": [
+    {
+      "name": "1b026b4054fb.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 9497,
+      "sha256": "1b026b4054fbb0b85a9e97111c996862e55ffc0c83e6b84dba97279806189ad3",
+      "width": 160,
+      "height": 159
+    },
+    {
+      "name": "48b0ee01baff.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 5808,
+      "sha256": "48b0ee01baff1de906a4517cce8836b1afdf3314127e97092a0514d365ed0d06",
+      "width": 122,
+      "height": 160
+    },
+    {
+      "name": "89d7dfaa0810.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 16388,
+      "sha256": "89d7dfaa0810a31a940b1116abb12135b4fa00ad918009fdf0d9f8ab5debb2ae",
+      "width": 480,
+      "height": 360
+    },
+    {
+      "name": "91af2eb6035d.mp4",
+      "mimeType": "video/mp4",
+      "byteSize": 96399170,
+      "sha256": "5f20cb3899095c5e49f3d8e08f153a22d5e79c0fff0abef735a40cec912eb624"
+    }
+  ]
+}

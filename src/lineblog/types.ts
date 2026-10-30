@@ -1,5 +1,6 @@
-// Shapes of src/lineblog/posts.json and media-catalog.json, written by
-// scripts/package-lineblog.ts from the local recovery archive.
+// Shapes of src/lineblog/post-index.json, posts/<id>.json and
+// media-catalog.json, written by scripts/package-lineblog.ts from the local
+// recovery archive.
 
 export interface LineblogText {
   type: "text"
@@ -37,6 +38,8 @@ export type LineblogBlock =
       content: LineblogInline[]
       /** Simplified Chinese translation paragraphs. */
       zh?: LineblogInline[][]
+      /** English translation paragraphs. */
+      en?: LineblogInline[][]
     }
   | { type: "quote"; content: LineblogInline[] }
   | { type: "hr" }
@@ -67,10 +70,28 @@ export interface LineblogPost {
   published: string
   title: string
   titleZh?: string
+  titleEn?: string
   url: string
   /** The Wayback Machine capture the post was recovered from. */
   archive: string
   blocks: LineblogBlock[]
+}
+
+/** An entry of the post index: what lists, months and links need. */
+export interface LineblogSummary {
+  id: string
+  published: string
+  title: string
+  titleZh?: string
+  titleEn?: string
+  /** The first archived picture or video cover, for the recent-posts list. */
+  thumbnail?: string
+}
+
+/** One post's file: the post and the catalog entries of the media it uses. */
+export interface LineblogPostFile {
+  post: LineblogPost
+  media: LineblogMedia[]
 }
 
 export interface LineblogMedia {

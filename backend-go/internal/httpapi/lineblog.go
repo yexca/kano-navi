@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,13 +26,16 @@ var lineblogTypes = map[string]string{
 // lineblogMedia serves one recovered LINE BLOG file from the data directory.
 // Only a regular file directly inside it with an archive name is served;
 // names are opaque hashes, so the rest of the path never reaches the disk.
+// An image asked for with w gets a copy from the shared variant cache; a
+// video ignores w.
 func (h *Handler) lineblogMedia(w http.ResponseWriter, r *http.Request, name string) {
 	match := lineblogName.FindStringSubmatch(name)
 	root := ""
 	if h.store != nil {
 		root = h.store.DataRoot()
 	}
-	if match == nil || root == "" {
+	width, widthPresent, widthValid := requestedWidth(r)
+	if match == nil || root == "" || widthPresent && !widthValid {
 		writeLineblogMissing(w, r)
 		return
 	}
@@ -45,6 +49,13 @@ func (h *Handler) lineblogMedia(w http.ResponseWriter, r *http.Request, name str
 	if err != nil || !info.Mode().IsRegular() {
 		writeLineblogMissing(w, r)
 		return
+	}
+	if widthPresent && match[2] != "mp4" {
+		open := func() (fs.File, error) { return dir.Open(name) }
+		path := filepath.Join(root, lineblogRoot, name)
+		if serveImageVariant(w, r, h.store, path, info, open, lineblogTypes[match[2]], width, mediaCacheControl(false)) {
+			return
+		}
 	}
 	file, err := dir.Open(name)
 	if err != nil {

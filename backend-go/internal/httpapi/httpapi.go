@@ -53,6 +53,10 @@ func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, options Sta
 	if now == nil {
 		now = time.Now
 	}
+	// The fixed history images share the store's variant cache.
+	if site, ok := options.Static.(*staticSite); ok && store != nil {
+		site.variants = store
+	}
 	return &Handler{
 		store:        store,
 		now:          now,

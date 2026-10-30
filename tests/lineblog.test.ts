@@ -8,14 +8,19 @@ import zlib from "node:zlib"
 import {
   cleanUrl,
   packageLineblog,
+  postIndex,
   referencedMedia,
   sha256ForContent,
   videoSources,
   withRecoveredImages,
 } from "../scripts/package-lineblog.ts"
 import {
+  addPostFile,
+  isEmoji,
   lineblogView,
+  loadedPost,
   media,
+  neighbours,
   pagerPages,
   postDate,
   posts,
@@ -27,7 +32,27 @@ import {
   homeIcon,
 } from "../src/lineblog/designs.ts"
 import { recoveredImages, tweetPictures } from "../src/lineblog/recovered.ts"
-import type { LineblogPost } from "../src/lineblog/types.ts"
+import catalogFile from "../src/lineblog/media-catalog.json" with { type: "json" }
+import type {
+  LineblogMedia,
+  LineblogPost,
+  LineblogPostFile,
+  LineblogSummary,
+} from "../src/lineblog/types.ts"
+
+const catalog = new Map(
+  (catalogFile as LineblogMedia[]).map((item) => [item.name, item]),
+)
+const postsDir = new URL("../src/lineblog/posts/", import.meta.url)
+const postFiles = await Promise.all(
+  posts.map(
+    async (summary) =>
+      JSON.parse(
+        await fs.readFile(new URL(`${summary.id}.json`, postsDir), "utf8"),
+      ) as LineblogPostFile,
+  ),
+)
+const fullPosts = postFiles.map((file) => file.post)
 
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1WQAAAAASUVORK5CYII=",
@@ -66,7 +91,13 @@ async function fixture(t: TestContext) {
     await fs.rm(root, { recursive: true, force: true })
   })
   const archive = path.join(root, "archive")
-  for (const folder of ["BLOG", "BLOG_zh-cn", "media", "media-parts"])
+  for (const folder of [
+    "BLOG",
+    "BLOG_zh-cn",
+    "BLOG_en",
+    "media",
+    "media-parts",
+  ])
     await fs.mkdir(path.join(archive, folder), { recursive: true })
 
   const image = Buffer.concat([PNG, Buffer.from("synthetic image")])
@@ -142,6 +173,18 @@ async function fixture(t: TestContext) {
     path.join(archive, "BLOG_zh-cn", "20160415_0123456789ABCDEF_v01.md"),
     [...header("# 動画\n# 视频"), ...translated].join("\n"),
   )
+  // The English file translates only the greeting.
+  await fs.writeFile(
+    path.join(archive, "BLOG_en", "20160415_0123456789ABCDEF_v01.md"),
+    [
+      ...header("# 動画\n# Video"),
+      "こんばんは、鹿乃です。",
+      "",
+      "Good evening, this is Kano.",
+      "",
+      ...body.slice(2),
+    ].join("\n"),
+  )
   return { root, archive, image, imageName, art, artName, video, videoName }
 }
 
@@ -161,24 +204,49 @@ test("LINE BLOG packaging parses posts, aligns translations and restores split v
     bytes: image.length + art.length + video.length,
   })
 
-  const [post] = JSON.parse(
-    await fs.readFile(path.join(contentDir, "posts.json"), "utf8"),
-  ) as LineblogPost[]
+  const index = JSON.parse(
+    await fs.readFile(path.join(contentDir, "post-index.json"), "utf8"),
+  ) as LineblogSummary[]
+  assert.deepEqual(index, [
+    {
+      id: "100",
+      published: "2016-04-15T12:57:00.000Z",
+      title: "動画",
+      titleZh: "视频",
+      titleEn: "Video",
+      thumbnail: imageName,
+    },
+  ])
+  assert.deepEqual(await fs.readdir(path.join(contentDir, "posts")), [
+    "100.json",
+  ])
+  const { post, media: postMedia } = JSON.parse(
+    await fs.readFile(path.join(contentDir, "posts", "100.json"), "utf8"),
+  ) as LineblogPostFile
+  // A post file carries its own media, not the design art.
+  assert.deepEqual(
+    postMedia.map((item) => item.name),
+    [imageName, videoName].sort(),
+  )
   assert.equal(post.id, "100")
   assert.equal(post.published, "2016-04-15T12:57:00.000Z")
   assert.equal(post.titleZh, "视频")
+  assert.equal(post.titleEn, "Video")
   assert.equal(post.url, "https://lineblog.me/kano/archives/100.html")
   const [greeting, lines, picture, youtube, product] = post.blocks
   assert.deepEqual(greeting, {
     type: "p",
     content: [{ type: "text", text: "こんばんは、鹿乃です。" }],
     zh: [[{ type: "text", text: "晚上好，我是鹿乃。" }]],
+    en: [[{ type: "text", text: "Good evening, this is Kano." }]],
   })
-  // A translation line inside a paragraph follows that paragraph.
+  // A translation line inside a paragraph follows that paragraph; each
+  // language aligns on its own.
   assert.equal(lines.type === "p" && lines.content[1].type, "link")
   assert.deepEqual(lines.type === "p" && lines.zh, [
     [{ type: "text", text: "第一行" }],
   ])
+  assert.equal(lines.type === "p" && lines.en, undefined)
   assert.deepEqual(picture, {
     type: "p",
     content: [
@@ -213,20 +281,44 @@ test("LINE BLOG packaging parses posts, aligns translations and restores split v
     (await fs.readdir(mediaDir)).sort(),
     [imageName, artName, videoName].sort(),
   )
-  const catalog = JSON.parse(
+  const written = JSON.parse(
     await fs.readFile(path.join(contentDir, "media-catalog.json"), "utf8"),
+  ) as LineblogMedia[]
+  const entry = {
+    name: imageName,
+    mimeType: "image/png",
+    byteSize: image.length,
+    sha256: sha256ForContent(image),
+    width: 1,
+    height: 1,
+  }
+  assert.deepEqual(
+    written.find((item) => item.name === imageName),
+    entry,
   )
   assert.deepEqual(
-    catalog.find((item: { name: string }) => item.name === imageName),
-    {
-      name: imageName,
-      mimeType: "image/png",
-      byteSize: image.length,
-      sha256: sha256ForContent(image),
-      width: 1,
-      height: 1,
-    },
+    postMedia.find((item) => item.name === imageName),
+    entry,
   )
+  assert.deepEqual(
+    written.map((item) => item.name),
+    [imageName, artName, videoName].sort(),
+  )
+})
+
+test("LINE BLOG packaging removes the files of posts it no longer holds", async (t) => {
+  const { root, archive, artName } = await fixture(t)
+  const contentDir = path.join(root, "content")
+  await fs.mkdir(path.join(contentDir, "posts"), { recursive: true })
+  await fs.writeFile(path.join(contentDir, "posts", "99.json"), "{}\n")
+  await packageLineblog(archive, {
+    contentDir,
+    mediaDir: path.join(root, "data", "lineblog"),
+    designArt: [artName],
+  })
+  assert.deepEqual(await fs.readdir(path.join(contentDir, "posts")), [
+    "100.json",
+  ])
 })
 
 test("LINE BLOG packaging writes nothing when media do not match their names", async (t) => {
@@ -258,13 +350,45 @@ test("archive links lose affiliate and API query parts", () => {
   )
 })
 
+test("the post index and post files agree with each other and the catalog", async () => {
+  assert.deepEqual(
+    (await fs.readdir(postsDir)).sort(),
+    posts.map((post) => `${post.id}.json`).sort(),
+  )
+  assert.deepEqual(postIndex(fullPosts, [...catalog.values()]), posts)
+  for (const file of postFiles)
+    assert.deepEqual(
+      file.media,
+      referencedMedia([file.post]).map((name) => catalog.get(name)),
+      file.post.id,
+    )
+})
+
+test("a loaded post file brings its media entries", () => {
+  const file = postFiles.find((item) =>
+    item.media.some((entry) => entry.width !== undefined && entry.width <= 80),
+  )!
+  const emoji = file.media.find((entry) => entry.width! <= 80)!
+  assert.equal(loadedPost(file.post.id), undefined)
+  assert.equal(isEmoji(emoji.name), false)
+  addPostFile(file)
+  assert.equal(loadedPost(file.post.id), file.post)
+  for (const entry of file.media) assert.equal(media.get(entry.name), entry)
+  assert.equal(isEmoji(emoji.name), true)
+  const [newest, second] = posts
+  assert.deepEqual(neighbours(second.id), {
+    newer: newest,
+    older: posts[2],
+  })
+})
+
 test("the packaged archive references only catalogued media with verified names", () => {
   assert.equal(new Set(posts.map((post) => post.id)).size, posts.length)
   for (let index = 1; index < posts.length; index += 1)
     assert.ok(posts[index - 1].published >= posts[index].published)
-  const sources = videoSources(posts)
-  for (const name of [...referencedMedia(posts), ...designMedia()]) {
-    const item = media.get(name)
+  const sources = videoSources(fullPosts)
+  for (const name of [...referencedMedia(fullPosts), ...designMedia()]) {
+    const item = catalog.get(name)
     assert.ok(item, name)
     const stem = name.slice(0, 12)
     if (item.mimeType === "video/mp4") {
@@ -277,7 +401,7 @@ test("the packaged archive references only catalogued media with verified names"
       assert.ok(item.width && item.height, name)
     }
   }
-  const text = JSON.stringify(posts)
+  const text = JSON.stringify(fullPosts)
   // A link never holds another link; nested anchors are invalid HTML.
   assert.doesNotMatch(
     text,
@@ -315,17 +439,17 @@ test("post times show in Japan time", () => {
 test("the blog's design art is catalogued archive media with its provenance", () => {
   const names = designMedia()
   assert.equal(names.length, 10)
-  assert.equal(media.get(homeIcon.media)?.mimeType, "image/png")
+  assert.equal(catalog.get(homeIcon.media)?.mimeType, "image/png")
   assert.match(homeIcon.capture, /^\d{14}$/u)
   for (const design of designs)
     for (const art of [design.header, design.profile]) {
-      assert.equal(media.get(art.media)?.mimeType, "image/jpeg", art.media)
+      assert.equal(catalog.get(art.media)?.mimeType, "image/jpeg", art.media)
       assert.match(art.capture, /^\d{14}$/u, art.media)
       assert.match(art.source, /^https?:\/\/[a-z.-]+\//u, art.media)
     }
   for (const design of designs) {
-    assert.equal(media.get(design.header.media)?.width, 2600)
-    assert.equal(media.get(design.header.media)?.height, 390)
+    assert.equal(catalog.get(design.header.media)?.width, 2600)
+    assert.equal(catalog.get(design.header.media)?.height, 390)
   }
 })
 
@@ -438,7 +562,7 @@ test("recovered pictures replace remote addresses and follow embedded tweets", (
 })
 
 test("every recovered picture is packaged with its source", () => {
-  const images = posts.flatMap((post) =>
+  const images = fullPosts.flatMap((post) =>
     post.blocks.flatMap((block) =>
       block.type === "p"
         ? block.content.flatMap((inline) =>
@@ -454,7 +578,7 @@ test("every recovered picture is packaged with its source", () => {
   for (const file of files) {
     assert.match(file.media, /^[0-9a-f]{12}\.jpg$/u)
     if (file.capture) assert.match(file.capture, /^\d{14}$/u)
-    assert.equal(media.get(file.media)?.mimeType, "image/jpeg", file.media)
+    assert.equal(catalog.get(file.media)?.mimeType, "image/jpeg", file.media)
     const image = images.find(
       (inline) => inline.type === "image" && inline.media === file.media,
     )
@@ -462,7 +586,7 @@ test("every recovered picture is packaged with its source", () => {
   }
   for (const item of recoveredImages)
     assert.ok(
-      !JSON.stringify(posts).includes(`"remote":"${item.address}"`),
+      !JSON.stringify(fullPosts).includes(`"remote":"${item.address}"`),
       item.address,
     )
 })

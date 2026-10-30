@@ -45,45 +45,67 @@ func (s *Store) ReadMediaVariant(ctx context.Context, id, version string, width 
 	if err != nil {
 		return nil, err
 	}
-	name := variantName(record.hash, width)
+	file, err := s.ReadVariant(ctx, record.hash, width, func() (*MediaFile, error) {
+		return s.readMediaRecord(record)
+	})
+	if err != nil {
+		return nil, err
+	}
+	file.LastModified = record.lastModified(file.LastModified)
+	return file, nil
+}
+
+// ReadVariant returns a copy no wider than width of the image whose SHA-256
+// is hash, made once and kept in the variant cache under that hash. original
+// loads the image's bytes and is called only when no copy or keep-original
+// marker is cached; its error is returned as is. A copy is cached only when
+// the loaded bytes match hash, and the original is returned whenever a
+// smaller copy cannot be made or stored.
+func (s *Store) ReadVariant(ctx context.Context, hash string, width int, original func() (*MediaFile, error)) (*MediaFile, error) {
+	if !mediavariant.ValidWidth(width) || !safeHash(hash) {
+		return nil, ErrMediaNotFound
+	}
+	name := variantName(hash, width)
 	if file, keepOriginal := s.readVariant(name); file != nil {
-		file.LastModified = record.lastModified(file.LastModified)
 		return file, nil
 	} else if keepOriginal {
-		return s.readMediaRecord(record)
+		return original()
 	}
 	// Concurrent cold requests for one copy wait for the first to make it,
 	// then find it in the cache, instead of each reading and decoding the
 	// original.
 	release, err := s.claimVariant(ctx, name)
 	if err != nil {
-		return s.readMediaRecord(record)
+		return original()
 	}
 	defer release()
 	if file, keepOriginal := s.readVariant(name); file != nil {
-		file.LastModified = record.lastModified(file.LastModified)
 		return file, nil
 	} else if keepOriginal {
-		return s.readMediaRecord(record)
+		return original()
 	}
-	original, err := s.readMediaRecord(record)
+	whole, err := original()
 	if err != nil {
 		return nil, err
+	}
+	sum := sha256.Sum256(whole.Content)
+	if hex.EncodeToString(sum[:]) != hash {
+		return whole, nil
 	}
 	select {
 	case resizeSlots <- struct{}{}:
 	case <-ctx.Done():
-		return original, nil
+		return whole, nil
 	}
-	content, mime, resizeErr := resizeVariant(original.Content, width)
+	content, mime, resizeErr := resizeVariant(whole.Content, width)
 	<-resizeSlots
 	if resizeErr != nil {
 		s.writeVariant(name+"."+variantKeepOriginal, nil)
-		return original, nil
+		return whole, nil
 	}
 	s.writeVariant(name+"."+mediaformat.Extension(mime), content)
 	file := variantFile(content, mime)
-	file.LastModified = original.LastModified
+	file.LastModified = whole.LastModified
 	return file, nil
 }
 

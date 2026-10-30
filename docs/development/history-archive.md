@@ -74,7 +74,11 @@ state while retaining original-source links.
 
 The page has no data-fetching hook or external embeds. Gallery and timeline
 images are lazy loaded from the local static asset route; the introductory
-portrait is loaded eagerly. Original websites open only when visitors follow
+portrait is loaded eagerly. Thumbnails, the portrait and the identity
+pictures offer the server's smaller copies through `srcset`, made on demand
+from the shipped files and kept in the runtime variant cache
+([Resized copies](../architecture/media-cache.md#resized-copies)); the image
+dialog loads the original. Original websites open only when visitors follow
 a link. Provenance hosts are documented in the privacy allowlist without
 expanding the remote downloader's destination policy.
 

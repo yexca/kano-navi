@@ -3,7 +3,9 @@ package sqlite
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"image"
 	"image/color"
@@ -13,6 +15,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -268,5 +271,41 @@ func TestReadVariantFileSkipsACopyItCannotExamine(t *testing.T) {
 	defer file.Close()
 	if out := readVariantFile(file, "image/jpeg"); out == nil || !bytes.Equal(out.Content, content) || out.MIMEType != "image/jpeg" {
 		t.Fatalf("readable copy not served: %+v", out)
+	}
+}
+
+func TestReadVariantCachesOnlyBytesMatchingTheHash(t *testing.T) {
+	s := openVariantStore(t)
+	ctx := context.Background()
+	content := syntheticImage(t, "image/jpeg", 1000, 500, false)
+	sum := sha256.Sum256(content)
+	hash := hex.EncodeToString(sum[:])
+	load := func() (*MediaFile, error) {
+		return &MediaFile{Content: content, MIMEType: "image/jpeg", SHA256: hash, Size: int64(len(content))}, nil
+	}
+	if _, err := s.ReadVariant(ctx, "not-a-hash", 320, load); err != ErrMediaNotFound {
+		t.Fatalf("unsafe hash accepted: %v", err)
+	}
+	if _, err := s.ReadVariant(ctx, hash, 333, load); err != ErrMediaNotFound {
+		t.Fatalf("unlisted width accepted: %v", err)
+	}
+	// Bytes that do not match the claimed hash are served whole and never
+	// cached under it.
+	other := strings.Repeat("0", 64)
+	file, err := s.ReadVariant(ctx, other, 320, load)
+	if err != nil || !bytes.Equal(file.Content, content) {
+		t.Fatalf("mismatched bytes: %v", err)
+	}
+	if entries, _ := filepath.Glob(filepath.Join(s.dataRoot, "cache", "variants", "00", "*")); len(entries) != 0 {
+		t.Fatalf("mismatched bytes cached: %v", entries)
+	}
+	file, err = s.ReadVariant(ctx, hash, 320, load)
+	if err != nil || file.Size >= int64(len(content)) {
+		t.Fatalf("matching bytes not resized: %v", err)
+	}
+	// A cached copy is found without loading the original.
+	file, err = s.ReadVariant(ctx, hash, 320, func() (*MediaFile, error) { return nil, errors.New("synthetic load failure") })
+	if err != nil || file.Size >= int64(len(content)) {
+		t.Fatalf("cached copy needed the original: %v", err)
 	}
 }

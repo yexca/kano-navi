@@ -69,7 +69,7 @@ and Simplified Chinese, in light and dark themes, on phones and desktops.
     <td width="50%" valign="top">
       <h3>📔 LINE BLOG archive</h3>
       Her 2015–2019 LINE BLOG, restored from web archives with its photos and
-      videos, in the blog's own layout and with Chinese translations.
+      videos, in the blog's own layout and with Chinese and English translations.
     </td>
   </tr>
   <tr>

@@ -1,12 +1,18 @@
-// Smaller copies of cached images. The server makes them on first request at
-// a fixed list of widths (backend-go/internal/mediavariant) and keeps the
+// Smaller copies of images. The server makes them on first request at a fixed
+// list of widths (backend-go/internal/mediavariant) for cached source media,
+// LINE BLOG archive images and the fixed history collection, and keeps the
 // original untouched; full-image viewers keep loading the original URL.
 
 /** The only widths the server accepts in a media URL's `w` parameter. */
 export const MEDIA_VARIANT_WIDTHS = [320, 640, 960, 1280, 1920] as const
 
-/** Matches a cached asset URL (`/media/<id>`), not profile media or assets. */
-const CACHED_MEDIA = /^\/media\/[a-f0-9]{64}(?:\?|$)/
+/**
+ * Matches an image URL with smaller copies: a cached asset (`/media/<id>`), a
+ * LINE BLOG archive image or a fixed history image. Profile media, videos and
+ * other bundled assets have none.
+ */
+const CACHED_MEDIA =
+  /^\/(?:media\/[a-f0-9]{64}|media\/lineblog\/[a-f0-9]{12}\.(?:jpg|png)|assets\/history\/[^/?#]+\.(?:jpe?g|png|webp))(?:\?|$)/
 
 /** The URL of a smaller copy, or the URL itself when it has none. */
 export function mediaVariantUrl(url: string, width: number): string {
@@ -15,10 +21,11 @@ export function mediaVariantUrl(url: string, width: number): string {
 }
 
 /**
- * A srcset for a cached image. With a known original width it lists the
- * smaller copies and then the original; without one it lists every copy, and
- * the server answers a width the image cannot shrink to with the original.
- * Other URLs (bundled assets, profile media, missing images) get none.
+ * A srcset for an image with smaller copies. With a known original width it
+ * lists the smaller copies and then the original; without one it lists every
+ * copy, and the server answers a width the image cannot shrink to with the
+ * original. Other URLs (bundled assets, profile media, missing images) get
+ * none.
  */
 export function mediaSrcSet(
   url: string | null | undefined,

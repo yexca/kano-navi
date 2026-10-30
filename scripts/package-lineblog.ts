@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url"
 import zlib from "node:zlib"
 
 import { designMedia } from "../src/lineblog/designs.ts"
+import { postThumbnail } from "../src/lineblog/post-media.ts"
 import {
   recoveredImages,
   tweetPictures,
@@ -20,6 +21,8 @@ import type {
   LineblogInline,
   LineblogMedia,
   LineblogPost,
+  LineblogPostFile,
+  LineblogSummary,
 } from "../src/lineblog/types.ts"
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024
@@ -485,8 +488,19 @@ function japanIso(value: string) {
   return new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}+09:00`).toISOString()
 }
 
-/** One post from its Japanese file and, when present, the Chinese one. */
-export function buildPost(japanese: string, chinese?: string): LineblogPost {
+/** The archive's translation folders and the language each one holds. */
+const translationFolders = [
+  { folder: "BLOG_zh-cn", language: "zh", title: "titleZh" },
+  { folder: "BLOG_en", language: "en", title: "titleEn" },
+] as const
+
+type TranslationLanguage = (typeof translationFolders)[number]["language"]
+
+/** One post from its Japanese file and the translated files present. */
+export function buildPost(
+  japanese: string,
+  translations: Partial<Record<TranslationLanguage, string>> = {},
+): LineblogPost {
   const original = parsePostFile(japanese)
   const id = /^https?:\/\/lineblog\.me\/kano\/archives\/(\d+)\.html$/u.exec(
     original.originalUrl,
@@ -502,15 +516,17 @@ export function buildPost(japanese: string, chinese?: string): LineblogPost {
     archive: `https://web.archive.org/web/${original.snapshot}/${original.originalUrl}`,
     blocks: mergeYoutube(original.blocks),
   }
-  if (chinese) {
-    const translated = parsePostFile(chinese)
-    if (translated.titles.length > 1) post.titleZh = translated.titles.at(-1)
+  for (const { language, title } of translationFolders) {
+    const source = translations[language]
+    if (!source) continue
+    const translated = parsePostFile(source)
+    if (translated.titles.length > 1) post[title] = translated.titles.at(-1)
     const additions = alignTranslation(original, translated)
     // Translations follow the original blocks; merging never moves a
     // paragraph, so its index in the merged list is found by identity.
     for (const [at, content] of additions) {
       const block = original.blocks[at]
-      if (block.type === "p") block.zh = content
+      if (block.type === "p") block[language] = content
       else throw new Error("translation follows a non-paragraph block")
     }
   }
@@ -941,25 +957,27 @@ async function readPost(file: string) {
 export async function readLineblogArchive(directory: string) {
   const root = await fs.realpath(directory)
   const japanese = await readPostFiles(root, "BLOG")
-  let chinese = new Map<string, { version: number; file: string }>()
-  try {
-    chinese = await readPostFiles(root, "BLOG_zh-cn")
-  } catch {
-    chinese = new Map()
-  }
+  // A missing translation folder only leaves its language out.
+  const translated = await Promise.all(
+    translationFolders.map(async ({ folder, language }) => ({
+      language,
+      files: await readPostFiles(root, folder).catch(
+        () => new Map<string, { version: number; file: string }>(),
+      ),
+    })),
+  )
   if (!japanese.size) throw new Error("the archive holds no posts")
   const posts: LineblogPost[] = []
   for (const [key, { file, version }] of japanese) {
-    const translation = chinese.get(key)
     try {
-      posts.push(
-        buildPost(
-          await readPost(file),
-          translation?.version === version
-            ? await readPost(translation.file)
-            : undefined,
-        ),
-      )
+      // A translation counts only for the same version of the article.
+      const translations: Partial<Record<TranslationLanguage, string>> = {}
+      for (const { language, files } of translated) {
+        const translation = files.get(key)
+        if (translation?.version === version)
+          translations[language] = await readPost(translation.file)
+      }
+      posts.push(buildPost(await readPost(file), translations))
     } catch (error) {
       throw new Error(
         `${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`,
@@ -981,9 +999,64 @@ async function writeJson(file: string, value: unknown) {
   await fs.rename(temporary, file)
 }
 
+/** The index entry of each post, newest first. */
+export function postIndex(posts: LineblogPost[], catalog: LineblogMedia[]) {
+  const media = new Map(catalog.map((item) => [item.name, item]))
+  return posts.map((post): LineblogSummary => {
+    const summary: LineblogSummary = {
+      id: post.id,
+      published: post.published,
+      title: post.title,
+    }
+    if (post.titleZh) summary.titleZh = post.titleZh
+    if (post.titleEn) summary.titleEn = post.titleEn
+    const thumbnail = postThumbnail(post, media)
+    if (thumbnail) summary.thumbnail = thumbnail
+    return summary
+  })
+}
+
+/** Each post with the catalog entries of the media it references. */
+export function postFile(
+  post: LineblogPost,
+  catalog: LineblogMedia[],
+): LineblogPostFile {
+  const names = new Set(referencedMedia([post]))
+  return { post, media: catalog.filter((item) => names.has(item.name)) }
+}
+
+/**
+ * Writes one file per post into `posts/`, removing files of posts the
+ * archive no longer holds, then the post index and the full media catalog.
+ */
+async function writeContent(
+  contentDir: string,
+  posts: LineblogPost[],
+  catalog: LineblogMedia[],
+) {
+  const postsDir = path.join(contentDir, "posts")
+  await fs.mkdir(postsDir, { recursive: true })
+  const files = new Set<string>()
+  for (const post of posts) {
+    const name = `${post.id}.json`
+    files.add(name)
+    await writeJson(path.join(postsDir, name), postFile(post, catalog))
+  }
+  for (const entry of await fs.readdir(postsDir)) {
+    if (/^\d+\.json$/u.test(entry) && !files.has(entry))
+      await fs.rm(path.join(postsDir, entry))
+  }
+  await writeJson(
+    path.join(contentDir, "post-index.json"),
+    postIndex(posts, catalog),
+  )
+  await writeJson(path.join(contentDir, "media-catalog.json"), catalog)
+}
+
 /**
  * Validates every post and media file before writing, then writes the post
- * and media catalogs into the frontend and the media into `mediaDir`. The
+ * files, post index and media catalog into the frontend and the media into
+ * `mediaDir`. The
  * blog's header and profile art (`designArt`) and the later recovered
  * pictures (`recovered`, `tweets`) are archive media too.
  */
@@ -1034,12 +1107,8 @@ export async function packageLineblog(
       else await fs.copyFile(file, staged)
       await fs.rename(staged, target)
     }
-    await fs.mkdir(contentDir, { recursive: true })
-    await writeJson(path.join(contentDir, "posts.json"), posts)
-    await writeJson(
-      path.join(contentDir, "media-catalog.json"),
-      prepared.map(({ item }) => item),
-    )
+    const catalog = prepared.map(({ item }) => item)
+    await writeContent(contentDir, posts, catalog)
     return {
       posts: posts.length,
       media: prepared.length,

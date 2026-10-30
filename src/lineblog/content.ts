@@ -1,18 +1,30 @@
-import catalog from "./media-catalog.json" with { type: "json" }
-import archive from "./posts.json" with { type: "json" }
+import index from "./post-index.json" with { type: "json" }
+import { inlineImages, isEmojiMedia } from "./post-media.ts"
 import type {
   LineblogBlock,
-  LineblogImage,
-  LineblogInline,
   LineblogMedia,
   LineblogPost,
+  LineblogPostFile,
+  LineblogSummary,
 } from "./types.ts"
 
-/** Newest first, as the blog listed them. */
-export const posts = archive as LineblogPost[]
-export const media = new Map(
-  (catalog as LineblogMedia[]).map((item) => [item.name, item]),
-)
+/** Every post's index entry, newest first, as the blog listed them. */
+export const posts = index as LineblogSummary[]
+
+/** Posts whose files have loaded, and the catalog entries they brought. */
+const loadedPosts = new Map<string, LineblogPost>()
+export const media = new Map<string, LineblogMedia>()
+
+export function loadedPost(id: string) {
+  return loadedPosts.get(id)
+}
+
+/** Keeps a loaded post file; its media then have their sizes and types. */
+export function addPostFile(file: LineblogPostFile) {
+  for (const item of file.media) media.set(item.name, item)
+  loadedPosts.set(file.post.id, file.post)
+  return file.post
+}
 
 export const PAGE_SIZE = 3
 export const ORIGINAL_BLOG = "https://lineblog.me/kano/"
@@ -24,10 +36,9 @@ export function mediaUrl(name: string) {
   return `/media/lineblog/${name}`
 }
 
-/** Pictographs the blog drew inline with the text (15 and 78 px). */
+/** Pictographs the blog drew inline with the text, among loaded media. */
 export function isEmoji(name: string | undefined) {
-  const width = name ? media.get(name)?.width : undefined
-  return width !== undefined && width <= 80
+  return isEmojiMedia(name ? media.get(name) : undefined)
 }
 
 const japanParts = new Intl.DateTimeFormat("en", {
@@ -80,16 +91,6 @@ export const archiveMonths = posts.reduce<
   return years
 }, [])
 
-function inlineImages(content: LineblogInline[]): LineblogImage[] {
-  return content.flatMap((inline) =>
-    inline.type === "image"
-      ? [inline]
-      : inline.type === "link"
-        ? inlineImages(inline.content)
-        : [],
-  )
-}
-
 /** Archived pictures a reader can open, in reading order. */
 export function postImages(blocks: LineblogBlock[]) {
   return blocks
@@ -99,20 +100,6 @@ export function postImages(blocks: LineblogBlock[]) {
         : [],
     )
     .filter((image) => image.media && !isEmoji(image.media))
-}
-
-/** The first archived picture or video cover, for the recent-posts list. */
-export function postThumbnail(post: LineblogPost) {
-  for (const block of post.blocks) {
-    if (block.type === "youtube" && block.cover) return block.cover
-    if (block.type === "p") {
-      const image = inlineImages(block.content).find(
-        (item) => item.media && !isEmoji(item.media),
-      )
-      if (image?.media) return image.media
-    }
-  }
-  return null
 }
 
 /** Readable alt text; the recovery kept file names and "image" as alts. */
@@ -134,13 +121,13 @@ export function articleHref(href: string) {
 }
 
 export interface LineblogView {
-  article: LineblogPost | null
+  article: LineblogSummary | null
   /** Unknown article numbers show a not-found note. */
   missingArticle: boolean
   month: string | null
   page: number
   pageCount: number
-  shown: LineblogPost[]
+  shown: LineblogSummary[]
 }
 
 /** What /lineblog shows for its query: an article, a month, or a page. */
@@ -186,8 +173,8 @@ export function lineblogView(search: string): LineblogView {
 }
 
 /** The newer and older neighbours of an article. */
-export function neighbours(post: LineblogPost) {
-  const at = posts.indexOf(post)
+export function neighbours(id: string) {
+  const at = posts.findIndex((post) => post.id === id)
   return { newer: posts[at - 1] ?? null, older: posts[at + 1] ?? null }
 }
 

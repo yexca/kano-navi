@@ -1,0 +1,259 @@
+{
+  "post": {
+    "id": "1535165",
+    "published": "2015-11-19T05:00:07.000Z",
+    "title": "はじめましてのご挨拶",
+    "url": "https://lineblog.me/kano/archives/1535165.html",
+    "archive": "https://web.archive.org/web/20151127175031/http://lineblog.me/kano/archives/1535165.html",
+    "blocks": [
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "image",
+            "alt": "image",
+            "media": "153dfd190839.jpg",
+            "source": "http://line.blogimg.jp/kano/imgs/2/e/2e35f488.jpg"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "はじめまして、鹿乃ですヽ|･ω･|ゞ"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "初次见面，我是鹿乃ヽ|･ω･|ゞ"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Nice to meet you, I'm Kano ヽ|･ω･|ゞ"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "読み方は「カノ」です。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "名字读作“Kano”。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "It's read \"Kano\"."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "歌をうたっています。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "我是唱歌的。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "I sing songs."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "よろしくお願いしますっ"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "请多多关照！"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Pleased to meet you!"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "昨日、11月18日に私の2ndシングル「ディアブレイブ」がリリースされました。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "昨天，11月18日，我的第二张单曲《Dear Brave》发售了。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Yesterday, November 18, my 2nd single \"Dear brave\" was released."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "こちらの表題曲はTVアニメ「ヘヴィーオブジェクト」のED主題歌になっています。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "这张单曲的主打歌，是电视动画《重装武器》的片尾主题曲。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "The title track is the ending theme for the TV anime \"Heavy Object\"."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "アニメともどもご愛顧いただきますようなにとぞなにとぞ…！"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "希望大家连同动画一起多多支持它，拜托了拜托了……！"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Please support both the anime and the song, I'm begging you, I'm begging you...!"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "ちなみに余談ですが、このブログを書きながらワーナーさんの社内を彷徨い歩いています。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "顺便说个题外话，我现在正一边写这篇博客，一边在华纳的办公楼里晃来晃去。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "By the way, as a side note, I'm writing this blog while wandering around inside the Warner offices."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "誰か迎えに…迎えに…"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "谁来接我一下……谁来接我……"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Somebody come get me... come get me..."
+            }
+          ]
+        ]
+      }
+    ],
+    "titleZh": "初次见面的问候",
+    "titleEn": "Nice to Meet You!"
+  },
+  "media": [
+    {
+      "name": "153dfd190839.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 79675,
+      "sha256": "153dfd1908393a7653c245ddaa980702af290ab940ab889d5f0b157a39b255cf",
+      "width": 240,
+      "height": 240
+    }
+  ]
+}

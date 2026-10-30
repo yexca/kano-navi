@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"html"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -89,7 +90,14 @@ type staticSite struct {
 	// publicOrigin, when set, makes index.html's root-relative share-tag
 	// URLs (content="/...") absolute, as link previews require.
 	publicOrigin string
+	// variants makes the w copies of the fixed history images; without it
+	// they are served whole.
+	variants variantReader
 }
+
+// historyImage matches a fixed history image, the only static files with
+// smaller copies.
+var historyImage = regexp.MustCompile(`^assets/history/[^/]+\.(?:jpe?g|png|webp)$`)
 
 // NewStaticSite returns nil when the directory has no index.html, so an API-only
 // process answers unknown paths with its JSON 404 instead. publicOrigin is a
@@ -130,6 +138,15 @@ func (s *staticSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	relative := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
 	if name, ok := s.file(relative); ok {
+		if width, present, valid := requestedWidth(r); present && historyImage.MatchString(relative) {
+			if !valid {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "media_not_found"}, "")
+				return
+			}
+			if s.serveVariant(w, r, name, width) {
+				return
+			}
+		}
 		s.serve(w, r, name, relative, http.StatusOK, "")
 		return
 	}
@@ -171,6 +188,18 @@ func (s *staticSite) file(relative string) (string, bool) {
 		return "", false
 	}
 	return resolved, true
+}
+
+// serveVariant answers a history image's w request from the variant cache,
+// keyed by the SHA-256 of the file's bytes. It reports false when the
+// original is to be served instead.
+func (s *staticSite) serveVariant(w http.ResponseWriter, r *http.Request, name string, width int) bool {
+	info, err := os.Stat(name)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	open := func() (fs.File, error) { return os.Open(name) }
+	return serveImageVariant(w, r, s.variants, name, info, open, staticContentType(name), width, "public, max-age=0, must-revalidate")
 }
 
 // serve writes one file. route names the page index.html is served for, whose
