@@ -1,7 +1,9 @@
 # One static Go binary serves the public API, the operator console, workflows
 # and timers, MCP and the built frontend. Node only builds the frontend; no
-# Node runtime is shipped.
-FROM node:24.22.1-bookworm-slim AS frontend
+# Node runtime is shipped. The frontend and backend stages run on the build
+# machine and Go cross-compiles for the target, so a multi-platform build
+# (linux/amd64, linux/arm64) needs no emulation: the runtime stage only copies.
+FROM --platform=$BUILDPLATFORM node:24.22.1-bookworm-slim AS frontend
 
 WORKDIR /app
 
@@ -12,7 +14,8 @@ RUN npm ci --ignore-scripts
 COPY . .
 RUN npx vite build
 
-FROM golang:1.26.10-bookworm AS backend
+FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm AS backend
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -24,17 +27,21 @@ COPY backend-go/ ./
 COPY package.json /tmp/package.json
 RUN VERSION="$(grep -m1 '^  "version"' /tmp/package.json | sed 's/.*"version": "\([^"]*\)".*/\1/')" \
   && echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
-  && CGO_ENABLED=0 GOOS=linux go build -trimpath \
+  && CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" go build -trimpath \
     -ldflags "-X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version=${VERSION}" \
     -o /out/kano-go ./cmd/kano-go \
   && mkdir -p /out/data
+
+# Node for the development image, on its own platform rather than the build
+# machine's.
+FROM node:24.22.1-bookworm-slim AS node
 
 # Development: the Go toolchain builds and runs the backend, Vite serves the
 # frontend with hot reload and proxies /api, /media and /mcp to it.
 FROM golang:1.26.10-bookworm AS development
 
-COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
-COPY --from=frontend /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
   && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 

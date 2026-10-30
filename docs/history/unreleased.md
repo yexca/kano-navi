@@ -20,3 +20,13 @@
   step's counts list them as Remaining with the bound that stopped it.
 
 </details>
+
+<details>
+<summary><strong>Runtime and development</strong></summary>
+
+- Release images are published for `linux/arm64` as well as `linux/amd64`
+  under the same tags, so ARM hosts such as a Raspberry Pi 4/5 or an Apple
+  silicon Mac pull a native image. The Dockerfiles cross-compile the Go
+  backend for the target platform.
+
+</details>
