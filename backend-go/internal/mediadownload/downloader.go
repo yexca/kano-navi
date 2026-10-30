@@ -27,7 +27,11 @@ type Download struct {
 	// NotModified reports a 304 answer to a revalidation; Content is empty.
 	NotModified bool
 }
-type Client struct{ http *http.Client }
+type Client struct {
+	http *http.Client
+	// now reads the clock for the step's time budget.
+	now func() time.Time
+}
 
 func NewClient(client *http.Client) *Client {
 	if client == nil {
@@ -36,7 +40,7 @@ func NewClient(client *http.Client) *Client {
 	copy := *client
 	copy.Timeout = 10 * time.Second
 	copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &Client{&copy}
+	return &Client{http: &copy, now: time.Now}
 }
 func AllowedURL(raw string) bool {
 	u, err := url.Parse(raw)
@@ -189,54 +193,86 @@ func (c *Client) fetchAsset(ctx context.Context, asset sqlite.PendingMedia) (Dow
 }
 
 // Measured counts ready files cached before dimension probing whose width and
-// height were filled by this run.
-type Summary struct{ Attempted, Ready, Unchanged, Missing, Failed, Measured int }
+// height were filled by this run. Remaining counts never-checked assets left
+// queued when the step ended, and Stopped names the bound that ended it with
+// work possibly left (empty when the queue ran dry).
+type Summary struct {
+	Attempted, Ready, Unchanged, Missing, Failed, Measured, Remaining int
+	Stopped                                                           string
+}
+
+// Bounds limit one media step: Batch assets are claimed per queue read, at
+// most Files are attempted, and no new file starts after Budget.
+type Bounds struct {
+	Batch, Files int
+	Budget       time.Duration
+}
+
+// StepBounds drain a large backlog, such as a history window's images, over a
+// few runs while leaving the run time the later steps need.
+var StepBounds = Bounds{Batch: 20, Files: 500, Budget: 5 * time.Minute}
+
+// Stop reasons recorded in Summary.Stopped.
+const (
+	StoppedFileCap     = "media_file_cap"
+	StoppedTimeBudget  = "media_time_budget"
+	StoppedRateLimited = "media_rate_limited"
+	StoppedNoProgress  = "media_no_progress"
+)
 
 // measureBatch bounds how many older files one media step measures.
 const measureBatch = 50
 
-func (c *Client) DownloadPending(ctx context.Context, store *sqlite.Store, limit int) (Summary, error) {
+// DownloadPending reads the queue in batches until it is empty or a bound
+// stops it. Each asset is attempted at most once per call, so an asset that
+// stays queued (a failed write, a clock skew) cannot loop; a batch with
+// nothing new ends the call. A 429 ends it at once rather than spending the
+// rest of the batch against a rate limit.
+func (c *Client) DownloadPending(ctx context.Context, store *sqlite.Store, bounds Bounds) (Summary, error) {
 	out := Summary{}
-	assets, err := store.PendingMedia(ctx, limit)
-	if err != nil {
-		return out, err
+	if bounds.Batch < 1 || bounds.Files < 1 {
+		return out, errors.New("media_bounds_invalid")
 	}
-	for _, asset := range assets {
-		if ctx.Err() != nil {
-			return out, ctx.Err()
+	deadline := c.now().Add(bounds.Budget)
+	tried := map[string]bool{}
+drain:
+	for {
+		if out.Attempted >= bounds.Files {
+			out.Stopped = StoppedFileCap
+			break
 		}
-		d, err := c.fetchAsset(ctx, asset)
-		if err == nil && d.NotModified {
-			if err = store.MarkMediaUnchanged(ctx, asset); err != nil {
-				return out, err
-			}
-			out.Attempted++
-			out.Unchanged++
-			continue
-		}
-		status, code := "ready", ""
+		assets, err := store.PendingMedia(ctx, min(bounds.Batch, bounds.Files-out.Attempted))
 		if err != nil {
-			status = "failed"
-			code = "media_unavailable"
-			var e *Error
-			if errors.As(err, &e) {
-				code = e.Code
-			}
-			if code == "media_missing" {
-				status = "missing"
-			}
-		}
-		if err = store.SaveMediaDownload(ctx, asset, d.Content, d.MIME, d.ETag, d.LastModified, status, code); err != nil {
 			return out, err
 		}
-		out.Attempted++
-		switch status {
-		case "ready":
-			out.Ready++
-		case "missing":
-			out.Missing++
-		default:
-			out.Failed++
+		if len(assets) == 0 {
+			break
+		}
+		progressed := false
+		for _, asset := range assets {
+			if tried[asset.ID] {
+				continue
+			}
+			if ctx.Err() != nil {
+				return out, ctx.Err()
+			}
+			if !c.now().Before(deadline) {
+				out.Stopped = StoppedTimeBudget
+				break drain
+			}
+			tried[asset.ID], progressed = true, true
+			code, err := c.downloadAsset(ctx, store, asset, &out)
+			if err != nil {
+				return out, err
+			}
+			if code == "media_rate_limited" {
+				out.Stopped = StoppedRateLimited
+				break drain
+			}
+		}
+		if !progressed {
+			out.Stopped = StoppedNoProgress
+			break
 		}
 	}
 	measured, err := store.MeasureMediaDimensions(ctx, measureBatch)
@@ -244,5 +280,47 @@ func (c *Client) DownloadPending(ctx context.Context, store *sqlite.Store, limit
 		return out, err
 	}
 	out.Measured = measured
+	if out.Remaining, err = store.RemainingMedia(ctx); err != nil {
+		return out, err
+	}
 	return out, nil
+}
+
+// downloadAsset fetches and records one asset, counting it in out, and
+// returns the failure code ("" when it is ready or unchanged).
+func (c *Client) downloadAsset(ctx context.Context, store *sqlite.Store, asset sqlite.PendingMedia, out *Summary) (string, error) {
+	d, err := c.fetchAsset(ctx, asset)
+	if err == nil && d.NotModified {
+		if err = store.MarkMediaUnchanged(ctx, asset); err != nil {
+			return "", err
+		}
+		out.Attempted++
+		out.Unchanged++
+		return "", nil
+	}
+	status, code := "ready", ""
+	if err != nil {
+		status = "failed"
+		code = "media_unavailable"
+		var e *Error
+		if errors.As(err, &e) {
+			code = e.Code
+		}
+		if code == "media_missing" {
+			status = "missing"
+		}
+	}
+	if err = store.SaveMediaDownload(ctx, asset, d.Content, d.MIME, d.ETag, d.LastModified, status, code); err != nil {
+		return "", err
+	}
+	out.Attempted++
+	switch status {
+	case "ready":
+		out.Ready++
+	case "missing":
+		out.Missing++
+	default:
+		out.Failed++
+	}
+	return code, nil
 }

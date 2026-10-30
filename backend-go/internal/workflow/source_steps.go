@@ -26,12 +26,14 @@ type TranslateRunner interface {
 }
 
 type SourceSteps struct {
-	X         *XRecentExecutor
-	Youtube   *ytsource.Adapter
-	Bilibili  *bilisource.Adapter
-	Media     *mediadownload.Client
-	Schedule  ScheduleRunner
-	Translate TranslateRunner
+	X        *XRecentExecutor
+	Youtube  *ytsource.Adapter
+	Bilibili *bilisource.Adapter
+	Media    *mediadownload.Client
+	// MediaBounds overrides mediadownload.StepBounds when set.
+	MediaBounds *mediadownload.Bounds
+	Schedule    ScheduleRunner
+	Translate   TranslateRunner
 	// History serves operator-selected windows through the source APIs.
 	History *HistorySource
 	Store   *sqlite.Store
@@ -117,18 +119,24 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 		if s.Media == nil {
 			break
 		}
-		result, err := s.Media.DownloadPending(ctx, s.Store, 20)
+		result, err := s.Media.DownloadPending(ctx, s.Store, s.mediaBounds())
 		if err != nil {
 			if ctx.Err() != nil {
 				return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
 			}
 			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 		}
+		// Images a bound left queued make the step partial; the next run
+		// continues with them.
 		status := "succeeded"
-		if result.Failed > 0 || result.Missing > 0 {
+		if result.Failed > 0 || result.Missing > 0 || result.Remaining > 0 {
 			status = "partial"
 		}
-		return AttemptResult{Status: status, Result: map[string]any{"attempted": result.Attempted, "ready": result.Ready, "unchanged": result.Unchanged, "failed": result.Failed, "measured": result.Measured}}, nil
+		counts := map[string]any{"attempted": result.Attempted, "ready": result.Ready, "unchanged": result.Unchanged, "failed": result.Failed, "measured": result.Measured, "remaining": result.Remaining}
+		if result.Stopped != "" {
+			counts["stopped"] = result.Stopped
+		}
+		return AttemptResult{Status: status, Result: counts}, nil
 	case "schedule", "translate":
 		var status string
 		var counts map[string]any
@@ -182,6 +190,13 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 		}}, nil
 	}
 	return AttemptResult{}, NewStepError("capability_not_migrated", ErrBlocked)
+}
+
+func (s *SourceSteps) mediaBounds() mediadownload.Bounds {
+	if s.MediaBounds != nil {
+		return *s.MediaBounds
+	}
+	return mediadownload.StepBounds
 }
 
 // youtubeList selects the uploads a recent run considers: an operator window's

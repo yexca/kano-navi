@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 	"github.com/yexca/kano-navi/backend-go/internal/testutil"
@@ -71,7 +72,7 @@ func TestDownloadPublishesReadableVersionAndFailureRetainsReadyFile(t *testing.T
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"image/png"}}, Body: io.NopCloser(strings.NewReader("\x89PNG\r\n\x1a\nsynthetic"))}, nil
 	})})
 	ctx := context.Background()
-	summary, err := client.DownloadPending(ctx, store, 1)
+	summary, err := client.DownloadPending(ctx, store, Bounds{Batch: 1, Files: 1, Budget: time.Minute})
 	if err != nil || summary.Ready != 1 {
 		t.Fatalf("summary=%#v err=%v", summary, err)
 	}
