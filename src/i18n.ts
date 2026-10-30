@@ -17,7 +17,7 @@ const messages = {
   "zh-CN": {
     "site.name": "鹿乃在做什么",
     "header.backToTop": "回到顶部",
-    "header.unofficial": "非官方整理",
+    "header.unofficial": "非官方",
     "header.language": "切换语言",
     "header.switchToDark": "切换深色模式",
     "header.switchToLight": "切换浅色模式",
@@ -98,7 +98,7 @@ const messages = {
   ja: {
     "site.name": "鹿乃ちゃん何してるか",
     "header.backToTop": "ページ上部へ",
-    "header.unofficial": "非公式まとめ",
+    "header.unofficial": "非公式",
     "header.language": "言語を切り替える",
     "header.switchToDark": "ダークモードに切り替える",
     "header.switchToLight": "ライトモードに切り替える",
@@ -180,7 +180,7 @@ const messages = {
   en: {
     "site.name": "What’s Kano Up To?",
     "header.backToTop": "Back to top",
-    "header.unofficial": "Unofficial board",
+    "header.unofficial": "Unofficial",
     "header.language": "Change language",
     "header.switchToDark": "Switch to dark mode",
     "header.switchToLight": "Switch to light mode",

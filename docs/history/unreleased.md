@@ -15,6 +15,8 @@
   a berry disc with a "Today" label and an accent rule, matching the month
   view, and keeps its full date when nothing is scheduled. On a wide screen,
   a weekend today's date stays readable on the filled header.
+- On a wide screen, the header shows just the site name, a size larger, with
+  a small "Unofficial" mark beside it.
 
 </details>
 

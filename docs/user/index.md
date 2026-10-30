@@ -18,8 +18,9 @@ These pages describe what you can see and do on the site.
 
 ## Pages and Settings
 
-Every page shares one header with the site name, the page links (Now,
-Journey, Line Blog, About), a live Japan-time clock, and language and theme controls.
+Every page shares one header with the site name (with an "Unofficial" mark on
+wide screens), the page links (Now, Journey, Line Blog, About), a live
+Japan-time clock, and language and theme controls.
 
 - **Languages:** English, Japanese, and Simplified Chinese. Your choice is
   remembered on this device.
