@@ -34,5 +34,10 @@
 - The build writes Brotli and gzip copies of its HTML, JavaScript, CSS, JSON
   and SVG files, and the server sends the best one a browser accepts instead
   of compressing those files on the fly.
+- The board loads as its own chunk like the other pages, with its copy in
+  `src/dashboard/dashboard-i18n.ts`, so a direct visit to `/history`,
+  `/lineblog` or `/about` no longer downloads its code (about 38 kB less
+  gzip). On `/`, a script the build writes into `index.html` preloads the
+  board's chunks alongside the entry.
 
 </details>

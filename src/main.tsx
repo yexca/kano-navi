@@ -14,7 +14,6 @@ import {
   useAppSettings,
 } from "@/app-settings"
 import type { PageMessages } from "@/i18n"
-import { DashboardApp } from "@/dashboard/dashboard-app"
 import { historyMove, inPlaceUrl, pagePath } from "@/lib/page-path"
 import "./index.css"
 
@@ -35,7 +34,14 @@ function withMessages(Page: ComponentType, messages: PageMessages) {
 
 // Keep in step with spaPages in backend-go/internal/httpapi/static.go.
 const routes: Record<string, () => Promise<ComponentType>> = {
-  "/": async () => DashboardApp,
+  // Keep in step with the board's preload in vite.config.ts.
+  "/": async () => {
+    const [page, copy] = await Promise.all([
+      import("@/dashboard/dashboard-app"),
+      import("@/dashboard/dashboard-i18n"),
+    ])
+    return withMessages(page.DashboardApp, copy.dashboardMessages)
+  },
   "/about": async () => {
     const [page, copy] = await Promise.all([
       import("@/about/about-app"),
@@ -69,7 +75,7 @@ const routes: Record<string, () => Promise<ComponentType>> = {
 /** Public pages open each other in place; /admin always loads on its own. */
 const publicPages = ["/", "/history", "/lineblog", "/about"]
 
-const loadedPages = new Map<string, ComponentType>([["/", DashboardApp]])
+const loadedPages = new Map<string, ComponentType>()
 const pendingPages = new Map<string, Promise<ComponentType>>()
 
 /** Each page's code loads once; a failed load may be tried again. */
@@ -90,6 +96,12 @@ function loadPage(path: string) {
   }
   return pending
 }
+
+// The first page's code starts loading with this module instead of after the
+// first render; for the board, index.html has already asked for it
+// (scripts/vite-page-preload.ts).
+const firstPath = pagePath(window.location.pathname)
+if (Object.hasOwn(routes, firstPath)) loadPage(firstPath).catch(() => undefined)
 
 function PageStatus({ failed = false }: { failed?: boolean }) {
   const { t } = useAppSettings()

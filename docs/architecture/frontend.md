@@ -93,11 +93,22 @@ Shared primitives must remain independent of dashboard, history, and admin
 features. Extract cohesive helpers when needed; avoid a repository-wide move
 for a small change.
 
-`/admin`, `/history`, `/lineblog`, and `/about` use React lazy imports with independent page
-CSS and translation chunks. The shared settings provider owns persistent theme
-and language; page message providers extend its translator without duplicating
-preferences. Shared navigation labels remain in the base dictionary. Suspense
-shows a localized loading status, and a page error boundary offers a full-page
+Every page, the board included, loads through a dynamic import with its own
+CSS and translation chunks, so a direct visit downloads the shared runtime
+(React, the settings provider and the base dictionary) and that page's code
+only. The first page's import starts as soon as `src/main.tsx` runs. Because
+the server answers every page with the same `index.html`, the board's chunks
+cannot be listed there statically: the build
+(`scripts/vite-page-preload.ts`) writes a small script ahead of the entry
+that adds `modulepreload` and style `preload` links for them only when the
+address is the board, so they download alongside the entry. The shared
+settings provider owns persistent theme and language; page message providers
+extend its translator without duplicating preferences. The base dictionary
+holds the copy shared by pages (header, footer, navigation, page status and
+the translation toggle); the board's own copy is in
+`src/dashboard/dashboard-i18n.ts`. While a page's code loads, the current
+page stays on screen, or on a direct visit a localized loading status
+appears after a short delay; a page error boundary offers a full-page
 reload when a chunk fails (including after a deployment). Direct visits and
 trailing-slash routes work through the existing SPA fallback, and
 `/index.html`, which the server answers as a file, is the board

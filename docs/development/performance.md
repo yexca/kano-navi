@@ -41,17 +41,19 @@ nothing into the repository.
   tests cover encoding negotiation, validators, 304, HEAD and ranges. The
   rules are in the
   [backend transfer contract](../architecture/backend.md#text-transfer-and-static-caching).
-- The homepage loads only its entry chunk and stylesheet, the local avatar
-  and banner, and its local dashboard and revision reads. `/admin`,
-  `/history`, `/lineblog` and `/about` and their translations are lazy chunks
-  requested only by their own pages (`src/main.tsx`).
+- Every page, the homepage included, is a lazy chunk with its translations,
+  requested only by its own page (`src/main.tsx`). The homepage loads the
+  entry, its own chunks (preloaded from `index.html`), the local avatar and
+  banner, and its local dashboard and revision reads.
 
 ## Measuring a Change
 
 Run the benchmark on the base and the changed revision on the same machine,
 with no build running concurrently, and compare matched results. For page
 weight, run `make ci-frontend` and compare the chunk sizes Vite reports for
-the homepage entry and each lazy page. For request behavior, serve the
+the entry, the shared chunks and each lazy page; the build manifest
+(`dist/.vite/manifest.json`) lists which chunks a page imports. For request
+behavior, serve the
 production build against a disposable development backend (see
 [Testing](testing.md#test-scope)) and review all five pages at desktop and
 mobile widths, including direct visits, refresh, a failed snapshot read with

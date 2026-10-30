@@ -11,7 +11,8 @@ sources. See [Backend](../architecture/backend.md).
 
 `make test-frontend` runs the frontend tests in `tests/`: the dashboard and
 admin request hooks, the month archive reads, polling, the pure view and
-filter helpers, `robots.txt`, and the history catalog and packaging.
+filter helpers, `robots.txt`, the board's preload in `index.html` and its
+own copy, and the history catalog and packaging.
 
 The Makefile is the canonical validation entry point. GitHub Actions invokes
 its targets so local and hosted checks protect the same contracts. Use the
