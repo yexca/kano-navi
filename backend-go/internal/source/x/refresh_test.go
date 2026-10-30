@@ -28,8 +28,8 @@ func TestRefreshForcesOneDetailRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(s.details, ",") != listed.id || got.Held != 0 || strings.Join(got.Refreshed, ",") != listed.id || got.FromTimeline[listed.id] {
-		t.Fatalf("details=%v held=%d refreshed=%v fromTimeline=%v", s.details, got.Held, got.Refreshed, got.FromTimeline)
+	if strings.Join(s.details, ",") != listed.id || got.Held != 0 || strings.Join(got.Refreshed, ",") != listed.id || got.FromListing[listed.id] {
+		t.Fatalf("details=%v held=%d refreshed=%v fromTimeline=%v", s.details, got.Held, got.Refreshed, got.FromListing)
 	}
 	var refreshed *Post
 	for i := range got.Posts {

@@ -125,6 +125,23 @@ type without saving an end, so the board keeps treating a stream as
 open-ended, while presets and a custom end save `endsAt`. A preview line
 renders the entry as calendar subscribers will see it.
 
+The console's Sources page (`src/admin/views/sources.tsx`) has three
+parts. A rail lists X, YouTube and Bilibili, each with its timer switch and
+its [method chain](workflows.md#method-chains): every method's switch and
+up/down moves, which save at once, a method the process cannot run greyed
+with the variable it needs, and Bilibili's one fixed method read-only. A
+source that `SKIP_*` turns off is locked. Selecting a source fills the
+settings beside the rail: the timer panel (next and last run, Run now, the
+interval and the sync setting), for X the X API panel (gate, daily cap,
+today's usage and each account's timeline failure streak), and for YouTube
+the progressive confirmation (push, the live-status probe and the read-only
+[follow-up checks](sources.md#follow-up-checks-and-refresh-requests)). The
+manual fetch sits below the settings: method, mode, count or dates, options,
+then the newest fetch's summary; Bilibili shows its single-video form
+there. On a narrower screen the rail moves above the settings with its sources side
+by side, and on a phone the sources stack and the unselected ones shrink to
+their heading.
+
 The console's post list (`src/admin/views/posts.tsx`) shows a post's quote
 read-only in its own cell under the wording, indented on the sunken surface
 so its thumbnails never read as the post's own images: author, time, the

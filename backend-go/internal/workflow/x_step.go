@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"time"
 
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
@@ -11,6 +12,8 @@ type XRecentExecutor struct {
 	Store   *sqlite.Store
 	Adapter *xsource.Adapter
 	Options xsource.Options
+	// Now dates the X API daily cap; nil is the clock.
+	Now func() time.Time
 }
 
 func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptResult, error) {
@@ -34,6 +37,30 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	if len(opts.Handles) == 0 {
 		return AttemptResult{}, NewStepError("x_no_accounts", ErrValidation)
 	}
+	// The run reads through its frozen chain, or the default one (ADR-0004).
+	chain := sqlite.DefaultSourceChain("x")
+	if in.Chain != nil {
+		chain = *in.Chain
+	}
+	opts.Chain = chain.Enabled()
+	// The gate counts timeline failures, so a chain without the timeline
+	// leaves the API open.
+	if chain.Uses(xsource.DiscoveryTimeline) {
+		opts.APIGate = chain.APIGate
+	}
+	now := time.Now()
+	if x.Now != nil {
+		now = x.Now()
+	}
+	day := sqlite.JapanDay(now)
+	budget := 0
+	if chain.Uses(xsource.DiscoveryAPI) {
+		usage, usageErr := x.Store.XAPIUsageOn(ctx, day)
+		if usageErr != nil {
+			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+		}
+		budget = max(chain.APIDailyCap-usage.Posts, 0)
+	}
 	start, startErr := x.Store.XAccountStart(ctx, opts.Handles)
 	if startErr != nil {
 		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
@@ -47,6 +74,10 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	discovered := 0
 	requested := 0
 	profileFallbacks := 0
+	// Where each account was served from, every chain method tried, and the
+	// posts API pages carried and the posts API answers returned.
+	discovery, tried := []string{}, []string{}
+	apiPosts, apiRead := 0, 0
 	// Posts read straight from timeline pages, pending IDs waiting for their
 	// backoff, and pending IDs the run stopped requesting.
 	fromTimeline, held := 0, 0
@@ -79,7 +110,35 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		accountOpts.CursorID = state.CursorID
 		accountOpts.Gap = state.Gap
 		accountOpts.RefreshIDs = state.RefreshIDs
+		accountOpts.GapCeilings = state.GapCeilings
+		failures, failuresErr := x.Store.XTimelineFailures(ctx, account)
+		if failuresErr != nil {
+			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+		}
+		accountOpts.TimelineFailures, accountOpts.APIBudget = failures, budget
 		result, err := x.Adapter.FetchRecent(ctx, account, accountOpts)
+		if writeErr := x.recordChain(ctx, account, day, failures, result); writeErr != nil {
+			return AttemptResult{}, NewStepError("x_source_write_failed", ErrSchema)
+		}
+		budget = max(budget-result.APIRead, 0)
+		apiRead += result.APIRead
+		served := result.Discovery
+		if served == "" {
+			served = "none"
+		}
+		discovery = append(discovery, account+": "+served)
+		for _, attempt := range result.Tried {
+			entry := account + ": " + attempt.Method
+			if attempt.Code != "" {
+				entry += ": " + attempt.Code
+			}
+			tried = append(tried, entry)
+			// The cap leaves the run partial; the gate and a missing
+			// credential are the chain working as set.
+			if attempt.Code == string(xsource.ErrAPIDailyCap) {
+				notes = append(notes, account+": "+attempt.Code)
+			}
+		}
 		for _, note := range result.Notes {
 			notes = append(notes, account+": "+note)
 		}
@@ -92,7 +151,11 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		discovered += result.DiscoveredCount
 		requested += result.RequestedCount
 		total += len(result.Posts)
-		fromTimeline += len(result.FromTimeline)
+		if result.Discovery == xsource.DiscoveryAPI {
+			apiPosts += len(result.FromListing)
+		} else {
+			fromTimeline += len(result.FromListing)
+		}
 		held += result.Held
 		refreshed += len(result.Refreshed)
 		for _, d := range result.Dropped {
@@ -133,7 +196,10 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 	if partial {
 		status = "partial"
 	}
-	out := map[string]any{"source": "x", "count": total, "posts": total, "discovered": discovered, "requested": requested, "timelinePosts": fromTimeline, "profileFallbacks": profileFallbacks, "timelineGaps": gaps, "errors": errorsOut}
+	out := map[string]any{"source": "x", "count": total, "posts": total, "discovered": discovered, "requested": requested, "timelinePosts": fromTimeline, "profileFallbacks": profileFallbacks, "timelineGaps": gaps, "errors": errorsOut, "discovery": discovery, "tried": tried}
+	if apiRead > 0 || apiPosts > 0 {
+		out["apiPosts"], out["apiRead"] = apiPosts, apiRead
+	}
 	// Like the extraction backoff keys, these appear only when used.
 	if held > 0 {
 		out["pendingHeld"] = held
@@ -145,6 +211,24 @@ func (x *XRecentExecutor) Execute(ctx context.Context, in StepInput) (AttemptRes
 		out["refreshed"] = refreshed
 	}
 	return AttemptResult{Status: status, Result: out}, nil
+}
+
+// recordChain keeps the X API state the chain reads: the posts API answers
+// returned count toward the Japan day's usage, and the account's timeline
+// failure streak grows when its timeline failed and starts over when the
+// timeline served. A cancelled run changes no streak.
+func (x *XRecentExecutor) recordChain(ctx context.Context, account, day string, failures int, result xsource.Result) error {
+	if err := x.Store.AddXAPIUsage(ctx, day, result.APIRead); err != nil {
+		return err
+	}
+	switch {
+	case ctx.Err() != nil:
+	case result.Discovery == xsource.DiscoveryTimeline && failures != 0:
+		return x.Store.SetXTimelineFailures(ctx, account, 0)
+	case result.TimelineFailed:
+		return x.Store.SetXTimelineFailures(ctx, account, failures+1)
+	}
+	return nil
 }
 
 // Refresh reads only the operator refreshes of every account, within the

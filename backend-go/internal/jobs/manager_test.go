@@ -145,14 +145,14 @@ func TestStartPresentsEachKindWithItsStepsAndLabel(t *testing.T) {
 func TestStartFreezesStepRunWindowsAndSync(t *testing.T) {
 	m, _, _ := newManager(t)
 	ctx := context.Background()
-	window := history.Window{Mode: history.ModeRecent, Days: 3}
+	window := history.Window{Method: history.MethodAPI, Mode: history.ModeAll}
 	sync := sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 5}
 	job := mustStart(t, m, KindWorkflow, "admin", Options{
 		Steps:        []string{"x", "youtube"},
 		FetchWindows: map[string]history.Window{"youtube": window},
 		SourceSync:   map[string]sqlite.SourceSync{"x": sync},
 	})
-	normalized, err := window.Normalize()
+	normalized, err := window.Normalize("youtube")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestListAndPageMatchEachJobDetail(t *testing.T) {
 	steps.set(nil, map[string]bool{"schedule": true})
 	start(KindScan, Options{})
 	steps.set(nil, nil)
-	start(KindWorkflow, Options{Steps: []string{"x", "youtube"}, FetchWindows: map[string]history.Window{"x": {Mode: history.ModeRecent, Days: 2}}})
+	start(KindWorkflow, Options{Steps: []string{"x", "youtube"}, FetchWindows: map[string]history.Window{"x": {Method: history.MethodTimeline, Mode: history.ModeCount, Count: 2}}})
 	start(KindWorkflow, Options{Source: "bilibili"})
 	start(KindLive, Options{})
 
@@ -258,6 +258,12 @@ func TestListAndPageMatchEachJobDetail(t *testing.T) {
 	testutil.Exec(t, path, `UPDATE workflow_runs SET status='failed',error_code='timeout' WHERE id=?`, legacy.ID)
 	testutil.Exec(t, path, `DELETE FROM sync_runs WHERE job_id=?`, ids[0])
 	ids = append(ids, legacy.ID)
+	// A fetch frozen with a selection no method serves any more still reads.
+	retired, err := m.Store.CreateWorkflowRun(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: []string{"youtube", "media"}, FetchWindows: map[string]history.Window{"youtube": {Mode: "recent", Days: 14}}}, "operator", "", map[string]bool{"youtube": true, "media": true}, time.Date(2026, 1, 3, 3, 4, 5, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids = append(ids, retired.ID)
 
 	want := map[string]Job{}
 	for _, id := range ids {
@@ -269,6 +275,9 @@ func TestListAndPageMatchEachJobDetail(t *testing.T) {
 	}
 	if legacy := want[legacy.ID]; legacy.WorkflowID == nil || legacy.FetchWindows["x"] == nil || legacy.TriggeredBy != "scheduler" {
 		t.Fatalf("legacy job=%+v", legacy)
+	}
+	if window, ok := want[retired.ID].FetchWindows["youtube"].(history.Window); !ok || window.Mode != "recent" || window.Days != 14 {
+		t.Fatalf("retired job=%+v", want[retired.ID])
 	}
 	if want[ids[0]].Run != nil {
 		t.Fatalf("job without history=%+v", want[ids[0]])
@@ -284,7 +293,7 @@ func TestListAndPageMatchEachJobDetail(t *testing.T) {
 		}
 	}
 	paged := []Job{}
-	for page := 1; page <= 3; page++ {
+	for page := 1; page <= (len(ids)+1)/2; page++ {
 		jobs, total, err := m.Page(ctx, page, 2)
 		if err != nil || total != len(ids) {
 			t.Fatalf("page %d total=%d err=%v", page, total, err)

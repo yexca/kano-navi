@@ -52,14 +52,10 @@ type Options struct {
 	// Bilibili reads single uploads for operators; nil disables the routes
 	// that need it.
 	Bilibili *bilisource.Adapter
-	// HistoryAvailable reports whether a source's official API can read past
-	// windows, which needs its credential.
-	HistoryAvailable func(source string) bool
-	// WindowAvailable reports whether a source can run a fetch window mode
-	// now, which X range and count windows can through the public timeline.
-	// When neither availability callback is configured, windows are disabled;
-	// this keeps a read-only sidecar from accepting work its queue cannot run.
-	WindowAvailable func(source, mode string) bool
+	// FetchMethods describes a source's manual fetch methods and which of
+	// them can run now. Without it no method can run, which keeps a read-only
+	// sidecar from accepting work its queue cannot run.
+	FetchMethods func(source string) []history.MethodStatus
 	// Now is the clock for Japan-date aggregates; nil uses time.Now.
 	Now func() time.Time
 }
@@ -167,29 +163,25 @@ func (a *api) needRuns(next http.HandlerFunc) http.HandlerFunc {
 
 func (a *api) skipped(step string) bool { return slices.Contains(a.SkippedSteps, step) }
 
-func (a *api) historyAvailable(source string) bool {
-	return a.HistoryAvailable != nil && a.HistoryAvailable(source)
-}
-
-func (a *api) windowAvailable(source, mode string) bool {
-	if a.WindowAvailable != nil {
-		return a.WindowAvailable(source, mode)
+// fetchMethods lists a source's manual fetch methods with their availability.
+func (a *api) fetchMethods(source string) []history.MethodStatus {
+	if a.FetchMethods != nil {
+		return a.FetchMethods(source)
 	}
-	if a.HistoryAvailable == nil {
-		return false
-	}
-	return mode == history.ModeRecent || (source == history.SourceYoutube && mode == history.ModeCount) || (mode != history.ModeCount && a.historyAvailable(source))
-}
-
-// windows lists the fetch window modes a source can run now.
-func (a *api) windows(source string) []string {
-	out := []string{}
-	for _, mode := range []string{history.ModeRecent, history.ModeBefore, history.ModeRange, history.ModeCount} {
-		if a.windowAvailable(source, mode) {
-			out = append(out, mode)
-		}
+	out := []history.MethodStatus{}
+	for _, method := range history.Methods(source) {
+		out = append(out, history.MethodStatus{Method: method})
 	}
 	return out
+}
+
+func (a *api) methodAvailable(source, id string) bool {
+	for _, method := range a.fetchMethods(source) {
+		if method.ID == id {
+			return method.Available
+		}
+	}
+	return false
 }
 
 // workflowError maps durable queue and definition failures to the wire codes.

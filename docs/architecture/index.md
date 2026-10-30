@@ -18,7 +18,7 @@ external sources.
 | [Frontend](frontend.md)               | Pages, request hooks, components, localization                     |
 | [Data model](data-model.md)           | Schema, seeds, event precedence, locks and tombstones              |
 | [Sources](sources.md)                 | X and YouTube adapters and schedule extraction                     |
-| [Workflows](workflows.md)             | Step catalog, single-flight queue, timers, fetch windows           |
+| [Workflows](workflows.md)             | Step catalog, single-flight queue, timers, manual fetches          |
 | [Media cache](media-cache.md)         | Media identity, downloader, layout, HTTP contract                  |
 
 ## When To Read What

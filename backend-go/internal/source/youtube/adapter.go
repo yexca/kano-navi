@@ -25,9 +25,12 @@ type Result struct {
 	NextCursor, NextCursorTime       string
 	Errors                           []string
 	Discovered, Requested, Inspected int
-	// Listing names where this run's uploads came from: ListingAPI,
-	// ListingFeed, ListingVideosPage, or "" when nothing answered.
+	// Listing names the chain method that served this run's uploads:
+	// ListingAPI, ListingFeed, ListingVideosPage, or "" when none did.
 	Listing string
+	// Tried lists the chain methods the run tried, in order, as "<method>"
+	// for the one that served and "<method>: <code>" for the others.
+	Tried []string
 	// APIRequests counts Data API calls, one quota unit each.
 	APIRequests int
 	// Shorts is the feed's format verdict (Video.Short) for every listed
@@ -41,7 +44,8 @@ type Result struct {
 	Localized map[string]map[string]string
 }
 
-// Upload listings, in the order the recent step tries them.
+// Upload listings, the YouTube chain's methods (ADR-0004), in the default
+// order the recent step tries them.
 const (
 	ListingAPI        = "api"
 	ListingFeed       = "rss"
@@ -97,9 +101,18 @@ type List struct {
 	// Count takes Limit uploads even past stored ones. Otherwise the uploads
 	// playlist is paged only until a page holds a stored video.
 	Count bool
-	// Since leaves out older entries, for an operator's recent window.
+	// Since leaves out entries published before it.
 	Since time.Time
+	// Listings are the chain's enabled methods in order; empty tries
+	// DefaultListings.
+	Listings []string
 }
+
+// DefaultListings is the chain's default order.
+var DefaultListings = []string{ListingAPI, ListingFeed, ListingVideosPage}
+
+// errEmptyListing is a listing that answered without any upload.
+const errEmptyListing = "youtube_listing_empty"
 
 // MaxListLimit bounds a list: four uploads-playlist pages of 50.
 const MaxListLimit = 200
@@ -127,7 +140,7 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 	}
 	now := a.Now()
 	listed := func(t time.Time) bool { return list.Since.IsZero() || !t.Before(list.Since) }
-	feed, held, listErr := a.listUploads(ctx, &result, state, list)
+	feed, pageIDs, held, listErr := a.listUploads(ctx, &result, state, list)
 	if ctx.Err() != nil {
 		return result, ctx.Err()
 	}
@@ -207,19 +220,6 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 	} else {
 		streamIDs = DiscoverIDs(body)
 	}
-	// Without a listing, the uploads tab still names the newest videos. It has
-	// no publication times, so its IDs are only detail candidates, like the
-	// streams page's, and the watch page supplies the time.
-	pageIDs := []string{}
-	if feed == nil {
-		body, err = a.Client.VideosPage(ctx, a.Options.ChannelID)
-		if err != nil {
-			result.Errors = append(result.Errors, safeError(err))
-		} else if pageIDs = DiscoverIDs(body); len(pageIDs) > 0 {
-			pageIDs = pageIDs[:min(len(pageIDs), videosPageLimit)]
-			result.Listing = ListingVideosPage
-		}
-	}
 	checked := map[string]bool{}
 	for _, id := range state.CheckedIDs {
 		checked[id] = true
@@ -245,7 +245,7 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 	// left in that batch goes to the newest listed uploads, whose answers
 	// only refresh their localized titles, which creators often add later.
 	batch := uniqueIDs(append(append([]string{}, result.Queue...), feedIDs...), MaxAPIVideos)
-	fromAPI, unclassified := a.apiDetails(ctx, batch, len(result.Queue), state.Videos, result.Localized, &result.APIRequests, &result.Errors)
+	fromAPI, unclassified := a.apiDetails(ctx, batch, len(result.Queue), state.Videos, result.Localized, &result.APIRequests, &result.Errors, nil)
 	budget := a.Options.MaxDetailRequests
 	for _, id := range append([]string{}, result.Queue...) {
 		if err = ctx.Err(); err != nil {
@@ -304,37 +304,180 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 	return result, nil
 }
 
-// listUploads reads the channel's newest uploads: the Data API's uploads
-// playlist when a key is set, then the RSS feed. Each failure is recorded in
-// the result; when neither answers it returns nil and the feed's error, so a
-// public outage keeps its retryable category. held reports an incremental
-// playlist read that stopped at its cap above the cursor.
-func (a *Adapter) listUploads(ctx context.Context, result *Result, state State, list List) (feed []Video, held bool, err error) {
-	if a.Options.APIKey != "" {
-		var uploads []Video
-		uploads, held, err = a.apiUploads(ctx, result, state, list)
-		if err == nil {
+// listUploads tries the chain's listings in order until one names uploads
+// (ADR-0004): the Data API's uploads playlist when a key is set, the RSS
+// feed, then the uploads tab. A listing falls through when its first page
+// fails, when it names no upload, or, for the API, without a key; each
+// failure is recorded in the result. The uploads tab has no publication
+// times, so its newest IDs come back as pageIDs, detail candidates like the
+// streams page's, and the watch page supplies the time. When nothing
+// answers it returns the feed's error if the feed was tried, so a public
+// outage keeps its retryable category. held reports an incremental playlist
+// read that stopped at its cap above the cursor.
+func (a *Adapter) listUploads(ctx context.Context, result *Result, state State, list List) (feed []Video, pageIDs []string, held bool, err error) {
+	listings := list.Listings
+	if len(listings) == 0 {
+		listings = DefaultListings
+	}
+	var feedErr error
+	fail := func(listing string, e error, record bool) {
+		code := safeError(e)
+		if e == nil {
+			code = errEmptyListing
+		}
+		result.Tried = append(result.Tried, listing+": "+code)
+		if record && e != nil {
+			result.Errors = append(result.Errors, code)
+		}
+	}
+	for _, listing := range listings {
+		if ctx.Err() != nil {
+			return nil, nil, false, ctx.Err()
+		}
+		switch listing {
+		case ListingAPI:
+			if a.Options.APIKey == "" {
+				fail(listing, &Error{"youtube_api_key_missing"}, false)
+				continue
+			}
+			uploads, capped, apiErr := a.apiUploads(ctx, result, state, list)
+			if apiErr != nil || len(uploads) == 0 {
+				if ctx.Err() != nil {
+					return nil, nil, false, ctx.Err()
+				}
+				fail(listing, apiErr, true)
+				err = apiErr
+				continue
+			}
 			result.Listing = ListingAPI
 			a.feedShorts(ctx, result, uploads, state.Videos)
-			return uploads, held, nil
+			result.Tried = append(result.Tried, listing)
+			return uploads, nil, capped, nil
+		case ListingFeed:
+			body, readErr := a.Client.Feed(ctx, a.Options.ChannelID)
+			var entries []Video
+			if readErr == nil {
+				entries, readErr = ParseFeed(body)
+			}
+			if readErr != nil || len(entries) == 0 {
+				if ctx.Err() != nil {
+					return nil, nil, false, ctx.Err()
+				}
+				fail(listing, readErr, true)
+				if readErr != nil {
+					err, feedErr = readErr, readErr
+				}
+				continue
+			}
+			result.Listing = ListingFeed
+			result.Tried = append(result.Tried, listing)
+			return entries, nil, false, nil
+		case ListingVideosPage:
+			body, readErr := a.Client.VideosPage(ctx, a.Options.ChannelID)
+			ids := []string{}
+			if readErr == nil {
+				ids = DiscoverIDs(body)
+			}
+			if readErr != nil || len(ids) == 0 {
+				if ctx.Err() != nil {
+					return nil, nil, false, ctx.Err()
+				}
+				fail(listing, readErr, true)
+				if readErr != nil {
+					err = readErr
+				}
+				continue
+			}
+			result.Listing = ListingVideosPage
+			result.Tried = append(result.Tried, listing)
+			return nil, ids[:min(len(ids), videosPageLimit)], false, nil
 		}
+	}
+	if feedErr != nil {
+		err = feedErr
+	}
+	return nil, nil, false, err
+}
+
+// UploadsPage reads one page of the uploads playlist through the Data API,
+// newest first, with the token of the next, older page (empty on the last).
+// It is the operator's API fetch; the recent step pages through apiUploads.
+func (a *Adapter) UploadsPage(ctx context.Context, token string) ([]Video, string, error) {
+	if a.Options.APIKey == "" {
+		return nil, "", &Error{"youtube_api_key_missing"}
+	}
+	body, err := a.Client.PlaylistPage(ctx, a.Options.APIKey, a.Options.ChannelID, token)
+	if err != nil {
+		return nil, "", err
+	}
+	return ParseUploadsPage(body)
+}
+
+// Described is what the Data API said about videos an operator's fetch
+// listed.
+type Described struct {
+	// Videos are the answers that passed the recent step's rules, completed
+	// from the stored or listed video.
+	Videos []Video
+	// Localized holds the localized titles of every answered video, as in
+	// Result.
+	Localized map[string]map[string]string
+	Errors    []string
+	// APIRequests counts Data API calls, one quota unit each.
+	APIRequests int
+}
+
+// DescribeVideos asks the Data API about listed videos, 50 to a videos.list
+// call, under the recent step's rules: the classification, the per-format
+// playlists for ended broadcasts without a stored premiere verdict, and
+// localized titles. It reads no watch page, so an unclassified answer for an
+// ended broadcast stands in for one, and a video the API leaves undecided is
+// left to the recent step. stored holds the stored rows of the listed videos;
+// a video without one is completed from its listing. formats, when given,
+// holds the whole format playlists for the run; without it the newest page of
+// each is read, as in the recent step. A failed call records its code and
+// describes none of its videos.
+func (a *Adapter) DescribeVideos(ctx context.Context, listed []Video, stored map[string]Video, formats *FormatSets) Described {
+	out := Described{Videos: []Video{}, Localized: map[string]map[string]string{}, Errors: []string{}}
+	known := map[string]Video{}
+	ids := []string{}
+	for _, v := range listed {
+		old, found := stored[v.ID]
+		if !found {
+			old = v
+		}
+		known[v.ID] = old
+		ids = append(ids, v.ID)
+	}
+	ids = uniqueIDs(ids, len(ids))
+	now := a.Now()
+	for start := 0; start < len(ids); start += MaxAPIVideos {
 		if ctx.Err() != nil {
-			return nil, false, ctx.Err()
+			return out
 		}
-		result.Errors = append(result.Errors, safeError(err))
+		batch := ids[start:min(len(ids), start+MaxAPIVideos)]
+		answered, unclassified := a.apiDetails(ctx, batch, len(batch), known, out.Localized, &out.APIRequests, &out.Errors, formats)
+		for _, id := range batch {
+			v, ok := answered[id]
+			if !ok {
+				if v, ok = unclassified[id]; !ok {
+					continue
+				}
+			}
+			out.Videos = append(out.Videos, completeDetails(v, known[id], now))
+		}
 	}
+	return out
+}
+
+// FeedUploads reads the channel's public feed, which lists the newest 15
+// uploads. It is the operator's RSS fetch.
+func (a *Adapter) FeedUploads(ctx context.Context) ([]Video, error) {
 	body, err := a.Client.Feed(ctx, a.Options.ChannelID)
-	if err == nil {
-		feed, err = ParseFeed(body)
+	if err != nil {
+		return nil, err
 	}
-	if err == nil {
-		result.Listing = ListingFeed
-		return feed, false, nil
-	}
-	if ctx.Err() == nil {
-		result.Errors = append(result.Errors, safeError(err))
-	}
-	return nil, false, err
+	return ParseFeed(body)
 }
 
 // cursorFloor is the publication time of the stored cursor, the newest upload
@@ -472,10 +615,10 @@ func (a *Adapter) playlistShorts(ctx context.Context, result *Result, uploads []
 // answered, classified or not, has its localized titles put in localized.
 // The first checks IDs are detail checks: when one of them is an ended
 // broadcast the answer cannot settle, the per-format playlists are read too
-// (formatLists). Calls are counted in requests; a failed videos.list call is
+// (formatLists, or the whole lists formats holds). Calls are counted in requests; a failed videos.list call is
 // recorded in errs and answers none. The recent step and the live-status
 // probe share it.
-func (a *Adapter) apiDetails(ctx context.Context, queue []string, checks int, stored map[string]Video, localized map[string]map[string]string, requests *int, errs *[]string) (out, unclassified map[string]Video) {
+func (a *Adapter) apiDetails(ctx context.Context, queue []string, checks int, stored map[string]Video, localized map[string]map[string]string, requests *int, errs *[]string, formats *FormatSets) (out, unclassified map[string]Video) {
 	out, unclassified = map[string]Video{}, map[string]Video{}
 	if a.Options.APIKey == "" || len(queue) == 0 {
 		return out, unclassified
@@ -496,7 +639,11 @@ func (a *Adapter) apiDetails(ctx context.Context, queue []string, checks int, st
 	listed := map[string]formatList{}
 	for _, id := range ids[:min(checks, len(ids))] {
 		if item, found := items[id]; found && needsListing(item, stored[id]) {
-			listed = a.formatLists(ctx, requests, errs)
+			if formats != nil {
+				listed = formats.listed(ctx, a, requests, errs)
+			} else {
+				listed = a.formatLists(ctx, requests, errs)
+			}
 			break
 		}
 	}
@@ -630,7 +777,7 @@ func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, e
 		ids = append(ids, v.ID)
 		stored[v.ID] = v
 	}
-	fromAPI, unclassified := a.apiDetails(ctx, ids, len(ids), stored, result.Localized, &result.APIRequests, &result.Errors)
+	fromAPI, unclassified := a.apiDetails(ctx, ids, len(ids), stored, result.Localized, &result.APIRequests, &result.Errors, nil)
 	for _, old := range videos {
 		if err := ctx.Err(); err != nil {
 			return result, err

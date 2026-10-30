@@ -103,18 +103,17 @@ func runStandalone(cfg config.Config) int {
 	}
 	handler := httpapi.NewStandaloneHandler(store, nil, httpapi.Standalone{
 		Admin: adminapi.New(adminapi.Options{
-			Store:            store,
-			Auth:             auth,
-			Runs:             manager,
-			Modules:          append(modules, pushAdmin),
-			Scheduler:        scheduler.Status,
-			YoutubePush:      pushAdmin.Status,
-			LiveProbe:        probe.Status,
-			SkippedSteps:     run.skipped,
-			XHandles:         run.xOptions.Handles,
-			Bilibili:         run.steps.Bilibili,
-			HistoryAvailable: run.steps.History.Available,
-			WindowAvailable:  run.steps.History.WindowAvailable,
+			Store:        store,
+			Auth:         auth,
+			Runs:         manager,
+			Modules:      append(modules, pushAdmin),
+			Scheduler:    scheduler.Status,
+			YoutubePush:  pushAdmin.Status,
+			LiveProbe:    probe.Status,
+			SkippedSteps: run.skipped,
+			XHandles:     run.xOptions.Handles,
+			Bilibili:     run.steps.Bilibili,
+			FetchMethods: run.steps.History.Methods,
 		}),
 		Static:       httpapi.NewStaticSite(cfg.StaticDirectory, cfg.PublicOrigin),
 		MCP:          standaloneMCP(store, manager),
@@ -208,14 +207,22 @@ func newPipeline(store *sqlite.Store, key string) pipeline {
 	xOptions := xsource.OptionsFromEnv()
 	youtubeOptions := ytsource.OptionsFromEnv()
 	xAdapter := xsource.NewAdapter(xsource.NewClient(&http.Client{Timeout: 10 * time.Second}), xOptions)
-	// X windows page the same public timeline when X_API_BEARER_TOKEN is absent.
+	youtubeAdapter := ytsource.NewAdapter(nil, youtubeOptions)
+	// Manual fetches list through the source adapters' clients, apart from
+	// X full-archive search.
 	fetcher := history.NewFetcher(store, history.OptionsFromEnv(os.Getenv), nil)
-	fetcher.Timeline = xAdapter
+	fetcher.Timeline, fetcher.Uploads = xAdapter, youtubeAdapter
+	// The timed X chain's API method reads through the same client as the
+	// manual one; without the credential the chain skips it.
+	xToken := strings.TrimSpace(os.Getenv("X_API_BEARER_TOKEN"))
+	if xToken != "" {
+		xAdapter.API = &history.XAPI{Fetcher: fetcher, Credential: xToken}
+	}
 	steps := &workflow.SourceSteps{
 		Store:     store,
 		Skip:      skip,
 		X:         &workflow.XRecentExecutor{Store: store, Adapter: xAdapter, Options: xOptions},
-		Youtube:   ytsource.NewAdapter(nil, youtubeOptions),
+		Youtube:   youtubeAdapter,
 		Bilibili:  bilisource.NewAdapter(nil, bilisource.OptionsFromEnv()),
 		Media:     mediadownload.NewClient(nil),
 		Schedule:  scheduleStep{schedule.New(store, schedule.Options{SecretsKey: key})},
@@ -223,7 +230,7 @@ func newPipeline(store *sqlite.Store, key string) pipeline {
 		History: &workflow.HistorySource{
 			Fetcher:      fetcher,
 			Store:        store,
-			XToken:       strings.TrimSpace(os.Getenv("X_API_BEARER_TOKEN")),
+			XToken:       xToken,
 			YoutubeKey:   strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY")),
 			Handles:      xOptions.Handles,
 			ChannelID:    youtubeOptions.ChannelID,

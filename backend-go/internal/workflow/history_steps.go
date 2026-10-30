@@ -4,19 +4,22 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
-// HistorySource runs operator-selected windows through the official source
-// APIs, or X windows through the public FxTwitter timeline when the API
-// credential is absent. Credentials come from the environment and never enter
-// a result.
+// HistorySource runs the operator's manual fetches, each through the one
+// listing method it names. A method that fails fails the step; a manual fetch
+// never falls back to another method. Credentials come from the environment
+// and never enter a result.
 type HistorySource struct {
-	Fetcher            *history.Fetcher
-	Store              *sqlite.Store
+	Fetcher *history.Fetcher
+	Store   *sqlite.Store
+	// XToken is the X API credential. YoutubeKey only reports whether the
+	// YouTube API method can run; the uploads adapter holds its own copy.
 	XToken, YoutubeKey string
 	Handles            []string
 	ChannelID          string
@@ -24,41 +27,32 @@ type HistorySource struct {
 	RequestLimit int
 }
 
-// Available reports whether a source's official API can search past windows.
-// Operator recent windows search dates only then.
-func (h *HistorySource) Available(source string) bool {
+// MethodAvailable reports whether a source's method can run now: the API
+// methods need their credential, and every method its adapter.
+func (h *HistorySource) MethodAvailable(source, method string) bool {
 	if h == nil || h.Fetcher == nil || h.Store == nil {
 		return false
 	}
-	if source == history.SourceX {
-		return strings.TrimSpace(h.XToken) != ""
-	}
-	return source == history.SourceYoutube && strings.TrimSpace(h.YoutubeKey) != ""
-}
-
-// timeline reports whether an X window pages the public timeline: a count
-// window always does, recent and range windows without the API credential.
-// Backfills have no timeline fallback.
-func (h *HistorySource) timeline(mode string) bool {
-	if h == nil || h.Fetcher == nil || h.Fetcher.Timeline == nil || h.Store == nil {
-		return false
-	}
-	return mode == history.ModeCount || (mode != history.ModeBefore && !h.Available(history.SourceX))
-}
-
-// WindowAvailable reports whether a step can serve a window mode now. A recent
-// window always can: without a credential or timeline it stays incremental.
-// A YouTube count window always can as well: it reads the uploads listing.
-func (h *HistorySource) WindowAvailable(source, mode string) bool {
 	switch {
-	case mode == history.ModeRecent:
-		return source == history.SourceX || source == history.SourceYoutube
-	case source == history.SourceYoutube && mode == history.ModeCount:
-		return true
-	case source == history.SourceX:
-		return h.timeline(mode) || (mode != history.ModeCount && h.Available(source))
+	case source == history.SourceX && method == history.MethodTimeline:
+		return h.Fetcher.Timeline != nil
+	case source == history.SourceX && method == history.MethodAPI:
+		return strings.TrimSpace(h.XToken) != ""
+	case source == history.SourceYoutube && method == history.MethodAPI:
+		return h.Fetcher.Uploads != nil && strings.TrimSpace(h.YoutubeKey) != ""
+	case source == history.SourceYoutube && method == history.MethodRSS:
+		return h.Fetcher.Uploads != nil
 	}
-	return source == history.SourceYoutube && mode != history.ModeCount && h.Available(source)
+	return false
+}
+
+// Methods describes a source's listing methods and which can run now.
+func (h *HistorySource) Methods(source string) []history.MethodStatus {
+	out := []history.MethodStatus{}
+	for _, method := range history.Methods(source) {
+		out = append(out, history.MethodStatus{Method: method, Available: h.MethodAvailable(source, method.ID)})
+	}
+	return out
 }
 
 // historyMessage keeps controlled codes and operator-facing validation text;
@@ -85,20 +79,40 @@ func stepStatus(messages []string) string {
 	return "succeeded"
 }
 
-// FetchX searches every configured account, through the API or the public
-// timeline. One account's failure keeps the others; the rotation spreads a
-// short request budget across runs.
+// selection validates a window frozen on a run. A selection no method serves,
+// such as one frozen before fetches named their method, fails cleanly.
+func (h *HistorySource) selection(source string, window history.Window) (history.Window, string) {
+	normalized, err := window.Normalize(source)
+	if err != nil {
+		return history.Window{}, historyMessage(err)
+	}
+	if !h.MethodAvailable(source, normalized.Method) {
+		return history.Window{}, history.UnavailableMessage(source, normalized.Method)
+	}
+	return normalized, ""
+}
+
+// counts is the console's summary of a fetch: what the selection listed,
+// split into new, already stored and failed records, the pages it read,
+// whether it reached the end of what it asked for, and the first new items.
+func counts(result history.Result) map[string]any {
+	return map[string]any{
+		"listed": result.Listed, "new": result.New, "stored": result.Stored, "failed": result.Failed,
+		"pages": result.Requested, "reachedEnd": !result.HasMore,
+	}
+}
+
+// FetchX fetches every configured account through the window's method. One
+// account's failure keeps the others; the rotation spreads a short request
+// budget across runs.
 func (h *HistorySource) FetchX(ctx context.Context, window history.Window) (AttemptResult, error) {
-	timeline := h.timeline(window.Mode)
-	if !timeline && window.Mode == history.ModeCount {
-		return failedResult("count windows need the public X timeline"), nil
+	window, message := h.selection(history.SourceX, window)
+	if message != "" {
+		return failedResult(message), nil
 	}
-	if !timeline && !h.Available(history.SourceX) {
-		return failedResult("X_API_BEARER_TOKEN is required for history search"), nil
-	}
-	fetch, discovery := h.Fetcher.Fetch, "api"
-	if timeline {
-		fetch, discovery = h.Fetcher.FetchTimeline, xsource.DiscoveryTimeline
+	fetch := h.Fetcher.FetchTimeline
+	if window.Method == history.MethodAPI {
+		fetch = h.Fetcher.FetchSearch
 	}
 	if len(h.Handles) == 0 {
 		return AttemptResult{}, NewStepError("x_no_accounts", ErrValidation)
@@ -125,7 +139,7 @@ func (h *HistorySource) FetchX(ctx context.Context, window history.Window) (Atte
 	}
 	accounts := []map[string]any{}
 	messages := []string{}
-	count, discovered, requested, scheduleAssets := 0, 0, 0, 0
+	total := history.Result{Items: []history.Item{}}
 	for index, handle := range ordered {
 		if window.Mode == history.ModeBefore {
 			oldest, lookupErr := h.Store.OldestSourceTimestamp(ctx, history.SourceX, handle)
@@ -134,12 +148,13 @@ func (h *HistorySource) FetchX(ctx context.Context, window history.Window) (Atte
 			}
 			if oldest == nil {
 				message := "no stored records for this account; select a date range first"
-				accounts = append(accounts, map[string]any{"handle": handle, "count": 0, "discovered": 0, "requested": 0, "supplemented": 0, "errors": []string{message}})
+				accounts = append(accounts, map[string]any{"handle": handle, "listed": 0, "new": 0, "stored": 0, "failed": 0, "pages": 0, "reachedEnd": true})
 				messages = append(messages, handle+": "+message)
 				continue
 			}
 		}
 		if remaining <= 0 {
+			total.HasMore = true
 			messages = append(messages, handle+": X request budget exhausted")
 			continue
 		}
@@ -152,53 +167,72 @@ func (h *HistorySource) FetchX(ctx context.Context, window history.Window) (Atte
 		if ctx.Err() != nil {
 			return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
 		}
-		requested += result.Requested
+		total.Requested += result.Requested
 		remaining -= result.Requested
+		// A manual fetch ignores the timed chain's gate and cap, but the posts
+		// it reads count toward the day's X API usage (ADR-0004).
+		total.PostsRead += result.PostsRead
+		if h.Store.AddXAPIUsage(ctx, sqlite.JapanDay(time.Now()), result.PostsRead) != nil {
+			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+		}
 		if fetchErr != nil {
+			total.HasMore = true
 			messages = append(messages, handle+": "+historyMessage(fetchErr))
 			continue
 		}
-		accounts = append(accounts, map[string]any{
-			"handle": handle, "count": result.Count, "discovered": result.Discovered, "requested": result.Requested,
-			"supplemented": 0, "scheduleAssets": result.ScheduleAssets, "window": result.Window,
-			"hasMore": result.HasMore, "errors": result.Errors,
-		})
-		count += result.Count
-		discovered += result.Discovered
-		scheduleAssets += result.ScheduleAssets
+		account := counts(result)
+		account["handle"] = handle
+		accounts = append(accounts, account)
+		total.Listed += result.Listed
+		total.New += result.New
+		total.Stored += result.Stored
+		total.Failed += result.Failed
+		total.ScheduleAssets += result.ScheduleAssets
+		total.HasMore = total.HasMore || result.HasMore
+		for _, item := range result.Items {
+			if len(total.Items) < history.MaxItems {
+				total.Items = append(total.Items, item)
+			}
+		}
 		for _, message := range result.Errors {
 			messages = append(messages, handle+": "+message)
 		}
 	}
 	if len(accounts) == 0 {
-		failure := "X history search failed for every account"
+		failure := "X fetch failed for every account"
 		if len(messages) > 0 {
 			failure += " (" + messages[0] + ")"
 		}
 		return failedResult(failure), nil
 	}
-	return AttemptResult{Status: stepStatus(messages), Result: map[string]any{
-		"source": "x", "count": count, "posts": count, "discovered": discovered, "supplemented": 0,
-		"requested": requested, "scheduleAssets": scheduleAssets, "accounts": accounts, "errors": messages,
-		"discovery": discovery,
-	}}, nil
+	out := counts(total)
+	out["source"], out["scheduleAssets"], out["items"], out["accounts"], out["errors"] = "x", total.ScheduleAssets, total.Items, accounts, messages
+	out["discovery"], out["apiRead"] = "api", total.PostsRead
+	if window.Method == history.MethodTimeline {
+		out["discovery"] = xsource.DiscoveryTimeline
+		delete(out, "apiRead")
+	}
+	return AttemptResult{Status: stepStatus(messages), Result: out}, nil
 }
 
-// FetchYoutube searches the configured channel. The result's counters use the
-// keys the operator console reads.
+// FetchYoutube fetches the configured channel through the window's method.
 func (h *HistorySource) FetchYoutube(ctx context.Context, window history.Window) (AttemptResult, error) {
-	if !h.Available(history.SourceYoutube) {
-		return failedResult("YOUTUBE_API_KEY is required for history search"), nil
+	window, message := h.selection(history.SourceYoutube, window)
+	if message != "" {
+		return failedResult(message), nil
 	}
-	result, err := h.Fetcher.Fetch(ctx, history.Request{Source: history.SourceYoutube, Account: h.ChannelID, Credential: h.YoutubeKey, Window: window})
+	result, err := h.Fetcher.FetchUploads(ctx, history.Request{Source: history.SourceYoutube, Account: h.ChannelID, Window: window})
 	if ctx.Err() != nil {
 		return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
 	}
 	if err != nil {
 		return failedResult(historyMessage(err)), nil
 	}
-	return AttemptResult{Status: stepStatus(result.Errors), Result: map[string]any{
-		"count": result.Count, "videos": result.Count, "discovered": result.Discovered, "requested": result.Requested,
-		"window": result.Window, "hasMore": result.HasMore, "errors": result.Errors,
-	}}, nil
+	out := counts(result)
+	out["items"], out["errors"] = result.Items, tallyCodes(result.Errors)
+	// The API method spends quota on its listing and its detail checks.
+	if window.Method == history.MethodAPI {
+		out["apiRequests"], out["inspected"] = result.APIRequests, result.Inspected
+	}
+	return AttemptResult{Status: stepStatus(result.Errors), Result: out}, nil
 }

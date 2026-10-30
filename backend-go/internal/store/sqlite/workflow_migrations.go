@@ -50,7 +50,7 @@ func migrateWorkflowSchema(ctx context.Context, db *sql.DB) error {
 		// Each source's timer (ADR-0003). Like source_sync_json it has no
 		// version, so v3 binaries still open the database.
 		`CREATE TABLE IF NOT EXISTS source_schedules(source TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0,
- interval_minutes INTEGER NOT NULL, sync_json TEXT NOT NULL DEFAULT '{}', next_run_at TEXT, updated_at TEXT NOT NULL)`,
+ interval_minutes INTEGER NOT NULL, sync_json TEXT NOT NULL DEFAULT '{}', chain_json TEXT NOT NULL DEFAULT '{}', next_run_at TEXT, updated_at TEXT NOT NULL)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS workflow_active_idx ON workflow_runs((1)) WHERE status IN ('queued','running')`,
 		`CREATE INDEX IF NOT EXISTS workflow_runs_created_idx ON workflow_runs(created_at DESC,id DESC)`,
 		`CREATE INDEX IF NOT EXISTS workflow_steps_run_idx ON workflow_run_steps(run_id,step_order)`,
@@ -107,6 +107,10 @@ func migrateWorkflowSchema(ctx context.Context, db *sql.DB) error {
 		// reader still opens the database; reads check for the column instead.
 		{"workflows", "source_sync_json", `ALTER TABLE workflows ADD COLUMN source_sync_json TEXT NOT NULL DEFAULT '{}'`},
 		{"workflow_runs", "source_sync_json", `ALTER TABLE workflow_runs ADD COLUMN source_sync_json TEXT NOT NULL DEFAULT '{}'`},
+		// Method fallback chains (ADR-0004): stored per schedule and frozen
+		// on runs, added the same way.
+		{"source_schedules", "chain_json", `ALTER TABLE source_schedules ADD COLUMN chain_json TEXT NOT NULL DEFAULT '{}'`},
+		{"workflow_runs", "source_chain_json", `ALTER TABLE workflow_runs ADD COLUMN source_chain_json TEXT NOT NULL DEFAULT '{}'`},
 	} {
 		rows, e := tx.QueryContext(ctx, "PRAGMA table_info("+column.table+")")
 		if e != nil {

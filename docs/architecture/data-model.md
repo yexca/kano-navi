@@ -40,7 +40,7 @@ own transaction, and the selected profile media is reconciled with its files
 | `media_links`            | Links from cached media to posts, videos, profiles, and focus items                                    |
 | `media_versions`         | Earlier cached files of an asset whose bytes a revalidation replaced                                   |
 | `sync_runs`              | Status, counts, error summaries, trigger, and asynchronous job identity                                |
-| `sync_state`             | Durable per-account X, YouTube and Bilibili cursors and read bookkeeping                               |
+| `sync_state`             | Durable per-account X, YouTube and Bilibili cursors, read bookkeeping and X API chain state            |
 | `app_settings`           | Model, schedule-extractor, X-account, Featured, and YouTube push settings (push secret sealed)         |
 | `schedule_extractions`   | Versioned LLM inputs, outcomes, and structured result metadata                                         |
 | `post_llm_states`        | Per-post LLM status, last attempt, error, reprocess queue state, and extraction failure backoff        |
@@ -49,7 +49,7 @@ own transaction, and the selected profile media is reconciled with its files
 | `llm_models`             | Per-provider model catalog with tags (`text`/`image` routing; `reasoning`/`tools`/`embedding` labels)  |
 | `llm_route_targets`      | The ordered provider + model failover queue (`route = 'schedule'`) shared by every extraction stage    |
 | `llm_route_providers`    | Provider-only routes that startup copies once into `llm_route_targets`; nothing else writes them       |
-| `source_schedules`       | Each source's timer and sync setting                                                                   |
+| `source_schedules`       | Each source's timer, sync setting and method chain                                                     |
 | `workflows`              | Saved workflow definitions (ADR-0003): kept in the schema, created empty, never read or written        |
 | `translations`           | Manual, platform, and machine translations of post text and video titles per target locale             |
 | `translation_states`     | Per-post/video machine translation state: source hash and language, last attempt, operator request     |
@@ -83,8 +83,11 @@ checks that every table has the columns its recorded version requires:
 A run freezes how its source steps read: `source_sync_json` holds the
 per-source sync ([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md);
 `{}` reads as each step's incremental default), `fetch_windows_json` an
-operator's [fetch windows](workflows.md#fetch-windows-and-historical-backfill)
-and `source_lookback_json` the days of a recent window. A partial unique
+operator's [manual fetch](workflows.md#manual-fetches-and-historical-backfill)
+(its method and selection), `source_chain_json` the per-source
+[method chain](workflows.md#method-chains) (`{}` reads as each source's
+default chain) and `source_lookback_json` the days a stored recent window
+froze; new runs write `{}` there. A partial unique
 index admits one queued or running run at a time. `capability` keeps its
 constrained values (`synthetic`, `x_recent`, `capability_not_migrated`);
 `adapter_capability` names the adapter that runs the step (`x_recent`,
@@ -97,14 +100,30 @@ queued again by a retry or by recovery from an expired lease.
 ([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)): `source`
 (`x`, `youtube` or `bilibili`, the primary key), `enabled`,
 `interval_minutes`, `sync_json` (`{"x": SourceSync}` or `{"youtube":
-SourceSync}`; `{}` for Bilibili and as the default), `next_run_at` and
-`updated_at`. A missing row reads as that source's disabled default (see
+SourceSync}`; `{}` for Bilibili and as the default), `chain_json` (X and
+YouTube: `{methods: [{id, enabled}], apiGate, apiDailyCap}`, the gate and cap
+for X only; `{}` for Bilibili, and a chain that is unreadable or does not
+list every method of its source once reads as the default;
+[ADR-0004](../decisions/ADR-0004-method-fallback-chains.md)), `next_run_at`
+and `updated_at`. A missing row reads as that source's disabled default (see
 [Source schedules](workflows.md#source-schedules)). The `workflows` table and
 its columns, including `source_sync_json` and `source_lookback_json`, stay in
 the schema; nothing reads or writes them. Every new run has an ad hoc
 `workflow_id` starting with `@`; a stored run whose `workflow_id` names a
 saved workflow shows in the history with that ID, without joining
 `workflows`.
+
+### Sync State
+
+`sync_state` rows are keyed by `source` and `account_id` and hold a cursor
+(`cursor_id`, `cursor_time`), `last_success_at` and `metadata_json`. Besides
+each source's incremental cursors and the fetch checkpoints (see
+[Budgets and checkpoints](workflows.md#budgets-and-checkpoints)), source
+`x-api` keeps the [X API chain](sources.md#x-api-in-the-chain) state: one row
+per X account with `{timelineFailures}`, its current streak of runs whose
+timeline failed, and the row `@usage` with `{day, posts}`, the posts X API
+answers returned on that Japan day. A count for an earlier day reads as
+zero, and the first read of a new day starts it over.
 
 ## Seed versus Synchronization
 
@@ -615,5 +634,5 @@ rows.
 ## Related Docs
 
 - [Sources and extraction](sources.md)
-- [Workflow source windows](workflows.md#fetch-windows-and-historical-backfill)
+- [Manual source fetches](workflows.md#manual-fetches-and-historical-backfill)
 - [Media cache](media-cache.md)

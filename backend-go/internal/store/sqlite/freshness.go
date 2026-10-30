@@ -58,12 +58,14 @@ func (s *Store) sourceFetchedAt(ctx context.Context) (map[string]*string, error)
 				if e != nil {
 					continue
 				}
-				// Resuming a page does not move its original recent window forward.
+				// A stored recent-window checkpoint counts up to its window end;
+				// resuming a page does not move it forward.
 				if end.Before(at) {
 					at = end
 				}
-			case "count":
-				// A resumed count fetch retains its original head-page read time.
+			case "count", "all":
+				// A resumed timeline fetch retains its original head-page read
+				// time; other fetch checkpoints record no head read.
 				if source != "x-timeline-window" {
 					continue
 				}

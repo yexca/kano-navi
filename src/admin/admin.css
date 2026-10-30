@@ -422,6 +422,102 @@
   overflow-wrap: anywhere;
 }
 
+.adm-segmented button svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* A manual fetch's follow-up steps. */
+.adm-fetch-options {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.adm-fetch-options legend {
+  margin-bottom: 10px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+/* The newest manual fetch of a source, under its form. */
+.adm-fetch-empty {
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--adm-line);
+  color: var(--adm-muted);
+  font-size: 13px;
+}
+
+.adm-fetch-summary {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-fetch-summary > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adm-fetch-summary-title {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.adm-fetch-summary-title small {
+  color: var(--adm-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.adm-fetch-items {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.adm-fetch-items > span {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-fetch-items ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-fetch-items li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+/* A title takes its own line once the row is narrower than about 12em. */
+.adm-fetch-items li span {
+  flex: 1 1 12em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.adm-fetch-items code,
+.adm-fetch-items small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
 .adm-input-icon {
   position: relative;
   display: block;
@@ -1215,19 +1311,46 @@
   color: var(--adm-accent);
 }
 
-/* Sources page: one card per source, then the chosen source's settings. */
-.adm-source-cards {
+/* Sources page: a rail with each source's timer switch and method chain, the
+   selected source's settings beside it and its manual fetch below them. The
+   rail spans both rows, so a tall rail leaves its extra height to the fetch
+   row. */
+.adm-sources-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
+  grid-template-columns: minmax(270px, 320px) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "rail detail"
+    "rail fetch";
+  align-items: start;
+  gap: 20px;
 }
 
-.adm-source-card {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.adm-source-rail {
+  display: grid;
+  grid-area: rail;
+  gap: 12px;
   min-width: 0;
-  padding: 16px;
+}
+
+.adm-source-fetch {
+  grid-area: fetch;
+  min-width: 0;
+}
+
+.adm-rail-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-rail-entry {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
   border: 1px solid var(--adm-line);
   border-radius: var(--adm-radius);
   background: var(--adm-surface);
@@ -1237,12 +1360,12 @@
     box-shadow 140ms ease;
 }
 
-.adm-source-card.is-selected {
+.adm-rail-entry.is-selected {
   border-color: color-mix(in oklab, var(--adm-accent) 55%, transparent);
   box-shadow: 0 0 0 3px var(--adm-accent-soft);
 }
 
-.adm-source-card-head {
+.adm-rail-head {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1259,7 +1382,7 @@
   box-sizing: content-box;
 }
 
-.adm-source-card-head:hover {
+.adm-rail-head:hover {
   background: var(--adm-sunken);
 }
 
@@ -1279,6 +1402,49 @@
   height: 19px;
 }
 
+.adm-rail-head .adm-source-name small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.adm-shell .adm-rail-head .adm-source-name small svg {
+  width: 12px;
+  height: 12px;
+}
+
+.adm-rail-entry.is-selected .adm-source-name small {
+  color: color-mix(in oklab, var(--adm-accent) 75%, var(--adm-text));
+}
+
+.adm-shell .adm-rail-chevron {
+  flex: none;
+  color: var(--adm-muted);
+  transition: transform 140ms ease;
+}
+
+.adm-rail-entry.is-selected .adm-rail-chevron {
+  color: var(--adm-accent);
+  transform: rotate(90deg);
+}
+
+.adm-rail-body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.adm-rail-entry.is-locked .adm-source-icon {
+  background: var(--adm-sunken);
+  color: var(--adm-muted);
+}
+
+.adm-rail-hint {
+  margin: 0;
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
 .adm-source-name {
   display: grid;
   flex: 1;
@@ -1295,60 +1461,6 @@
   font-size: 12px;
 }
 
-.adm-source-card.is-selected .adm-source-name small {
-  color: color-mix(in oklab, var(--adm-accent) 75%, var(--adm-text));
-}
-
-.adm-shell .adm-source-card-chevron {
-  color: var(--adm-muted);
-  transition: transform 140ms ease;
-}
-
-.adm-source-card.is-selected .adm-source-card-chevron {
-  color: var(--adm-accent);
-  transform: rotate(90deg);
-}
-
-.adm-source-facts {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-}
-
-.adm-source-facts > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 24px;
-}
-
-.adm-source-facts dt {
-  color: var(--adm-muted);
-  font-size: 12px;
-}
-
-.adm-source-facts dd {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.adm-source-card > footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 14px;
-  border-top: 1px solid var(--adm-line);
-}
-
 .adm-source-note {
   display: flex;
   align-items: flex-start;
@@ -1362,19 +1474,86 @@
 }
 
 .adm-shell .adm-source-note svg {
+  flex: none;
   width: 14px;
   height: 14px;
   margin-top: 2px;
 }
 
-.adm-source-card.is-skipped .adm-source-icon {
-  background: var(--adm-sunken);
+/* YouTube's progressive confirmation: push, the live-status probe and the
+   follow-up checks as one numbered sequence. */
+.adm-confirm-steps {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-confirm-step + .adm-confirm-step {
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-confirm-step > section {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px 0;
+}
+
+.adm-confirm-step:first-child > section {
+  padding-top: 0;
+}
+
+.adm-confirm-step:last-child > section {
+  padding-bottom: 0;
+}
+
+.adm-confirm-step header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.adm-confirm-step h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.adm-confirm-step header p {
+  max-width: 64ch;
+  margin: 4px 0 0;
   color: var(--adm-muted);
+  font-size: 13px;
+}
+
+.adm-confirm-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--adm-accent-soft);
+  color: var(--adm-accent);
+}
+
+.adm-shell .adm-confirm-mark svg {
+  width: 16px;
+  height: 16px;
+}
+
+.adm-follow-ups {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .adm-source-detail {
   display: grid;
-  gap: 12px;
+  grid-area: detail;
+  gap: 16px;
+  min-width: 0;
 }
 
 .adm-source-header {
@@ -4033,6 +4212,23 @@ button.adm-run-line:hover {
   }
 }
 
+/* Below this the Sources page stacks: the rail on top, its sources side by
+ * side while they fit, then the settings and the manual fetch. */
+@media (max-width: 1180px) {
+  .adm-sources-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas:
+      "rail"
+      "detail"
+      "fetch";
+  }
+
+  .adm-rail-list {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .adm-shell {
     grid-template-columns: minmax(0, 1fr);
@@ -4187,17 +4383,28 @@ button.adm-run-line:hover {
     flex-basis: 100%;
   }
 
-  /* On a phone the other sources shrink to their heading, like tabs. */
-  .adm-source-cards {
+  /* On a phone the rail stacks and the other sources shrink to their
+   * heading, like tabs. */
+  .adm-rail-list {
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
 
-  .adm-source-card:not(.is-selected) {
+  .adm-rail-entry:not(.is-selected) {
     padding: 12px 16px;
   }
 
-  .adm-source-card:not(.is-selected) > :not(.adm-source-card-head) {
+  .adm-rail-entry:not(.is-selected) > .adm-rail-body {
     display: none;
+  }
+
+  .adm-confirm-step header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .adm-confirm-step header > .adm-badge {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .adm-queue-list li {
@@ -4568,4 +4775,83 @@ button.adm-run-line:hover {
   .adm-translation-original blockquote {
     max-height: 160px;
   }
+}
+
+/* A source's method chain: its listing methods in the order timed reads try
+   them, with enable switches and up/down moves. */
+.adm-chain {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.adm-chain-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-chain-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface);
+}
+
+.adm-chain-item.is-off .adm-chain-name,
+.adm-chain-item.is-off .adm-chain-name strong {
+  color: var(--adm-muted);
+}
+
+.adm-chain-rank {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--adm-sunken);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.adm-chain-name {
+  display: grid;
+  min-width: 0;
+}
+
+.adm-chain-name strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.adm-chain-name small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-chain-name small svg {
+  width: 13px;
+  height: 13px;
+}
+
+.adm-chain-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.adm-chain-actions .adm-switch {
+  margin-right: 6px;
 }

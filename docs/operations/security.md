@@ -23,8 +23,8 @@
 
 ## Admin Authentication
 
-Optional historical source credentials (`X_API_BEARER_TOKEN`,
-`YOUTUBE_API_KEY`) exist only in the environment. Official source requests use
+Optional source API credentials (`X_API_BEARER_TOKEN`, `YOUTUBE_API_KEY`)
+exist only in the environment. Official source requests use
 Bearer or `X-Goog-Api-Key` headers with redirects blocked. The admin API
 returns availability flags, not credentials; error reports contain controlled
 codes rather than upstream response bodies or request exceptions. Time-window

@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -159,6 +158,19 @@ type Options struct {
 	// known-post refreshes. A count setting, whose timeline read leaves the
 	// incremental state as it is, serves operator refreshes this way.
 	RefreshOnly bool
+	// Chain lists the listing methods a run tries in order (ADR-0004):
+	// DiscoveryTimeline, DiscoveryProfile and DiscoveryAPI. Empty tries the
+	// timeline, then the profile page.
+	Chain []string
+	// APIGate opens the API method only once TimelineFailures, counting a
+	// timeline failure of this run, reaches it; 0 leaves it open.
+	APIGate, TimelineFailures int
+	// APIBudget is how many posts API answers may still return today; below
+	// one minimal page the chain skips the API.
+	APIBudget int
+	// GapCeilings holds the oldest stored status above each gap floor, which
+	// bounds the API read that closes the gap.
+	GapCeilings map[string]string
 }
 
 func DefaultOptions() Options {
@@ -237,10 +249,7 @@ type Post struct {
 	// Quote is the status the post quotes, nil when it quotes none. Its
 	// images are never the post's own MediaURLs.
 	Quote *Quote
-	// QuoteUnread marks a source that does not read quotes (the X API
-	// window), so a stored quote is kept rather than cleared.
-	QuoteUnread bool
-	Raw         map[string]any
+	Raw   map[string]any
 }
 type ScheduleCandidate struct{ PostID, SourceURL, MediaURL, AccountHandle string }
 type Result struct {
@@ -257,12 +266,19 @@ type Result struct {
 	Held               int
 	Dropped            []DroppedStatus
 	ScheduleCandidates []ScheduleCandidate
-	// FromTimeline marks posts read from a timeline page without a detail
-	// request. A stored one keeps the values it has.
-	FromTimeline map[string]bool
-	// Discovery names where the status IDs came from: DiscoveryTimeline, or
-	// DiscoveryProfile after a timeline fallback.
+	// FromListing marks posts read from a timeline or API page without a
+	// detail request. A stored one keeps the values it has.
+	FromListing map[string]bool
+	// Discovery names the chain method that served the account:
+	// DiscoveryTimeline, DiscoveryProfile or DiscoveryAPI; empty when none did.
 	Discovery string
+	// Tried lists the chain methods the run tried, in order, with their
+	// controlled codes; the one that served has none.
+	Tried []Attempt
+	// TimelineFailed reports a timeline that was tried and did not serve.
+	TimelineFailed bool
+	// APIRead counts the posts API answers returned.
+	APIRead int
 	// Gap is the account's unread timeline stretch after the run, nil when
 	// there is none; Notes are controlled codes about it.
 	Gap   *Gap
@@ -279,6 +295,8 @@ type Adapter struct {
 	Client  *Client
 	Options Options
 	Now     func() time.Time
+	// API serves the chain's API method; nil leaves it unavailable.
+	API APIReader
 }
 
 func NewAdapter(c *Client, options Options) *Adapter {
@@ -327,28 +345,10 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		}
 		opts.PendingIDs, opts.PendingRetries, opts.RefreshKnown = nil, nil, 0
 		result.RefreshOnly = true
-	} else {
-		// The timeline pages back to stored posts; the logged-out profile page
-		// lists only the newest few statuses and is the fallback.
-		found, err = a.discoverTimeline(ctx, account, opts, cutoff)
-		result.Discovery, result.Gap, result.Notes = DiscoveryTimeline, found.gap, found.notes
+	} else if found, err = a.discover(ctx, account, opts, cutoff, &result); err != nil {
+		return result, err
 	}
 	ids := found.ids
-	if !opts.RefreshOnly && (err != nil || len(ids) == 0) {
-		// The profile page lists IDs only; every one needs a detail request.
-		found.posts = nil
-		result.Discovery, result.Gap, result.Notes = DiscoveryProfile, opts.Gap, nil
-		profile, profileErr := a.Client.Profile(ctx, account)
-		if profileErr != nil {
-			return result, profileErr
-		}
-		ids = DiscoverIDs(profile, account, opts.DiscoveryLimit)
-		// The profile lists only the newest few statuses; when none of them is
-		// stored, the timeline reads the rest later.
-		if opts.CursorID != "" && !slices.ContainsFunc(ids, func(id string) bool { return reachesStored(id, opts, cutoff) }) {
-			result.Gap = withGap(opts.Gap, Gap{Floor: opts.CursorID})
-		}
-	}
 	if !cutoff.IsZero() {
 		filtered := make([]string, 0, len(ids))
 		for _, id := range ids {
@@ -361,7 +361,8 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		ids = filtered
 	}
 	result.DiscoveredCount = len(ids)
-	if len(ids) == 0 && len(opts.PendingIDs) == 0 && len(opts.RefreshIDs) == 0 {
+	// An API read newer than the cursor may rightly find nothing.
+	if len(ids) == 0 && len(opts.PendingIDs) == 0 && len(opts.RefreshIDs) == 0 && result.Discovery != DiscoveryAPI {
 		return result, &Error{Code: ErrInvalidResponse, Err: errors.New("no status ids")}
 	}
 	queue := []string{}
@@ -405,7 +406,7 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 	if a.Now != nil {
 		now = a.Now()
 	}
-	result.FromTimeline = map[string]bool{}
+	result.FromListing = map[string]bool{}
 	result.PendingRetries = map[string]PendingRetry{}
 	successful := map[string]bool{}
 	accept := func(post *Post) bool {
@@ -419,12 +420,12 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 		}
 		return true
 	}
-	// A status the timeline page carried is stored from the page, pending or
-	// not; the rest wait for their backoff or take a detail request.
+	// A status a timeline or API page carried is stored from the page,
+	// pending or not; the rest wait for their backoff or take a detail request.
 	detail := []string{}
 	for _, id := range queue {
 		if post := found.posts[id]; post != nil && !refreshing[id] && accept(post) {
-			result.FromTimeline[id] = true
+			result.FromListing[id] = true
 			continue
 		}
 		if retry, ok := opts.PendingRetries[id]; ok && retry.waiting(now) && !forced[id] {

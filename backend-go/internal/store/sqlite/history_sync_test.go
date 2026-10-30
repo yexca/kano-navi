@@ -34,7 +34,7 @@ func TestHistoryPageCommitsRecordsWithCheckpointAndKeepsIncrementalCursor(t *tes
 	if _, err := s.db.Exec(`INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES('x','synthetic_handle','1900000000000000009','2026-03-09T00:00:00.000Z','2026-03-09T00:00:00.000Z','{"pendingStatusIds":["1900000000000000010"]}')`); err != nil {
 		t.Fatal(err)
 	}
-	window := history.Window{Mode: history.ModeBefore, Days: 2, StartTime: "2026-03-03T00:00:00.000Z", EndTime: "2026-03-05T00:00:00.000Z"}
+	window := history.Window{Method: history.MethodAPI, Mode: history.ModeBefore, Days: 2, StartTime: "2026-03-03T00:00:00.000Z", EndTime: "2026-03-05T00:00:00.000Z"}
 	post := xsource.Post{ID: "1900000000000000001", AccountHandle: "synthetic_handle", Type: "notice", Label: "SCHEDULE / 日程", Text: "weekly schedule", PublishedAt: "2026-03-04T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000001", MediaURLs: []string{"https://media.example.test/board.png"}, Raw: map[string]any{"id": "1900000000000000001"}}
 	page := history.Page{
 		Source: history.SourceX, Account: "synthetic_handle", CheckpointKey: "synthetic_handle:checkpoint", Window: window, Next: "page-2", Discovered: 1,
@@ -44,7 +44,7 @@ func TestHistoryPageCommitsRecordsWithCheckpointAndKeepsIncrementalCursor(t *tes
 	}
 	revision := query(`SELECT value FROM app_settings WHERE key='dashboard_revision'`)
 	written, err := s.WriteHistoryPage(ctx, page)
-	if err != nil || written != (history.Written{Posts: 1, ScheduleAssets: 1}) {
+	if err != nil || written.New != 1 || written.Stored != 0 || written.ScheduleAssets != 1 || len(written.NewIDs) != 1 || written.NewIDs[0] != post.ID {
 		t.Fatalf("written=%+v err=%v", written, err)
 	}
 	for statement, want := range map[string]string{
@@ -79,8 +79,8 @@ func TestHistoryPageCommitsRecordsWithCheckpointAndKeepsIncrementalCursor(t *tes
 	// A post that another account already owns keeps its owner and content.
 	post.Text = "claimed by another account"
 	page.Account, page.Posts, page.Backfill = "other_handle", []xsource.Post{post}, nil
-	if _, err = s.WriteHistoryPage(ctx, page); err != nil {
-		t.Fatal(err)
+	if written, err = s.WriteHistoryPage(ctx, page); err != nil || written.New != 0 || written.Stored != 1 {
+		t.Fatalf("written=%+v err=%v", written, err)
 	}
 	if got := query(`SELECT account_handle||'/'||text FROM posts WHERE id='1900000000000000001'`); got != "synthetic_handle/weekly schedule" {
 		t.Fatalf("post owner=%s", got)
@@ -98,7 +98,7 @@ func TestTimelinePageKeepsStoredPostsAndItsOwnCheckpoint(t *testing.T) {
 	if _, err := s.WriteHistoryPage(ctx, page); err != nil {
 		t.Fatal(err)
 	}
-	window := history.Window{Mode: history.ModeRange, StartDate: "2026-03-01", EndDate: "2026-03-07", StartTime: "2026-02-28T15:00:00.000Z", EndTime: "2026-03-07T15:00:00.000Z"}
+	window := history.Window{Method: history.MethodTimeline, Mode: history.ModeAll}
 	again := stored
 	again.Text, again.MediaURLs = "from the timeline", []string{"https://media.example.test/timeline.png"}
 	fresh := xsource.Post{ID: "1900000000000000002", AccountHandle: "synthetic_handle", Type: "notice", Label: "SCHEDULE / 日程", Text: "weekly schedule", PublishedAt: "2026-03-05T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000002", MediaURLs: []string{"https://media.example.test/board.png"}, Raw: map[string]any{"id": "1900000000000000002"}}
@@ -111,7 +111,7 @@ func TestTimelinePageKeepsStoredPostsAndItsOwnCheckpoint(t *testing.T) {
 		},
 	}
 	written, err := s.WriteHistoryPage(ctx, timeline)
-	if err != nil || written != (history.Written{Posts: 1, ScheduleAssets: 1}) {
+	if err != nil || written.New != 1 || written.Stored != 1 || written.ScheduleAssets != 1 || len(written.NewIDs) != 1 || written.NewIDs[0] != fresh.ID {
 		t.Fatalf("written=%+v err=%v", written, err)
 	}
 	for statement, want := range map[string]string{
@@ -140,40 +140,58 @@ func TestTimelinePageKeepsStoredPostsAndItsOwnCheckpoint(t *testing.T) {
 	}
 }
 
-func TestHistoryVideosKeepReservationStateAndRestartAfterSearchLimit(t *testing.T) {
+func TestHistoryVideosKeepStoredRowsOrRefreshThemWithoutReservationState(t *testing.T) {
 	s, query := openHistoryStore(t)
 	ctx := context.Background()
 	if _, err := s.db.Exec(`INSERT INTO videos(id,source,title,published_at,scheduled_at,url,thumbnail_url,kind,is_upcoming,raw_json) VALUES('AAAAAAAAAAA','youtube','old title','2026-03-04T10:00:00Z','2026-03-20T10:00:00Z','https://www.youtube.com/watch?v=AAAAAAAAAAA',NULL,'UPCOMING LIVE',1,'{}')`); err != nil {
 		t.Fatal(err)
 	}
-	window := history.Window{Mode: history.ModeBefore, Days: 30, StartTime: "2026-02-03T00:00:00.000Z", EndTime: "2026-03-05T00:00:00.000Z"}
+	window := history.Window{Method: history.MethodAPI, Mode: history.ModeAll}
+	stored := ytsource.Video{ID: "AAAAAAAAAAA", Title: "new title", PublishedAt: "2026-03-04T10:00:00.000Z", URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", ThumbnailURL: "https://media.example.test/a.jpg", Kind: "VIDEO"}
+	older := ytsource.Video{ID: "BBBBBBBBBBB", Title: "older", PublishedAt: "2026-02-20T10:00:00.000Z", URL: "https://www.youtube.com/watch?v=BBBBBBBBBBB", Kind: "VIDEO"}
 	page := history.Page{
-		Source: history.SourceYoutube, Account: "UCAAAAAAAAAAAAAAAAAAAAAA", CheckpointKey: "channel:checkpoint", Window: window, Discovered: 500,
-		Videos: []ytsource.Video{
-			{ID: "AAAAAAAAAAA", Title: "new title", PublishedAt: "2026-03-04T10:00:00.000Z", URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", ThumbnailURL: "https://media.example.test/a.jpg", Kind: "VIDEO"},
-			{ID: "BBBBBBBBBBB", Title: "older", PublishedAt: "2026-02-20T10:00:00.000Z", URL: "https://www.youtube.com/watch?v=BBBBBBBBBBB", Kind: "VIDEO"},
-		},
-		Backfill: &history.Backfill{SearchLimitReached: true},
+		Source: history.SourceYoutube, Account: "UCAAAAAAAAAAAAAAAAAAAAAA", CheckpointKey: "channel:checkpoint", Window: window, Discovered: 2,
+		Videos: []ytsource.Video{stored, older}, KeepStored: true,
 	}
-	if _, err := s.WriteHistoryPage(ctx, page); err != nil {
-		t.Fatal(err)
+	written, err := s.WriteHistoryPage(ctx, page)
+	if err != nil || written.New != 1 || written.Stored != 1 || len(written.NewIDs) != 1 || written.NewIDs[0] != older.ID {
+		t.Fatalf("written=%+v err=%v", written, err)
+	}
+	if got := query(`SELECT title FROM videos WHERE id='AAAAAAAAAAA'`); got != "old title" {
+		t.Fatalf("a kept video changed: %s", got)
+	}
+	// A refresh rewrites the listing's fields; reservation state stays.
+	page.KeepStored, page.Videos = false, []ytsource.Video{stored}
+	if written, err = s.WriteHistoryPage(ctx, page); err != nil || written.New != 0 || written.Stored != 1 {
+		t.Fatalf("refresh=%+v err=%v", written, err)
 	}
 	for statement, want := range map[string]string{
 		`SELECT title||'/'||kind||'/'||is_upcoming||'/'||scheduled_at||'/'||thumbnail_url FROM videos WHERE id='AAAAAAAAAAA'`: "new title/UPCOMING LIVE/1/2026-03-20T10:00:00Z/https://media.example.test/a.jpg",
-		`SELECT COUNT(*) FROM videos`: "2",
+		`SELECT COUNT(*) FROM videos`:                                                    "2",
+		`SELECT COUNT(*) FROM video_revisions WHERE video_id='AAAAAAAAAAA'`:              "1",
 		`SELECT COUNT(*) FROM media_links WHERE owner_type='video' AND role='thumbnail'`: "1",
-		// The search API cannot page past its limit, so the next backfill
-		// restarts from the oldest record that was actually stored.
-		`SELECT cursor_time FROM sync_state WHERE source='youtube-backfill'`: "2026-02-20T10:00:00.000Z",
-		`SELECT COUNT(*) FROM sync_state WHERE source='youtube'`:             "0",
+		`SELECT COUNT(*) FROM sync_state WHERE source='youtube'`:                         "0",
 	} {
 		if got := query(statement); got != want {
 			t.Fatalf("%s = %q, want %q", statement, got, want)
 		}
 	}
 	state, err := s.SyncState(ctx, "youtube-window", "channel:checkpoint")
-	if err != nil || !state.Found || state.CursorID != "" || state.Metadata["discovered"] != float64(500) {
+	if err != nil || !state.Found || state.CursorID != "" || state.Metadata["discovered"] != float64(2) {
 		t.Fatalf("state=%+v err=%v", state, err)
+	}
+	// A listing read in one request writes no checkpoint, and so cannot carry
+	// a backfill.
+	feed := history.Page{Source: history.SourceYoutube, Account: "UCAAAAAAAAAAAAAAAAAAAAAA", Window: history.Window{Method: history.MethodRSS, Mode: history.ModeCount, Count: 5}, KeepStored: true, Videos: []ytsource.Video{older}}
+	if written, err = s.WriteHistoryPage(ctx, feed); err != nil || written.Stored != 1 {
+		t.Fatalf("feed=%+v err=%v", written, err)
+	}
+	if got := query(`SELECT COUNT(*) FROM sync_state WHERE source='youtube-window'`); got != "1" {
+		t.Fatalf("checkpoints=%s", got)
+	}
+	feed.Backfill = &history.Backfill{}
+	if _, err = s.WriteHistoryPage(ctx, feed); err == nil {
+		t.Fatal("a backfill without a checkpoint was accepted")
 	}
 	if err = s.WriteSyncMetadata(ctx, "x-budget", "window-range", map[string]any{"lastAccount": "synthetic_handle"}); err != nil {
 		t.Fatal(err)
@@ -283,7 +301,7 @@ func TestTheSameThumbnailInAnotherFormIsNotARevision(t *testing.T) {
 	// thumbnail and its media link stay.
 	page := history.Page{
 		Source: history.SourceYoutube, Account: channel, CheckpointKey: "channel:checkpoint",
-		Window: history.Window{Mode: history.ModeBefore, Days: 30, StartTime: "2026-01-01T00:00:00.000Z", EndTime: "2026-01-31T00:00:00.000Z"},
+		Window: history.Window{Method: history.MethodAPI, Mode: history.ModeAll},
 		Videos: []ytsource.Video{{ID: "AAAAAAAAAAA", Title: "title", PublishedAt: "2026-01-02T09:00:00Z", URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", ThumbnailURL: "https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg", Kind: "MUSIC"}},
 	}
 	if _, err := s.WriteHistoryPage(ctx, page); err != nil {

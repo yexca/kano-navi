@@ -110,15 +110,21 @@ a saved workflow reports that ID there, and its name is not read.
   Known catalog steps run once in catalog order; an empty list or another
   value is `400 invalid_input`. Source steps read as their
   [source schedule](#sources) does.
-- `{"kind": "fetch", "source": "x" | "youtube", "window": Window}`: one
-  source plus media for a [history window](workflows.md#fetch-windows-and-historical-backfill).
-  `Window` is `{mode: "recent" | "before", days}`, `{mode: "range",
-startDate, endDate}` or `{mode: "count", count}` (1–200 per X account or
-  for the YouTube channel). A mode outside the source's `windows` is
-  rejected with `400 invalid_input`: past YouTube windows and X backfills
-  need the official API credential, while X `range` and `count` windows
-  page the public timeline and a YouTube `count` window reads the uploads
-  listing.
+- `{"kind": "fetch", "source": "x" | "youtube", "method": Method, "window":
+Selection, "options"?: {"extract"?, "translate"?, "refresh"?}}`: one
+  source plus media for a
+  [manual fetch](workflows.md#manual-fetches-and-historical-backfill)
+  through the one method it names. `Method` is `timeline` or `api` for X
+  and `api` or `rss` for YouTube. `Selection` is `{mode: "count", count}`
+  (1 to the method's `maxCount`), `{mode: "all"}`, `{mode: "range",
+startDate, endDate}` or `{mode: "before", days}` (1–365), as the method's
+  `modes` allow. `extract` (X methods) adds the `schedule` step,
+  `translate` the `translate` step, and `refresh` (YouTube methods)
+  rewrites stored videos the listing names again; each is a boolean and
+  defaults to false. An unknown method, a mode or count the method does not
+  serve, an option it does not take, or a method that cannot run now (its
+  credential is missing) answers `400 invalid_input`; the fetch never falls
+  back to another method.
 
 A busy queue answers `409` with the active run. There are no saved workflows
 ([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)): a
@@ -131,54 +137,78 @@ A busy queue answers `409` with the active run. There are no saved workflows
 steps disabled through `SKIP_*`.
 
 A failed run with a retryable failed step can be retried. The run keeps its
-steps, sync settings and windows, so no saved definition is needed.
+steps, sync settings and windows, so no saved definition is needed. A manual
+fetch's `fetchWindows` entry is its frozen selection with its `method`; a
+stored run frozen without a method still reads as stored, and running it
+again fails its fetch step.
 
 ## Sources
 
-| Method and path                            | Body                               | Result                    |
-| ------------------------------------------ | ---------------------------------- | ------------------------- |
-| `GET /sources`                             |                                    | per-source status (below) |
-| `PUT /sources/{source}/schedule`           | `{enabled, intervalMinutes, sync}` | `SourceSchedule`          |
-| `POST /sources/{source}/run`               |                                    | `202 {run}`; `409 busy`   |
-| `GET /sources/youtube/push`                |                                    | push status               |
-| `PUT /sources/youtube/push`                | `{enabled, callbackUrl}`           | push status               |
-| `POST /sources/youtube/push/rotate-secret` |                                    | push status               |
-| `GET /sources/youtube/live-probe`          |                                    | live probe status         |
-| `PUT /sources/youtube/live-probe`          | `{enabled, intervalMinutes}`       | live probe status         |
+| Method and path                            | Body                                      | Result                    |
+| ------------------------------------------ | ----------------------------------------- | ------------------------- |
+| `GET /sources`                             |                                           | per-source status (below) |
+| `PUT /sources/{source}/schedule`           | `{enabled, intervalMinutes, sync, chain}` | `SourceSchedule`          |
+| `POST /sources/{source}/run`               |                                           | `202 {run}`; `409 busy`   |
+| `GET /sources/youtube/push`                |                                           | push status               |
+| `PUT /sources/youtube/push`                | `{enabled, callbackUrl}`                  | push status               |
+| `POST /sources/youtube/push/rotate-secret` |                                           | push status               |
+| `GET /sources/youtube/live-probe`          |                                           | live probe status         |
+| `PUT /sources/youtube/live-probe`          | `{enabled, intervalMinutes}`              | live probe status         |
 
 ```json
 {
   "schedules": [SourceSchedule],
-  "x":       {"skipped", "historyAvailable", "windows", "accounts": [{"account", "oldest"}]},
-  "youtube": {"skipped", "historyAvailable", "windows", "oldest", "push": PushStatus, "liveProbe": LiveProbeStatus},
+  "x":       {"skipped", "methods": [FetchMethod], "accounts": [{"account", "oldest"}]},
+  "youtube": {"skipped", "methods": [FetchMethod], "oldest", "push": PushStatus, "liveProbe": LiveProbeStatus},
   "bilibili": {"available", "skipped", "account", "videos", "signedIn", "minIntervalMinutes", "lastAttemptAt", "lastSuccessAt", "blockedUntil", "lastError"}
 }
 ```
 
-`historyAvailable` reports the official API credential; `windows` lists the
-fetch window modes the source can run now, such as `["recent", "range",
-"count"]` for X without `X_API_BEARER_TOKEN`.
+`FetchMethod` describes one manual fetch method in the order the console
+offers them: `{id, modes, maxCount, pageSize, requires, refresh, extract,
+available}`. `requires` names the environment variable the method needs
+(`X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY`), never its value, and is absent
+for the public `timeline` and `rss` methods; `available` is false while
+it, or the method's adapter, is missing. `refresh` and `extract` say which
+options the method takes.
 
 `schedules` lists the [source schedules](workflows.md#source-schedules) of
 `x`, `youtube` and `bilibili`, in that order. `SourceSchedule` is `{source,
 enabled, intervalMinutes, minIntervalMinutes, maxIntervalMinutes, sync,
-nextRunAt, lastRun, skipped}`, plus `reason: "environment"` while `SKIP_*`
+chain, nextRunAt, lastRun, skipped}`, plus `reason: "environment"` while `SKIP_*`
 disables the source. `sync` is `{mode: "incremental", max}` (default, `max` 50) or `{mode: "count", count}`, each 1–200, and null for Bilibili.
+`chain` is the source's [method chain](workflows.md#method-chains):
+`{methods, fixed}`, where `methods` lists `{id, enabled, available,
+requires}` in the order reads try them. `available` is false while the
+method's credential is missing, and `requires` names its variable
+(`X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY`) for the `api` methods. `fixed`
+is true for Bilibili, whose one method `list` cannot change. The X chain adds
+`apiGate`, `apiDailyCap`, `apiUsage` (`{day, posts}`, the posts X API
+answers returned on the current Japan day) and `timelineFailures`, each
+account's current streak (see
+[X API in the chain](sources.md#x-api-in-the-chain)).
 `lastRun` is `{id, status, at}` of the newest run of the source's chain, from
 its timer or Run now
 (durable run status; `at` is when it finished, started or was queued), or
 null. The Bilibili `minIntervalMinutes` is `BILIBILI_MIN_INTERVAL_MINUTES`.
 `PUT /sources/{source}/schedule` takes any subset of `{enabled,
-intervalMinutes, sync}` and keeps omitted fields. It answers `404 not_found`
-for another source and `400 invalid_input` for other fields, an interval
-outside the bounds, an invalid `sync` or a `sync` for Bilibili. Enabling a
+intervalMinutes, sync, chain}` and keeps omitted fields. `chain` takes any
+subset of `{methods, apiGate, apiDailyCap}`: `methods` is `[{id, enabled}]`
+in the new order and must list every method of the source once with at
+least one enabled; `apiGate` (0–100) and `apiDailyCap` (1–10,000) apply to X
+only. It answers `404 not_found` for another source and `400 invalid_input`
+for other fields, an interval outside the bounds, an invalid `sync` or a
+`sync` for Bilibili, and for a chain with an unknown or repeated method, a
+missing method, no enabled method, a gate or cap out of range or for
+YouTube, or any chain for Bilibili. A method may be enabled while its
+credential is missing; reads skip it until it is set. Enabling a
 schedule or changing its interval plans the next run one interval later,
 with the timer's [random offset](workflows.md#source-schedules); a sync
 change alone keeps the plan.
 
 `POST /sources/{source}/run` is **Run now**: it submits the source's fixed
 chain once, triggered by the operator and read with the schedule's sync
-setting, and answers `202 {run}` or `409 {error: "busy", run}` while the
+setting and method chain, and answers `202 {run}` or `409 {error: "busy", run}` while the
 queue is occupied. It does not move the schedule's `nextRunAt`. It answers
 `404 not_found` for another source and `400 invalid_input` while `SKIP_*`
 disables the source.

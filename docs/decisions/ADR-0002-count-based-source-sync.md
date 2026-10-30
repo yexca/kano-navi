@@ -1,6 +1,6 @@
 # ADR-0002: Count-Based Source Synchronization for Saved Workflows
 
-- Status: Accepted; amended by [ADR-0003](ADR-0003-per-source-sync-schedules.md), which stores `sourceSync` on source schedules and removes saved workflows
+- Status: Accepted; amended by [ADR-0003](ADR-0003-per-source-sync-schedules.md), which stores `sourceSync` on source schedules and removes saved workflows, and by [ADR-0004](ADR-0004-method-fallback-chains.md), which adds the X API to timed X reads as a gated, capped fallback
 - Date: 2026-10-26
 
 ## Context

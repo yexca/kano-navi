@@ -1,109 +1,187 @@
 # Workflows and Synchronization
 
-## Fetch Windows and Historical Backfill
+## Manual Fetches and Historical Backfill
 
-The console's Sources page offers `recent`, `before`, `range` and `count`
-fetches for X and YouTube; it is the one place to start them. The Posts and
-Videos pages open on their lists and link to it from their header.
-`POST /api/admin/runs` with `{ "kind": "fetch", "source": "x" }` plus
-`"window": { "mode": "recent", "days": 30 }`,
-`"window": { "mode": "before", "days": 30 }`,
-`"window": { "mode": "range", "startDate": "2026-09-01", "endDate": "2026-09-30" }`,
-or `"window": { "mode": "count", "count": 50 }` starts one.
-Days must be integers from 1 to 365; date ranges cover at most 365 days; a
-count is an integer from 1 to 200 per X account or for the YouTube channel.
-Both selected dates are inclusive in `Asia/Tokyo`; internal timestamp bounds
-are start-inclusive and end-exclusive. `before` ends at the oldest persisted
-post per X account, or oldest published YouTube video, rather than a UI
-page's limited list. With no records, fetch a date range first. X accounts
-without records are skipped and reported while other accounts can backfill.
+The console's Sources page starts manual fetches of X and YouTube; it is the
+one place to start them. The Posts and Videos pages open on their lists and
+link to it from their header. A fetch names one listing method first, then
+what the method reads. `POST /api/admin/runs` with
+`{ "kind": "fetch", "source": "x", "method": "timeline", "window": { "mode": "count", "count": 50 } }`
+starts one; the [Admin API](admin-api.md#runs) describes the body and its
+options.
 
-The run freezes the validated selection (mode with days, dates or count) in
-`workflow_runs.fetch_windows_json`, so a recovered or retried run never
-changes it. The step resolves the bounds when it runs and stores them with
-its checkpoint, so a resumed window keeps the bounds it started with; X
-search ends at least ten seconds before the present.
+| Source  | Method     | Needs                | Modes                              | Listing                                                |
+| ------- | ---------- | -------------------- | ---------------------------------- | ------------------------------------------------------ |
+| X       | `timeline` |                      | `count` (1–200), `all`             | public FxTwitter timeline, 100 statuses a page         |
+| X       | `api`      | `X_API_BEARER_TOKEN` | `count` (1–200), `range`, `before` | full-archive search, 100 posts a page                  |
+| YouTube | `api`      | `YOUTUBE_API_KEY`    | `count` (1–200), `all`             | uploads playlist, 50 entries and one quota unit a page |
+| YouTube | `rss`      |                      | `count` (1–15)                     | public feed, its newest 15 uploads in one request      |
 
-`GET /api/admin/sources` reports per source `historyAvailable` (whether the
-official-API credential is set), `windows` (the modes it can run now) and
-the oldest stored timestamps, never keys; a mode outside `windows` is
-rejected with a validation message. Each window and credential is served as
-follows:
+- `count` reads the newest `count` records per X account or for the channel,
+  stored or not, whatever their age.
+- `all` pages the listing to its end.
+- `range` reads `startDate` to `endDate`, at most 365 days; both dates are
+  inclusive in `Asia/Tokyo`, and the internal bounds are start-inclusive and
+  end-exclusive.
+- `before` reads `days` (1–365) before the oldest persisted post of each
+  account, rather than before a UI page's limited list. Accounts without
+  posts are skipped and reported while the others backfill; with no posts at
+  all, fetch a date range first.
 
-| Window   | X without `X_API_BEARER_TOKEN` | X with the token    | YouTube without `YOUTUBE_API_KEY` | YouTube with the key          |
-| -------- | ------------------------------ | ------------------- | --------------------------------- | ----------------------------- |
-| `recent` | public timeline                | full-archive search | listed uploads of its days        | date search, then recent step |
-| `before` | unavailable                    | full-archive search | unavailable                       | date search                   |
-| `range`  | public timeline                | full-archive search | unavailable                       | date search                   |
-| `count`  | public timeline                | public timeline     | uploads listing (15 at most)      | uploads listing               |
+The method IDs are stable, since runs freeze them. `GET /api/admin/sources`
+describes each source's methods: their modes, count bound, page size, the variable a method needs
+(never its value) and whether it can run now.
 
-A YouTube `recent` window without a key keeps the listed uploads published
-within its days, so it cannot reach past what the feed lists. With a key the
-date search is followed by the regular recent read, which refreshes
-reservations the search API does not describe; if that read fails, the run
-is `partial` with `youtube_recent_unavailable`. A YouTube `count` window reads
-the uploads listing like the recent step (see [YouTube](sources.md#youtube)).
+A manual fetch never falls back. A method that cannot run now, because its
+credential or adapter is missing, is refused with a validation message, and so
+is a mode or count the method does not serve. A method that fails fails the
+run with its controlled code: unlike a timed source step, the fetch step's
+failure is not tolerated, so the steps after it do not run.
 
-These requests run the chosen source and media stages through the
-single-flight queue; opening a page does not fetch platforms. They do not
-run schedule extraction on historical posts or overwrite the regular
-incremental source cursor. Schedule-image candidates on fetched X pages are
-registered with each page (see [Schedule images](sources.md#schedule-images)).
-Source schedules, Run now, YouTube pushes and one-off step runs carry no
-window: they read with the schedule's frozen sync setting (see
-[Source schedules](#source-schedules)), whatever the credentials. A full
-sync or scan carries neither and stays incremental.
+The options add steps or change what is written:
 
-### Public X timeline windows
+- `extract` (X methods) appends the `schedule` step. Schedule extraction picks
+  its candidates among all stored X posts by its keyword and message rules,
+  unattempted posts first (see
+  [Schedule extraction](sources.md#schedule-extraction-pipeline)), so fetched
+  posts that match join that queue whichever run extracts them: this run with
+  `extract`, otherwise the X chain's next `schedule` step. Posts the rules do
+  not select are not extracted either way.
+- `translate` appends the `translate` step.
+- `refresh` (YouTube methods) rewrites the videos the listing names that are
+  already stored: their title (keeping a revision), publication time and URL.
+  The listing leaves their reservation state (kind, upcoming flag, scheduled
+  time) and stored thumbnail alone; the `api` method then checks their details
+  as it does for new videos (see [YouTube methods](#youtube-methods)). Without
+  it, stored videos are left as they are.
 
-X timeline windows page the public FxTwitter timeline
+X fetches only fill gaps: a post that is already stored keeps the text, media
+and schedule candidate it has, so extraction fingerprints do not change.
+
+Each fetch step reports `listed`, the records the selection took from the
+listing, split into `new`, `stored` (already stored, refreshed or not) and
+`failed` (listed without usable content); `pages`, the requests it made;
+`reachedEnd`, false when the page budget or a failed later page stopped it
+before the end of what it asked for, in which case repeating the fetch
+continues it; and `items`, the first 20 new records as `{id, title, account}`
+(an X post's first line of text, cut to 80 characters, or a video's title).
+An X result also lists the same counts per account under `accounts`, with
+`scheduleAssets` and `discovery` (`timeline` or `api`); an `api` result adds
+`apiRead`, the posts its answers returned. A YouTube `api` result
+adds `inspected`, the videos whose details it checked, and `apiRequests`, its
+Data API calls (quota units). The Sources page shows the newest fetch of the
+source under its form.
+
+The run freezes the validated selection (method, mode, its count, days or
+dates, and `refresh`) in `workflow_runs.fetch_windows_json`, so a recovered or
+retried run never changes it. A run frozen without a method, or with a mode no
+method serves, such as a `recent` window or a YouTube date window, reads in the
+run history as it was stored; running it again fails its fetch step with
+`this fetch uses a retired selection; start a new fetch`.
+
+These requests run the chosen source and media stages, with the steps their
+options add, through the single-flight queue; opening a page does not fetch
+platforms. They never read or move the incremental cursors, the pending queue
+or timeline gaps. Schedule-image candidates on fetched X pages are registered
+with each page (see [Schedule images](sources.md#schedule-images)). Source
+schedules, Run now, YouTube pushes and one-off step runs carry no window: they
+read with the schedule's frozen sync setting (see
+[Source schedules](#source-schedules)), whatever the credentials. A full sync
+or scan carries neither and stays incremental.
+
+### X timeline method
+
+Timeline fetches page the public FxTwitter timeline
 (`api.fxtwitter.com/2/profile/<handle>/statuses`, 100 statuses per page)
 newest first. Each status is stored from the timeline page itself, without
-vxtwitter detail requests or the incremental pending queue. Paging never
-reads or moves the incremental cursor: a `recent` or `range` window
-continues until a page's oldest own status predates the window, and a
-`count` window stops after the account's newest `count` own statuses,
-whatever their age. Reposts are skipped, replies are not listed, and
-statuses outside a date window are ignored. Posts that are already stored
-keep the text, media and schedule candidate the detail path wrote, so a
-window only fills gaps and does not change extraction fingerprints. A
-status the timeline lists without usable content is reported as
-`<id>: x_invalid_response`; a timeline that ends before the window's start
-(or before `count` statuses) reports `x_timeline_end`. Timeline pages use
-the X source client's protections: a 10-second timeout, a 4 MiB response
-limit, rejected redirects and controlled `x_*` error codes.
+vxtwitter detail requests or the incremental pending queue. A `count` fetch
+stops after the account's newest `count` own statuses, and an `all` fetch at
+the end of the timeline. Reposts are skipped and replies are not listed. A
+status the timeline lists without usable content is counted as failed and
+reported as `<id>: x_invalid_response`; a timeline that ends before a `count`
+fetch's count reports `x_timeline_end`. Timeline pages use the X source
+client's protections: a 10-second timeout, a 4 MiB response limit, rejected
+redirects and controlled `x_*` error codes.
 
-### Official API windows
+### X API method
 
 `backend-go/internal/source/history` calls only
 `https://api.x.com/2/tweets/search/all`
 ([X full-archive search](https://docs.x.com/x-api/posts/search/quickstart/full-archive-search),
-which needs full-archive access) and
-`https://www.googleapis.com/youtube/v3/search`
-([YouTube date-window search](https://developers.google.com/youtube/v3/docs/search/list)).
-The environment-only credentials travel in request headers
-(`Authorization: Bearer` for X, `X-Goog-Api-Key` for YouTube), never in URLs,
-SQLite or results. Each request has the `SYNC_TIMEOUT_MS` timeout (7 seconds
-by default, at most 60), pages wait `SYNC_REQUEST_DELAY_MS` apart, and
-redirects are rejected so a credential header never follows one. Each
-response has a fixed 4 MiB byte limit: the adapter checks `Content-Length`
-and counts streamed bytes, cancelling an oversized body before parsing or
-writing its page. Failures reach run history only as controlled codes:
+which needs full-archive access). The environment-only credential travels in
+the `Authorization: Bearer` header, never in URLs, SQLite or results. Each
+request has the `SYNC_TIMEOUT_MS` timeout (7 seconds by default, at most 60),
+pages wait `SYNC_REQUEST_DELAY_MS` apart, and redirects are rejected so the
+credential header never follows one. Each response has a fixed 4 MiB byte
+limit: the adapter checks `Content-Length` and counts streamed bytes,
+cancelling an oversized body before parsing or writing its page. Posts are
+mapped as the X chain's API method maps them, quoted statuses included (see
+[X API in the chain](sources.md#x-api-in-the-chain)), and the posts a search
+returns count toward the day's X API usage; a manual fetch ignores the
+chain's gate and daily cap. Searches end at least ten seconds before the
+present. Without a start time the endpoint
+covers only 30 days, so a `count` search starts at the Snowflake epoch
+(November 2010), where status IDs begin; it asks for the posts it still needs,
+10 to 100 a page, and stops at the count. X bills every post a search reads.
+
+Failures reach run history only as controlled codes:
 `source_api_http_<status>`, `source_api_request_failed`,
 `source_api_response_too_large`, `source_api_invalid_response`,
 `source_api_invalid_records` and `source_api_repeated_page`, never upstream
-bodies or credentials. A window that stops at its page budget reports
-`history_page_budget_reached; repeat this fetch to continue`.
+bodies or credentials. A fetch that stops at its page budget reports
+`history_page_budget_reached; repeat this fetch to continue`. Source access,
+quota and search coverage depend on the platform; this feature does not
+promise a complete export of its archive.
 
-Source access, quota, and search coverage depend on the platform. YouTube
-channel search is capped at 500 results and may omit results with date
-sorting; use narrower date ranges for dense archives. This feature does not
-promise a complete export of the platform's archive.
+### YouTube methods
+
+Both methods read through the YouTube source client, with its 10-second
+timeout, 4 MiB response limit, rejected redirects and controlled codes. The
+`api` method pages the channel's uploads playlist (`playlistItems.list` on the
+`UU` playlist, the key only in the `X-Goog-Api-Key` header), newest first; an
+entry that a new upload shifts onto the next page is listed once. The `rss`
+method reads the public feed once, with the feed's retries after an upstream
+5xx or connection failure (see [YouTube](sources.md#youtube)). Failures record
+`youtube_api_*` or `youtube_feed_*` codes.
+
+Videos are written as the listing describes them: title, publication time,
+largest thumbnail and the kind their title gives. The `api` method then checks
+the details of each page's videos that are not stored yet, and of the stored
+ones too with `refresh`, through one `videos.list` call per 50 (see
+[Data API](sources.md#data-api)). It follows the recent step's rules: the
+classification, the per-format playlists for an ended broadcast without a
+stored premiere verdict, localized titles, and
+the recent step's upsert of videos and reservation events, so manual locks
+and deletion tombstones hold. It reads no watch page, so an ended broadcast
+the answer cannot classify is written as the API describes it (an
+[unclassified answer](sources.md#data-api), which creates no event), and a
+video the API leaves undecided keeps its listed row. The answers commit with
+their page and its checkpoint. A failed details call records its
+`youtube_api_*` code and leaves the step `partial`; the page's videos stay as
+listed and the fetch goes on.
+
+A `count` fetch reads the newest page of each format playlist, as the recent
+step does, at most once per details call. An `all` fetch reaches broadcasts
+far below those pages, so it pages both playlists to their end instead, at
+most 20 pages (1,000 entries) each: once per run, the first time a page's
+details name an ended broadcast that needs a verdict, keeping the two
+membership sets in memory for the rest of the run. A video on the live list
+is a stream and one on the long-form list a premiere; one seen on both, or on
+neither, gets no verdict. A list that the cap or a failed page cuts short
+records its code (`youtube_format_list_incomplete`, or the page's
+`youtube_api_*` code) and names only what it read, so a broadcast it did not
+reach gets no verdict. An `all` fetch therefore spends about two quota units
+per 50 new uploads (a playlist page and a details call), plus one unit per 50
+entries of each format playlist once per run when it holds an ended broadcast.
+
+The `rss` method only lists: its 15 uploads are within the recent step's own
+listing, which checks their details. Neither method reads the streams page,
+watch pages or the detail queue, and neither writes incremental state.
 
 ### Budgets and checkpoints
 
-`SOURCE_HISTORY_MAX_PAGES` bounds pages per source/account per run (4 by
-default, 1–20), for API and timeline pages alike. X windows share
+`SOURCE_HISTORY_MAX_PAGES` bounds the pages of one fetch per X account or for
+the channel (4 by default, 1–20), for every paging method. X fetches share
 `X_MAX_STATUS_REQUESTS` across accounts as a page budget, including failed
 requests: each account gets an even share of what is left, and the first
 account rotates across runs per mode (`sync_state` source `x-budget`, key
@@ -112,18 +190,18 @@ left without budget reports `X request budget exhausted`.
 
 Each successful page and its continuation checkpoint commit in one
 transaction with the page's posts or videos and schedule candidates. The
-checkpoint is a `sync_state` row keyed by account and a hash of the
-selection: source `x-window` or `youtube-window` for API next tokens, and
-`x-timeline-window` for timeline cursors, which are not API next tokens.
-Repeating an interrupted window resumes its next page; completed ranges can
-be refreshed. A `recent` window resumes only while its saved interval still
-overlaps the new one. When a resumed timeline cursor fails, the window
-starts again from the newest page, in the same run if the budget allows.
-`before` runs finish a pending interval (`pendingWindow`) before moving
-farther back, using `x-backfill`/`youtube-backfill` search boundaries. A
-completed empty interval also moves this boundary backward, preventing an
-endless retry over the same empty month. Failures retain all records and the
-last successful checkpoint.
+checkpoint is a `sync_state` row keyed by account and a hash of the selection
+(mode with its count or dates), under the method's own source:
+`x-timeline-window` for timeline cursors, `x-window` for X API next tokens and
+`youtube-window` for playlist page tokens. The RSS method reads one request and
+keeps no checkpoint. Repeating an interrupted fetch resumes its next page; a
+completed one starts again at the newest page. When a resumed cursor or token
+fails, the fetch starts again from the newest page, in the same run if the
+budget allows. `before` runs finish a pending interval (`pendingWindow`) before
+moving farther back, using `x-backfill` search boundaries. A completed empty
+interval also moves this boundary backward, preventing an endless retry over
+the same empty month. Failures retain all records and the last successful
+checkpoint.
 
 ### Source schedules
 
@@ -141,7 +219,7 @@ page. A fresh installation keeps all three disabled.
 When a schedule is due, the server process submits its chain as the ad hoc
 run `@source-<source>` (`reconcile` is appended as for every run with a
 source step), labelled `source-schedule` in the run history. **Run now** on a
-source's section (`POST /api/admin/sources/{source}/run`) submits the same
+source's timer panel (`POST /api/admin/sources/{source}/run`) submits the same
 chain once, triggered by the operator, and leaves the schedule's next run
 where it was; the history shows it as "X · run now". The follow-up
 steps always run, even when the source wrote nothing: each works from its
@@ -174,12 +252,48 @@ freezes it in `workflow_runs.source_sync_json`:
 Every other run with an X or YouTube step reads that source with these
 settings too, frozen on the run: a YouTube push, Run now, a
 [one-off step run](#modular-steps-and-timers) and the operator's single-video refresh.
-A step with a fetch window reads its window instead. Credentials never turn
-a scheduled read into a date search: X always reads the public timeline (the token serves operator
-`before` and `range` windows), and YouTube with a key pages the uploads
-playlist at one quota unit per 50 uploads. Full syncs (console, MCP,
-`kano-go sync`) carry no setting and run incrementally with
-`X_DISCOVERY_LIMIT` for X and 50 uploads for YouTube.
+A [manual fetch](#manual-fetches-and-historical-backfill) reads through its
+method instead. Full syncs (console, MCP, `kano-go sync`) carry no setting
+and run incrementally with `X_DISCOVERY_LIMIT` for X and 50 uploads for
+YouTube.
+
+#### Method chains
+
+Each X and YouTube schedule also orders its listing methods into a fallback
+chain ([ADR-0004](../decisions/ADR-0004-method-fallback-chains.md)), stored
+in `source_schedules.chain_json` and edited in the source rail of the
+Sources page. A read tries the enabled methods from the top and falls to the
+next when the first page fails, when the answer lists none of the account's
+or channel's own records, when the chain skips the method, or on quota and
+rate limits. A later page that fails keeps the earlier pages and leaves the
+run partial without falling back.
+
+| Source     | Methods, in default order                                                                         | Default   |
+| ---------- | ------------------------------------------------------------------------------------------------- | --------- |
+| `x`        | `timeline` (FxTwitter timeline), `profile` (logged-out `x.com/<handle>`, IDs only), `api` (X API) | `api` off |
+| `youtube`  | `api` (Data API uploads playlist), `rss` (public feed), `videos_page` (uploads tab, IDs only)     | all on    |
+| `bilibili` | `list` (the upload list)                                                                          | fixed     |
+
+The default is the order the recent steps have always used, so an
+unconfigured chain reads as the steps did without one. A method whose
+credential the process lacks is skipped with `x_api_unavailable` or
+`youtube_api_key_missing`. The chain covers listing methods only: detail
+requests (vxtwitter, watch pages) and fixed helper reads (the streams page,
+and the feed read for Shorts verdicts while the Data API lists) stay outside
+it. [X](sources.md#x) and [YouTube](sources.md#youtube) describe the methods,
+and [X API in the chain](sources.md#x-api-in-the-chain) its gate and daily
+cap. An X `count` sync setting reads the timeline's count window whatever
+the chain says.
+
+Each run freezes its chain in `workflow_runs.source_chain_json`, so a retry
+or recovery reads the same way: timer runs, Run now, YouTube pushes, one-off
+step runs and the [live-status probe](#live-status-probe), which reads the
+YouTube chain. Full syncs and runs stored without a chain read through the
+default. The step result names the method that served each X account in
+`discovery` (`<account>: <method>`, or `none`) and the channel in `listing`,
+and lists every method tried, in order, in `tried`: `<method>` for the one
+that served and `<method>: <code>` for the others, each prefixed with the
+account for X.
 
 Enabling a schedule or changing its interval plans the next run one interval
 later, never immediately; a sync change alone keeps the plan. Claiming a run
@@ -241,7 +355,7 @@ deterministic duplicate-merge rules in
 30 days ago to 60 days ahead, then the
 [video merging](data-model.md#video-merging) rule to every Bilibili upload.
 Every run that includes `x`, `youtube`, `bilibili` or `schedule` (sync, scan,
-fetch windows, source schedules, Run now, step runs, WebSub pushes and MCP) appends it as its last
+manual fetches, source schedules, Run now, step runs, WebSub pushes and MCP) appends it as its last
 step; it can also be selected alone. Its
 result counts `considered`, `merged`, `retargeted`, `released`, `kept` and
 `ambiguous` events, `eventsTimed` and `eventsCreated` YouTube events, and
@@ -287,7 +401,8 @@ when a video is due and at least two minutes have passed since the previous
 probe run was queued, it queues a run of the single `live` step
 (`kind: "live"`, ad hoc workflow `@live`, labelled `live-probe`) through the
 same single-flight queue. The run asks only about the due videos, earliest
-first: with `YOUTUBE_API_KEY`, in one Data API call, then the watch pages of
+first: with `YOUTUBE_API_KEY` and the YouTube chain's `api` method on, in one
+Data API call, then the watch pages of
 those the API could not settle (see
 [Live-status probe](sources.md#live-status-probe)). A busy queue or nothing
 due waits for the next tick. Requests are recorded per video in `sync_state`
@@ -322,8 +437,8 @@ Every run is a durable `workflow_runs` row with its ordered
 console's job list and the `sync_runs` history are projections of them (see
 [Backend](backend.md#jobs-and-workflows) for the reserved run IDs). A run
 freezes what its steps read: `fetch_windows_json` for operator windows,
-`source_sync_json` for schedule sync settings and `source_lookback_json` for
-per-step days. Retry and recovery therefore repeat the same work without a
+`source_sync_json` for schedule sync settings, `source_chain_json` for their
+method chains and `source_lookback_json` for per-step days. Retry and recovery therefore repeat the same work without a
 saved definition.
 
 Statuses are fixed enums. Runs use `queued`, `running`, `succeeded`,
@@ -357,8 +472,9 @@ run. A dispatched run has at most 20 minutes.
 run; `permanent`, `schema_failure`, `validation_failure`, `cancelled` and
 `blocked` are not. The final failure of `x`, `youtube`, `bilibili` or
 `translate` is recorded with its code and the run continues, finishing
-`partial`, or `failed` when no step completed. Any other final failure ends
-the run and marks its pending steps `blocked`.
+`partial`, or `failed` when no step completed; a source step that carries a
+[manual fetch](#manual-fetches-and-historical-backfill) is the exception. Any
+other final failure ends the run and marks its pending steps `blocked`.
 `POST /api/admin/runs/{id}/retry` requeues a `failed`, `partial` or
 `blocked` run while no other run is active, when it has a retryable failed
 step and no permanent failure: retryable failed and blocked steps return to
@@ -388,7 +504,7 @@ workflow runs as operator jobs. internal/workflow maps steps to their adapters
 (`SourceSteps`), executes runs with leases, retries and recovery, and owns the
 single-flight queue, and the timer that starts due source schedules
 (`SourceChains`) through it. `jobs.QueueManager` submits Run now and step
-runs and freezes each source step's schedule sync on them.
+runs and freezes each source step's schedule sync and method chain on them.
 A new module needs one catalog entry and one step adapter; the console reads
 the catalog rather than maintaining another step list. See
 [Backend](backend.md#jobs-and-workflows).

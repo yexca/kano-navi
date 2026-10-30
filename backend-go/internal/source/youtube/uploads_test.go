@@ -218,3 +218,22 @@ func sorted(ids []string) []string {
 	slices.Sort(out)
 	return out
 }
+
+func TestOperatorListingsReadOnePlaylistPageOrTheFeed(t *testing.T) {
+	var requested []string
+	a := NewAdapter(uploadsClient(t, &requested), Options{ChannelID: syntheticChannel, MaxDetailRequests: 1, APIKey: "synthetic-api-key"})
+	videos, next, err := a.UploadsPage(context.Background(), "p2")
+	if err != nil || next != "p3" || len(videos) != 2 || videos[0].ID != "CCCCCCCCCCC" || strings.Join(requested, ",") != "p2" {
+		t.Fatalf("page=%v next=%q err=%v requested=%v", videos, next, err, requested)
+	}
+	feed, err := a.FeedUploads(context.Background())
+	if err != nil || len(feed) != 1 || feed[0].ID != "AAAAAAAAAAA" {
+		t.Fatalf("feed=%v err=%v", feed, err)
+	}
+	// Without a key the API listing fails with a controlled code and sends
+	// nothing.
+	a.Options.APIKey = ""
+	if _, _, err = a.UploadsPage(context.Background(), ""); err == nil || err.Error() != "youtube_api_key_missing" || len(requested) != 1 {
+		t.Fatalf("keyless err=%v requested=%v", err, requested)
+	}
+}

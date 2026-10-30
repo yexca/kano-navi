@@ -98,6 +98,15 @@ func (s *Store) CreateWorkflowRun(ctx context.Context, definition WorkflowDefini
 			return nil, ErrWorkflowStorage
 		}
 	}
+	if len(definition.SourceChain) > 0 {
+		chain, chainErr := json.Marshal(definition.SourceChain)
+		if chainErr != nil || !s.sourceChain {
+			return nil, ErrWorkflowValidation
+		}
+		if _, e = tx.ExecContext(ctx, `UPDATE workflow_runs SET source_chain_json=? WHERE id=?`, string(chain), id); e != nil {
+			return nil, ErrWorkflowStorage
+		}
+	}
 	if len(definition.FetchWindows) > 0 {
 		windows, windowErr := json.Marshal(definition.FetchWindows)
 		if windowErr != nil || s.workflowVersion < 3 {

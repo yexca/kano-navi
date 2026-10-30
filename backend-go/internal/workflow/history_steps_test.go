@@ -12,6 +12,7 @@ import (
 
 	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	xsource "github.com/yexca/kano-navi/backend-go/internal/source/x"
+	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
@@ -29,6 +30,36 @@ func (h *historyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), ContentLength: -1}, nil
 }
 
+// stubUploads lists two synthetic uploads, or fails with a controlled code.
+type stubUploads struct {
+	fail  error
+	calls []string
+}
+
+func (s *stubUploads) UploadsPage(_ context.Context, token string) ([]ytsource.Video, string, error) {
+	s.calls = append(s.calls, "api:"+token)
+	if s.fail != nil {
+		return nil, "", s.fail
+	}
+	return []ytsource.Video{
+		{ID: "AAAAAAAAAAA", Title: "newest upload", PublishedAt: "2026-03-09T03:00:00Z", URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", Kind: "VIDEO"},
+		{ID: "BBBBBBBBBBB", Title: "older upload", PublishedAt: "2026-03-08T03:00:00Z", URL: "https://www.youtube.com/watch?v=BBBBBBBBBBB", Kind: "VIDEO"},
+	}, "", nil
+}
+
+func (s *stubUploads) FeedUploads(context.Context) ([]ytsource.Video, error) {
+	s.calls = append(s.calls, "rss")
+	if s.fail != nil {
+		return nil, s.fail
+	}
+	return []ytsource.Video{{ID: "AAAAAAAAAAA", Title: "newest upload", PublishedAt: "2026-03-09T03:00:00Z", URL: "https://www.youtube.com/watch?v=AAAAAAAAAAA", Kind: "VIDEO"}}, nil
+}
+
+func (s *stubUploads) DescribeVideos(_ context.Context, listed []ytsource.Video, _ map[string]ytsource.Video, _ *ytsource.FormatSets) ytsource.Described {
+	s.calls = append(s.calls, "details")
+	return ytsource.Described{Videos: listed, Localized: map[string]map[string]string{}, Errors: []string{}, APIRequests: 1}
+}
+
 func newHistorySource(t *testing.T, transport *historyTransport) (*HistorySource, *sqlite.Store) {
 	t.Helper()
 	store, err := sqlite.OpenStandalone(filepath.Join(t.TempDir(), "database", "kano.sqlite"))
@@ -38,13 +69,18 @@ func newHistorySource(t *testing.T, transport *historyTransport) (*HistorySource
 	t.Cleanup(func() { store.Close() })
 	fetcher := history.NewFetcher(store, history.Options{MaxPages: 4}, transport)
 	fetcher.Now = func() time.Time { return time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC) }
+	fetcher.Uploads = &stubUploads{}
 	return &HistorySource{
 		Fetcher: fetcher, Store: store, XToken: "synthetic-source-credential", YoutubeKey: "synthetic-source-credential",
 		Handles: []string{"synthetic_one", "synthetic_two"}, ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", RequestLimit: 4,
 	}, store
 }
 
-func TestHistoryXKeepsWorkingAccountsRotatesBudgetAndReportsWindows(t *testing.T) {
+func apiRange() history.Window {
+	return history.Window{Method: history.MethodAPI, Mode: history.ModeRange, StartDate: "2026-03-01", EndDate: "2026-03-07"}
+}
+
+func TestHistoryXKeepsWorkingAccountsRotatesBudgetAndReportsCounts(t *testing.T) {
 	transport := &historyTransport{respond: func(r *http.Request) (int, string) {
 		if r.URL.Query().Get("query") == "from:synthetic_two" {
 			return 503, ""
@@ -53,24 +89,27 @@ func TestHistoryXKeepsWorkingAccountsRotatesBudgetAndReportsWindows(t *testing.T
 	}}
 	source, store := newHistorySource(t, transport)
 	ctx := context.Background()
-	window := history.Window{Mode: history.ModeRange, StartDate: "2026-03-01", EndDate: "2026-03-07"}
-	out, err := source.FetchX(ctx, window)
+	out, err := source.FetchX(ctx, apiRange())
 	if err != nil || out.Status != "partial" {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 	accounts := out.Result["accounts"].([]map[string]any)
-	if out.Result["count"] != 1 || out.Result["requested"] != 2 || len(accounts) != 1 || accounts[0]["handle"] != "synthetic_one" {
+	if out.Result["listed"] != 1 || out.Result["new"] != 1 || out.Result["stored"] != 0 || out.Result["pages"] != 2 || out.Result["reachedEnd"] != false || out.Result["discovery"] != "api" {
 		t.Fatalf("result=%v", out.Result)
 	}
-	if resolved := accounts[0]["window"].(history.Window); resolved.StartTime != "2026-02-28T15:00:00.000Z" || resolved.EndTime != "2026-03-07T15:00:00.000Z" {
-		t.Fatalf("window=%+v", resolved)
+	if len(accounts) != 1 || accounts[0]["handle"] != "synthetic_one" || accounts[0]["reachedEnd"] != true {
+		t.Fatalf("accounts=%v", accounts)
+	}
+	if items := out.Result["items"].([]history.Item); len(items) != 1 || items[0] != (history.Item{ID: "1900000000000000001", Title: "stored", Account: "synthetic_one"}) {
+		t.Fatalf("items=%v", items)
 	}
 	if messages := out.Result["errors"].([]string); len(messages) != 1 || messages[0] != "synthetic_two: source_api_http_503" {
 		t.Fatalf("errors=%v", messages)
 	}
-	// The next run starts with the other account, so a short budget is shared.
-	if _, err = source.FetchX(ctx, window); err != nil {
-		t.Fatal(err)
+	// The next run starts with the other account, so a short budget is
+	// shared; the post it lists again counts as stored.
+	if out, err = source.FetchX(ctx, apiRange()); err != nil || out.Result["new"] != 0 || out.Result["stored"] != 1 {
+		t.Fatalf("again=%v err=%v", out.Result, err)
 	}
 	if got := strings.Join(transport.accounts, ","); got != "synthetic_one,synthetic_two,synthetic_two,synthetic_one" {
 		t.Fatalf("order=%s", got)
@@ -81,7 +120,7 @@ func TestHistoryXKeepsWorkingAccountsRotatesBudgetAndReportsWindows(t *testing.T
 	}
 	// A backfill needs a stored record per account; only one account has one.
 	transport.accounts = nil
-	out, err = source.FetchX(ctx, history.Window{Mode: history.ModeBefore, Days: 3})
+	out, err = source.FetchX(ctx, history.Window{Method: history.MethodAPI, Mode: history.ModeBefore, Days: 3})
 	if err != nil || out.Status != "partial" {
 		t.Fatalf("before=%+v err=%v", out, err)
 	}
@@ -91,33 +130,68 @@ func TestHistoryXKeepsWorkingAccountsRotatesBudgetAndReportsWindows(t *testing.T
 	}
 }
 
-func TestHistoryStepsRequireCredentialAndFailWithoutAnyAccount(t *testing.T) {
+func TestHistoryStepsFailWithTheMethodsCodeAndNeverFallBack(t *testing.T) {
 	transport := &historyTransport{respond: func(*http.Request) (int, string) { return 401, "" }}
 	source, _ := newHistorySource(t, transport)
+	timeline := &stubTimeline{}
+	source.Fetcher.Timeline = timeline
 	ctx := context.Background()
-	window := history.Window{Mode: history.ModeRange, StartDate: "2026-03-01", EndDate: "2026-03-07"}
-	out, err := source.FetchX(ctx, window)
-	if err != nil || out.Status != "failed" || out.Result["error"] != "X history search failed for every account (synthetic_one: source_api_http_401)" {
-		t.Fatalf("out=%+v err=%v", out, err)
+	out, err := source.FetchX(ctx, apiRange())
+	if err != nil || out.Status != "failed" || out.Result["error"] != "X fetch failed for every account (synthetic_one: source_api_http_401)" || len(timeline.accounts) != 0 {
+		t.Fatalf("out=%+v err=%v timeline=%v", out, err, timeline.accounts)
 	}
-	if out, err = source.FetchYoutube(ctx, window); err != nil || out.Status != "failed" || out.Result["error"] != "source_api_http_401" {
-		t.Fatalf("youtube=%+v err=%v", out, err)
+	uploads := &stubUploads{fail: &ytsource.Error{Code: "youtube_api_forbidden"}}
+	source.Fetcher.Uploads = uploads
+	if out, err = source.FetchYoutube(ctx, history.Window{Method: history.MethodAPI, Mode: history.ModeAll}); err != nil || out.Status != "failed" || out.Result["error"] != "youtube_api_forbidden" || strings.Join(uploads.calls, ",") != "api:" {
+		t.Fatalf("youtube=%+v err=%v calls=%v", out, err, uploads.calls)
 	}
+	// A missing credential fails its method before any request.
 	source.XToken, source.YoutubeKey = "", " "
 	sent := len(transport.accounts)
 	steps := &SourceSteps{History: source}
-	for step, message := range map[string]string{"x": "X_API_BEARER_TOKEN is required for history search", "youtube": "YOUTUBE_API_KEY is required for history search"} {
-		out, err = steps.Execute(ctx, StepInput{StepID: step, Window: &window})
-		if err != nil || out.Status != "failed" || out.Result["error"] != message {
+	for step, tc := range map[string]struct {
+		window  history.Window
+		message string
+	}{
+		"x":       {apiRange(), "X_API_BEARER_TOKEN is required for the api method"},
+		"youtube": {history.Window{Method: history.MethodAPI, Mode: history.ModeCount, Count: 5}, "YOUTUBE_API_KEY is required for the api method"},
+	} {
+		out, err = steps.Execute(ctx, StepInput{StepID: step, Window: &tc.window})
+		if err != nil || out.Status != "failed" || out.Result["error"] != tc.message {
 			t.Fatalf("%s=%+v err=%v", step, out, err)
 		}
 	}
-	if len(transport.accounts) != sent || source.Available("x") || source.Available("youtube") || (*HistorySource)(nil).Available("x") {
+	if len(transport.accounts) != sent || len(uploads.calls) != 1 || len(timeline.accounts) != 0 {
 		t.Fatal("a missing credential must never reach the network")
 	}
 }
 
-// stubTimeline lists one synthetic own status per account inside March 2026.
+func TestRetiredWindowsFailCleanly(t *testing.T) {
+	transport := &historyTransport{respond: func(*http.Request) (int, string) { return 500, "" }}
+	source, _ := newHistorySource(t, transport)
+	timeline := &stubTimeline{}
+	source.Fetcher.Timeline = timeline
+	uploads := source.Fetcher.Uploads.(*stubUploads)
+	steps := &SourceSteps{History: source}
+	// Windows frozen before fetches named their method, and YouTube date
+	// searches, no longer run.
+	for step, windows := range map[string][]history.Window{
+		"x":       {{Mode: "recent", Days: 7}, {Mode: history.ModeCount, Count: 20}, {Mode: history.ModeRange, StartDate: "2026-03-01", EndDate: "2026-03-07"}},
+		"youtube": {{Mode: "recent", Days: 14}, {Mode: history.ModeBefore, Days: 30}, {Mode: history.ModeCount, Count: 20}},
+	} {
+		for _, window := range windows {
+			out, err := steps.Execute(context.Background(), StepInput{StepID: step, Window: &window})
+			if err != nil || out.Status != "failed" || out.Result["error"] != history.ErrRetired.Error() {
+				t.Fatalf("%s %+v => %+v err=%v", step, window, out, err)
+			}
+		}
+	}
+	if len(transport.accounts) != 0 || len(timeline.accounts) != 0 || len(uploads.calls) != 0 {
+		t.Fatal("a retired window reached the network")
+	}
+}
+
+// stubTimeline lists one synthetic own status per account, then ends.
 type stubTimeline struct {
 	mu       sync.Mutex
 	accounts []string
@@ -135,77 +209,92 @@ func (s *stubTimeline) TimelineStatuses(_ context.Context, account, cursor strin
 	}}, nil
 }
 
-func TestXWindowsPageTheTimelineWithoutCredential(t *testing.T) {
+func TestXTimelineMethodLeavesTheIncrementalCursor(t *testing.T) {
 	transport := &historyTransport{respond: func(*http.Request) (int, string) { return 500, "" }}
 	source, store := newHistorySource(t, transport)
 	timeline := &stubTimeline{}
 	source.Fetcher.Timeline = timeline
-	source.XToken = ""
 	ctx := context.Background()
 	if _, err := store.DB().Exec(`INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,metadata_json) VALUES('x','synthetic_one','1900000000000000009','2026-03-09T00:00:00.000Z','{}')`); err != nil {
 		t.Fatal(err)
 	}
 	steps := &SourceSteps{History: source}
-	window := history.Window{Mode: history.ModeRange, StartDate: "2026-03-01", EndDate: "2026-03-07"}
-	out, err := steps.Execute(ctx, StepInput{StepID: "x", Window: &window})
-	if err != nil || out.Status != "succeeded" || out.Result["discovery"] != xsource.DiscoveryTimeline || out.Result["count"] != 2 || out.Result["discovered"] != 2 {
-		t.Fatalf("range=%+v err=%v", out, err)
-	}
-	// A recent window pages back to its start too, past the incremental cursor.
-	recent := history.Window{Mode: history.ModeRecent, Days: 7}
-	if out, err = steps.Execute(ctx, StepInput{StepID: "x", WorkflowID: sqlite.AdhocFetchWorkflow, Window: &recent, LookbackDays: 7}); err != nil || out.Result["discovery"] != xsource.DiscoveryTimeline {
-		t.Fatalf("recent=%+v err=%v", out, err)
+	// The timeline method runs even with the API credential present.
+	all := history.Window{Method: history.MethodTimeline, Mode: history.ModeAll}
+	out, err := steps.Execute(ctx, StepInput{StepID: "x", Window: &all})
+	if err != nil || out.Status != "partial" || out.Result["discovery"] != xsource.DiscoveryTimeline || out.Result["listed"] != 4 || out.Result["new"] != 2 || out.Result["failed"] != 2 || out.Result["reachedEnd"] != true {
+		t.Fatalf("all=%+v err=%v", out, err)
 	}
 	var cursor string
 	if err = store.DB().QueryRow(`SELECT cursor_id FROM sync_state WHERE source='x' AND account_id='synthetic_one'`).Scan(&cursor); err != nil || cursor != "1900000000000000009" {
 		t.Fatalf("incremental cursor=%s err=%v", cursor, err)
 	}
 	var checkpoints int
-	if err = store.DB().QueryRow(`SELECT COUNT(*) FROM sync_state WHERE source=?`, history.TimelineCheckpoint).Scan(&checkpoints); err != nil || checkpoints != 4 {
-		t.Fatalf("checkpoints=%d err=%v", checkpoints, err)
+	if err = store.DB().QueryRow(`SELECT COUNT(*) FROM sync_state WHERE source=?`, history.TimelineCheckpoint).Scan(&checkpoints); err != nil || checkpoints != 2 || len(transport.accounts) != 0 {
+		t.Fatalf("checkpoints=%d err=%v api=%v", checkpoints, err, transport.accounts)
 	}
-	// A backfill still needs the API; it never pages the timeline.
-	sent := len(timeline.accounts)
-	before := history.Window{Mode: history.ModeBefore, Days: 3}
-	if out, err = source.FetchX(ctx, before); err != nil || out.Status != "failed" || out.Result["error"] != "X_API_BEARER_TOKEN is required for history search" || len(timeline.accounts) != sent {
-		t.Fatalf("before=%+v err=%v", out, err)
-	}
-	// A count window reads the timeline even with the credential.
-	withCredential, _ := newHistorySource(t, transport)
-	withCredential.Fetcher.Timeline = timeline
-	count := history.Window{Mode: history.ModeCount, Count: 20}
-	if out, err = (&SourceSteps{History: withCredential}).Execute(ctx, StepInput{StepID: "x", Window: &count}); err != nil || out.Result["discovery"] != xsource.DiscoveryTimeline || len(transport.accounts) != 0 {
-		t.Fatalf("count=%+v err=%v api=%v", out, err, transport.accounts)
-	}
-	// A YouTube count window reads the uploads listing, never the search API.
-	if _, err = steps.Execute(ctx, StepInput{StepID: "youtube", Window: &count}); err == nil || len(transport.accounts) != 0 {
-		t.Fatalf("youtube count must reach the (absent) recent adapter: err=%v api=%v", err, transport.accounts)
+	// Without the timeline adapter the method is unavailable.
+	source.Fetcher.Timeline = nil
+	if out, err = steps.Execute(ctx, StepInput{StepID: "x", Window: &all}); err != nil || out.Result["error"] != "the timeline method is unavailable" {
+		t.Fatalf("no timeline=%+v err=%v", out, err)
 	}
 }
 
-func TestWindowAvailabilityFollowsCredentialAndTimeline(t *testing.T) {
+func TestYoutubeMethodsListUploadsWithoutTheRecentStep(t *testing.T) {
+	transport := &historyTransport{respond: func(*http.Request) (int, string) { return 500, "" }}
+	source, store := newHistorySource(t, transport)
+	uploads := source.Fetcher.Uploads.(*stubUploads)
+	steps := &SourceSteps{History: source}
+	ctx := context.Background()
+	rss := history.Window{Method: history.MethodRSS, Mode: history.ModeCount, Count: 15}
+	out, err := steps.Execute(ctx, StepInput{StepID: "youtube", Window: &rss})
+	if err != nil || out.Status != "succeeded" || out.Result["listed"] != 1 || out.Result["new"] != 1 || out.Result["pages"] != 1 || out.Result["reachedEnd"] != true {
+		t.Fatalf("rss=%+v err=%v", out, err)
+	}
+	all := history.Window{Method: history.MethodAPI, Mode: history.ModeAll}
+	out, err = steps.Execute(ctx, StepInput{StepID: "youtube", Window: &all})
+	// The new upload gets its details checked: one more quota unit.
+	if err != nil || out.Result["listed"] != 2 || out.Result["new"] != 1 || out.Result["stored"] != 1 || out.Result["apiRequests"] != 2 || out.Result["inspected"] != 1 {
+		t.Fatalf("api=%+v err=%v", out, err)
+	}
+	if items := out.Result["items"].([]history.Item); len(items) != 1 || items[0] != (history.Item{ID: "BBBBBBBBBBB", Title: "older upload"}) {
+		t.Fatalf("items=%v", items)
+	}
+	if strings.Join(uploads.calls, ",") != "rss,api:,details" || len(transport.accounts) != 0 {
+		t.Fatalf("calls=%v", uploads.calls)
+	}
+	var count int
+	if err = store.DB().QueryRow(`SELECT COUNT(*) FROM sync_state WHERE source='youtube'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("incremental youtube state=%d err=%v", count, err)
+	}
+}
+
+func TestMethodAvailabilityFollowsCredentialsAndAdapters(t *testing.T) {
 	transport := &historyTransport{respond: func(*http.Request) (int, string) { return 500, "" }}
 	source, _ := newHistorySource(t, transport)
 	source.Fetcher.Timeline = &stubTimeline{}
-	modes := func(name string) string {
+	available := func(name string) string {
 		out := []string{}
-		for _, mode := range []string{history.ModeRecent, history.ModeBefore, history.ModeRange, history.ModeCount} {
-			if source.WindowAvailable(name, mode) {
-				out = append(out, mode)
+		for _, method := range source.Methods(name) {
+			if method.Available {
+				out = append(out, method.ID)
 			}
 		}
 		return strings.Join(out, ",")
 	}
-	if x, youtube := modes("x"), modes("youtube"); x != "recent,before,range,count" || youtube != "recent,before,range,count" {
+	if x, youtube := available("x"), available("youtube"); x != "timeline,api" || youtube != "api,rss" {
 		t.Fatalf("with credentials x=%s youtube=%s", x, youtube)
 	}
 	source.XToken, source.YoutubeKey = "", ""
-	if x, youtube := modes("x"), modes("youtube"); x != "recent,range,count" || youtube != "recent,count" {
+	if x, youtube := available("x"), available("youtube"); x != "timeline" || youtube != "rss" {
 		t.Fatalf("without credentials x=%s youtube=%s", x, youtube)
 	}
-	source.Fetcher.Timeline = nil
-	if x := modes("x"); x != "recent" {
-		t.Fatalf("without timeline x=%s", x)
+	source.Fetcher.Timeline, source.Fetcher.Uploads = nil, nil
+	if x, youtube := available("x"), available("youtube"); x != "" || youtube != "" {
+		t.Fatalf("without adapters x=%s youtube=%s", x, youtube)
+	}
+	if (*HistorySource)(nil).MethodAvailable("x", history.MethodTimeline) || len(source.Methods("bilibili")) != 0 {
+		t.Fatal("a missing source or fetcher offers methods")
 	}
 }
 
@@ -237,9 +326,6 @@ func TestSavedWorkflowsReadBySyncSettingWhateverTheCredentials(t *testing.T) {
 	out, err := steps.Execute(ctx, StepInput{StepID: "x", WorkflowID: "full-refresh", Sync: sqlite.SourceSync{Mode: sqlite.SyncCount, Count: 30}})
 	if err != nil || out.Result["discovery"] != xsource.DiscoveryTimeline || len(timeline.accounts) != 2 || len(transport.accounts) != 0 {
 		t.Fatalf("count out=%+v err=%v api=%v", out, err, transport.accounts)
-	}
-	if window := out.Result["accounts"].([]map[string]any)[0]["window"].(history.Window); window.Mode != history.ModeCount || window.Count != 30 {
-		t.Fatalf("window=%+v", window)
 	}
 }
 

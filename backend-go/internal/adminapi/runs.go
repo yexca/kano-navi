@@ -79,7 +79,7 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, httpx.Invalid("saved workflows are removed; send the steps to run once, or use a source's Run now"))
 		return
 	}
-	allowed := map[string][]string{"sync": {"kind"}, "scan": {"kind"}, "translate": {"kind"}, "workflow": {"kind", "steps"}, "fetch": {"kind", "source", "window"}}
+	allowed := map[string][]string{"sync": {"kind"}, "scan": {"kind"}, "translate": {"kind"}, "workflow": {"kind", "steps"}, "fetch": {"kind", "source", "method", "window", "options"}}
 	fields, known := allowed[kind]
 	if !known {
 		httpx.WriteError(w, httpx.Invalid("kind must be sync, scan, translate, workflow or fetch"))
@@ -108,31 +108,39 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 		options.Steps = steps
 	case "fetch":
 		jobKind = jobs.KindWorkflow
-		var source string
+		var source, method string
 		if json.Unmarshal(body["source"], &source) != nil || (source != "x" && source != "youtube") {
 			httpx.WriteError(w, httpx.Invalid("source must be x or youtube"))
 			return
 		}
-		window, parseErr := history.Parse(body["window"])
+		_ = json.Unmarshal(body["method"], &method)
+		chosen, optionsErr := parseFetchOptions(body["options"])
+		if optionsErr != nil {
+			httpx.WriteError(w, optionsErr)
+			return
+		}
+		window, parseErr := history.Select(source, method, body["window"], chosen.Refresh)
 		if parseErr != nil {
 			httpx.WriteError(w, httpx.Invalid("%s", parseErr.Error()))
 			return
 		}
-		// Past windows need the official API credential, except the X windows
-		// the public timeline serves without it.
-		if !a.windowAvailable(source, window.Mode) {
-			if window.Mode == history.ModeCount {
-				httpx.WriteError(w, httpx.Invalid("count windows need the public X timeline"))
-				return
-			}
-			credential := "YOUTUBE_API_KEY"
-			if source == "x" {
-				credential = "X_API_BEARER_TOKEN"
-			}
-			httpx.WriteError(w, httpx.Invalid("%s is required for history search", credential))
+		if described, _ := history.Lookup(source, method); chosen.Extract && !described.Extract {
+			httpx.WriteError(w, httpx.Invalid("extract is not supported for this method"))
+			return
+		}
+		// The fetch runs only the method it names, so a method that cannot
+		// run now is refused rather than replaced.
+		if !a.methodAvailable(source, method) {
+			httpx.WriteError(w, httpx.Invalid("%s", history.UnavailableMessage(source, method)))
 			return
 		}
 		options.Steps = []string{source, "media"}
+		if chosen.Extract {
+			options.Steps = append(options.Steps, "schedule")
+		}
+		if chosen.Translate {
+			options.Steps = append(options.Steps, "translate")
+		}
 		options.FetchWindows = map[string]history.Window{source: window}
 	}
 	result, err := a.Runs.Start(r.Context(), jobKind, "admin", options)
@@ -141,6 +149,38 @@ func (a *api) startRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeStart(w, result)
+}
+
+// fetchOptions are a manual fetch's options: run schedule extraction and
+// translation after it, and refresh stored records the method lists again.
+type fetchOptions struct{ Extract, Translate, Refresh bool }
+
+func parseFetchOptions(raw json.RawMessage) (fetchOptions, error) {
+	var out fetchOptions
+	if jsonNull(raw) {
+		return out, nil
+	}
+	var input map[string]json.RawMessage
+	if json.Unmarshal(raw, &input) != nil || input == nil {
+		return out, httpx.Invalid("options must be an object")
+	}
+	for key, value := range input {
+		var target *bool
+		switch key {
+		case "extract":
+			target = &out.Extract
+		case "translate":
+			target = &out.Translate
+		case "refresh":
+			target = &out.Refresh
+		default:
+			return out, httpx.Invalid("options.%s is not supported", key)
+		}
+		if json.Unmarshal(value, target) != nil {
+			return out, httpx.Invalid("options.%s must be true or false", key)
+		}
+	}
+	return out, nil
 }
 
 // catalogSteps reads a one-off step run's steps: distinct catalog IDs, run
@@ -297,8 +337,8 @@ func (a *api) sources(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"schedules": schedules,
-		"x":         map[string]any{"skipped": a.skipped("x"), "historyAvailable": a.historyAvailable("x"), "windows": a.windows("x"), "accounts": accounts},
-		"youtube":   map[string]any{"skipped": a.skipped("youtube"), "historyAvailable": a.historyAvailable("youtube"), "windows": a.windows("youtube"), "oldest": oldest, "push": a.pushStatus(), "liveProbe": probe},
+		"x":         map[string]any{"skipped": a.skipped("x"), "methods": a.fetchMethods("x"), "accounts": accounts},
+		"youtube":   map[string]any{"skipped": a.skipped("youtube"), "methods": a.fetchMethods("youtube"), "oldest": oldest, "push": a.pushStatus(), "liveProbe": probe},
 		"bilibili":  bilibili,
 	})
 }

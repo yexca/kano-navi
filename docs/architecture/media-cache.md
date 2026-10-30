@@ -245,8 +245,7 @@ synthetic response bodies; CI does not download live media.
 
 A successful complete post update replaces only its `post-image` and
 `quote-image` links inside the post transaction, preserving declared order and
-removing vanished positions; an X API window, which does not read quotes,
-keeps the `quote-image` links.
+removing vanished positions.
 An explicit empty media list clears the links and primary source URL; an omitted
 media declaration retains the previous snapshot. Failed reads make no post write.
 Unreferenced cached bytes may be retained, but neither post display nor extraction

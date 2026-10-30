@@ -23,13 +23,51 @@ export type StepProgress =
   | "skipped"
   | "cancelled"
 
-export interface FetchWindow {
-  /** "count" reads each X account's or the channel's newest records. */
-  mode: "recent" | "before" | "range" | "count"
+/** A manual fetch's listing method; see the server's method table. */
+export type FetchMethodId = "timeline" | "api" | "rss"
+
+/**
+ * What a method reads: the newest `count` per X account or for the channel,
+ * the whole listing, or for the X API a Japan date range or a backfill of
+ * `days` before the oldest stored post.
+ */
+export type FetchMode = "count" | "all" | "range" | "before"
+
+/** The selection a manual fetch sends with its method. */
+export interface FetchSelection {
+  mode: FetchMode
   days?: number
   count?: number
   startDate?: string
   endDate?: string
+}
+
+export interface FetchOptions {
+  /** Run schedule extraction after an X fetch. */
+  extract?: boolean
+  translate?: boolean
+  /** Rewrite stored records the method lists again (YouTube only). */
+  refresh?: boolean
+}
+
+/** One listing method of a source and whether the server can run it now. */
+export interface FetchMethod {
+  id: FetchMethodId
+  modes: FetchMode[]
+  maxCount: number
+  pageSize: number
+  /** The environment variable the method needs, never its value. */
+  requires?: string
+  refresh: boolean
+  extract: boolean
+  available: boolean
+}
+
+/** A record a fetch stored for the first time. */
+export interface FetchItem {
+  id: string
+  title: string
+  account?: string
 }
 
 /**
@@ -39,9 +77,15 @@ export interface FetchWindow {
 export type SourceSync =
   { mode: "incremental"; max: number } | { mode: "count"; count: number }
 
-/** A run's source window: an operator's, or a source timer's frozen sync. */
-export interface RunWindow extends Omit<FetchWindow, "mode"> {
-  mode: FetchWindow["mode"] | SourceSync["mode"]
+/**
+ * A run's source window: an operator's fetch, or a source timer's frozen
+ * sync. Runs frozen before fetches named their method carry no `method` and
+ * may use the retired `recent` mode.
+ */
+export interface RunWindow extends Omit<FetchSelection, "mode"> {
+  method?: FetchMethodId
+  mode: FetchMode | SourceSync["mode"] | "recent"
+  refresh?: boolean
   max?: number
 }
 
@@ -138,6 +182,34 @@ export interface LiveProbeStatus {
 
 export type ScheduleSource = "x" | "youtube" | "bilibili"
 
+/** One listing method of a source's fallback chain (ADR-0004). */
+export interface ChainMethod {
+  id: string
+  enabled: boolean
+  /** Whether this process can run it; the variable it needs otherwise. */
+  available: boolean
+  requires?: string
+}
+
+/** The ordered fallback over listing methods that timed reads try. */
+export interface SourceChain {
+  methods: ChainMethod[]
+  /** Bilibili's one method cannot be reordered. */
+  fixed: boolean
+  /** X only: timeline failures before the API runs, and its daily cap. */
+  apiGate?: number
+  apiDailyCap?: number
+  apiUsage?: { day: string; posts: number }
+  timelineFailures?: Record<string, number>
+}
+
+/** What a schedule update may change in the chain. */
+export interface SourceChainUpdate {
+  methods?: { id: string; enabled: boolean }[]
+  apiGate?: number
+  apiDailyCap?: number
+}
+
 /** A source's own timer (ADR-0003). */
 export interface SourceSchedule {
   source: ScheduleSource
@@ -147,6 +219,7 @@ export interface SourceSchedule {
   maxIntervalMinutes: number
   /** X and YouTube only. */
   sync: SourceSync | null
+  chain: SourceChain
   nextRunAt: string | null
   lastRun: { id: string; status: string; at: string } | null
   /** SKIP_* disables the source in this process. */
@@ -158,16 +231,13 @@ export interface Sources {
   schedules: SourceSchedule[]
   x: {
     skipped: boolean
-    /** The official API credential is configured. */
-    historyAvailable: boolean
-    /** The window modes the server can run now. */
-    windows: FetchWindow["mode"][]
+    /** The manual fetch methods, in the order the console offers them. */
+    methods: FetchMethod[]
     accounts: { account: string; oldest: string | null }[]
   }
   youtube: {
     skipped: boolean
-    historyAvailable: boolean
-    windows: FetchWindow["mode"][]
+    methods: FetchMethod[]
     oldest: string | null
     push: PushStatus
     liveProbe: LiveProbeStatus

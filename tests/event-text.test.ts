@@ -33,7 +33,9 @@ test("every status code has English and Chinese admin labels", () => {
       `admin.event.status.${code}` as keyof (typeof adminMessages)["en"]
     assert.equal(typeof adminMessages.en[key], "string", key)
     assert.doesNotMatch(String(adminMessages.en[key]), cjk, key)
-    assert.equal(typeof adminMessages["zh-CN"][key], "string", key)
+    // New admin text is English only, so the Chinese catalog is partial.
+    const chinese: Record<string, unknown> = adminMessages["zh-CN"]
+    assert.equal(typeof chinese[key], "string", key)
   }
 })
 

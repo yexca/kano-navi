@@ -71,7 +71,7 @@ tasks: an overview of what waits for a decision and the active run, a review
 queue for schedule images, suspected cancellations, and failed extractions,
 schedule curation with durable locks, posts, videos and the featured video,
 profile images, the run history and one-off step runs, sources with their
-timers, fetch windows and YouTube push, schedule detection settings, and the
+timers, manual fetches and YouTube push, schedule detection settings, and the
 LLM provider catalog with one ordered model queue. See the
 [Admin API](architecture/admin-api.md).
 

@@ -26,7 +26,9 @@ import type {
   DiscoveredModel,
   EventInput,
   Extraction,
-  FetchWindow,
+  FetchMethodId,
+  FetchOptions,
+  FetchSelection,
   LlmCatalog,
   Model,
   Overview,
@@ -40,6 +42,7 @@ import type {
   ScheduleImage,
   ScheduleSource,
   Session,
+  SourceChainUpdate,
   SourceSchedule,
   Sources,
   StepCatalog,
@@ -81,7 +84,14 @@ export type StartRun =
   | { kind: "sync" | "scan" }
   /** A one-off step run: the picked steps once, nothing saved. */
   | { kind: "workflow"; steps: string[] }
-  | { kind: "fetch"; source: "x" | "youtube"; window: FetchWindow }
+  /** A manual fetch through one method; it never falls back to another. */
+  | {
+      kind: "fetch"
+      source: "x" | "youtube"
+      method: FetchMethodId
+      window: FetchSelection
+      options?: FetchOptions
+    }
 
 /** A run start, or a source's Run now: its fixed chain once. */
 export type StartWork = StartRun | { kind: "source"; source: ScheduleSource }
@@ -119,7 +129,7 @@ function createClient(run: Runner, slow: Runner) {
       source: ScheduleSource,
       body: Partial<
         Pick<SourceSchedule, "enabled" | "intervalMinutes" | "sync">
-      >,
+      > & { chain?: SourceChainUpdate },
     ) => send<SourceSchedule>("PUT", `/sources/${enc(source)}/schedule`, body),
     runSource: (source: ScheduleSource) =>
       send<{ run: Run }>("POST", `/sources/${enc(source)}/run`),

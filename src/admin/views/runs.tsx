@@ -39,6 +39,8 @@ import {
   metricLabel,
   RunLine,
   stepIcons,
+  stepResult,
+  windowText,
 } from "@/admin/views/run-parts"
 import type { Translator } from "@/types"
 import { cn } from "@/lib/utils"
@@ -135,11 +137,6 @@ function StepRunDialog({ onClose }: { onClose: () => void }) {
       )}
     </Modal>
   )
-}
-
-function stepResult(run: Run, step: string): unknown {
-  const results = run.result?.results || run.run?.counts || {}
-  return results[step === "schedule" ? "schedules" : step] ?? results[step]
 }
 
 type Scalar = string | number | boolean
@@ -333,21 +330,7 @@ function WindowLine({ run, step }: { run: Run; step: string }) {
   const { t } = useAppSettings()
   const window = run.fetchWindows?.[step]
   if (!window) return null
-  return (
-    <small className="adm-muted">
-      {t(`admin.fetch.mode.${window.mode}`)}
-      {window.days
-        ? ` · ${t("admin.fetch.daysCount", { count: window.days })}`
-        : ""}
-      {window.max
-        ? ` · ${t("admin.fetch.maxCount", { count: window.max })}`
-        : ""}
-      {window.count
-        ? ` · ${t(step === "youtube" ? "admin.fetch.videosCount" : "admin.fetch.postsCount", { count: window.count })}`
-        : ""}
-      {window.startDate ? ` · ${window.startDate} – ${window.endDate}` : ""}
-    </small>
-  )
+  return <small className="adm-muted">{windowText(window, step, t)}</small>
 }
 
 /** One step of a run: its outcome, error in words and what it counted. */

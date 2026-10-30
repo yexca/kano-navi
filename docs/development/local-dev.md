@@ -79,14 +79,15 @@ while developing.
 
 Each source timer's sync setting controls how much a run reads, separately
 from its interval (incremental with a cap of 50 by default). The Sources page
-also offers recent windows, older-record backfill, date ranges and latest
-counts. Without keys, X recent,
-date-range and latest-count fetches page the public FxTwitter timeline, and
-YouTube recent fetches keep the finite RSS coverage and report that limitation.
-For backfills and YouTube history, optionally configure environment-only
-`X_API_BEARER_TOKEN` with full-archive access and/or `YOUTUBE_API_KEY`, then
-restart the server.
-See [Fetch windows](../architecture/workflows.md#fetch-windows-and-historical-backfill).
+also starts manual fetches through one method each. Without keys, X fetches
+page the public FxTwitter timeline (the newest posts, or everything) and
+YouTube fetches read the RSS feed's newest 15 uploads. For X date ranges and
+backfills, or the whole YouTube uploads playlist, optionally configure
+environment-only `X_API_BEARER_TOKEN` with full-archive access and/or
+`YOUTUBE_API_KEY`, then restart the server. The X token also lets the X
+timer's method chain fall back to the X API, which stays off until it is
+enabled on the Sources page.
+See [Manual fetches](../architecture/workflows.md#manual-fetches-and-historical-backfill).
 
 Tailwind CSS 4 runs through `@tailwindcss/vite`; `src/index.css` loads the
 existing `tailwind.config.ts` with `@config`. The CSS runtime requires Safari

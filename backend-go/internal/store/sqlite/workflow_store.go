@@ -75,10 +75,10 @@ func (s *Store) ListWorkflowRuns(ctx context.Context, page, size int, status, wo
 	return WorkflowRunPage{out, page, size, total, pageCount(total, size), page < pageCount(total, size)}, nil
 }
 
-// runConfigColumns selects the lookback days, windows and sync frozen on a
-// run, as NULL where a read-only snapshot lacks the column.
+// runConfigColumns selects the lookback days, windows, sync and chains
+// frozen on a run, as NULL where a read-only snapshot lacks the column.
 func (s *Store) runConfigColumns() string {
-	columns := []string{"NULL", "NULL", "NULL"}
+	columns := []string{"NULL", "NULL", "NULL", "NULL"}
 	if s.workflowVersion >= 2 {
 		columns[0] = "source_lookback_json"
 	}
@@ -88,11 +88,14 @@ func (s *Store) runConfigColumns() string {
 	if s.sourceSync {
 		columns[2] = "source_sync_json"
 	}
+	if s.sourceChain {
+		columns[3] = "source_chain_json"
+	}
 	return strings.Join(columns, ",")
 }
 
 // decodeRunConfig fills what runConfigColumns read.
-func (s *Store) decodeRunConfig(x *WorkflowRun, lookback, windows, sync sql.NullString) error {
+func (s *Store) decodeRunConfig(x *WorkflowRun, lookback, windows, sync, chain sql.NullString) error {
 	if s.workflowVersion >= 2 && (!lookback.Valid || json.Unmarshal([]byte(lookback.String), &x.SourceLookbackDays) != nil) {
 		return ErrWorkflowStorage
 	}
@@ -112,6 +115,22 @@ func (s *Store) decodeRunConfig(x *WorkflowRun, lookback, windows, sync sql.Null
 					x.SourceSync = map[string]SourceSync{}
 				}
 				x.SourceSync[source] = setting
+			}
+		}
+	}
+	if s.sourceChain {
+		// Like the sync, a run keeps only the chains it froze; a run without
+		// one reads through the source's default chain.
+		var stored map[string]SourceChain
+		if !chain.Valid || json.Unmarshal([]byte(chain.String), &stored) != nil {
+			return ErrWorkflowStorage
+		}
+		for source, setting := range stored {
+			if setting.Problem(source) == "" {
+				if x.SourceChain == nil {
+					x.SourceChain = map[string]SourceChain{}
+				}
+				x.SourceChain[source] = setting
 			}
 		}
 	}
@@ -147,15 +166,15 @@ func (s *Store) GetWorkflowRun(ctx context.Context, id string) (*WorkflowRun, er
 	if err := s.requireWorkflow(); err != nil {
 		return nil, err
 	}
-	var lookback, windows, sync sql.NullString
-	x, e := scanRun(s.db.QueryRowContext(ctx, "SELECT "+runColumns+","+s.runConfigColumns()+" FROM workflow_runs WHERE id=?", id), &lookback, &windows, &sync)
+	var lookback, windows, sync, chain sql.NullString
+	x, e := scanRun(s.db.QueryRowContext(ctx, "SELECT "+runColumns+","+s.runConfigColumns()+" FROM workflow_runs WHERE id=?", id), &lookback, &windows, &sync, &chain)
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, ErrWorkflowNotFound
 	}
 	if e != nil {
 		return nil, ErrWorkflowStorage
 	}
-	if e = s.decodeRunConfig(&x, lookback, windows, sync); e != nil {
+	if e = s.decodeRunConfig(&x, lookback, windows, sync, chain); e != nil {
 		return nil, e
 	}
 	rows, e := s.db.QueryContext(ctx, `SELECT `+s.stepColumns()+` FROM workflow_run_steps WHERE run_id=? ORDER BY step_order LIMIT ?`, id, maxRunSteps)
@@ -231,10 +250,10 @@ func (s *Store) WorkflowRunSummaries(ctx context.Context, ids []string) (map[str
 		return nil, ErrWorkflowStorage
 	}
 	for rows.Next() {
-		var lookback, windows, sync sql.NullString
-		x, e := scanRun(rows, &lookback, &windows, &sync)
+		var lookback, windows, sync, chain sql.NullString
+		x, e := scanRun(rows, &lookback, &windows, &sync, &chain)
 		if e == nil {
-			e = s.decodeRunConfig(&x, lookback, windows, sync)
+			e = s.decodeRunConfig(&x, lookback, windows, sync, chain)
 		}
 		if e != nil {
 			rows.Close()

@@ -14,16 +14,12 @@
       "reason": "Official documentation link for the optional historical X source API."
     },
     {
-      "host": "developers.google.com",
-      "reason": "Official documentation link describing YouTube date-window search and source limits."
-    },
-    {
       "host": "api.x.com",
-      "reason": "Optional server-side official X full-archive search for operator-selected date windows; bearer credentials are sent only in headers."
+      "reason": "Optional server-side official X full-archive search for the operator's manual X API fetches (newest posts, date ranges, backfills); bearer credentials are sent only in headers."
     },
     {
       "host": "www.googleapis.com",
-      "reason": "Optional server-side YouTube Data API: date-window search and pagination, and the recent step's uploads playlist and videos.list details; API credentials are sent only in headers."
+      "reason": "Optional server-side YouTube Data API: the uploads playlist for the recent step and the operator's manual API fetches, and videos.list details; API credentials are sent only in headers."
     },
     {
       "host": "pubsubhubbub.appspot.com",

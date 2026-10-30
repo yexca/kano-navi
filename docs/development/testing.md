@@ -81,7 +81,7 @@ Backend coverage, by package under `backend-go/internal/`:
   tests cover ID search before pagination and inclusive Japan-date boundaries.
 - `httpapi`: public reads, media containment and validators, compression and
   static caching, the admin session and origin guard, event mutations, and the
-  operator console routes for workflows, jobs and source fetch windows.
+  operator console routes for workflows, jobs and manual source fetches.
 - `workflow` and `jobs`: single-flight reservation, leases, retry, recovery,
   cancellation, timers, and the source, media and history steps; each job
   kind's steps and history label, and run listings that match each run's

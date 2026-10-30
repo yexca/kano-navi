@@ -86,7 +86,7 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 			return StartResult{Reason: reason(ReasonNoSteps)}, nil
 		}
 		for source, window := range options.FetchWindows {
-			normalized, windowErr := window.Normalize()
+			normalized, windowErr := window.Normalize(source)
 			if windowErr != nil || (source != "x" && source != "youtube") {
 				return StartResult{}, sqlite.ErrWorkflowValidation
 			}
@@ -96,10 +96,20 @@ func (m *QueueManager) Start(ctx context.Context, kind, triggeredBy string, opti
 		if err != nil {
 			return StartResult{}, err
 		}
-		run, err = m.Queue.SubmitDefinition(ctx, definition, trigger, recentDays(definition.FetchWindows))
+		definition.SourceChain, err = m.sourceChain(ctx, definition.Steps, definition.FetchWindows)
+		if err != nil {
+			return StartResult{}, err
+		}
+		run, err = m.Queue.SubmitDefinition(ctx, definition, trigger, nil)
 	case KindLive:
 		source = "youtube-live"
-		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocLiveWorkflow, Steps: []string{StepLive}}, trigger, nil)
+		// The probe reads through YouTube's chain: without its api method it
+		// makes no Data API call.
+		definition := sqlite.WorkflowDefinition{ID: sqlite.AdhocLiveWorkflow, Steps: []string{StepLive}}
+		if definition.SourceChain, err = m.sourceChain(ctx, definition.Steps, nil); err != nil {
+			return StartResult{}, err
+		}
+		run, err = m.Queue.SubmitDefinition(ctx, definition, trigger, nil)
 	case KindTranslate:
 		source = "translate"
 		run, err = m.Queue.SubmitDefinition(ctx, sqlite.WorkflowDefinition{ID: sqlite.AdhocTranslateWorkflow, Steps: []string{StepTranslate}}, trigger, nil)
@@ -157,16 +167,29 @@ func (m *QueueManager) sourceSync(ctx context.Context, definition sqlite.Workflo
 	return out, nil
 }
 
-// recentDays gives the incremental synchronization the lookback of a recent
-// window, which it uses when the source API credential is absent.
-func recentDays(windows map[string]history.Window) map[string]int {
-	days := map[string]int{}
-	for source, window := range windows {
-		if window.Mode == history.ModeRecent {
-			days[source] = window.Days
+// sourceChain freezes the method chain each source step without a window
+// reads through, as its source schedule orders it (ADR-0004). A manual
+// fetch names its own method; full syncs, scans and the other kinds never
+// get here and read through the default chains.
+func (m *QueueManager) sourceChain(ctx context.Context, steps []string, windows map[string]history.Window) (map[string]sqlite.SourceChain, error) {
+	var chains map[string]sqlite.SourceChain
+	out := map[string]sqlite.SourceChain{}
+	for _, step := range steps {
+		source := workflow.ChainSource(step)
+		if _, windowed := windows[step]; windowed || !slices.Contains(sqlite.ChainSources, source) {
+			continue
+		}
+		if chains == nil {
+			var err error
+			if chains, err = m.Store.SourceScheduleChains(ctx); err != nil {
+				return nil, err
+			}
+		}
+		if chain, ok := chains[source]; ok {
+			out[source] = chain
 		}
 	}
-	return days
+	return out, nil
 }
 
 func (m *QueueManager) Get(ctx context.Context, id string) (*Job, error) {

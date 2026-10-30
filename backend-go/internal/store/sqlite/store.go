@@ -36,6 +36,9 @@ type Store struct {
 	// sourceSync reports the source_sync_json columns, which a read-only
 	// snapshot that has not been upgraded lacks.
 	sourceSync bool
+	// sourceChain reports the source_chain_json column, which such a
+	// snapshot lacks as well.
+	sourceChain bool
 	// scheduleOffset draws a source schedule's jitter; nil draws at random.
 	scheduleOffset func(spread int64) int64
 }
@@ -87,14 +90,16 @@ func OpenReadOnly(filename string) (*Store, error) {
 		}
 	}
 	var version int
-	sync := false
+	sync, chain := false, false
 	if workflowTable == 1 {
 		_ = db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM workflow_migrations`).Scan(&version)
 		var columns int
 		_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('workflow_runs') WHERE name='source_sync_json'`).Scan(&columns)
 		sync = columns == 1
+		_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('workflow_runs') WHERE name='source_chain_json'`).Scan(&columns)
+		chain = columns == 1
 	}
-	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), workflowVersion: version, sourceSync: sync}, nil
+	return &Store{db: db, dataRoot: filepath.Dir(filepath.Dir(abs)), workflowVersion: version, sourceSync: sync, sourceChain: chain}, nil
 }
 
 // OpenAdminWrites opens an existing fixture in SQLite rw mode. It never creates
@@ -134,7 +139,7 @@ func OpenAdminWrites(filename string) (*Store, error) {
 	}
 	store.workflowWritable = true
 	store.workflowVersion = WorkflowSchemaVersion
-	store.sourceSync = true
+	store.sourceSync, store.sourceChain = true, true
 	return store, nil
 }
 

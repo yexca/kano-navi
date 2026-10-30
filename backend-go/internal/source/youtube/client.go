@@ -201,6 +201,21 @@ func (c *Client) VideosPlaylist(ctx context.Context, key, channel string) ([]byt
 	}
 	return c.playlist(ctx, key, "UULF"+channel[2:], "")
 }
+
+// FormatPlaylistPage lists a page of the live (UULV) or long-form (UULF)
+// playlist that an earlier answer's nextPageToken names, or the newest page for
+// an empty token: one quota unit.
+func (c *Client) FormatPlaylistPage(ctx context.Context, key, channel string, live bool, token string) ([]byte, error) {
+	if !channelID.MatchString(channel) {
+		return nil, &Error{"youtube_invalid_channel"}
+	}
+	prefix := "UULF"
+	if live {
+		prefix = "UULV"
+	}
+	return c.playlist(ctx, key, prefix+channel[2:], token)
+}
+
 func (c *Client) playlist(ctx context.Context, key, playlist, token string) ([]byte, error) {
 	query := url.Values{"part": {"snippet,contentDetails,status"}, "playlistId": {playlist}, "maxResults": {"50"}}
 	if token != "" {

@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/yexca/kano-navi/backend-go/internal/jobs"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
+	"github.com/yexca/kano-navi/backend-go/internal/jobs"
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 )
 
@@ -33,12 +35,16 @@ func (a *api) sourceSchedules(ctx context.Context) ([]map[string]any, error) {
 	}
 	out := make([]map[string]any, 0, len(schedules))
 	for _, schedule := range schedules {
-		out = append(out, a.scheduleEntry(schedule))
+		entry, err := a.scheduleEntry(ctx, schedule)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, entry)
 	}
 	return out, nil
 }
 
-func (a *api) scheduleEntry(schedule sqlite.SourceSchedule) map[string]any {
+func (a *api) scheduleEntry(ctx context.Context, schedule sqlite.SourceSchedule) (map[string]any, error) {
 	low, high := sqlite.SourceScheduleBounds(schedule.Source, a.bilibiliFloor())
 	entry := map[string]any{
 		"source": schedule.Source, "enabled": schedule.Enabled, "intervalMinutes": schedule.IntervalMinutes,
@@ -48,11 +54,44 @@ func (a *api) scheduleEntry(schedule sqlite.SourceSchedule) map[string]any {
 	if a.skipped(schedule.Source) {
 		entry["reason"] = "environment"
 	}
-	return entry
+	chain, err := a.chainEntry(ctx, schedule)
+	if err != nil {
+		return nil, err
+	}
+	entry["chain"] = chain
+	return entry, nil
+}
+
+// chainEntry describes a schedule's method chain (ADR-0004): each method in
+// order with whether it is enabled, whether this process can run it and the
+// variable it needs. X adds its API gate and cap, today's usage and each
+// account's timeline failure streak. Bilibili's one method is fixed.
+func (a *api) chainEntry(ctx context.Context, schedule sqlite.SourceSchedule) (map[string]any, error) {
+	methods := []map[string]any{}
+	for _, method := range schedule.Chain.Methods {
+		item := map[string]any{"id": method.ID, "enabled": method.Enabled, "available": true}
+		if method.ID == history.MethodAPI {
+			if described, ok := history.Lookup(schedule.Source, method.ID); ok {
+				item["requires"] = described.Requires
+			}
+			item["available"] = a.methodAvailable(schedule.Source, method.ID)
+		}
+		methods = append(methods, item)
+	}
+	out := map[string]any{"methods": methods, "fixed": !slices.Contains(sqlite.ChainSources, schedule.Source)}
+	if schedule.Source == "x" {
+		state, err := a.Store.XAPIStatus(ctx, a.XHandles, a.Now())
+		if err != nil {
+			return nil, err
+		}
+		out["apiGate"], out["apiDailyCap"] = schedule.Chain.APIGate, schedule.Chain.APIDailyCap
+		out["apiUsage"], out["timelineFailures"] = state.Usage, state.TimelineFailures
+	}
+	return out, nil
 }
 
 // updateSourceSchedule accepts any subset of { enabled, intervalMinutes,
-// sync }; omitted fields keep their value.
+// sync, chain }; omitted fields keep their value.
 func (a *api) updateSourceSchedule(w http.ResponseWriter, r *http.Request) {
 	source := r.PathValue("source")
 	if !slices.Contains(sqlite.ScheduleSources, source) {
@@ -96,6 +135,13 @@ func (a *api) updateSourceSchedule(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			schedule.Sync = &setting
+		case "chain":
+			chain, chainErr := sourceChain(source, raw, schedule.Chain)
+			if chainErr != nil {
+				httpx.WriteError(w, chainErr)
+				return
+			}
+			schedule.Chain = chain
 		default:
 			httpx.WriteError(w, httpx.Invalid("%s is not a source schedule field", key))
 			return
@@ -110,7 +156,73 @@ func (a *api) updateSourceSchedule(w http.ResponseWriter, r *http.Request) {
 		workflowError(w, err, "not_found")
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, a.scheduleEntry(saved))
+	entry, err := a.scheduleEntry(r.Context(), saved)
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, entry)
+}
+
+// sourceChain reads { methods: [{ id, enabled }], apiGate, apiDailyCap } over
+// the current chain: methods, when given, list every method of the source
+// once with at least one enabled; the X API gate and cap apply to X only.
+func sourceChain(source string, raw json.RawMessage, current sqlite.SourceChain) (sqlite.SourceChain, error) {
+	if !slices.Contains(sqlite.ChainSources, source) {
+		return current, httpx.Invalid("the %s chain is fixed", source)
+	}
+	var body map[string]json.RawMessage
+	if json.Unmarshal(raw, &body) != nil || body == nil {
+		return current, httpx.Invalid("chain must be an object")
+	}
+	chain := current
+	chain.Methods = slices.Clone(current.Methods)
+	for key, value := range body {
+		switch {
+		case key == "methods":
+			var methods []map[string]json.RawMessage
+			if json.Unmarshal(value, &methods) != nil {
+				return current, httpx.Invalid("chain methods must be a list of { id, enabled }")
+			}
+			chain.Methods = []sqlite.ChainMethod{}
+			seen := map[string]bool{}
+			for _, item := range methods {
+				var method sqlite.ChainMethod
+				if len(item) != 2 || json.Unmarshal(item["id"], &method.ID) != nil || json.Unmarshal(item["enabled"], &method.Enabled) != nil {
+					return current, httpx.Invalid("chain methods must be a list of { id, enabled }")
+				}
+				if !slices.Contains(sqlite.ChainMethodIDs(source), method.ID) {
+					return current, httpx.Invalid("%s is not a method of the %s chain", method.ID, source)
+				}
+				if seen[method.ID] {
+					return current, httpx.Invalid("the chain lists %s twice", method.ID)
+				}
+				seen[method.ID] = true
+				chain.Methods = append(chain.Methods, method)
+			}
+			if len(seen) != len(sqlite.ChainMethodIDs(source)) {
+				return current, httpx.Invalid("the chain must list every method: %s", strings.Join(sqlite.ChainMethodIDs(source), ", "))
+			}
+			if len(chain.Enabled()) == 0 {
+				return current, httpx.Invalid("the chain must enable at least one method")
+			}
+		case key == "apiGate" && source == "x":
+			gate, err := integer(value, "apiGate", 0, sqlite.MaxXAPIGate)
+			if err != nil {
+				return current, err
+			}
+			chain.APIGate = gate
+		case key == "apiDailyCap" && source == "x":
+			limit, err := integer(value, "apiDailyCap", 1, sqlite.MaxXAPIDailyCap)
+			if err != nil {
+				return current, err
+			}
+			chain.APIDailyCap = limit
+		default:
+			return current, httpx.Invalid("%s is not a field of the %s chain", key, source)
+		}
+	}
+	return chain, nil
 }
 
 // runSource starts Run now: the source's fixed chain once, triggered by the

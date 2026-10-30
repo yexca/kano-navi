@@ -295,6 +295,7 @@ CREATE TABLE source_schedules (
     enabled INTEGER NOT NULL DEFAULT 0,
     interval_minutes INTEGER NOT NULL,
     sync_json TEXT NOT NULL DEFAULT '{}',
+    chain_json TEXT NOT NULL DEFAULT '{}',
     next_run_at TEXT,
     updated_at TEXT NOT NULL
   );

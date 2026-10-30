@@ -33,19 +33,24 @@ the last kept one, which then reads on to the oldest floor. A failed
 continuation restarts at the newest page. A timeline that ends
 before the floor closes the gap and every older one and reports
 `x_timeline_gap`, so an operator
-can fill it with a date window through the API. The step result counts
+can fill it with a timeline `all` fetch or an X API date range. The step result counts
 accounts with an open gap as `timelineGaps`
 ([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)).
 
-When the first timeline page fails, is not a timeline, or yields none of the
-account's own statuses, discovery falls back to the logged-out profile page
-`x.com/<handle>`, which lists only the newest few statuses. Only links whose
-path is `/<handle>/status/<id>` (handle case-insensitive, plain or
-URL-encoded) count; quoted statuses, reposts and other handles' links are left
-out, as the timeline leaves them out. The run records the
-source used in `sync_state.metadata_json.discovery` (`timeline` or `profile`)
-and counts fallback accounts as `profileFallbacks` in the step result. A
-fallback alone does not fail the account or mark the run partial.
+The timeline is the first method of the X schedule's default
+[method chain](workflows.md#method-chains). When its first page fails, is
+not a timeline, or yields none of the account's own statuses, the chain goes
+on to the logged-out profile page `x.com/<handle>`, which lists only the
+newest few statuses. Only links whose path is `/<handle>/status/<id>` (handle
+case-insensitive, plain or URL-encoded) count; quoted statuses, reposts and
+other handles' links are left out, as the timeline leaves them out. The
+chain may also enable the [X API](#x-api-in-the-chain). The run records the
+method that served in `sync_state.metadata_json.discovery` (`timeline`,
+`profile` or `api`) and counts accounts the profile page served as
+`profileFallbacks` in the step result. A fallback alone does not fail the
+account or mark the run partial. When a method other than the timeline
+serves, every gap keeps its floor and drops its FxTwitter continuation, so
+the timeline later reads it again from the newest page.
 
 Before an account has a cursor, the Snowflake timestamps of discovered IDs are
 decoded and IDs older than `X_BOOTSTRAP_DAYS` are skipped. Each account has
@@ -54,15 +59,16 @@ refresh only a small `X_REFRESH_KNOWN` budget.
 
 The timeline pages a run reads already carry each status, so a new or pending
 status that a page lists with usable content is stored from the page, through
-the same mapping as an operator fetch window (below), without a detail
-request. An `api.vxtwitter.com` detail request remains the fallback for a
+the same mapping as an operator's manual fetch (below), without a detail
+request; posts the [X API](#x-api-in-the-chain) returns are stored the same
+way. An `api.vxtwitter.com` detail request remains the fallback for a
 status the timeline lists without content, for a pending status the pages no
 longer list, for the `X_REFRESH_KNOWN` refreshes, and for every status found
 on the logged-out profile page, which lists IDs only.
 `X_MAX_STATUS_REQUESTS` is the total detail-request budget shared by all
 configured accounts; posts read from the timeline do not use it, and the step
 result counts them as `timelinePosts`. A stored post that a page lists again
-keeps the text, media and schedule candidate it has, as in a fetch window.
+keeps the text, media and schedule candidate it has, as in a manual fetch.
 Successful posts are stored with `account_handle` and returned as one
 time-ordered feed. Image-only posts are retained as candidates as long as they
 have a publication time and a media URL.
@@ -81,15 +87,14 @@ post that still names its file takes the thumbnail on its next refresh. A
 quoted status is read into the same
 [quote projection](#quoted-posts) on both paths.
 
-Operator fetch windows read the same timeline differently (see
-[Fetch windows](workflows.md#fetch-windows-and-historical-backfill)): without
-`X_API_BEARER_TOKEN`, `recent` and `range` windows, and `count` windows
-always, request pages of 100 and store each own status from the page itself.
+The operator's timeline fetches read the same timeline differently (see
+[Manual fetches](workflows.md#manual-fetches-and-historical-backfill)): they
+request pages of 100 and store each own status from the page itself.
 The adapter maps FxTwitter's `created_timestamp`, `text`, counters and
 `media` (a photo's URL without the `?name=orig` size, or a video's or GIF's
 thumbnail, in post order; a quoted status's images belong to its quote) onto
 the same post fields the detail path fills, and keeps only the author's name
-and handle of the repeated profile, and of a quoted status's, in `raw_json`. Such windows leave stored posts, the
+and handle of the repeated profile, and of a quoted status's, in `raw_json`. Such fetches leave stored posts, the
 cursor and the pending queue unchanged.
 
 Both discovery hosts and the detail host share one client: a fixed timeout and
@@ -109,7 +114,7 @@ a timeline page lists with content is stored from the page whatever its
 failures. Successful posts, pending-work removal, the failure counts and the
 latest successful cursor commit atomically. Budget exhaustion retains
 unfinished IDs; an all-failed run does not record a successful cursor or
-timestamp. Date-window fetches neither consume this queue nor update normal
+timestamp. Manual fetches neither consume this queue nor update normal
 incremental state.
 
 Failed detail requests are counted per ID in
@@ -125,7 +130,7 @@ first consecutive failure, 6 hours after the second and 24 hours after the
 third, as the extraction failure backoff does, and the fourth drops the ID
 with `x_retry_limit`; a gone answer waits the same way before its second
 request. A waiting ID makes no request, uses none of the budget and keeps its
-place in the queue, and a cancelled run counts no failure. A dropped ID leaves the queue for good; a date window can
+place in the queue, and a cancelled run counts no failure. A dropped ID leaves the queue for good; a manual fetch can
 still store it. The step result counts waiting IDs as `pendingHeld` and lists
 dropped ones as `pendingDropped` (`<account>: <id>: <code>`); both keys
 appear only when used.
@@ -141,18 +146,80 @@ serve the same purpose. These requests supplement discovery without
 bypassing the shared `X_MAX_STATUS_REQUESTS` budget and can recover a schedule
 post that has fallen out of the discovered status list.
 
+#### X API in the chain
+
+The X schedule's [method chain](workflows.md#method-chains) can enable the
+official API (`api`, off by default), which needs `X_API_BEARER_TOKEN`
+([ADR-0004](../decisions/ADR-0004-method-fallback-chains.md)). It reads
+`https://api.x.com/2/users/<id>/tweets` without reposts and replies, newest
+first, with the account's cursor as `since_id`, up to the run's cap of new
+posts in pages of 5 to 100 and at most 10 pages; before an account has a
+cursor it reads from `X_BOOTSTRAP_DAYS` ago instead. The numeric user ID
+comes from `/2/users/by/username/<handle>` once per process. Requests share
+the manual X API method's client (see
+[X API method](workflows.md#x-api-method)): the token only in the
+`Authorization` header, the `SYNC_TIMEOUT_MS` timeout, the 4 MiB limit,
+rejected redirects and `source_api_*` codes.
+
+A read that stops short of the end (its cap, the daily cap, the page bound
+or a failed later page) opens a [timeline gap](#x) at the cursor. Once the
+newest posts are read, each gap is read between its floor (`since_id`) and
+the oldest stored status above it (`until_id`), so it closes exactly and
+needs no continuation; a read cut short resumes below the oldest status it
+stored.
+
+The answer carries what the timeline and detail paths store, and each post
+is stored exactly as they store it, so a later timeline read or detail
+refresh keeps its extraction fingerprint: a long post's whole text
+(`note_tweet`), its `t.co` links replaced by their targets and its own
+media links removed, HTML entities decoded; its own images in attachment
+order (a photo's `url`, or a video's or GIF's `preview_image_url`); the
+like, repost and reply counts; `raw_json.mediaURLs`; and the
+[quote projection](#quoted-posts) of the status it quotes, read from the
+answer's expansions. Another author's post fails the answer with
+`source_api_invalid_records`. Posts read this way need no detail request
+and count as `apiPosts` in the step result.
+
+**Gate.** The chain reads the API only after the account's timeline failed
+`apiGate` consecutive runs (3 by default, 0–100; 0 opens it at once). The
+current run's failure counts, so the third failing run already reads through
+the API. A run the timeline serves starts the count over, and a cancelled run
+changes nothing. A chain without the timeline has nothing to count and never
+waits. A gated method records `x_api_gated` in `tried`, and the chain goes
+on without making the run partial.
+
+**Daily cap.** `apiDailyCap` (100 by default, 1–10,000) bounds the posts
+X API answers return per Japan day, the unit X bills. The accounts post a few
+times a day and a `since_id` read that finds nothing new returns nothing, so
+an ordinary day of fallback reads returns a few dozen posts; 100 leaves room
+to fill a gap after an outage while a month stays near 3,000 posts at worst.
+A request never asks for more posts than are left. With fewer than five left
+(the endpoint's smallest page), the chain skips the API with
+`x_api_daily_cap` until midnight in Japan, and the run is partial. Manual
+X API fetches ignore the gate and the cap, but the posts they read count
+toward the day.
+
+Each account's failure streak and the day's usage are kept in `sync_state`
+(source `x-api`; see [Sync state](data-model.md#sync-state)). The Sources
+page shows today's usage beside the cap and each account's streak, and the
+step result adds `apiPosts` and `apiRead`, the posts the answers returned,
+when the API was used.
+
 ### YouTube
 
-The `youtube` step reads the RSS feed for `YOUTUBE_CHANNEL_ID` (the current main channel
-by default), or with `YOUTUBE_API_KEY` the Data API's uploads playlist (see
-[Data API](#data-api)). It takes the newest listed uploads and stores the ones
+The `youtube` step lists the uploads of `YOUTUBE_CHANNEL_ID` (the current
+main channel by default) through the YouTube schedule's
+[method chain](workflows.md#method-chains): by default the Data API's uploads
+playlist when `YOUTUBE_API_KEY` is set (see [Data API](#data-api)), then the
+RSS feed, then the uploads tab. It takes the newest listed uploads and stores the ones
 not stored yet; see [source schedules](workflows.md#source-schedules). An
 incremental run takes at most the YouTube schedule's `max` (50 by default and
 for full syncs; the feed lists 15) uploads that are not stored yet, plus the
-stored ones among the newest `max` as detail candidates. A `count` run, and an
-operator `count` window, take the newest `count` entries, stored or not, and
-an operator `recent` window the listed uploads of its days. Without a key, a
-`count` above the feed's 15 is partial and reports `youtube_count_limited`.
+stored ones among the newest `max` as detail candidates. A `count` run takes
+the newest `count` entries, stored or not. Without a key, a `count` above the
+feed's 15 is partial and reports `youtube_count_limited`. The operator's
+manual fetches list uploads through their own method instead (see
+[Manual fetches](workflows.md#youtube-methods)).
 The cursor is the newest listed upload. An incremental run that leaves a new
 upload above the stored cursor unread, because of its cap or a failed
 playlist page, keeps the cursor, so later runs take the rest while the
@@ -191,7 +258,7 @@ upcoming pages without a start time remain retryable within the existing request
 budget. They record the protected `youtube_watch_details_incomplete` diagnostic
 without updating video/event details or claiming a successful check. Incremental
 metadata distinguishes successful `inspected` checks from `detailRequested`
-attempts. Historical windows
+attempts. Manual fetches
 do not write this incremental metadata.
 
 Feed failures record codes with their own `youtube_feed_` prefix
@@ -212,13 +279,14 @@ watch pages are requested once; their 5xx responses record
 The feed can also answer 404 for hours at a time, so a failed listing does not
 stop the step. It records the code and still works through stored detail
 work: refresh requests, the rotating queue, active reservations and due
-follow-ups. In place of the listing it reads the channel's uploads tab
-(`/channel/<id>/videos`) once and takes its newest 15 IDs as detail
-candidates, after the streams page's. The tab has no publication times, so
+follow-ups. The chain's next method, by default the channel's uploads tab
+(`/channel/<id>/videos`), is read once in its place, and its newest 15 IDs
+are detail candidates, after the streams page's. The tab has no publication times, so
 those IDs add no unchecked rows and leave the cursor alone; a watch page
 supplies a new video's time from `publishDate` (a stored time always wins).
 The step result reports where the uploads came from as `listing`: `api`,
-`rss`, `videos_page`, or empty when nothing answered, and a run that recorded
+`rss`, `videos_page`, or empty when nothing answered, `tried` lists every
+listing method tried with its code, and a run that recorded
 failures lists their controlled codes as `errors`, each once in order of
 first appearance with `×n` when it occurred n times (for example
 `youtube_watch_details_incomplete ×12`). The run view in `/admin` shows such
@@ -231,7 +299,8 @@ queue, so IDs whose checks keep failing do not starve the rest.
 
 #### Data API
 
-With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
+With `YOUTUBE_API_KEY` set and the chain's `api` method on, the recent step
+asks the YouTube Data API:
 
 - `playlistItems.list` on the channel's uploads playlist (`UU` and the channel
   ID after `UC`) is the listing, read like feed entries: the video's
@@ -242,8 +311,8 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   reaches the stored cursor (an entry at or below its time), or without a
   cursor at a page that holds a stored video, so uploads an earlier capped
   run left below newer stored ones are still read. A failed
-  later page keeps the earlier ones. When the first page fails, the feed and
-  then the uploads tab are tried as above.
+  later page keeps the earlier ones. When the first page fails or lists no
+  upload, the chain's next method is tried.
 - One `videos.list` call (`snippet`, `contentDetails`, `liveStreamingDetails`,
   `localizations`) covers the first 50 IDs of the detail queue, and any room
   left in it goes to the newest listed uploads of the run, stored or new. A
@@ -307,7 +376,15 @@ broadcast needs them. The key is sent only in the `X-Goog-Api-Key` header to
 back to the public pages; `apiRequests` in the step result counts the calls.
 The [live-status probe](#live-status-probe) asks the same `videos.list`
 first, one call and one quota unit per probe run, under the same
-classification rules.
+classification rules. An operator's manual API fetch checks the videos it
+lists under these rules too, without watch pages; a whole-playlist fetch
+reads the per-format playlists to their end rather than their newest pages
+(see [YouTube methods](workflows.md#youtube-methods)).
+
+A YouTube chain with `api` off makes no Data API call for its runs, key or
+not: no listing, `videos.list`, per-format or Shorts playlist, and the
+[live-status probe](#live-status-probe) reads watch pages only. Watch pages
+take over as they do without a key.
 
 #### Localized Titles
 
@@ -355,14 +432,14 @@ verdict of each listed entry as `videos.is_short` (1 or 0) on the stored row,
 new or old, after the video upsert; a verdict for a video the snapshot does
 not hold adds no row, and a changed value advances the dashboard revision.
 The stored `url` stays the canonical watch page. Watch pages, the live probe,
-historical windows and Bilibili never write `is_short`, so a later detail check
+manual fetches and Bilibili never write `is_short`, so a later detail check
 cannot clear it. Rows neither the feed nor the Shorts playlist below named
 stay `NULL` (unknown); the length is never used to guess. The step result's
 `shorts` counts the uploads marked as Shorts in that run, so a feed that
 stops naming the format shows as zero.
 
 When the Data API supplies the listing, the feed is still read for these
-verdicts alone. If it fails, its code is recorded and one `playlistItems.list`
+verdicts alone, a fixed helper read whether or not the chain enables `rss`. If it fails, its code is recorded and one `playlistItems.list`
 page (one quota unit, counted in `apiRequests`) of the channel's Shorts
 playlist (`UUSH` and the channel ID after `UC`) stands in: every upload it
 names that the run listed or the snapshot holds is marked a Short (1). The
@@ -410,8 +487,8 @@ writes; see [Video corrections](data-model.md#video-corrections-and-history).
 
 Whether a stream is on air is read from YouTube rather than guessed from its
 start time. A separate probe step (`live`) asks only about the videos it
-checks, through the Data API when `YOUTUBE_API_KEY` is set and otherwise
-their watch pages, with no feed, playlist or streams page, for at most five
+checks, through the Data API when `YOUTUBE_API_KEY` is set and the YouTube
+chain enables `api`, and otherwise their watch pages, with no feed, playlist or streams page, for at most five
 (`ytsource.MaxLiveProbes`) stored videos per run:
 
 - reservations whose scheduled start is within the next 15 minutes or has
@@ -437,7 +514,8 @@ ended) and `LiveStatus`: `upcoming`, `live`, `ended` (an end time, or
 names none. A live or ended broadcast's `startTimestamp` is its actual start
 and replaces the reservation time.
 
-With a key, one `videos.list` call (`snippet`, `contentDetails`,
+With a key and the chain's `api` method on, one `videos.list` call
+(`snippet`, `contentDetails`,
 `liveStreamingDetails`, `localizations`) asks about all of a run's due videos
 before any watch page, and is read as in the [Data API](#data-api) detail
 check, including the [localized titles](#localized-titles).
@@ -460,7 +538,7 @@ quota unit whatever the number of due videos, two more when an ended
 broadcast needs the per-format playlists, and nothing while nothing is
 due; the probe's worst case of 30 runs an hour is 720 units a day, and
 together with a regular YouTube step every 15 minutes (two units per run)
-stays under a tenth of the default 10,000. Without a key the probe reads
+stays under a tenth of the default 10,000. Without either the probe reads
 watch pages only.
 
 The store writes `videos.live_status` and `live_checked_at`, the actual start,
@@ -601,8 +679,8 @@ translation in the same transaction.
 ### Source Request Limits
 
 Every source client requests fixed destinations with a 10-second timeout
-(official-API fetch windows use `SYNC_TIMEOUT_MS`; see
-[Fetch windows](workflows.md#official-api-windows))
+(the X API, manual or in the chain, uses `SYNC_TIMEOUT_MS`; see
+[X API method](workflows.md#x-api-method))
 that stays active through body consumption, rejects redirects, and records
 only controlled error codes. Response bodies are limited to 4 MiB for X and
 YouTube and 2 MiB for Bilibili; a timed-out or oversized stream is cancelled
@@ -807,12 +885,11 @@ A quote the payload names but does not carry is stored as unavailable with
 only its ID and URL: vxtwitter's `qrtURL` without `qrt`, an FxTwitter quote
 typed as anything other than a status (a tombstone), or a quoted status
 without an author or content. A payload that names no usable status ID
-stores no quote. The X API date-window path does not read referenced
-statuses, so it keeps a stored quote and its images instead of clearing
-them.
+stores no quote. X API answers carry the quoted status as an expansion; one
+X does not return is stored as unavailable in the same way.
 
 An operator can hide a post's quote from the public pages
-(`posts.quote_hidden_at`); synchronization, the X API window and the
+(`posts.quote_hidden_at`); synchronization, the X API fetch method and the
 startup quote backfill (which fills a missing `quote_json` from the post's
 stored `raw_json`) keep updating the stored quote underneath and never write
 that decision.
@@ -844,14 +921,14 @@ candidates and extraction, whatever its wording says.
 
 ### Schedule Images
 
-Recent X synchronization and X fetch windows (timeline and API pages) share
+Recent X synchronization and manual X fetches (timeline and API pages) share
 one candidate rule: a post with an image of its own whose text contains one
 of the fixed source keywords (`schedule`, `スケジュール`, `配信予定`,
 `週間予定`, `今週の予定`, case-insensitive; the configurable extraction
 keywords play no part) registers its first image as the schedule asset
 `schedule-x-<post ID>`, with its source URL and account. The asset, its
 `schedule-image` media link and a `pending` / `unreviewed` review commit
-with the post, and with the page's continuation checkpoint for a window.
+with the post, and with the page's continuation checkpoint for a manual fetch.
 Registration does not run extraction or approve an image, and it writes no
 period.
 
@@ -973,12 +1050,12 @@ pending-ID queue and incremental cursor. YouTube detail work uses an independent
 `youtube-details` durable queue: new discoveries join the tail, attempted work
 rotates before its request, failed work remains retryable, and completed ordinary
 videos leave the queue. Reservations continue to rotate for refresh. Reopening
-SQLite preserves those turns. Date-window work uses separate rotation/queue
+SQLite preserves those turns. Manual fetches use separate rotation/queue
 identities and never rewrites incremental cursors or their check metadata.
 
 ## Related Docs
 
-- [Workflow and historical fetch windows](workflows.md)
+- [Workflows and manual fetches](workflows.md)
 - [Event precedence](data-model.md#event-precedence)
 - [Configuration](../operations/configuration.md)
 - [Secure development](../development/security.md)

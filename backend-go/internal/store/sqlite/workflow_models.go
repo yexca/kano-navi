@@ -28,6 +28,9 @@ type WorkflowDefinition struct {
 	// SourceSync is how each source step of a run reads, from the source
 	// schedules (ADR-0003). It is frozen on the run.
 	SourceSync map[string]SourceSync
+	// SourceChain is the method fallback chain each source step of a run
+	// reads through (ADR-0004). It is frozen on the run.
+	SourceChain map[string]SourceChain
 	// SourceLookbackDays are the days of an operator's recent fetch windows.
 	SourceLookbackDays map[string]int
 	// FetchWindows are operator-selected source windows of a fetch. They are
@@ -69,6 +72,7 @@ type WorkflowRun struct {
 	RecoveryCount           int                       `json:"recoveryCount"`
 	SourceLookbackDays      map[string]int            `json:"sourceLookbackDays,omitempty"`
 	SourceSync              map[string]SourceSync     `json:"sourceSync,omitempty"`
+	SourceChain             map[string]SourceChain    `json:"sourceChain,omitempty"`
 	FetchWindows            map[string]history.Window `json:"fetchWindows,omitempty"`
 	Steps                   []WorkflowStep            `json:"steps,omitempty"`
 }

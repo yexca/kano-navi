@@ -19,7 +19,10 @@ type SourceSchedule struct {
 	Enabled         bool   `json:"enabled"`
 	IntervalMinutes int    `json:"intervalMinutes"`
 	// Sync is how X and YouTube are read (ADR-0002); Bilibili has none.
-	Sync      *SourceSync        `json:"sync"`
+	Sync *SourceSync `json:"sync"`
+	// Chain is the fallback over listing methods that X and YouTube reads
+	// try (ADR-0004); Bilibili's is its one fixed method.
+	Chain     SourceChain        `json:"chain"`
 	NextRunAt *string            `json:"nextRunAt"`
 	UpdatedAt *string            `json:"updatedAt"`
 	LastRun   *SourceScheduleRun `json:"lastRun"`
@@ -83,6 +86,7 @@ func defaultSourceSchedule(source string, floor int) SourceSchedule {
 	if slices.Contains(SyncSources, source) {
 		schedule.Sync = &SourceSync{Mode: SyncIncremental, Max: DefaultSyncMax}
 	}
+	schedule.Chain = DefaultSourceChain(source)
 	return schedule
 }
 
@@ -111,15 +115,21 @@ func (s *Store) SourceSchedules(ctx context.Context, floor int) ([]SourceSchedul
 		return nil, err
 	}
 	if present {
-		rows, err := s.db.QueryContext(ctx, `SELECT source,enabled,interval_minutes,sync_json,next_run_at,updated_at FROM source_schedules`)
+		// A snapshot that has not been upgraded lacks the chain and reads the
+		// defaults.
+		chainColumn := "'{}'"
+		if s.scheduleChain(ctx) {
+			chainColumn = "chain_json"
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT source,enabled,interval_minutes,sync_json,`+chainColumn+`,next_run_at,updated_at FROM source_schedules`)
 		if err != nil {
 			return nil, ErrWorkflowStorage
 		}
 		for rows.Next() {
-			var source, sync, updated string
+			var source, sync, chain, updated string
 			var enabled, interval int
 			var next sql.NullString
-			if rows.Scan(&source, &enabled, &interval, &sync, &next, &updated) != nil {
+			if rows.Scan(&source, &enabled, &interval, &sync, &chain, &next, &updated) != nil {
 				rows.Close()
 				return nil, ErrWorkflowStorage
 			}
@@ -134,6 +144,9 @@ func (s *Store) SourceSchedules(ctx context.Context, floor int) ([]SourceSchedul
 			if x.Sync != nil {
 				setting := readSourceSync(sync)[source]
 				x.Sync = &setting
+			}
+			if slices.Contains(ChainSources, source) {
+				x.Chain = readSourceChain(source, chain)
 			}
 			x.NextRunAt = nullableWorkflowString(next)
 			x.UpdatedAt = &updated
@@ -184,7 +197,7 @@ func (s *Store) SaveSourceSchedule(ctx context.Context, input SourceSchedule, fl
 		return SourceSchedule{}, err
 	}
 	low, high := SourceScheduleBounds(input.Source, floor)
-	if input.IntervalMinutes < low || input.IntervalMinutes > high || (input.Sync == nil) != (current.Sync == nil) || (input.Sync != nil && !input.Sync.Valid()) {
+	if input.IntervalMinutes < low || input.IntervalMinutes > high || (input.Sync == nil) != (current.Sync == nil) || (input.Sync != nil && !input.Sync.Valid()) || (slices.Contains(ChainSources, input.Source) && input.Chain.Problem(input.Source) != "") {
 		return SourceSchedule{}, ErrWorkflowValidation
 	}
 	tx, err := s.workflowTx(ctx)
@@ -218,13 +231,21 @@ func upsertSourceSchedule(ctx context.Context, tx *sql.Tx, schedule SourceSchedu
 		}
 		sync = string(encoded)
 	}
+	chain := "{}"
+	if slices.Contains(ChainSources, schedule.Source) {
+		encoded, err := json.Marshal(schedule.Chain)
+		if err != nil {
+			return ErrWorkflowValidation
+		}
+		chain = string(encoded)
+	}
 	var planned any
 	if next != nil {
 		planned = *next
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO source_schedules(source,enabled,interval_minutes,sync_json,next_run_at,updated_at) VALUES(?,?,?,?,?,?)
- ON CONFLICT(source) DO UPDATE SET enabled=excluded.enabled,interval_minutes=excluded.interval_minutes,sync_json=excluded.sync_json,next_run_at=excluded.next_run_at,updated_at=excluded.updated_at`,
-		schedule.Source, schedule.Enabled, schedule.IntervalMinutes, sync, planned, workflowTime(now)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO source_schedules(source,enabled,interval_minutes,sync_json,chain_json,next_run_at,updated_at) VALUES(?,?,?,?,?,?,?)
+ ON CONFLICT(source) DO UPDATE SET enabled=excluded.enabled,interval_minutes=excluded.interval_minutes,sync_json=excluded.sync_json,chain_json=excluded.chain_json,next_run_at=excluded.next_run_at,updated_at=excluded.updated_at`,
+		schedule.Source, schedule.Enabled, schedule.IntervalMinutes, sync, chain, planned, workflowTime(now)); err != nil {
 		return ErrWorkflowStorage
 	}
 	return nil
@@ -284,6 +305,29 @@ func (s *Store) SourceScheduleSync(ctx context.Context) (map[string]SourceSync, 
 		}
 	}
 	return out, nil
+}
+
+// SourceScheduleChains is the chain of each X and YouTube schedule, which
+// every run with a source step reads through, except a full sync.
+func (s *Store) SourceScheduleChains(ctx context.Context) (map[string]SourceChain, error) {
+	schedules, err := s.SourceSchedules(ctx, SourceScheduleMinMinutes)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]SourceChain{}
+	for _, schedule := range schedules {
+		if slices.Contains(ChainSources, schedule.Source) {
+			out[schedule.Source] = schedule.Chain
+		}
+	}
+	return out, nil
+}
+
+// scheduleChain reports the chain_json column, which a read-only snapshot
+// that has not been upgraded lacks.
+func (s *Store) scheduleChain(ctx context.Context) bool {
+	var n int
+	return s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('source_schedules') WHERE name='chain_json'`).Scan(&n) == nil && n == 1
 }
 
 // SetScheduleOffset replaces the random draw of source schedule jitter, for

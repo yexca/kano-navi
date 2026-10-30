@@ -15,6 +15,7 @@ import (
 	"github.com/yexca/kano-navi/backend-go/internal/contentadmin"
 	"github.com/yexca/kano-navi/backend-go/internal/httpx"
 	"github.com/yexca/kano-navi/backend-go/internal/jobs"
+	"github.com/yexca/kano-navi/backend-go/internal/source/history"
 	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 	"github.com/yexca/kano-navi/backend-go/internal/testutil"
 	"github.com/yexca/kano-navi/backend-go/internal/workflow"
@@ -88,21 +89,21 @@ func newConsole(t *testing.T, mode, password string, steps *gatedSteps) *console
 	t.Cleanup(queue.Close)
 	runs := &jobs.QueueManager{Store: store, Queue: queue}
 	handler := New(Options{
-		Store:            store,
-		Auth:             newAuth(t, mode, password),
-		Runs:             runs,
-		Modules:          []httpx.AdminModule{pingModule{}},
-		Scheduler:        func() map[string]any { return map[string]any{"enabled": true, "running": true, "tickSeconds": 30} },
-		SkippedSteps:     []string{"media"},
-		XHandles:         []string{"synthetic_one"},
-		HistoryAvailable: func(source string) bool { return source == "youtube" },
-		// As in production without X_API_BEARER_TOKEN: X windows other than a
-		// backfill page the public timeline.
-		WindowAvailable: func(source, mode string) bool {
-			if source == "x" {
-				return mode != "before"
+		Store:        store,
+		Auth:         newAuth(t, mode, password),
+		Runs:         runs,
+		Modules:      []httpx.AdminModule{pingModule{}},
+		Scheduler:    func() map[string]any { return map[string]any{"enabled": true, "running": true, "tickSeconds": 30} },
+		SkippedSteps: []string{"media"},
+		XHandles:     []string{"synthetic_one"},
+		// As in production with YOUTUBE_API_KEY and without
+		// X_API_BEARER_TOKEN.
+		FetchMethods: func(source string) []history.MethodStatus {
+			out := []history.MethodStatus{}
+			for _, method := range history.Methods(source) {
+				out = append(out, history.MethodStatus{Method: method, Available: source == "youtube" || method.ID == history.MethodTimeline})
 			}
-			return mode != "count"
+			return out
 		},
 		Now: func() time.Time { return time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC) },
 	})
@@ -284,7 +285,17 @@ func TestOneOffStepRunsReplaceSavedWorkflows(t *testing.T) {
 	if retired := payload["run"].(map[string]any); code != 200 || retired["workflowId"] != "evening" || retired["kind"] != "workflow" || retired["sourceSchedule"] != nil || retired["status"] != "completed" {
 		t.Fatalf("retired=%d %v", code, payload)
 	}
-	if code, payload = c.call(t, "GET", "/api/admin/runs?pageSize=5", ""); code != 200 || payload["total"] != float64(2) {
+	// A fetch frozen with a selection no method serves any more still reads
+	// as it was stored.
+	retired, err := c.store.CreateWorkflowRun(context.Background(), sqlite.WorkflowDefinition{ID: sqlite.AdhocFetchWorkflow, Steps: []string{"youtube", "media"}, FetchWindows: map[string]history.Window{"youtube": {Mode: history.ModeRange, StartDate: "2026-02-01", EndDate: "2026-02-07"}}}, "operator", "", map[string]bool{"youtube": true, "media": true}, time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, payload = c.call(t, "GET", "/api/admin/runs/"+retired.ID, "")
+	if window, _ := payload["run"].(map[string]any)["fetchWindows"].(map[string]any)["youtube"].(map[string]any); code != 200 || window["mode"] != "range" || window["startDate"] != "2026-02-01" {
+		t.Fatalf("retired fetch=%d %v", code, payload)
+	}
+	if code, payload = c.call(t, "GET", "/api/admin/runs?pageSize=5", ""); code != 200 || payload["total"] != float64(3) {
 		t.Fatalf("history=%d %v", code, payload)
 	}
 }
@@ -357,69 +368,98 @@ func TestRunsAreSingleFlightAndSurviveOneFailedSource(t *testing.T) {
 	}
 }
 
-func TestSourceFetchWindows(t *testing.T) {
+func TestSourceFetchMethods(t *testing.T) {
 	c := newConsole(t, "development", "", &gatedSteps{})
 	code, payload := c.call(t, "GET", "/api/admin/sources", "")
 	x := payload["x"].(map[string]any)
 	youtube := payload["youtube"].(map[string]any)
-	if code != 200 || x["historyAvailable"] != false || len(x["accounts"].([]any)) != 1 || youtube["oldest"] != nil || youtube["historyAvailable"] != true ||
-		youtube["push"].(map[string]any)["enabled"] != false {
+	if code != 200 || len(x["accounts"].([]any)) != 1 || youtube["oldest"] != nil || youtube["push"].(map[string]any)["enabled"] != false {
 		t.Fatalf("status=%d %v", code, payload)
 	}
-	if fmt.Sprint(x["windows"]) != "[recent range count]" || fmt.Sprint(youtube["windows"]) != "[recent before range]" {
-		t.Fatalf("windows x=%v youtube=%v", x["windows"], youtube["windows"])
+	// Each method reports its modes, bounds and the variable it needs,
+	// never a credential.
+	describe := func(state map[string]any) string {
+		out := []string{}
+		for _, item := range state["methods"].([]any) {
+			method := item.(map[string]any)
+			out = append(out, fmt.Sprintf("%v %v %v %v %v", method["id"], method["modes"], method["maxCount"], method["available"], method["requires"]))
+		}
+		return strings.Join(out, "; ")
+	}
+	if got := describe(x); got != "timeline [count all] 200 true <nil>; api [count range before] 200 false X_API_BEARER_TOKEN" {
+		t.Fatalf("x methods=%s", got)
+	}
+	if got := describe(youtube); got != "api [count all] 200 true YOUTUBE_API_KEY; rss [count] 15 true <nil>" {
+		t.Fatalf("youtube methods=%s", got)
+	}
+	if _, legacy := x["windows"]; legacy {
+		t.Fatalf("x=%v", x)
 	}
 	for body, message := range map[string]string{
-		`{"kind":"fetch","source":"x"}`:                                                                           "fetch window is required",
-		`{"kind":"fetch","source":"x","window":{"mode":"recent","days":0}}`:                                       "days must be an integer from 1 to 365",
-		`{"kind":"fetch","source":"x","window":{"mode":"recent","days":"7"}}`:                                     "days must be an integer from 1 to 365",
-		`{"kind":"fetch","source":"x","window":{"mode":"sideways","days":7}}`:                                     "unsupported fetch mode",
-		`{"kind":"fetch","source":"x","window":{"mode":"range","startDate":"2026-02-30","endDate":"2026-03-01"}}`: "date is invalid",
-		`{"kind":"fetch","source":"x","window":{"mode":"range","startDate":"2026-03-02","endDate":"2026-03-01"}}`: "date range must cover 1 to 365 days",
-		`{"kind":"fetch","source":"x","window":{"mode":"before","days":7}}`:                                       "X_API_BEARER_TOKEN is required for history search",
-		`{"kind":"fetch","source":"x","window":{"mode":"count","count":0}}`:                                       "count must be an integer from 1 to 200",
-		`{"kind":"fetch","source":"youtube","window":{"mode":"count","count":201}}`:                               "count must be an integer from 1 to 200",
+		`{"kind":"fetch","source":"x","window":{"mode":"count","count":5}}`:                                                           "method must be one of timeline, api",
+		`{"kind":"fetch","source":"x","method":"timeline"}`:                                                                           "fetch window is required",
+		`{"kind":"fetch","source":"x","method":"timeline","window":{"mode":"range","startDate":"2026-03-01","endDate":"2026-03-07"}}`: "this fetch uses a retired selection; start a new fetch",
+		`{"kind":"fetch","source":"youtube","method":"api","window":{"mode":"before","days":7}}`:                                      "this fetch uses a retired selection; start a new fetch",
+		`{"kind":"fetch","source":"x","method":"api","window":{"mode":"range","startDate":"2026-02-30","endDate":"2026-03-01"}}`:      "date is invalid",
+		`{"kind":"fetch","source":"x","method":"api","window":{"mode":"before","days":7}}`:                                            "X_API_BEARER_TOKEN is required for the api method",
+		`{"kind":"fetch","source":"x","method":"timeline","window":{"mode":"count","count":0}}`:                                       "count must be an integer from 1 to 200",
+		`{"kind":"fetch","source":"youtube","method":"rss","window":{"mode":"count","count":16}}`:                                     "count must be an integer from 1 to 15",
+		`{"kind":"fetch","source":"youtube","method":"rss","window":{"mode":"count","count":5},"options":{"extract":true}}`:           "extract is not supported for this method",
+		`{"kind":"fetch","source":"x","method":"timeline","window":{"mode":"all"},"options":{"refresh":true}}`:                        "refresh is not supported for this method",
+		`{"kind":"fetch","source":"x","method":"timeline","window":{"mode":"all"},"options":{"translate":"yes"}}`:                     "options.translate must be true or false",
+		`{"kind":"fetch","source":"x","method":"timeline","window":{"mode":"all"},"options":{"fallback":true}}`:                       "options.fallback is not supported",
+		`{"kind":"fetch","source":"x","method":"timeline","window":{"mode":"all"},"options":[]}`:                                      "options must be an object",
 	} {
 		if code, payload := c.call(t, "POST", "/api/admin/runs", body); code != 400 || payload["message"] != message {
 			t.Fatalf("%s => %d %v", body, code, payload)
 		}
 	}
-	// A past window is accepted once the source credential is configured and
-	// stays frozen on the run exactly as the operator selected it.
-	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"fetch","source":"youtube","window":{"mode":"range","startDate":"2026-03-01","endDate":"2026-03-07"}}`)
+	// The selection is frozen on the run with its method, and the options
+	// add their steps.
+	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"fetch","source":"youtube","method":"api","window":{"mode":"all","count":9},"options":{"refresh":true,"translate":true}}`)
 	if code != 202 {
-		t.Fatalf("history=%d %v", code, payload)
+		t.Fatalf("api=%d %v", code, payload)
 	}
-	past := c.waitForRun(t, runID(t, payload), "completed")
-	if window := past["fetchWindows"].(map[string]any)["youtube"].(map[string]any); window["mode"] != "range" || window["startDate"] != "2026-03-01" || window["endDate"] != "2026-03-07" || window["days"] != nil {
-		t.Fatalf("past window=%v", window)
+	all := c.waitForRun(t, runID(t, payload), "completed")
+	if window := all["fetchWindows"].(map[string]any)["youtube"].(map[string]any); window["method"] != "api" || window["mode"] != "all" || window["refresh"] != true || window["count"] != nil {
+		t.Fatalf("all window=%v", window)
 	}
-	// X range and count windows need no credential: the timeline serves them.
-	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"fetch","source":"x","window":{"mode":"count","count":20}}`)
+	if fmt.Sprint(all["steps"]) != "[youtube media translate reconcile]" {
+		t.Fatalf("steps=%v", all["steps"])
+	}
+	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"fetch","source":"x","method":"timeline","window":{"mode":"count","count":20},"options":{"extract":true,"translate":false}}`)
 	if code != 202 {
 		t.Fatalf("count=%d %v", code, payload)
 	}
 	latest := c.waitForRun(t, runID(t, payload), "completed")
-	if window := latest["fetchWindows"].(map[string]any)["x"].(map[string]any); window["mode"] != "count" || window["count"] != float64(20) || window["days"] != nil {
+	if window := latest["fetchWindows"].(map[string]any)["x"].(map[string]any); window["method"] != "timeline" || window["mode"] != "count" || window["count"] != float64(20) {
 		t.Fatalf("count window=%v", window)
 	}
-	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"fetch","source":"youtube","window":{"mode":"recent","days":21}}`)
-	if code != 202 {
-		t.Fatalf("fetch=%d %v", code, payload)
+	if latest["kind"] != "workflow" || latest["workflowId"] != nil || fmt.Sprint(latest["steps"]) != "[x media schedule reconcile]" {
+		t.Fatalf("run=%v", latest)
 	}
-	run := c.waitForRun(t, runID(t, payload), "completed")
-	steps := run["steps"].([]any)
-	if run["kind"] != "workflow" || run["workflowId"] != nil || fmt.Sprint(steps) != "[youtube media reconcile]" {
-		t.Fatalf("run=%v", run)
+	// A failed method fails the run; the later steps do not go on without it.
+	c.steps.fail = map[string]bool{"x": true}
+	code, payload = c.call(t, "POST", "/api/admin/runs", `{"kind":"fetch","source":"x","method":"timeline","window":{"mode":"all"}}`)
+	if code != 202 {
+		t.Fatalf("failing=%d %v", code, payload)
+	}
+	failed := c.waitForRun(t, runID(t, payload), "failed")
+	if progress := failed["progress"].(map[string]any); progress["x"] != "failed" || progress["media"] == "completed" {
+		t.Fatalf("failed run=%v", failed)
 	}
 }
 
-func TestWindowAvailabilityFailsClosedWithoutHistoryWiring(t *testing.T) {
+func TestFetchMethodsFailClosedWithoutHistoryWiring(t *testing.T) {
 	a := &api{}
 	for _, source := range []string{"x", "youtube"} {
-		for _, mode := range []string{"recent", "before", "range", "count"} {
-			if a.windowAvailable(source, mode) {
-				t.Fatalf("%s/%s unexpectedly available without history wiring", source, mode)
+		methods := a.fetchMethods(source)
+		if len(methods) != 2 {
+			t.Fatalf("%s methods=%v", source, methods)
+		}
+		for _, method := range methods {
+			if method.Available || a.methodAvailable(source, method.ID) {
+				t.Fatalf("%s/%s unexpectedly available without history wiring", source, method.ID)
 			}
 		}
 	}

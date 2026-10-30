@@ -126,17 +126,18 @@ the observed local origin.
 
 The console's job list is a projection of durable workflow runs. Every run is
 ad hoc and names its kind of work with a reserved ID: `@sync`, `@scan`,
-`@fetch` (fetch windows and one-off step runs), `@translate`, `@live` and
+`@fetch` (manual fetches and one-off step runs), `@translate`, `@live` and
 `@source-<source>` (a source's chain, from its timer or Run now). All of them
 share the SQLite single-flight reservation, so a second start answers `409`
 with `busy` and the active run.
 
 Jobs survive a restart and are recovered. Every job reports per-step progress.
 A failed X or YouTube step is recorded and the remaining steps still run; the
-job finishes as partial, or failed when no step succeeded. Steps disabled
+job finishes as partial, or failed when no step succeeded. A manual fetch is
+the exception: its method's failure fails the job. Steps disabled
 through `SKIP_X`, `SKIP_YOUTUBE`, `SKIP_MEDIA` or `SKIP_LLM` are recorded as
 skipped. Each step's counters are merged into the job's `sync_runs.counts_json`
-row. The step catalog, queue, timers and fetch windows are described in
+row. The step catalog, queue, timers and manual fetches are described in
 [Workflows](workflows.md).
 
 ## Read-Only Mode

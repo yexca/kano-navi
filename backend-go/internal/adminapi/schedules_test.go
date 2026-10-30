@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -194,5 +195,57 @@ func TestRunNowSubmitsTheSourceChainOnce(t *testing.T) {
 	})}
 	if code, payload = skipped.call(t, "POST", "/api/admin/sources/youtube/run", ""); code != 400 || payload["message"] != "the youtube source is disabled for this process" {
 		t.Fatalf("skipped=%d %v", code, payload)
+	}
+}
+
+func TestSourceScheduleChainAPI(t *testing.T) {
+	c := newConsole(t, "development", "", &gatedSteps{})
+	_, payload := c.call(t, "GET", "/api/admin/sources", "")
+	chain, _ := json.Marshal(scheduleBySource(t, payload, "x")["chain"])
+	// The default is the former order; the API needs its credential, and the
+	// console shows today's usage and each account's streak.
+	if !strings.Contains(string(chain), `"methods":[{"available":true,"enabled":true,"id":"timeline"},{"available":true,"enabled":true,"id":"profile"},{"available":false,"enabled":false,"id":"api","requires":"X_API_BEARER_TOKEN"}]`) ||
+		!strings.Contains(string(chain), `"apiGate":3`) || !strings.Contains(string(chain), `"apiDailyCap":100`) || !strings.Contains(string(chain), `"apiUsage":{"day":"2026-03-02","posts":0}`) {
+		t.Fatalf("x chain=%s", chain)
+	}
+	if bilibili, _ := json.Marshal(scheduleBySource(t, payload, "bilibili")["chain"]); string(bilibili) != `{"fixed":true,"methods":[{"available":true,"enabled":true,"id":"list"}]}` {
+		t.Fatalf("bilibili chain=%s", bilibili)
+	}
+	for path, cases := range map[string]map[string]string{
+		"/api/admin/sources/x/schedule": {
+			`{"chain":[]}`: "chain must be an object",
+			`{"chain":{"methods":[{"id":"timeline","enabled":true},{"id":"search","enabled":true},{"id":"api","enabled":true}]}}`:     "search is not a method of the x chain",
+			`{"chain":{"methods":[{"id":"timeline","enabled":true},{"id":"timeline","enabled":true},{"id":"api","enabled":true}]}}`:   "the chain lists timeline twice",
+			`{"chain":{"methods":[{"id":"timeline","enabled":true},{"id":"api","enabled":true}]}}`:                                    "the chain must list every method: timeline, profile, api",
+			`{"chain":{"methods":[{"id":"timeline","enabled":false},{"id":"profile","enabled":false},{"id":"api","enabled":false}]}}`: "the chain must enable at least one method",
+			`{"chain":{"methods":[{"id":"timeline"}]}}`: "chain methods must be a list of { id, enabled }",
+			`{"chain":{"apiGate":101}}`:                 "apiGate must be an integer from 0 to 100",
+			`{"chain":{"apiDailyCap":0}}`:               "apiDailyCap must be an integer from 1 to 10000",
+		},
+		"/api/admin/sources/youtube/schedule": {
+			`{"chain":{"apiGate":3}}`: "apiGate is not a field of the youtube chain",
+		},
+		"/api/admin/sources/bilibili/schedule": {
+			`{"chain":{"methods":[{"id":"list","enabled":true}]}}`: "the bilibili chain is fixed",
+		},
+	} {
+		for body, message := range cases {
+			if code, payload := c.call(t, "PUT", path, body); code != 400 || payload["message"] != message {
+				t.Fatalf("%s %s => %d %v", path, body, code, payload)
+			}
+		}
+	}
+	code, payload := c.call(t, "PUT", "/api/admin/sources/x/schedule", `{"chain":{"methods":[{"id":"api","enabled":true},{"id":"timeline","enabled":true},{"id":"profile","enabled":false}],"apiGate":0,"apiDailyCap":40}}`)
+	chain, _ = json.Marshal(payload["chain"])
+	if code != 200 || !strings.Contains(string(chain), `"methods":[{"available":false,"enabled":true,"id":"api","requires":"X_API_BEARER_TOKEN"},{"available":true,"enabled":true,"id":"timeline"},{"available":true,"enabled":false,"id":"profile"}]`) ||
+		!strings.Contains(string(chain), `"apiGate":0`) || !strings.Contains(string(chain), `"apiDailyCap":40`) {
+		t.Fatalf("saved=%d %s", code, chain)
+	}
+	// Omitted fields keep their value, the chain included.
+	if code, payload = c.call(t, "PUT", "/api/admin/sources/x/schedule", `{"chain":{"apiDailyCap":50}}`); code != 200 {
+		t.Fatalf("cap=%d %v", code, payload)
+	}
+	if chain, _ = json.Marshal(payload["chain"]); !strings.Contains(string(chain), `"enabled":true,"id":"api"`) || !strings.Contains(string(chain), `"apiGate":0`) {
+		t.Fatalf("kept=%s", chain)
 	}
 }

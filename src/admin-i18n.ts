@@ -489,43 +489,26 @@ export const adminMessages = {
 
     "admin.sources.title": "Sources",
     "admin.sources.description":
-      "Each source runs on its own timer. Pick a source to change its timer, read past or recent windows, or set up YouTube push and live checks.",
+      "Each source runs on its own timer. Pick a source to change its timer, fetch through one method, or set up YouTube push and live checks.",
     "admin.sources.x.hint":
       "The public FxTwitter timeline, or the full archive with X_API_BEARER_TOKEN.",
     "admin.sources.youtube.hint":
       "The RSS feed, or older videos with YOUTUBE_API_KEY.",
-    "admin.sources.historyOn": "History search available",
-    "admin.sources.historyTimeline": "Windows via the timeline",
-    "admin.sources.historyOff": "Recent only",
     "admin.sources.lastSuccess": "Last successful read",
     "admin.sources.oldest": "Oldest stored · {label}",
     "admin.sources.channel": "channel",
     "admin.sources.none": "No records",
-    "admin.fetch.mode": "Window",
     "admin.fetch.mode.recent": "Recent",
     "admin.fetch.mode.before": "Before oldest",
     "admin.fetch.mode.range": "Date range",
     "admin.fetch.mode.count": "Latest",
     "admin.fetch.mode.incremental": "Incremental",
-    "admin.fetch.hint.recent": "Read the last few days, like a timed sync.",
-    "admin.fetch.hint.recentAll":
-      "Read every post of the last few days, including ones a timed sync missed.",
-    "admin.fetch.hint.count":
-      "Read each account's newest posts from its timeline, whatever their age.",
-    "admin.fetch.hint.count.youtube":
-      "Read the channel's newest uploads, stored or not. Without YOUTUBE_API_KEY the RSS feed lists only 15.",
-    "admin.fetch.hint.before":
-      "Continue backwards from the oldest stored record. Interrupted pages resume first.",
-    "admin.fetch.hint.range":
-      "Read an inclusive Japan date range of up to 365 days.",
-    "admin.fetch.days": "Days",
     "admin.fetch.backfillDays": "Days per backfill",
     "admin.fetch.daysHint": "1 to 365",
     "admin.fetch.daysCount": ({ count }: { count: number }) =>
       plural(count, "day", "days"),
     "admin.fetch.count": "Posts per account",
     "admin.fetch.count.youtube": "Videos",
-    "admin.fetch.countHint": "1 to 200",
     "admin.fetch.postsCount": ({ count }: { count: number }) =>
       plural(count, "post", "posts"),
     "admin.fetch.videosCount": ({ count }: { count: number }) =>
@@ -534,12 +517,57 @@ export const adminMessages = {
       `at most ${count}`,
     "admin.fetch.start": "First day",
     "admin.fetch.end": "Last day",
-    "admin.fetch.needsKey.x":
-      "This window needs X_API_BEARER_TOKEN on the server.",
-    "admin.fetch.needsKey.youtube":
-      "Past windows need YOUTUBE_API_KEY on the server.",
     "admin.fetch.noRecords": "Nothing is stored yet; read a date range first.",
     "admin.fetch.run": "Start fetch",
+    "admin.fetch.heading": "Manual fetch",
+    "admin.fetch.intro":
+      "Read once through the method you pick. A failed method fails the run; nothing falls back, and the timer's position stays.",
+    "admin.fetch.method": "Method",
+    "admin.fetch.method.x.timeline": "FxTwitter timeline",
+    "admin.fetch.method.x.api": "X API",
+    "admin.fetch.method.youtube.api": "Data API",
+    "admin.fetch.method.youtube.rss": "RSS feed",
+    "admin.fetch.methodHint.x.timeline":
+      "The public timeline, 100 posts a page. Posts already stored keep what they have.",
+    "admin.fetch.methodHint.x.api":
+      "Full-archive search through X_API_BEARER_TOKEN; X bills every post read. Posts already stored keep what they have.",
+    "admin.fetch.methodHint.youtube.api":
+      "The uploads playlist through YOUTUBE_API_KEY, 50 videos and one quota unit a page.",
+    "admin.fetch.methodHint.youtube.rss":
+      "The public feed, which lists the newest 15 uploads.",
+    "admin.fetch.needs": "Needs {variable} on the server.",
+    "admin.fetch.unavailable": "This method is not available on the server.",
+    "admin.fetch.selection": "Read",
+    "admin.fetch.mode.all": "Everything",
+    "admin.fetch.modeHint.count.x":
+      "Each account's newest posts, stored or not, whatever their age.",
+    "admin.fetch.modeHint.count.youtube":
+      "The channel's newest uploads, stored or not.",
+    "admin.fetch.modeHint.all.x":
+      "Every page of each account's timeline. A fetch stops at its page budget; repeat it to continue.",
+    "admin.fetch.modeHint.all.youtube":
+      "Every page of the uploads playlist. A fetch stops at its page budget; repeat it to continue.",
+    "admin.fetch.modeHint.range.x":
+      "An inclusive Japan date range of up to 365 days.",
+    "admin.fetch.modeHint.before.x":
+      "Continue backwards from each account's oldest stored post. An interrupted interval finishes first.",
+    "admin.fetch.countRange": "1 to {max}",
+    "admin.fetch.options": "Then",
+    "admin.fetch.option.extract": "Extract schedules",
+    "admin.fetch.option.extractHint":
+      "Run schedule extraction in the same run; fetched posts join its queue.",
+    "admin.fetch.option.translate": "Translate",
+    "admin.fetch.option.translateHint": "Run the translate step afterwards.",
+    "admin.fetch.option.refresh": "Refresh stored videos",
+    "admin.fetch.option.refreshHint":
+      "Rewrite the title and publication time of videos already stored.",
+    "admin.fetch.last": "Last fetch",
+    "admin.fetch.reachedEnd": "Reached the end of what it asked for.",
+    "admin.fetch.repeat":
+      "Stopped before the end; repeat this fetch to continue where it left off.",
+    "admin.fetch.newItems": ({ count }: { count: number }) =>
+      `New: ${plural(count, "record", "records")}`,
+    "admin.fetch.openRuns": "Open runs",
     "admin.fetch.openSources": "Fetch",
     "admin.push.title": "YouTube push",
     "admin.push.description":
@@ -611,9 +639,48 @@ export const adminMessages = {
     "admin.timer.runNowHint":
       "Run this source's steps once. The next timed run stays as planned.",
     "admin.timer.never": "Never",
-    "admin.fetch.title": "Fetch a window",
-    "admin.fetch.description":
-      "Read a past or recent window once. It leaves the timer's position alone.",
+    "admin.chain.title": "Method chain",
+    "admin.chain.description":
+      "Timed reads, Run now, pushes and step runs try the enabled methods from the top and fall to the next when the first page fails, lists none of the account's own records, or hits quota or rate limits. Manual fetches pick their own method.",
+    "admin.chain.fixed":
+      "Bilibili reads its upload list through one fixed method.",
+    "admin.chain.up": "Move {method} up",
+    "admin.chain.down": "Move {method} down",
+    "admin.chain.needs": "Needs {variable}",
+    "admin.chain.method.x.timeline": "FxTwitter timeline",
+    "admin.chain.method.x.profile": "x.com profile page (IDs only)",
+    "admin.chain.method.x.api": "X API",
+    "admin.chain.method.youtube.api": "Data API uploads playlist",
+    "admin.chain.method.youtube.rss": "RSS feed",
+    "admin.chain.method.youtube.videos_page": "Uploads tab (IDs only)",
+    "admin.chain.method.bilibili.list": "Upload list",
+    "admin.chain.youtubeAPIOff":
+      "With the Data API off, YouTube makes no Data API call at all: listing, details, the live-status probe and Shorts verdicts use public pages.",
+    "admin.chain.apiGate": "Timeline failures before the X API",
+    "admin.chain.apiGateHint":
+      "The X API runs only after the timeline failed this many consecutive runs of an account. 0 opens it at once.",
+    "admin.chain.apiDailyCap": "X API posts per Japan day",
+    "admin.chain.apiDailyCapHint":
+      "At the cap the chain skips the X API until midnight in Japan. Manual fetches count too.",
+    "admin.chain.usage": "X API today",
+    "admin.chain.usageValue": "{posts} of {cap} posts",
+    "admin.chain.streak": "Timeline failure streak",
+    "admin.sources.rail": "Sources and method chains",
+    "admin.sources.locked": "Locked",
+    "admin.xapi.description":
+      "Timed X reads reach the X API only after an account's timeline keeps failing, and only up to a daily cap.",
+    "admin.xapi.inChain": "Method {rank} in the chain",
+    "admin.xapi.offInChain": "Off in the chain",
+    "admin.confirm.title": "Progressive confirmation",
+    "admin.confirm.description":
+      "YouTube confirms a video in steps: push queues a read when it appears, the live-status probe follows streams around their start, and follow-up checks reread it after it ends. The timer catches what these miss.",
+    "admin.followUp.title": "Follow-up checks",
+    "admin.followUp.description":
+      "Every YouTube read rereads the watch page of up to 10 finished videos at these times after their end, start or publication, to pick up a new thumbnail or title. Videos older than 8 days are left alone.",
+    "admin.followUp.automatic": "Automatic",
+    "admin.followUp.offsets": "Rechecked after",
+    "admin.fetch.headingFor": "Manual fetch · {source}",
+    "admin.fetch.noneYet": "No manual fetch of this source yet.",
 
     "admin.models.extraction": "Detection stages",
     "admin.models.extractionHint":
@@ -848,6 +915,13 @@ export const adminMessages = {
     "admin.metric.attempted": "Attempted",
     "admin.metric.success": "Succeeded",
     "admin.metric.failed": "Failed",
+    "admin.metric.listed": "Listed",
+    "admin.metric.new": "New",
+    "admin.metric.stored": "Already stored",
+    "admin.metric.pages": "Pages",
+    "admin.metric.reachedEnd": "Reached the end",
+    "admin.metric.apiRequests": "Data API calls",
+    "admin.metric.items": "New records",
     "admin.metric.skipped": "Skipped",
     "admin.metric.uncertain": "Uncertain",
     "admin.metric.cached": "Cached",
@@ -863,6 +937,10 @@ export const adminMessages = {
     "admin.metric.dropped": "Dropped",
     "admin.metric.pendingDropped": "Pending dropped",
     "admin.metric.profileFallbacks": "Profile fallbacks",
+    "admin.metric.discovery": "Served by",
+    "admin.metric.tried": "Methods tried",
+    "admin.metric.apiPosts": "Posts from the X API",
+    "admin.metric.apiRead": "X API posts read",
     "admin.metric.boardAttempted": "Boards attempted",
     "admin.metric.messageAttempted": "Messages attempted",
     "admin.metric.assetVerification": "Image checks",
@@ -930,6 +1008,16 @@ export const adminMessages = {
     "admin.code.no_structured_output":
       "The model did not answer in the required format.",
     "admin.code.x_no_accounts": "No X accounts are configured.",
+    "admin.code.x_api_daily_cap":
+      "The X API daily cap is spent; the chain skips the X API until midnight in Japan.",
+    "admin.code.x_api_gated":
+      "The timeline has not failed enough consecutive runs to open the X API.",
+    "admin.code.x_api_unavailable":
+      "The chain enables the X API, but X_API_BEARER_TOKEN is not set.",
+    "admin.code.x_listing_empty":
+      "The method answered without any of the account's own posts.",
+    "admin.code.youtube_listing_empty":
+      "The listing answered without any upload.",
     "admin.code.youtube_http_error": "YouTube answered with an error.",
     "admin.code.youtube_timeout": "YouTube took too long to answer.",
     "admin.code.youtube_rate_limited": "YouTube is limiting requests.",
@@ -1466,50 +1554,29 @@ export const adminMessages = {
     "admin.runs.retry": "重试",
 
     "admin.sources.title": "来源",
-    "admin.sources.description":
-      "每个来源按各自的定时器运行。选择一个来源可修改定时器、读取过去或最近的时间段，或设置 YouTube 推送与直播检测。",
     "admin.sources.x.hint":
       "公开的 FxTwitter 时间线；配置 X_API_BEARER_TOKEN 后可检索完整历史。",
     "admin.sources.youtube.hint":
       "RSS 订阅；配置 YOUTUBE_API_KEY 后可读取更早的视频。",
-    "admin.sources.historyOn": "可检索历史",
-    "admin.sources.historyTimeline": "经时间线抓取窗口",
-    "admin.sources.historyOff": "仅近期",
     "admin.sources.lastSuccess": "最近一次成功读取",
     "admin.sources.oldest": "最早记录 · {label}",
     "admin.sources.channel": "频道",
     "admin.sources.none": "没有记录",
-    "admin.fetch.mode": "时间窗口",
     "admin.fetch.mode.recent": "近期",
     "admin.fetch.mode.before": "向前回填",
     "admin.fetch.mode.range": "日期范围",
     "admin.fetch.mode.count": "最新条数",
     "admin.fetch.mode.incremental": "增量",
-    "admin.fetch.hint.recent": "读取最近几天，与定时同步相同。",
-    "admin.fetch.hint.recentAll":
-      "读取最近几天的全部贴文，包括定时同步漏掉的。",
-    "admin.fetch.hint.count":
-      "从时间线读取每个账号最新的若干条贴文，不限时间。",
-    "admin.fetch.hint.count.youtube":
-      "读取频道最新的若干个投稿，无论是否已存。没有 YOUTUBE_API_KEY 时 RSS 只列出 15 个。",
-    "admin.fetch.hint.before":
-      "从最早的已存记录继续向前读取。中断的分页会优先续读。",
-    "admin.fetch.hint.range": "读取包含两端的日本日期范围，最多 365 天。",
-    "admin.fetch.days": "天数",
     "admin.fetch.backfillDays": "每次回填天数",
     "admin.fetch.daysHint": "1 到 365",
     "admin.fetch.daysCount": "{count} 天",
     "admin.fetch.count": "每个账号的条数",
     "admin.fetch.count.youtube": "视频数",
-    "admin.fetch.countHint": "1 到 200",
     "admin.fetch.postsCount": "{count} 条",
     "admin.fetch.videosCount": "{count} 个视频",
     "admin.fetch.maxCount": "最多 {count} 条",
     "admin.fetch.start": "第一天",
     "admin.fetch.end": "最后一天",
-    "admin.fetch.needsKey.x": "这个时间窗口需要服务器配置 X_API_BEARER_TOKEN。",
-    "admin.fetch.needsKey.youtube":
-      "过去的时间窗口需要服务器配置 YOUTUBE_API_KEY。",
     "admin.fetch.noRecords": "还没有存储任何记录，请先读取一个日期范围。",
     "admin.fetch.run": "开始抓取",
     "admin.fetch.openSources": "抓取",
@@ -1581,9 +1648,6 @@ export const adminMessages = {
     "admin.timer.runNowHint":
       "立即运行此来源的步骤一次，下次定时运行的时间不变。",
     "admin.timer.never": "从未",
-    "admin.fetch.title": "抓取时间窗口",
-    "admin.fetch.description":
-      "读取一次过去或近期的时间窗口，不会改变定时器的读取位置。",
 
     "admin.models.extraction": "识别阶段",
     "admin.models.extractionHint":

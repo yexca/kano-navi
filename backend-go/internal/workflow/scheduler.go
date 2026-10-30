@@ -2,8 +2,10 @@ package workflow
 
 import (
 	"context"
-	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
+	"slices"
 	"sync"
+
+	"github.com/yexca/kano-navi/backend-go/internal/store/sqlite"
 	"time"
 )
 
@@ -104,8 +106,9 @@ func (s *Scheduler) Tick(ctx context.Context) (*Run, error) {
 	return s.submitSource(ctx, *source)
 }
 
-// submitSource queues a source's fixed chain with its sync setting frozen on
-// the run, labelled source-schedule in the run history.
+// submitSource queues a source's fixed chain with its sync setting and
+// method chain frozen on the run, labelled source-schedule in the run
+// history.
 func (s *Scheduler) submitSource(ctx context.Context, schedule sqlite.SourceSchedule) (*Run, error) {
 	definition := sqlite.WorkflowDefinition{
 		ID:    sqlite.SourceScheduleWorkflow(schedule.Source),
@@ -113,6 +116,9 @@ func (s *Scheduler) submitSource(ctx context.Context, schedule sqlite.SourceSche
 	}
 	if schedule.Sync != nil {
 		definition.SourceSync = map[string]sqlite.SourceSync{schedule.Source: *schedule.Sync}
+	}
+	if slices.Contains(sqlite.ChainSources, schedule.Source) {
+		definition.SourceChain = map[string]sqlite.SourceChain{schedule.Source: schedule.Chain}
 	}
 	var run *Run
 	var err error

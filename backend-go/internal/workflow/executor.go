@@ -66,6 +66,9 @@ type StepInput struct {
 	// Sync is the source schedule's setting frozen on the run; the zero value
 	// is the step's incremental default.
 	Sync sqlite.SourceSync
+	// Chain is the source's method fallback chain frozen on the run, or nil
+	// for its default chain (ADR-0004). The live probe reads YouTube's.
+	Chain *sqlite.SourceChain
 	// Window is the operator-selected source window frozen on the run, or nil
 	// for the incremental synchronization.
 	Window *history.Window
@@ -269,6 +272,10 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 			completed++
 			continue
 		}
+		// A manual fetch reads only through the method it names, so its failure
+		// fails the run instead of letting the later steps go on without it.
+		_, fetched := run.FetchWindows[step.StepID]
+		tolerate := e.TolerateFailure[step.StepID] && !fetched
 		success := false
 		for attempt := 1; attempt <= e.MaxAttempts; attempt++ {
 			if ctx.Err() != nil {
@@ -298,6 +305,9 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 				if window, selected := run.FetchWindows[step.StepID]; selected {
 					input.Window = &window
 				}
+				if chain, frozen := run.SourceChain[ChainSource(step.StepID)]; frozen {
+					input.Chain = &chain
+				}
 				out, execErr = e.Steps.Execute(ctx, input)
 			}
 			if ctx.Err() != nil {
@@ -321,7 +331,7 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 				if err = e.Store.FinishWorkflowStep(finishCtx, lease, step.ID, num, sqlite.WorkflowOutcome{Status: outStatus, Code: code, Retryable: retry}, retry && attempt < e.MaxAttempts, e.Clock().UTC()); err != nil {
 					return nil, err
 				}
-				if (!retry || attempt == e.MaxAttempts) && outStatus == "failed" && e.TolerateFailure[step.StepID] {
+				if (!retry || attempt == e.MaxAttempts) && outStatus == "failed" && tolerate {
 					e.record(run.ID, step.StepID, map[string]any{"error": code})
 					tolerated++
 					toleratedCode = code
@@ -344,7 +354,7 @@ func (e *Executor) ExecuteRun(ctx context.Context, run *Run) (*Run, error) {
 				return nil, err
 			}
 			e.record(run.ID, step.StepID, out.Result)
-			if out.Status == "failed" && e.TolerateFailure[step.StepID] {
+			if out.Status == "failed" && tolerate {
 				tolerated++
 				toleratedCode = "permanent"
 				success = true

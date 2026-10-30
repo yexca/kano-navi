@@ -28,11 +28,12 @@ func (s *Store) WriteXRecent(ctx context.Context, account string, result xsource
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	// A post read from a timeline page that is already stored keeps the text,
-	// media and schedule candidate it has, as a fetch window leaves it.
+	// A post read from a timeline or API page that is already stored keeps
+	// the text, media and schedule candidate it has, as a fetch window leaves
+	// it.
 	kept := map[string]bool{}
 	for _, p := range result.Posts {
-		if result.FromTimeline[p.ID] {
+		if result.FromListing[p.ID] {
 			var exists int
 			lookupErr := tx.QueryRowContext(ctx, `SELECT 1 FROM posts WHERE id=?`, p.ID).Scan(&exists)
 			if lookupErr == nil {
@@ -164,7 +165,7 @@ func writeXPost(ctx context.Context, tx *sql.Tx, account string, p xsource.Post,
 	if len(p.MediaURLs) > 0 {
 		media = p.MediaURLs[0]
 	}
-	written, err := tx.ExecContext(ctx, `INSERT INTO posts(id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,raw_json,quote_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET account_handle=excluded.account_handle,type=excluded.type,label=excluded.label,text=excluded.text,published_at=excluded.published_at,url=excluded.url,likes=excluded.likes,reposts=excluded.reposts,replies=excluded.replies,media_url=excluded.media_url,media_alt=excluded.media_alt,raw_json=excluded.raw_json,quote_json=CASE WHEN ? THEN posts.quote_json ELSE excluded.quote_json END WHERE lower(posts.account_handle)=lower(excluded.account_handle) OR posts.account_handle IS NULL`, p.ID, "x", account, p.Type, p.Label, p.Text, p.PublishedAt, p.URL, p.Likes, p.Reposts, p.Replies, nullable(media), nullable(p.MediaAlt), string(raw), quoteJSON(p.Quote), p.QuoteUnread)
+	written, err := tx.ExecContext(ctx, `INSERT INTO posts(id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,raw_json,quote_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET account_handle=excluded.account_handle,type=excluded.type,label=excluded.label,text=excluded.text,published_at=excluded.published_at,url=excluded.url,likes=excluded.likes,reposts=excluded.reposts,replies=excluded.replies,media_url=excluded.media_url,media_alt=excluded.media_alt,raw_json=excluded.raw_json,quote_json=excluded.quote_json WHERE lower(posts.account_handle)=lower(excluded.account_handle) OR posts.account_handle IS NULL`, p.ID, "x", account, p.Type, p.Label, p.Text, p.PublishedAt, p.URL, p.Likes, p.Reposts, p.Replies, nullable(media), nullable(p.MediaAlt), string(raw), quoteJSON(p.Quote))
 	if err != nil {
 		return false, err
 	}
@@ -173,8 +174,7 @@ func writeXPost(ctx context.Context, tx *sql.Tx, account string, p xsource.Post,
 	} else if count != 1 {
 		return false, nil
 	}
-	// A source that does not read quotes keeps the stored quote and its images.
-	if _, err = tx.ExecContext(ctx, `DELETE FROM media_links WHERE owner_type='post' AND owner_id=? AND (role='post-image' OR (role=? AND NOT ?))`, p.ID, roleQuoteImage, p.QuoteUnread); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM media_links WHERE owner_type='post' AND owner_id=? AND role IN ('post-image',?)`, p.ID, roleQuoteImage); err != nil {
 		return false, err
 	}
 	for i, u := range p.MediaURLs {
@@ -182,7 +182,7 @@ func writeXPost(ctx context.Context, tx *sql.Tx, account string, p xsource.Post,
 			return false, err
 		}
 	}
-	if p.Quote != nil && !p.QuoteUnread {
+	if p.Quote != nil {
 		if err = writeQuoteMedia(ctx, tx, p.ID, p.Quote.MediaURLs, now); err != nil {
 			return false, err
 		}
@@ -263,6 +263,10 @@ type XRecentState struct {
 	CursorID string
 	// Gap is the timeline stretch a capped run left unread, or nil.
 	Gap *xsource.Gap
+	// GapCeilings holds, for each gap floor, the oldest stored status above
+	// it: everything between the two is unread, which an X API read closes
+	// exactly with since_id and until_id.
+	GapCeilings map[string]string
 	// RefreshIDs are the account's posts an operator asked to read again,
 	// oldest request first.
 	RefreshIDs []string
@@ -317,6 +321,19 @@ func (s *Store) XRecentState(ctx context.Context, account string) (XRecentState,
 	out.PendingIDs, out.PendingRetries = data.Pending, data.Retries
 	if data.Gap != nil && data.Gap.Floor != "" {
 		out.Gap = data.Gap
+		out.GapCeilings = map[string]string{}
+		for gap := data.Gap; gap != nil; gap = gap.Older {
+			// Status IDs are decimal and time ordered; compare them by length,
+			// then digits.
+			var ceiling string
+			err = s.db.QueryRowContext(ctx, `SELECT id FROM posts WHERE source='x' AND lower(account_handle)=lower(?) AND (length(id)>length(?) OR (length(id)=length(?) AND id>?)) ORDER BY length(id),id LIMIT 1`, account, gap.Floor, gap.Floor, gap.Floor).Scan(&ceiling)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return out, ErrSourceWrite
+			}
+			if ceiling != "" {
+				out.GapCeilings[gap.Floor] = ceiling
+			}
+		}
 	}
 	if len(out.PendingIDs) > 1000 {
 		out.PendingIDs = out.PendingIDs[:1000]

@@ -75,7 +75,7 @@ func TestWriteXRecentKeepsStoredTimelinePostsAndPendingRetries(t *testing.T) {
 	result := xsource.Result{Account: "kano", DiscoveredCount: 2, RequestedCount: 1,
 		Posts:              []xsource.Post{post("1", "timeline text"), post("2", "new")},
 		ScheduleCandidates: []xsource.ScheduleCandidate{candidate("1", "https://pbs.twimg.com/media/other.jpg"), candidate("2", "https://pbs.twimg.com/media/2.jpg")},
-		FromTimeline:       map[string]bool{"1": true, "2": true},
+		FromListing:        map[string]bool{"1": true, "2": true},
 		PendingIDs:         []string{"8"}, PendingRetries: map[string]xsource.PendingRetry{"8": retry},
 		Dropped:    []xsource.DroppedStatus{{ID: "7", Code: xsource.DroppedGone}},
 		NextCursor: "2", NextCursorTime: "2026-10-12T00:00:00Z"}

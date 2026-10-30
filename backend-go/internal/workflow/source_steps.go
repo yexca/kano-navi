@@ -32,7 +32,7 @@ type SourceSteps struct {
 	Media     *mediadownload.Client
 	Schedule  ScheduleRunner
 	Translate TranslateRunner
-	// History serves operator-selected windows through the source APIs.
+	// History serves the operator's manual fetches through their methods.
 	History *HistorySource
 	Store   *sqlite.Store
 	// Skip holds steps disabled for the whole process through SKIP_* flags.
@@ -45,19 +45,14 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 		return AttemptResult{Status: "succeeded", Result: map[string]any{"skipped": true, "reason": "environment"}}, nil
 	}
 	// Source chains, step runs, full syncs and scans carry no window and read each
-	// source by its sync setting (ADR-0002), whatever credentials are set;
-	// only operator windows search dates.
+	// source by its sync setting (ADR-0002), whatever credentials are set; a
+	// manual fetch reads through the one method its window names.
+	if in.Window != nil && (in.StepID == "x" || in.StepID == "youtube") && s.History == nil {
+		return AttemptResult{}, NewStepError("history_unavailable", ErrDependency)
+	}
 	switch in.StepID {
 	case "x":
-		// A selected window uses the API whenever its credential is present.
-		// Without it, recent and range windows page the public timeline back to
-		// their start, as count windows always do; a backfill then fails with
-		// the credential message. Only a recent window without either source
-		// stays incremental.
-		if in.Window != nil && s.History == nil {
-			return AttemptResult{}, NewStepError("history_unavailable", ErrDependency)
-		}
-		if in.Window != nil && (in.Window.Mode != history.ModeRecent || s.History.Available(history.SourceX) || s.History.timeline(history.ModeRecent)) {
+		if in.Window != nil {
 			return s.History.FetchX(ctx, *in.Window)
 		}
 		// A count setting reads the newest posts from the timeline every run;
@@ -67,7 +62,7 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 			if s.History == nil {
 				return AttemptResult{}, NewStepError("history_unavailable", ErrDependency)
 			}
-			out, err := s.History.FetchX(ctx, history.Window{Mode: history.ModeCount, Count: in.Sync.Count})
+			out, err := s.History.FetchX(ctx, history.Window{Method: history.MethodTimeline, Mode: history.ModeCount, Count: in.Sync.Count})
 			if err != nil {
 				return out, err
 			}
@@ -90,24 +85,18 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 			return s.X.Execute(ctx, in)
 		}
 	case "youtube":
-		if in.Window != nil && s.History == nil {
-			return AttemptResult{}, NewStepError("history_unavailable", ErrDependency)
-		}
-		if in.Window != nil && in.Window.Mode != history.ModeRecent && in.Window.Mode != history.ModeCount {
+		if in.Window != nil {
 			return s.History.FetchYoutube(ctx, *in.Window)
 		}
 		if s.Youtube == nil {
 			break
-		}
-		if in.Window != nil && in.Window.Mode == history.ModeRecent && s.History.Available(history.SourceYoutube) {
-			return s.youtubeWindowAndFeed(ctx, in)
 		}
 		return s.youtubeRecent(ctx, in)
 	case "live":
 		if s.Youtube == nil {
 			break
 		}
-		return s.youtubeLive(ctx)
+		return s.youtubeLive(ctx, in)
 	case "bilibili":
 		if s.Bilibili == nil {
 			break
@@ -184,31 +173,28 @@ func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult,
 	return AttemptResult{}, NewStepError("capability_not_migrated", ErrBlocked)
 }
 
-// youtubeList selects the uploads a recent run considers: an operator window's
-// days or count, otherwise the sync setting, incremental by default.
-func youtubeList(in StepInput, now time.Time) ytsource.List {
+// youtubeList selects the uploads a recent run considers by the sync setting,
+// incremental by default.
+func youtubeList(in StepInput, listings []string) ytsource.List {
 	switch {
-	case in.Window != nil && in.Window.Mode == history.ModeRecent:
-		return ytsource.List{Limit: ytsource.MaxListLimit, Since: now.Add(-time.Duration(in.Window.Days) * 24 * time.Hour)}
-	case in.Window != nil && in.Window.Mode == history.ModeCount:
-		return ytsource.List{Limit: in.Window.Count, Count: true}
 	case in.Sync.Mode == sqlite.SyncCount:
-		return ytsource.List{Limit: in.Sync.Count, Count: true}
+		return ytsource.List{Limit: in.Sync.Count, Count: true, Listings: listings}
 	case in.Sync.Mode == sqlite.SyncIncremental && in.Sync.Max > 0:
-		return ytsource.List{Limit: in.Sync.Max}
+		return ytsource.List{Limit: in.Sync.Max, Listings: listings}
 	}
-	return ytsource.List{Limit: sqlite.DefaultSyncMax}
+	return ytsource.List{Limit: sqlite.DefaultSyncMax, Listings: listings}
 }
 
-// youtubeRecent lists the newest uploads (Data API, RSS feed or uploads tab)
-// and refreshes active reservations. It fails only when no listing answered
+// youtubeRecent lists the newest uploads through the run's chain (Data API,
+// RSS feed or uploads tab) and refreshes active reservations. It fails only when no listing answered
 // and no detail check succeeded.
 func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptResult, error) {
 	state, err := s.Store.YoutubeRecentState(ctx, s.Youtube.Options.ChannelID)
 	if err != nil {
 		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 	}
-	result, err := s.Youtube.FetchUploads(ctx, state, youtubeList(in, s.Youtube.Now()))
+	youtube, listings := s.youtubeFor(in.Chain)
+	result, err := youtube.FetchUploads(ctx, state, youtubeList(in, listings))
 	if err != nil {
 		if ctx.Err() != nil {
 			return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
@@ -249,7 +235,7 @@ func (s *SourceSteps) youtubeRecent(ctx context.Context, in StepInput) (AttemptR
 			shorts++
 		}
 	}
-	counts := map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested, "shorts": shorts, "listing": result.Listing, "apiRequests": result.APIRequests}
+	counts := map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "inspected": result.Inspected, "requested": result.Requested, "shorts": shorts, "listing": result.Listing, "tried": result.Tried, "apiRequests": result.APIRequests}
 	if len(result.Errors) > 0 {
 		counts["errors"] = tallyCodes(result.Errors)
 	}
@@ -306,10 +292,10 @@ func (s *SourceSteps) bilibiliRecent(ctx context.Context) (AttemptResult, error)
 }
 
 // youtubeLive asks about only the few active videos that are due by their
-// phase, through one Data API call when a key is set and otherwise their
-// watch pages, and stores the broadcast state they report. Nothing due means
+// phase, through one Data API call when a key is set and YouTube's chain
+// enables the api method, and otherwise their watch pages, and stores the broadcast state they report. Nothing due means
 // no request.
-func (s *SourceSteps) youtubeLive(ctx context.Context) (AttemptResult, error) {
+func (s *SourceSteps) youtubeLive(ctx context.Context, in StepInput) (AttemptResult, error) {
 	now := time.Now()
 	if s.Youtube.Now != nil {
 		now = s.Youtube.Now()
@@ -332,7 +318,8 @@ func (s *SourceSteps) youtubeLive(ctx context.Context) (AttemptResult, error) {
 	if len(candidates) == 0 {
 		return AttemptResult{Status: "succeeded", Result: counts}, nil
 	}
-	result, err := s.Youtube.ProbeLive(ctx, candidates)
+	youtube, _ := s.youtubeFor(in.Chain)
+	result, err := youtube.ProbeLive(ctx, candidates)
 	if err != nil || ctx.Err() != nil {
 		return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
 	}
@@ -356,31 +343,4 @@ func (s *SourceSteps) youtubeLive(ctx context.Context) (AttemptResult, error) {
 		return AttemptResult{Status: "failed", Result: counts}, nil
 	}
 	return AttemptResult{Status: "partial", Result: counts}, nil
-}
-
-// youtubeWindowAndFeed serves a recent window from the API and still refreshes
-// reservations from the public feed, which the search API does not describe.
-func (s *SourceSteps) youtubeWindowAndFeed(ctx context.Context, in StepInput) (AttemptResult, error) {
-	searched, err := s.History.FetchYoutube(ctx, *in.Window)
-	if err != nil || searched.Status == "failed" {
-		return searched, err
-	}
-	feed, feedErr := s.youtubeRecent(ctx, in)
-	if ctx.Err() != nil {
-		return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
-	}
-	messages, _ := searched.Result["errors"].([]string)
-	if feedErr != nil {
-		searched.Result["errors"] = append(messages, "youtube_recent_unavailable; reservation refresh was skipped")
-		searched.Status = "partial"
-		return searched, nil
-	}
-	count, _ := searched.Result["count"].(int)
-	added, _ := feed.Result["count"].(int)
-	searched.Result["count"], searched.Result["videos"] = count+added, count+added
-	searched.Result["inspected"] = feed.Result["inspected"]
-	if feed.Status == "partial" {
-		searched.Status = "partial"
-	}
-	return searched, nil
 }

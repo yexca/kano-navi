@@ -161,7 +161,7 @@ func TestLiveProbeAsksTheDataAPIWhenAKeyIsSet(t *testing.T) {
 	yt := ytsource.NewAdapter(ytsource.NewClient(&http.Client{Transport: rt}), ytsource.Options{ChannelID: "UCAAAAAAAAAAAAAAAAAAAAAA", MaxDetailRequests: 1, APIKey: "synthetic-api-key"})
 	yt.Now = func() time.Time { return clock }
 	steps := &SourceSteps{Store: s, Youtube: yt}
-	got, err := steps.youtubeLive(ctx)
+	got, err := steps.youtubeLive(ctx, StepInput{})
 	if err != nil || got.Status != "succeeded" {
 		t.Fatalf("result=%#v err=%v", got, err)
 	}

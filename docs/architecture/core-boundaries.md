@@ -67,5 +67,5 @@ successful snapshot while a source is unavailable.
 - [Frontend](frontend.md)
 - [Data model and precedence](data-model.md)
 - [Sources and extraction](sources.md)
-- [Workflows and fetch windows](workflows.md)
+- [Workflows and manual fetches](workflows.md)
 - [Deployment security](../operations/security.md)

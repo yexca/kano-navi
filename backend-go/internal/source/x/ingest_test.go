@@ -281,8 +281,8 @@ func TestIncrementalRunStoresTimelineStatusesAndRequestsOnlyTheRest(t *testing.T
 	if strings.Join(s.details, ",") != strings.Join([]string{pendingOld.id, empty.id, known.id}, ",") || got.RequestedCount != 3 {
 		t.Fatalf("details=%v requested=%d", s.details, got.RequestedCount)
 	}
-	if len(got.Posts) != 6 || len(got.PendingIDs) != 0 || len(got.FromTimeline) != 3 || !got.FromTimeline[schedule.id] || !got.FromTimeline[wasPending.id] || got.FromTimeline[known.id] {
-		t.Fatalf("posts=%d pending=%v fromTimeline=%v", len(got.Posts), got.PendingIDs, got.FromTimeline)
+	if len(got.Posts) != 6 || len(got.PendingIDs) != 0 || len(got.FromListing) != 3 || !got.FromListing[schedule.id] || !got.FromListing[wasPending.id] || got.FromListing[known.id] {
+		t.Fatalf("posts=%d pending=%v fromTimeline=%v", len(got.Posts), got.PendingIDs, got.FromListing)
 	}
 	if len(got.ScheduleCandidates) != 1 || got.ScheduleCandidates[0].MediaURL != "https://pbs.twimg.com/media/week.jpg" || got.NextCursor != schedule.id {
 		t.Fatalf("candidates=%+v cursor=%s", got.ScheduleCandidates, got.NextCursor)

@@ -14,6 +14,30 @@ import (
 	ytsource "github.com/yexca/kano-navi/backend-go/internal/source/youtube"
 )
 
+// StoredYoutubeVideos reads the stored rows of the given YouTube video IDs, as
+// the recent state reads them, for a manual fetch's detail checks. IDs
+// without a row are absent.
+func (s *Store) StoredYoutubeVideos(ctx context.Context, ids []string) (map[string]ytsource.Video, error) {
+	out := map[string]ytsource.Video{}
+	if s == nil || s.db == nil {
+		return out, ErrUnavailable
+	}
+	for _, id := range ids {
+		var v ytsource.Video
+		var premiere sql.NullBool
+		err := s.db.QueryRowContext(ctx, `SELECT id,title,COALESCE(published_at,''),COALESCE(scheduled_at,''),url,COALESCE(thumbnail_url,''),COALESCE(kind,''),is_upcoming,is_premiere FROM videos WHERE id=? AND source='youtube'`, id).Scan(&v.ID, &v.Title, &v.PublishedAt, &v.ScheduledAt, &v.URL, &v.ThumbnailURL, &v.Kind, &v.IsUpcoming, &premiere)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return out, ErrUnavailable
+		}
+		v.Premiere, v.PremiereKnown = premiere.Bool, premiere.Valid
+		out[v.ID] = v
+	}
+	return out, nil
+}
+
 func (s *Store) YoutubeRecentState(ctx context.Context, channel string) (ytsource.State, error) {
 	out := ytsource.State{Videos: map[string]ytsource.Video{}}
 	var meta string

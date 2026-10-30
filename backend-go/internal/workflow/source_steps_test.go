@@ -23,7 +23,7 @@ func TestWindowStepWithoutHistoryReturnsDependencyInsteadOfPanicking(t *testing.
 	for _, step := range []string{"x", "youtube"} {
 		t.Run(step, func(t *testing.T) {
 			steps := &SourceSteps{}
-			window := history.Window{Mode: history.ModeRecent, Days: 7}
+			window := history.Window{Method: history.MethodAPI, Mode: history.ModeCount, Count: 7}
 			_, err := steps.Execute(context.Background(), StepInput{StepID: step, Window: &window})
 			var stepErr *StepError
 			if !errors.As(err, &stepErr) || stepErr.Code != "history_unavailable" || stepErr.Category != ErrDependency {

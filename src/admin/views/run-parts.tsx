@@ -19,7 +19,7 @@ import {
   formatRelative,
   statusTone,
 } from "@/admin/format"
-import type { Run } from "@/admin/types"
+import type { Run, RunWindow } from "@/admin/types"
 import type { Translator } from "@/types"
 import { StatusBadge, Spinner } from "@/admin/ui"
 import { cn } from "@/lib/utils"
@@ -124,6 +124,41 @@ export function metricLabel(key: string, t: Translator) {
 /** Steps a run may hold and still read as a fetch of its sources. */
 const fetchSteps = ["x", "youtube", "bilibili", "media", "reconcile"]
 
+/** The sources a run fetched through a named method. */
+function fetchedSources(run: Run) {
+  return Object.entries(run.fetchWindows || {})
+    .filter(([, window]) => window.method)
+    .map(([source]) => source)
+}
+
+/** A step's stored result: the finished run's counts or the history row's. */
+export function stepResult(run: Run, step: string): unknown {
+  const results = run.result?.results || run.run?.counts || {}
+  return results[step === "schedule" ? "schedules" : step] ?? results[step]
+}
+
+/**
+ * A run's source window in words: the method, the mode and its count, days
+ * or dates.
+ */
+export function windowText(window: RunWindow, step: string, t: Translator) {
+  const parts = []
+  if (window.method)
+    parts.push(t(`admin.fetch.method.${step}.${window.method}`))
+  parts.push(t(`admin.fetch.mode.${window.mode}`))
+  if (window.days)
+    parts.push(t("admin.fetch.daysCount", { count: window.days }))
+  if (window.max) parts.push(t("admin.fetch.maxCount", { count: window.max }))
+  if (window.count) {
+    const key =
+      step === "youtube" ? "admin.fetch.videosCount" : "admin.fetch.postsCount"
+    parts.push(t(key, { count: window.count }))
+  }
+  if (window.startDate) parts.push(`${window.startDate} – ${window.endDate}`)
+  if (window.refresh) parts.push(t("admin.fetch.option.refresh"))
+  return parts.join(" · ")
+}
+
 export function runTitle(run: Run, t: Translator) {
   if (run.sourceSchedule) {
     const source = t(`admin.step.${run.sourceSchedule}`)
@@ -134,12 +169,15 @@ export function runTitle(run: Run, t: Translator) {
   // A stored run of a saved workflow (see ADR-0003).
   if (run.workflowId)
     return t("admin.run.retiredWorkflow", { id: run.workflowId })
+  // A manual fetch names its method, and may go on to extract and translate;
+  // a run frozen before that is a fetch when it holds only source steps.
+  const fetched = fetchedSources(run)
   if (
     run.kind === "workflow" &&
     run.fetchWindows &&
-    run.steps.every((step) => fetchSteps.includes(step))
+    (fetched.length > 0 || run.steps.every((step) => fetchSteps.includes(step)))
   ) {
-    const sources = Object.keys(run.fetchWindows)
+    const sources = fetched.length ? fetched : Object.keys(run.fetchWindows)
     return t("admin.run.fetchTitle", {
       sources: sources.map((source) => t(`admin.step.${source}`)).join(" + "),
     })

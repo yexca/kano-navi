@@ -25,12 +25,12 @@
 | `MCP_CONTROL_TOKEN`             | Empty                | Bearer token for MCP mutation tools                               |
 | `X_HANDLES`                     | `kano_2525,_Kanotic` | Comma-separated public X account names                            |
 | `X_HANDLE`                      | Empty                | Single-account compatibility fallback                             |
-| `X_API_BEARER_TOKEN`            | Empty                | Optional environment-only credential for X archive search         |
-| `YOUTUBE_API_KEY`               | Empty                | Optional environment-only Data API key: YouTube sync and search   |
-| `SOURCE_HISTORY_MAX_PAGES`      | `4`                  | Fetch window pages per account/run (1–20), also within X budget   |
+| `X_API_BEARER_TOKEN`            | Empty                | Optional environment-only X API credential: fetches, chain method |
+| `YOUTUBE_API_KEY`               | Empty                | Optional environment-only Data API key: YouTube sync and fetches  |
+| `SOURCE_HISTORY_MAX_PAGES`      | `4`                  | Manual fetch pages per account or channel (1–20), within X budget |
 | `X_BOOTSTRAP_DAYS`              | `7`                  | Age limit in days while an X account has no cursor yet            |
 | `X_DISCOVERY_LIMIT`             | `50`                 | Full-sync cap of unstored X statuses per account; pages of 20     |
-| `X_MAX_STATUS_REQUESTS`         | `12`                 | Maximum X detail requests per run; X fetch window page budget     |
+| `X_MAX_STATUS_REQUESTS`         | `12`                 | Maximum X detail requests per run; manual X fetch page budget     |
 | `X_REFRESH_KNOWN`               | `1`                  | Known X posts refreshed per run                                   |
 | `X_SCHEDULE_REFRESH_LIMIT`      | `1`                  | Missing schedule source posts prioritized per account             |
 | `YOUTUBE_CHANNEL_ID`            | Main channel         | YouTube channel identifier                                        |
@@ -88,8 +88,13 @@ reads and the timer interval are independent. A source schedule's
 incremental cap replaces `X_DISCOVERY_LIMIT` for every run that reads X with
 it (timer, Run now, YouTube push, one-off step run); full syncs
 (`kano-go sync`, the console's Sync everything, MCP) keep the variable for X
-and read 50 YouTube uploads at most. These runs never turn
-`X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY` into date searches
+and read 50 YouTube uploads at most. Each schedule's
+[method chain](../architecture/workflows.md#method-chains) decides whether
+its runs use `X_API_BEARER_TOKEN` and `YOUTUBE_API_KEY`: the X API only as a
+fallback behind its gate and daily cap, the YouTube Data API only while the
+chain enables it ([ADR-0004](../decisions/ADR-0004-method-fallback-chains.md)).
+Full syncs read through the default chains, which leave the X API off, and
+no timed read turns a credential into a date search
 ([ADR-0002](../decisions/ADR-0002-count-based-source-sync.md)).
 
 The backend (`kano-go`) reads `.env` from its working directory; variables
@@ -133,7 +138,8 @@ its interval (default 15 minutes, 5–360), stored in `app_settings` as
 `youtube_live_probe_enabled` and `youtube_live_probe_interval_minutes`. The
 interval paces streams on air and waiting rooms that stay closed past their
 start; around the start itself the probe checks every 3 minutes. With
-`YOUTUBE_API_KEY` it asks the Data API first, one quota unit per run. It
+`YOUTUBE_API_KEY`, and unless the YouTube timer's method chain turns the Data
+API off, it asks the Data API first, one quota unit per run. It
 uses the same timer process, so `WORKFLOW_SCHEDULER_ENABLED=0` or
 `SKIP_YOUTUBE=1` stops it. See
 [Workflows](../architecture/workflows.md#live-status-probe).
@@ -143,4 +149,4 @@ uses the same timer process, so `WORKFLOW_SCHEDULER_ENABLED=0` or
 - [Local development](../development/local-dev.md)
 - [Docker deployment](docker.md)
 - [Deployment security](security.md)
-- [Historical source access](../architecture/workflows.md#fetch-windows-and-historical-backfill)
+- [Manual source fetches](../architecture/workflows.md#manual-fetches-and-historical-backfill)

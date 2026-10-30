@@ -74,13 +74,6 @@ func TestWriteXRecentStoresTheQuoteApartFromOwnImages(t *testing.T) {
 		t.Fatalf("own=%s quoted=%s", own, quoted)
 	}
 
-	// A source that does not read quotes keeps the stored one.
-	unread := post
-	unread.Quote, unread.QuoteUnread, unread.MediaURLs = nil, true, nil
-	write(unread)
-	if storedQuote(t, db, post.ID) == "" || linkedMedia(t, db, post.ID, "quote-image") == "" || linkedMedia(t, db, post.ID, "post-image") != "" {
-		t.Fatalf("unread source changed the quote: %s", storedQuote(t, db, post.ID))
-	}
 	// A complete answer without a quote clears it and its images.
 	cleared := post
 	cleared.Quote = nil
@@ -282,9 +275,6 @@ func TestHiddenQuoteSurvivesRewritesAndStaysOffPublicPages(t *testing.T) {
 	// A detail rewrite updates the stored quote underneath the decision.
 	post.Quote = quote("rewritten")
 	write(post)
-	unread := post
-	unread.Quote, unread.QuoteUnread = nil, true
-	write(unread)
 	// The backfill reads only rows without a projection; clear it to make
 	// the backfill rewrite this row from its raw_json as an upgrade would.
 	if _, err = s.DB().Exec(`UPDATE posts SET quote_json=NULL,raw_json=? WHERE id=?`, `{"quote":{"type":"status","id":"`+quotedID+`","text":"backfilled","author":{"screen_name":"quoted_synthetic"}}}`, id); err != nil {
