@@ -1,12 +1,14 @@
 package httpapi
 
 import (
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // lineblogRoot is the data directory holding the recovered LINE BLOG media,
@@ -27,7 +29,8 @@ var lineblogTypes = map[string]string{
 // Only a regular file directly inside it with an archive name is served;
 // names are opaque hashes, so the rest of the path never reaches the disk.
 // An image asked for with w gets a copy from the shared variant cache; a
-// video ignores w.
+// video ignores w. An image and its copies are immutable once its bytes are
+// checked against its name.
 func (h *Handler) lineblogMedia(w http.ResponseWriter, r *http.Request, name string) {
 	match := lineblogName.FindStringSubmatch(name)
 	root := ""
@@ -50,10 +53,14 @@ func (h *Handler) lineblogMedia(w http.ResponseWriter, r *http.Request, name str
 		writeLineblogMissing(w, r)
 		return
 	}
-	if widthPresent && match[2] != "mp4" {
+	// An image's name is the start of its bytes' SHA-256, so an image whose
+	// bytes match it never changes; a video is named after its watch URL.
+	image := match[2] != "mp4"
+	named := func(hash string) bool { return image && strings.HasPrefix(hash, match[1]) }
+	path := filepath.Join(root, lineblogRoot, name)
+	if widthPresent && image {
 		open := func() (fs.File, error) { return dir.Open(name) }
-		path := filepath.Join(root, lineblogRoot, name)
-		if serveImageVariant(w, r, h.store, path, info, open, lineblogTypes[match[2]], width, mediaCacheControl(false)) {
+		if serveImageVariant(w, r, h.store, path, info, open, lineblogTypes[match[2]], width, named) {
 			return
 		}
 	}
@@ -63,10 +70,23 @@ func (h *Handler) lineblogMedia(w http.ResponseWriter, r *http.Request, name str
 		return
 	}
 	defer file.Close()
+	if info, err = file.Stat(); err != nil || !info.Mode().IsRegular() {
+		writeLineblogMissing(w, r)
+		return
+	}
+	immutable := false
+	if image {
+		hash, err := fixedFileHash(path, info, file)
+		if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+			writeLineblogMissing(w, r)
+			return
+		}
+		immutable = err == nil && named(hash)
+	}
 	w.Header().Set("Content-Type", lineblogTypes[match[2]])
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", mediaCacheControl(false))
+	w.Header().Set("Cache-Control", mediaCacheControl(immutable))
 	w.Header().Set("ETag", `"`+match[1]+`-`+strconv.FormatInt(info.Size(), 10)+`"`)
 	// ServeContent answers ranges, HEAD and both conditional validators.
 	http.ServeContent(w, r, name, info.ModTime(), file)

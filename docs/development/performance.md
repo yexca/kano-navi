@@ -33,9 +33,11 @@ nothing into the repository.
   without a temporary sort. Startup adds the index to older snapshots, and
   the schema upgrade tests check that it exists.
 - Public dashboard, revision and health JSON, the calendar and Atom feeds
-  and the build's text files are gzip-compressed; admin, authentication,
-  MCP and runtime media are not.
-  Hashed build files are immutable and everything else revalidates. HTTP
+  are gzip-compressed on the fly, and the build's text files are sent from
+  Brotli or gzip siblings written at build time; admin, authentication,
+  MCP and runtime media are not compressed.
+  Hashed build files and hash-addressed fixed images are immutable and
+  everything else revalidates. HTTP
   tests cover encoding negotiation, validators, 304, HEAD and ranges. The
   rules are in the
   [backend transfer contract](../architecture/backend.md#text-transfer-and-static-caching).

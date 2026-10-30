@@ -81,9 +81,11 @@ func (p *pageTags) apply(page []byte, route string) []byte {
 var hashedBuildFile = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$`)
 
 // staticSite serves the built single-page application. Only manifest-listed,
-// content-hashed JS/CSS filenames are immutable; curated /assets/history and
-// replaceable icons keep revalidation. Other paths receive index.html so a
-// reload keeps working: 200 for the frontend's pages, 404 for anything else.
+// content-hashed JS/CSS filenames and /assets/history files asked for by
+// their bytes' hash are immutable; other files keep revalidation. Text files
+// are sent from their precompressed siblings when the request accepts one.
+// Other paths receive index.html so a reload keeps working: 200 for the
+// frontend's pages, 404 for anything else.
 type staticSite struct {
 	root       string
 	buildFiles map[string]bool
@@ -98,6 +100,54 @@ type staticSite struct {
 // historyImage matches a fixed history image, the only static files with
 // smaller copies.
 var historyImage = regexp.MustCompile(`^assets/history/[^/]+\.(?:jpe?g|png|webp)$`)
+
+// historyFile matches a fixed history file, which pages request with v set to
+// the SHA-256 of its bytes.
+var historyFile = regexp.MustCompile(`^assets/history/[^/]+$`)
+
+// historyVersion returns the request's single v when it has the form of a
+// SHA-256, or "".
+func historyVersion(r *http.Request) string {
+	values := r.URL.Query()["v"]
+	if len(values) != 1 || !sha256Hex.MatchString(values[0]) {
+		return ""
+	}
+	return values[0]
+}
+
+var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// versioned reports whether hash is the v the request names. A missing or
+// malformed v never matches.
+func versioned(r *http.Request) func(hash string) bool {
+	version := historyVersion(r)
+	return func(hash string) bool { return version != "" && hash == version }
+}
+
+// precompressedCodings are the build's precompressed siblings of its text
+// files, in order of preference.
+var precompressedCodings = []struct{ coding, suffix string }{{"br", ".br"}, {"gzip", ".gz"}}
+
+// precompressible reports whether the build may hold precompressed siblings
+// of the file name (scripts/vite-precompress.ts).
+func precompressible(name string) bool {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".html", ".js", ".css", ".json", ".svg":
+		return true
+	}
+	return false
+}
+
+// precompressedSibling reports whether relative is a precompressed sibling,
+// which is only served in place of its original.
+func precompressedSibling(relative string) bool {
+	for _, candidate := range precompressedCodings {
+		if stem, ok := strings.CutSuffix(relative, candidate.suffix); ok && precompressible(stem) {
+			return true
+		}
+	}
+	return false
+}
 
 // NewStaticSite returns nil when the directory has no index.html, so an API-only
 // process answers unknown paths with its JSON 404 instead. publicOrigin is a
@@ -160,8 +210,16 @@ func (s *staticSite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // file resolves a request path to a regular file contained by the build
-// directory. Dotfiles (including the manifest) are never served.
+// directory. Dotfiles (including the manifest) and precompressed siblings
+// are never served by their own path.
 func (s *staticSite) file(relative string) (string, bool) {
+	if precompressedSibling(relative) {
+		return "", false
+	}
+	return s.contained(relative)
+}
+
+func (s *staticSite) contained(relative string) (string, bool) {
 	if relative == "" {
 		return "", false
 	}
@@ -199,7 +257,37 @@ func (s *staticSite) serveVariant(w http.ResponseWriter, r *http.Request, name s
 		return false
 	}
 	open := func() (fs.File, error) { return os.Open(name) }
-	return serveImageVariant(w, r, s.variants, name, info, open, staticContentType(name), width, "public, max-age=0, must-revalidate")
+	return serveImageVariant(w, r, s.variants, name, info, open, staticContentType(name), width, versioned(r))
+}
+
+// precompressed opens the most preferred precompressed sibling of relative
+// that the request accepts and returns it with its length and coding. A
+// sibling older than its original is stale and skipped.
+func (s *staticSite) precompressed(r *http.Request, relative string, original fs.FileInfo) (*os.File, int64, string) {
+	if !precompressible(relative) {
+		return nil, 0, ""
+	}
+	accept := r.Header.Get("Accept-Encoding")
+	for _, candidate := range precompressedCodings {
+		if !acceptsCoding(accept, candidate.coding) {
+			continue
+		}
+		name, ok := s.contained(relative + candidate.suffix)
+		if !ok {
+			continue
+		}
+		file, err := os.Open(name)
+		if err != nil {
+			continue
+		}
+		info, err := file.Stat()
+		if err != nil || !info.Mode().IsRegular() || info.ModTime().Before(original.ModTime()) {
+			_ = file.Close()
+			continue
+		}
+		return file, info.Size(), candidate.coding
+	}
+	return nil, 0, ""
 }
 
 // serve writes one file. route names the page index.html is served for, whose
@@ -216,15 +304,20 @@ func (s *staticSite) serve(w http.ResponseWriter, r *http.Request, name, relativ
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
 		return
 	}
-	cache := "public, max-age=0, must-revalidate"
-	if s.buildFiles[relative] && hashedBuildFile.MatchString(relative) {
-		cache = "public, max-age=31536000, immutable"
+	immutable := s.buildFiles[relative] && hashedBuildFile.MatchString(relative)
+	if historyFile.MatchString(relative) && historyVersion(r) != "" {
+		// A history file is immutable under the v that is its bytes' hash.
+		hash, err := fixedFileHash(name, info, file)
+		if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "api_not_found"}, "")
+			return
+		}
+		immutable = err == nil && versioned(r)(hash)
 	}
-	switch strings.ToLower(filepath.Ext(name)) {
-	case ".html", ".js", ".css":
+	if precompressible(relative) {
 		w.Header().Add("Vary", "Accept-Encoding")
 	}
-	w.Header().Set("Cache-Control", cache)
+	w.Header().Set("Cache-Control", mediaCacheControl(immutable))
 	if contentType := staticContentType(name); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
@@ -255,7 +348,30 @@ func (s *staticSite) serve(w http.ResponseWriter, r *http.Request, name, relativ
 		http.ServeContent(w, r, filepath.Base(name), info.ModTime(), bytes.NewReader(page))
 		return
 	}
+	if sibling, length, coding := s.precompressed(r, relative, info); sibling != nil {
+		defer sibling.Close()
+		w.Header().Set("Content-Encoding", coding)
+		// The original's modification time keeps Last-Modified, and so the
+		// conditional requests, the same for every encoding; ranges address
+		// the encoded bytes.
+		http.ServeContent(lengthWriter{ResponseWriter: w, length: length}, r, filepath.Base(name), info.ModTime(), sibling)
+		return
+	}
 	http.ServeContent(w, r, filepath.Base(name), info.ModTime(), file)
+}
+
+// lengthWriter declares a precompressed sibling's length on a full response,
+// which ServeContent leaves out once Content-Encoding is set.
+type lengthWriter struct {
+	http.ResponseWriter
+	length int64
+}
+
+func (l lengthWriter) WriteHeader(status int) {
+	if status == http.StatusOK && l.Header().Get("Content-Length") == "" {
+		l.Header().Set("Content-Length", strconv.FormatInt(l.length, 10))
+	}
+	l.ResponseWriter.WriteHeader(status)
 }
 
 // staticContentType pins the types a build emits so responses do not depend

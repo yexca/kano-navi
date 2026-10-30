@@ -40,6 +40,8 @@ export const scriptJobs: Record<string, Job[]> = {
   "production-smoke.ts": ["frontend", "docker"],
   "run-app.mjs": [],
   "smoke.ts": ["frontend", "smoke", "docker"],
+  // Build plugins loaded by vite.config.ts.
+  "vite-precompress.ts": frontendJobs,
 }
 
 const documentation =

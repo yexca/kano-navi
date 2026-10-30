@@ -15,7 +15,9 @@ bundled images are packaged.
   dimensions, MIME type, size, SHA-256, source identity, and date basis.
   Original local paths are excluded.
 - `src/history/media.ts` groups images and supplies versioned local
-  `/assets/history/<filename>?v=<sha256>` URLs.
+  `/assets/history/<filename>?v=<sha256>` URLs, which the server caches as
+  immutable while the hash matches the file
+  ([Immutable fixed files](../architecture/media-cache.md#immutable-fixed-files)).
 - `public/assets/history/` contains the 60 verified original image files,
   copied by Vite into `dist/` and included in production Docker images.
 - `src/history/history-i18n.ts` supplies image and provenance translations.

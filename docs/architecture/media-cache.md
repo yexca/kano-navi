@@ -59,7 +59,9 @@ them. `GET /media/lineblog/<name>` (and `HEAD`) opens the directory as a root
 and serves only a regular file directly inside it whose name is 12 lowercase
 hex digits and `.jpg`, `.png` or `.mp4`; the type comes from the extension.
 Responses carry `nosniff`, `default-src 'none'; sandbox`, an ETag of the name
-and size, revalidation caching, byte ranges and conditional requests. Any
+and size, byte ranges and conditional requests; images whose bytes match
+their name are immutable and everything else revalidates
+([Immutable Fixed Files](#immutable-fixed-files)). Any
 other name, a directory, a symlink or a missing file answers `404`. The
 server never writes this directory. Its images have smaller copies (see
 [Resized Copies](#resized-copies)); videos ignore `w`.
@@ -262,14 +264,36 @@ made again next time; a process without the built site, such as the Vite
 development server's API, serves history files without copies). It carries
 `nosniff`, `default-src 'none'; sandbox`, range and conditional handling and
 the copy's own hash as its ETag. A `/media/<id>` copy is immutable when `v` is
-given; archive and history copies revalidate like their originals. Originals
-are never changed; the variant directory is a derived cache that may be
-deleted at any time.
+given; archive and history copies are cached like their originals
+([Immutable Fixed Files](#immutable-fixed-files)). Originals are never
+changed; the variant directory is a derived cache that may be deleted at any
+time.
 
 Pages request copies through `srcset` and `sizes` with the widths below an
 image's known width (every width when it is unknown) plus the original; the
 full-image viewers keep loading the original. Profile media and other bundled
 `/assets/` files have no copies.
+
+## Immutable Fixed Files
+
+LINE BLOG archive images and the fixed history files are addressed by their
+bytes' SHA-256, so the server lets browsers keep them for a year without
+revalidating (`public, max-age=31536000, immutable`) once it has checked that
+the bytes match the address:
+
+| Request                                             | Immutable when                                                          |
+| --------------------------------------------------- | ----------------------------------------------------------------------- |
+| `GET /media/lineblog/<name>.(jpg\|png)[?w=<width>]` | the file's SHA-256 starts with the name's 12 hex digits                 |
+| `GET /assets/history/<file>?v=<hash>[&w=<width>]`   | there is exactly one `v`, 64 lowercase hex digits, equal to the SHA-256 |
+
+Everything else answers `public, max-age=0, must-revalidate`: LINE BLOG
+videos (named after their watch URL, not their bytes), an archive image whose
+bytes do not match its name, a history file without `v`, or with a repeated,
+malformed or different `v`. A copy (`w`) takes its original's verdict, since
+the variant cache only stores a copy made from bytes with the hash it is
+filed under. The server reads the file to hash it and remembers the hash by
+path, size and modification time like the variant cache; a replaced file is
+hashed anew, so its old addresses revalidate.
 
 ## Verification
 

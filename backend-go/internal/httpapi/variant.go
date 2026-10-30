@@ -40,6 +40,41 @@ var (
 	fixedHashes   = map[string]fixedHash{}
 )
 
+// knownFixedHash returns the remembered hash of the file at path while its
+// size and modification time still match.
+func knownFixedHash(path string, info fs.FileInfo) (string, bool) {
+	fixedHashesMu.Lock()
+	known, ok := fixedHashes[path]
+	fixedHashesMu.Unlock()
+	if !ok || known.size != info.Size() || !known.modTime.Equal(info.ModTime()) {
+		return "", false
+	}
+	return known.hash, true
+}
+
+func rememberFixedHash(path string, info fs.FileInfo, hash string) {
+	fixedHashesMu.Lock()
+	fixedHashes[path] = fixedHash{size: info.Size(), modTime: info.ModTime(), hash: hash}
+	fixedHashesMu.Unlock()
+}
+
+// fixedFileHash returns the SHA-256 of the opened fixed file at path, whose
+// stat is info. A file not remembered is read to its end and remembered; the
+// caller seeks back before serving it.
+func fixedFileHash(path string, info fs.FileInfo, file io.Reader) (string, error) {
+	if hash, ok := knownFixedHash(path, info); ok {
+		return hash, nil
+	}
+	digest := sha256.New()
+	read, err := io.Copy(digest, file)
+	if err != nil || read != info.Size() {
+		return "", errors.New("fixed file unreadable")
+	}
+	hash := hex.EncodeToString(digest.Sum(nil))
+	rememberFixedHash(path, info, hash)
+	return hash, nil
+}
+
 // readFixedImage reads a regular file no larger than maxVariantSourceBytes
 // whose type is mime.
 func readFixedImage(open func() (fs.File, error), mime string) (*sqlite.MediaFile, error) {
@@ -64,8 +99,9 @@ func readFixedImage(open func() (fs.File, error), mime string) (*sqlite.MediaFil
 // copy no wider than width from the shared variant cache, or with the
 // original when no copy can be made. It reports false, having written
 // nothing, when the file cannot be read as a variant source; the caller then
-// serves the original itself.
-func serveImageVariant(w http.ResponseWriter, r *http.Request, variants variantReader, path string, info fs.FileInfo, open func() (fs.File, error), mime string, width int, cacheControl string) bool {
+// serves the original itself. immutable decides from the original's SHA-256
+// whether the response may be cached as immutable.
+func serveImageVariant(w http.ResponseWriter, r *http.Request, variants variantReader, path string, info fs.FileInfo, open func() (fs.File, error), mime string, width int, immutable func(hash string) bool) bool {
 	if variants == nil {
 		return false
 	}
@@ -76,28 +112,26 @@ func serveImageVariant(w http.ResponseWriter, r *http.Request, variants variantR
 		}
 		return readFixedImage(open, mime)
 	}
-	fixedHashesMu.Lock()
-	known, ok := fixedHashes[path]
-	fixedHashesMu.Unlock()
-	if !ok || known.size != info.Size() || !known.modTime.Equal(info.ModTime()) {
+	hash, ok := knownFixedHash(path, info)
+	if !ok {
 		file, err := readFixedImage(open, mime)
 		if err != nil {
 			return false
 		}
 		loaded = file
-		known = fixedHash{size: info.Size(), modTime: info.ModTime(), hash: file.SHA256}
-		fixedHashesMu.Lock()
-		fixedHashes[path] = known
-		fixedHashesMu.Unlock()
+		hash = file.SHA256
+		rememberFixedHash(path, info, hash)
 	}
-	file, err := variants.ReadVariant(r.Context(), known.hash, width, original)
+	// The cache stores a copy only when the bytes it was made from match
+	// hash, so the copy belongs to the original hash names.
+	file, err := variants.ReadVariant(r.Context(), hash, width, original)
 	if err != nil {
 		return false
 	}
 	w.Header().Set("Content-Type", file.MIMEType)
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", cacheControl)
+	w.Header().Set("Cache-Control", mediaCacheControl(immutable(hash)))
 	w.Header().Set("ETag", `"`+file.SHA256+`"`)
 	// ServeContent answers ranges, HEAD and both conditional validators.
 	http.ServeContent(w, r, "", file.LastModified, bytes.NewReader(file.Content))

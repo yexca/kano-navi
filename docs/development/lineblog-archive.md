@@ -29,7 +29,9 @@ packaged, and what an instance needs to show it.
   `GET /media/lineblog/<name>`, which serves only a regular file directly
   inside that directory whose name is 12 lowercase hex digits plus `.jpg`,
   `.png` or `.mp4`, with a fixed type for the extension, `nosniff`, a
-  sandboxing CSP, revalidation, byte ranges and conditional requests.
+  sandboxing CSP, byte ranges and conditional requests. Images whose bytes
+  match their name are immutable and videos revalidate
+  ([Immutable fixed files](../architecture/media-cache.md#immutable-fixed-files)).
   Images also have smaller copies, made on demand in the runtime variant
   cache ([Resized copies](../architecture/media-cache.md#resized-copies)):
   the recent-post thumbnails, profile photo, article pictures, link-card

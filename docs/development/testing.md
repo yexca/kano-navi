@@ -79,8 +79,8 @@ Backend coverage, by package under `backend-go/internal/`:
   ready files and 304 resets; freshness tests exclude historical and cursor-only
   writes and retain timeline head-page times across resumed pages. Admin post
   tests cover ID search before pagination and inclusive Japan-date boundaries.
-- `httpapi`: public reads, media containment and validators, compression and
-  static caching, the admin session and origin guard, event mutations, and the
+- `httpapi`: public reads, media containment and validators, compression,
+  precompressed siblings and static and fixed-media caching, the admin session and origin guard, event mutations, and the
   operator console routes for workflows, jobs and source fetch windows.
 - `workflow` and `jobs`: single-flight reservation, leases, retry, recovery,
   cancellation, timers, and the source, media and history steps; each job

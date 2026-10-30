@@ -27,5 +27,12 @@
   and `/assets/history/<file>`), kept in `data/cache/variants/`. Thumbnails
   and in-article pictures request them through `srcset`; image viewers keep
   the originals.
+- LINE BLOG archive images and history images requested by their hash, and
+  their smaller copies, are cached by browsers as immutable once the server
+  has checked their bytes against the hash; videos and other fixed files
+  keep revalidating.
+- The build writes Brotli and gzip copies of its HTML, JavaScript, CSS, JSON
+  and SVG files, and the server sends the best one a browser accepts instead
+  of compressing those files on the fly.
 
 </details>

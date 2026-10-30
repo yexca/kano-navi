@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -179,5 +181,117 @@ func TestStaticSiteServesSmallerHistoryCopies(t *testing.T) {
 	NewStaticSite(root, "").ServeHTTP(plain, httptest.NewRequest(http.MethodGet, "/assets/history/synthetic.jpg?w=640", nil))
 	if plain.Code != http.StatusOK || !bytes.Equal(plain.Body.Bytes(), original) {
 		t.Fatalf("site without cache status=%d", plain.Code)
+	}
+}
+
+func sha256Of(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
+}
+
+func TestLineblogImagesAreImmutableOnlyUnderTheirOwnHash(t *testing.T) {
+	store, dir := lineblogStore(t)
+	image := noisyJPEG(t, 1000, 500)
+	named := sha256Of(image)[:12] + ".jpg"
+	video := append([]byte("\x00\x00\x00\x18ftypmp42"), []byte(strings.Repeat("synthetic", 20))...)
+	videoName := sha256Of(video)[:12] + ".mp4"
+	for name, content := range map[string][]byte{named: image, "0123456789ab.jpg": image, videoName: video} {
+		if err := os.WriteFile(filepath.Join(dir, name), content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	handler := NewHandler(store)
+	for path, want := range map[string]bool{
+		"/media/lineblog/" + named:            true,
+		"/media/lineblog/" + named + "?w=320": true,
+		// Bytes that do not match the name, and videos, which are named
+		// after their watch URL, revalidate.
+		"/media/lineblog/0123456789ab.jpg":        false,
+		"/media/lineblog/0123456789ab.jpg?w=320":  false,
+		"/media/lineblog/" + videoName:            false,
+		"/media/lineblog/" + videoName + "?w=320": false,
+	} {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			recorder := request(t, handler, method, path)
+			if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != mediaCacheControl(want) {
+				t.Fatalf("%s %s status=%d cache=%q", method, path, recorder.Code, recorder.Header().Get("Cache-Control"))
+			}
+		}
+	}
+	// A file replaced under its old name is hashed anew and loses immutable.
+	path := filepath.Join(dir, named)
+	if err := os.WriteFile(path, noisyJPEG(t, 1200, 400), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Minute)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range []string{"", "?w=320"} {
+		recorder := request(t, handler, http.MethodGet, "/media/lineblog/"+named+suffix)
+		if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != mediaCacheControl(false) {
+			t.Fatalf("replaced %s cache=%q", suffix, recorder.Header().Get("Cache-Control"))
+		}
+	}
+}
+
+func TestHistoryFilesAreImmutableOnlyUnderTheirOwnHash(t *testing.T) {
+	store, _ := lineblogStore(t)
+	root := t.TempDir()
+	original := noisyJPEG(t, 1000, 500)
+	hash := sha256Of(original)
+	for name, content := range map[string][]byte{
+		"index.html":                   []byte("<!doctype html><title>synthetic</title>"),
+		"assets/history/synthetic.jpg": original,
+		"assets/kano-banner.jpg":       original,
+	} {
+		full := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	handler := NewStandaloneHandler(store, nil, Standalone{Static: NewStaticSite(root, "")})
+	other := sha256Of([]byte("synthetic"))
+	for path, want := range map[string]bool{
+		"/assets/history/synthetic.jpg?v=" + hash:                  true,
+		"/assets/history/synthetic.jpg?v=" + hash + "&w=640":       true,
+		"/assets/history/synthetic.jpg":                            false,
+		"/assets/history/synthetic.jpg?w=640":                      false,
+		"/assets/history/synthetic.jpg?v=" + other:                 false,
+		"/assets/history/synthetic.jpg?v=" + other + "&w=640":      false,
+		"/assets/history/synthetic.jpg?v=" + strings.ToUpper(hash): false,
+		"/assets/history/synthetic.jpg?v=" + hash[:12]:             false,
+		"/assets/history/synthetic.jpg?v=" + hash + "&v=" + hash:   false,
+		// Only history files are versioned.
+		"/assets/kano-banner.jpg?v=" + hash: false,
+	} {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			recorder := request(t, handler, method, path)
+			if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != mediaCacheControl(want) {
+				t.Fatalf("%s %s status=%d cache=%q", method, path, recorder.Code, recorder.Header().Get("Cache-Control"))
+			}
+		}
+	}
+	// The original is still sent whole after its hash was read.
+	if recorder := request(t, handler, http.MethodGet, "/assets/history/synthetic.jpg?v="+hash); !bytes.Equal(recorder.Body.Bytes(), original) {
+		t.Fatalf("original length=%d", recorder.Body.Len())
+	}
+	// A replaced file no longer matches the hash its old URLs carry.
+	path := filepath.Join(root, "assets", "history", "synthetic.jpg")
+	if err := os.WriteFile(path, noisyJPEG(t, 1200, 400), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Minute)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range []string{"", "&w=640"} {
+		recorder := request(t, handler, http.MethodGet, "/assets/history/synthetic.jpg?v="+hash+suffix)
+		if recorder.Code != http.StatusOK || recorder.Header().Get("Cache-Control") != mediaCacheControl(false) {
+			t.Fatalf("replaced %s cache=%q", suffix, recorder.Header().Get("Cache-Control"))
+		}
 	}
 }
