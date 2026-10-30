@@ -15,14 +15,17 @@ filter helpers, `robots.txt`, the board's preload in `index.html` and its
 own copy, and the history catalog and packaging.
 
 The Makefile is the canonical validation entry point. GitHub Actions invokes
-its targets so local and hosted checks protect the same contracts. Use the
-smallest target that covers the change; aggregate checks are for broad changes,
-CI/tooling work, and pre-commit validation.
+its targets so local and hosted checks protect the same contracts. Use
+`make ci-fast` for ordinary local feedback, then add the smallest affected-area
+target when the change needs compilation or tests. Aggregate checks are for
+broad changes, CI/tooling work, releases, and pre-commit validation at those
+boundaries.
 
 ## Validation Targets
 
 | Change or task                                         | Target                | Requirements                             |
 | ------------------------------------------------------ | --------------------- | ---------------------------------------- |
+| Fast local format, docs and privacy feedback           | make ci-fast          | Installed Node.js and Go                 |
 | Documentation links                                    | make docs-check       | Node.js                                  |
 | Formatting, docs, workflows, CI plan, scanner, privacy | make ci-style         | Locked dependencies and Go               |
 | SQLite, API, sync, media or extraction                 | make ci-backend       | Go and a C compiler                      |
@@ -36,6 +39,11 @@ CI/tooling work, and pre-commit validation.
 | Install then full validation                           | make ci               | Node/npm, Go and Docker                  |
 | Manual privacy review before handoff or commit         | make sensitive-check  | Node and Git                             |
 | Dependency advisories and npm registry signatures      | make audit            | Locked installation, Go and network      |
+
+`make ci-fast` runs only formatting, documentation-link and sensitive-information
+checks; it does not reinstall dependencies, run tests, or start Docker. Use it
+for small edits, then add `make typecheck`, `make go-test` or `make test-frontend`
+when the affected code needs that check.
 
 make ci-style runs make go-format-check, the gofmt step of make go-check on LF
 copies of the Go sources, so make check catches Go formatting without Docker.

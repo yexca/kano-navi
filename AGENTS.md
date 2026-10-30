@@ -149,7 +149,8 @@ GitHub Actions. Prefer its targets over reconstructing CI commands by hand.
 
 - Begin with `git status --short` and preserve existing user changes. Do not
   use destructive reset or checkout commands.
-- Use the smallest sufficient target: `make docs-check` for docs,
+- Use the smallest sufficient target: `make ci-fast` for ordinary local
+  feedback, `make docs-check` for docs,
   `make ci-style` for style/tooling (including actionlint), `make ci-backend`
   for data/API/sync (golangci-lint, vet and race-enabled Go tests), and
   `make ci-frontend` for UI (type check, build and frontend tests).
@@ -158,16 +159,20 @@ GitHub Actions. Prefer its targets over reconstructing CI commands by hand.
   disposable state; do not run live synchronization to validate CI changes.
 - `make check` runs installed-dependency checks without Docker; it needs Go as
   well as Node. `make ci-local` adds Docker build/runtime checks. `make ci`
-  installs first and runs the full sequence.
+  installs first and runs the full sequence. Use `make ci` for releases,
+  major refactors, dependency or CI infrastructure changes, and other broad
+  validation boundaries.
 - Register new public hosts with a reason in `scripts/privacy-allowlist.json`.
   When the scanner reports a finding, fix the source; do not hide it with an
   allow comment or formatting change.
 
 ## Commits, Release and Handoff
 
-- Before every commit, run `make ci` and `make sensitive-check`, and review
-  scanner findings and `git diff --cached` manually. Stage only the requested
-  scope.
+- Before a routine commit, run `make ci-fast` and the smallest affected-area
+  target, then run `make sensitive-check` and review scanner findings and
+  `git diff --cached` manually. Run `make ci` before releases, major
+  refactors, dependency or CI infrastructure changes, and other broad
+  validation boundaries. Stage only the requested scope.
 - Before handoff, run proportional validation and `make sensitive-check`.
 - Never commit `.env`, `.npmrc`, credentials, personal paths, logs,
   databases/WAL, runtime media, or unrelated changes. Ignore rules are not a
