@@ -952,8 +952,8 @@
   background: var(--berry);
 }
 
-.guide-day.is-today .guide-day-name,
-.guide-day.is-today .guide-day-number {
+.guide-day.is-today .guide-day-head .guide-day-name,
+.guide-day.is-today .guide-day-head .guide-day-number {
   color: #fff;
 }
 
@@ -1225,8 +1225,38 @@
     font-size: 24px;
   }
 
+  /* A row of the list marks today the way the month grid does: its date in a
+     berry disc, with an accent rule instead of a filled header. */
+  .guide-day.is-today {
+    box-shadow: inset 3px 0 0 var(--berry);
+  }
+
+  .guide-day.is-today .guide-day-head {
+    background: none;
+  }
+
+  .guide-day.is-today .guide-day-head .guide-day-name {
+    color: var(--berry);
+  }
+
+  .guide-day.is-today .guide-day-head .guide-day-number {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--berry);
+    font-size: 20px;
+  }
+
   .guide-day-today {
     margin: 2px 0 0;
+    padding: 0;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .guide-day-events,
@@ -1247,18 +1277,19 @@
   }
 }
 
+/* An empty day folds to one line; today keeps its full date. */
 @media (max-width: 1040px) {
-  .guide-day.is-empty {
+  .guide-day.is-empty:not(.is-today) {
     padding-block: 2px;
   }
 
-  .guide-day.is-empty .guide-day-head {
+  .guide-day.is-empty:not(.is-today) .guide-day-head {
     display: flex;
     gap: 6px;
     padding: 6px 0;
   }
 
-  .guide-day.is-empty .guide-day-number {
+  .guide-day.is-empty:not(.is-today) .guide-day-number {
     font-size: 16px;
   }
 }

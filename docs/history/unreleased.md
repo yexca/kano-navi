@@ -11,6 +11,10 @@
   paragraph's translation (the English ones are machine translations), which
   a menu switch hides or shows. The About page credits
   the fan recovery project the archive is built on.
+- On phones and tablets, today's row in the weekly schedule shows its date in
+  a berry disc with a "Today" label and an accent rule, matching the month
+  view, and keeps its full date when nothing is scheduled. On a wide screen,
+  a weekend today's date stays readable on the filled header.
 
 </details>
 
