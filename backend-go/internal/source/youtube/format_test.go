@@ -56,7 +56,7 @@ func TestEndedBroadcastsTakeTheirVerdictFromTheFormatPlaylists(t *testing.T) {
 	if !slices.Equal(lists, []string{"UULV" + syntheticChannel[2:], "UULF" + syntheticChannel[2:]}) || strings.Join(watched, ",") != "XXXXXXXXXXX" {
 		t.Fatalf("lists=%v watched=%v", lists, watched)
 	}
-	if result.APIRequests != 3 || result.Requested != 1 || result.Inspected != 5 || strings.Join(result.Errors, ",") != "youtube_watch_details_incomplete" {
+	if result.APIRequests != 3 || result.Requested != 1 || result.Inspected != 5 || strings.Join(result.Errors, ",") != CodeLoginRequired {
 		t.Fatalf("result=%#v", result)
 	}
 	got := map[string]Video{}
@@ -94,7 +94,7 @@ func TestAFailedFormatPlaylistLeavesTheOtherVerdicts(t *testing.T) {
 	a := NewAdapter(c, Options{ChannelID: syntheticChannel, MaxDetailRequests: 12, APIKey: "synthetic-api-key"})
 	a.Now = probeNow
 	result, err := a.ProbeLive(context.Background(), []Video{{ID: "PPPPPPPPPPP", ScheduledAt: "2026-01-03T09:00:00Z", Kind: "UPCOMING LIVE"}, {ID: "LLLLLLLLLLL", ScheduledAt: "2026-01-03T09:00:00Z", Kind: "UPCOMING LIVE"}})
-	if err != nil || strings.Join(watched, ",") != "LLLLLLLLLLL" || strings.Join(result.Errors, ",") != "youtube_api_http_error,youtube_watch_details_incomplete" {
+	if err != nil || strings.Join(watched, ",") != "LLLLLLLLLLL" || strings.Join(result.Errors, ",") != "youtube_api_http_error,"+CodeLoginRequired {
 		t.Fatalf("watched=%v result=%#v err=%v", watched, result, err)
 	}
 	for _, v := range result.Videos {

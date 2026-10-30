@@ -169,6 +169,16 @@ type playerResponse struct {
 	} `json:"videoDetails"`
 	Playability struct {
 		Status string `json:"status"`
+		// Reason and Messages say why a page is not playable; the error
+		// screen's subreason may add to them.
+		Reason      string   `json:"reason"`
+		Messages    []string `json:"messages"`
+		ErrorScreen struct {
+			Renderer struct {
+				Reason    playerText `json:"reason"`
+				Subreason playerText `json:"subreason"`
+			} `json:"playerErrorMessageRenderer"`
+		} `json:"errorScreen"`
 	} `json:"playabilityStatus"`
 	Microformat struct {
 		Renderer struct {
@@ -179,12 +189,53 @@ type playerResponse struct {
 	} `json:"microformat"`
 }
 
+// playerText is a player string, given whole or in runs.
+type playerText struct {
+	SimpleText string `json:"simpleText"`
+	Runs       []struct {
+		Text string `json:"text"`
+	} `json:"runs"`
+}
+
+func (t playerText) String() string {
+	out := t.SimpleText
+	for _, run := range t.Runs {
+		out += run.Text
+	}
+	return out
+}
+
 type broadcastDetails struct {
 	LiveNow *bool  `json:"isLiveNow"`
 	Start   string `json:"startTimestamp"`
 	End     string `json:"endTimestamp"`
 }
 
+// CodeLoginRequired is what ParseWatch reports for YouTube's bot check, which
+// covers every watch page of a host at once: a LOGIN_REQUIRED player whose
+// reason names the check ("Sign in to confirm you're not a bot"), or the
+// check's page without a player. A LOGIN_REQUIRED reason that names another
+// cause of a single video, an age gate or a private video, is incomplete
+// instead. A missing or unrecognized reason counts as the bot check, since
+// that is how the check reaches the server; at worst it ends one run's page
+// requests early. Members-only videos answer UNPLAYABLE and stay incomplete.
+const CodeLoginRequired = "youtube_watch_login_required"
+
+var botCheckPattern = regexp.MustCompile(`(?i)confirm you(?:'|’|&#39;|&#x27;|\\u0027|\\u2019)re not a bot`)
+
+// perVideoSignIn names the LOGIN_REQUIRED reasons of one video, not the host.
+var perVideoSignIn = regexp.MustCompile(`(?i)confirm your age|age[- ]restricted|inappropriate for some users|private video|video is private`)
+
+// botCheck reports whether a LOGIN_REQUIRED player is the bot check.
+func botCheck(player playerResponse) bool {
+	p := player.Playability
+	reason := strings.Join(append([]string{p.Reason, p.ErrorScreen.Renderer.Reason.String(), p.ErrorScreen.Renderer.Subreason.String()}, p.Messages...), "\n")
+	return botCheckPattern.MatchString(reason) || !perVideoSignIn.MatchString(reason)
+}
+
+// ParseWatch reads one watch page. A page that does not pass the
+// completeness checks reports youtube_watch_details_incomplete, or
+// CodeLoginRequired when it asks to sign in.
 func ParseWatch(body []byte, id string) (Video, error) {
 	text := string(body)
 	v := Video{ID: id, URL: "https://www.youtube.com/watch?v=" + id}
@@ -236,6 +287,9 @@ func ParseWatch(body []byte, id string) (Video, error) {
 	}
 	v.IsUpcoming = player.VideoDetails.Upcoming || (!found && regexp.MustCompile(`"isUpcoming"\s*:\s*true`).MatchString(text))
 	if v.Title == "" || (v.IsUpcoming && v.ScheduledAt == "") || (v.ScheduledAt == "" && (!found || player.VideoDetails.VideoID != id || player.Playability.Status != "OK")) {
+		if found && player.Playability.Status == "LOGIN_REQUIRED" && botCheck(player) || !found && botCheckPattern.MatchString(text) {
+			return v, &Error{CodeLoginRequired}
+		}
 		return v, &Error{"youtube_watch_details_incomplete"}
 	}
 	// The end is optional detail read only from the flat broadcast object; an

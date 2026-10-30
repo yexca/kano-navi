@@ -189,7 +189,17 @@ video without a reservation needs a complete, playable player response with a
 matching video ID and title. Missing/truncated details, invalid timestamps, and
 upcoming pages without a start time remain retryable within the existing request
 budget. They record the protected `youtube_watch_details_incomplete` diagnostic
-without updating video/event details or claiming a successful check. Incremental
+without updating video/event details or claiming a successful check. A page
+that shows YouTube's bot check instead records `youtube_watch_login_required`:
+a `LOGIN_REQUIRED` player whose reason names the check ("confirm you're not a
+bot") or gives none that is recognized, or the check's page without a player.
+YouTube puts a host behind this check for every watch page at once, so the
+run requests no further watch page, and the code appears once. A
+`LOGIN_REQUIRED` reason that concerns one video, an age gate or a private
+video, records `youtube_watch_details_incomplete` and the run goes on. The queued IDs it did not reach
+keep their places ahead of the rotated one, and an unclassified Data API
+answer stands in for each of them as for a failed page. A members-only page
+answers `UNPLAYABLE` and stays `youtube_watch_details_incomplete`. Incremental
 metadata distinguishes successful `inspected` checks from `detailRequested`
 attempts. Historical windows
 do not write this incremental metadata.
@@ -244,11 +254,15 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   run left below newer stored ones are still read. A failed
   later page keeps the earlier ones. When the first page fails, the feed and
   then the uploads tab are tried as above.
-- One `videos.list` call (`snippet`, `contentDetails`, `liveStreamingDetails`,
-  `localizations`) covers the first 50 IDs of the detail queue, and any room
-  left in it goes to the newest listed uploads of the run, stored or new. A
-  described queued video counts as a successful detail check without a
-  watch-page request: its title, length (ISO 8601 `duration`), and for a
+- `videos.list` calls (`snippet`, `contentDetails`, `liveStreamingDetails`,
+  `localizations`) cover the detail queue in order, 50 IDs per call and at
+  most five calls (`ytsource.MaxAPIDetailCalls`), so a 200-video `count`
+  window fits in one run. Any room left in the last call goes to the newest
+  listed uploads of the run, stored or new. A failed call records its
+  `youtube_api_` code and ends the lookup, since a refused key, quota or rate
+  limit holds for the later calls too; the IDs it and later calls would have
+  covered fall back to watch pages. A described queued video counts as a
+  successful detail check without a watch-page request: its title, length (ISO 8601 `duration`), and for a
   broadcast the actual start (or the reservation), the actual end and
   `liveBroadcastContent` as `upcoming`/`live`/`ended`. The watch-page budget
   (`YOUTUBE_MAX_DETAIL_REQUESTS`) then goes to the queued IDs the API left out.
@@ -262,7 +276,7 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   verdict, the run reads the newest page of the live playlist (`UULV` and the
   channel ID after `UC`) and of the long-form playlist (`UULF` and the
   channel ID after `UC`), one `playlistItems.list` call and one quota unit
-  each, counted in `apiRequests`, at most once per `videos.list` call. YouTube lists
+  each, counted in `apiRequests`, at most once per run. YouTube lists
   streams on the live playlist and premieres with ordinary uploads on the
   long-form one, so an ended broadcast on the live playlist is a stream and one
   on the long-form playlist is a premiere. The playlists are undocumented,
@@ -297,9 +311,10 @@ With `YOUTUBE_API_KEY` set, the recent step asks the YouTube Data API first:
   for what counts as the same image.
 
 A run that finds a stored video on its first playlist page spends two quota
-units (of the default 10,000 a day), whatever the queue length; each further
-page adds one, and the per-format playlists two more when a queued ended
-broadcast needs them. The key is sent only in the `X-Goog-Api-Key` header to
+units (of the default 10,000 a day) while its detail queue holds at most 50
+IDs; each further 50 queued IDs add one, up to five `videos.list` calls,
+each further playlist page adds one, and the per-format playlists two more
+when a queued ended broadcast needs them. The key is sent only in the `X-Goog-Api-Key` header to
 `https://www.googleapis.com/youtube/v3/`, with the client's 10-second timeout,
 4 MiB limit and rejected redirects. Failures record controlled codes
 (`youtube_api_forbidden` for a refused key or quota, `youtube_api_rate_limited`,
@@ -454,7 +469,9 @@ every video falls back), when the answer leaves the video out, when it
 names no broadcast state, or when it cannot classify the video, such as an
 ended broadcast with neither verdict or an upcoming one without a
 start. If that page fails too, an ended broadcast with an API start is
-written unclassified, as in the recent step. `apiRequests` in the run
+written unclassified, as in the recent step. A page that asks to sign in
+(`youtube_watch_login_required`) ends the run's page requests the same way:
+the remaining videos are left as if their pages failed. `apiRequests` in the run
 result counts the calls; `requested` counts watch pages. Each run costs one
 quota unit whatever the number of due videos, two more when an ended
 broadcast needs the per-format playlists, and nothing while nothing is

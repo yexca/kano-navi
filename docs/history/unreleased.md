@@ -10,6 +10,12 @@
   which bound `stopped` it, and finishes `partial` while images remain.
 - `MEDIA_DOWNLOAD_LIMIT` is removed from `.env.example` and the configuration
   page. The backend never read it; an existing `.env` entry can be deleted.
+- YouTube recent sync asks the Data API about the whole detail queue, 50
+  videos per call and at most five calls a run, so a 200-video count window
+  is classified in one run instead of mostly waiting for watch pages.
+- A watch page that asks the server to sign in (YouTube's bot check) records
+  `youtube_watch_login_required` once and stops further watch page requests
+  for that run, in recent sync and the live-status probe alike.
 
 </details>
 

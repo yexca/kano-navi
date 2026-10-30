@@ -939,6 +939,8 @@ export const adminMessages = {
     "admin.code.youtube_timeout": "YouTube took too long to answer.",
     "admin.code.youtube_rate_limited": "YouTube is limiting requests.",
     "admin.code.youtube_unavailable": "YouTube could not be reached.",
+    "admin.code.youtube_watch_login_required":
+      "YouTube asked this server to sign in (its bot check), so the run read no more watch pages.",
     "admin.code.youtube_feed_http_error":
       "YouTube's RSS feed answered with an error; its 404s can last for hours.",
     "admin.code.youtube_feed_upstream_5xx":
@@ -1898,6 +1900,8 @@ export const adminMessages = {
     "admin.code.youtube_timeout": "YouTube 响应超时。",
     "admin.code.youtube_rate_limited": "YouTube 正在限流。",
     "admin.code.youtube_unavailable": "无法访问 YouTube。",
+    "admin.code.youtube_watch_login_required":
+      "YouTube 要求此服务器登录（机器人验证），本次运行不再读取视频页面。",
     "admin.code.youtube_feed_http_error":
       "YouTube RSS 订阅源返回了错误；它的 404 可能持续数小时。",
     "admin.code.youtube_feed_upstream_5xx":

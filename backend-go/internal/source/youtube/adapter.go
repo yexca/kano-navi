@@ -240,13 +240,18 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 	}
 	eligible = append(append(eligible, state.ActiveIDs...), state.FollowUpIDs...)
 	result.Queue = uniqueIDs(eligible, 1000)
-	// The Data API answers the first batch of the queue in one call; the watch
-	// page budget then goes to the rest, newest work first as before. Room
-	// left in that batch goes to the newest listed uploads, whose answers
-	// only refresh their localized titles, which creators often add later.
-	batch := uniqueIDs(append(append([]string{}, result.Queue...), feedIDs...), MaxAPIVideos)
+	// The Data API answers the queue in batches of MaxAPIVideos, at most
+	// MaxAPIDetailCalls calls; the watch page budget then goes to the rest,
+	// newest work first as before. Room left in the last batch goes to the
+	// newest listed uploads, whose answers only refresh their localized
+	// titles, which creators often add later.
+	calls := min(max((len(result.Queue)+MaxAPIVideos-1)/MaxAPIVideos, 1), MaxAPIDetailCalls)
+	batch := uniqueIDs(append(append([]string{}, result.Queue...), feedIDs...), calls*MaxAPIVideos)
 	fromAPI, unclassified := a.apiDetails(ctx, batch, len(result.Queue), state.Videos, result.Localized, &result.APIRequests, &result.Errors)
 	budget := a.Options.MaxDetailRequests
+	// Once a page asks to sign in, YouTube's bot check covers this host, so no
+	// further page is requested this run.
+	signIn := false
 	for _, id := range append([]string{}, result.Queue...) {
 		if err = ctx.Err(); err != nil {
 			return result, err
@@ -256,23 +261,26 @@ func (a *Adapter) FetchUploads(ctx context.Context, state State, list List) (Res
 		// An operator's refresh request reads the watch page while the budget
 		// allows, so it can settle a premiere verdict the API answer only
 		// repeats; that answer stands in when the page fails.
-		if answered && refresh[id] && budget > 0 {
+		if answered && refresh[id] && budget > 0 && !signIn {
 			fallback, hasFallback, answered = v, true, false
 		}
-		if !answered && budget == 0 {
-			continue
+		if !answered && (budget == 0 || signIn) {
+			// Behind the bot check the page would fail too, so what the API
+			// said stands in.
+			if !signIn || !hasFallback {
+				continue
+			}
+			v, answered = fallback, true
 		}
 		// Rotate before fetching so a permanent failure cannot starve later IDs.
 		result.Queue = append(withoutID(result.Queue, id), id)
 		if !answered {
 			budget--
 			result.Requested++
-			body, err = a.Client.Watch(ctx, id)
-			if err == nil {
-				v, err = ParseWatch(body, id)
-			}
+			v, err = a.watch(ctx, id)
 			if err != nil {
 				result.Errors = append(result.Errors, safeError(err))
+				signIn = safeError(err) == CodeLoginRequired
 				// The page could not decide, so what the API said still counts.
 				if v, answered = fallback, hasFallback; !answered {
 					continue
@@ -464,33 +472,50 @@ func (a *Adapter) playlistShorts(ctx context.Context, result *Result, uploads []
 	}
 }
 
-// apiDetails reads the first MaxAPIVideos queued IDs in one videos.list call
-// when a key is set. It returns the videos the API could describe; the rest,
-// including any the API left out or could not classify, fall back to their
-// watch pages. Ended broadcasts it could not classify are also returned as
-// unclassified, for use only when their page fails. Every video the call
-// answered, classified or not, has its localized titles put in localized.
-// The first checks IDs are detail checks: when one of them is an ended
-// broadcast the answer cannot settle, the per-format playlists are read too
-// (formatLists). Calls are counted in requests; a failed videos.list call is
-// recorded in errs and answers none. The recent step and the live-status
-// probe share it.
+// MaxAPIDetailCalls bounds the videos.list calls of one recent run, enough
+// for a MaxListLimit count window in batches of MaxAPIVideos.
+const MaxAPIDetailCalls = 5
+
+// apiDetails reads the queued IDs in videos.list calls of MaxAPIVideos each,
+// in order, at most MaxAPIDetailCalls, when a key is set. It returns the
+// videos the API could describe; the rest, including any the API left out or
+// could not classify, fall back to their watch pages. Ended broadcasts it
+// could not classify are also returned as unclassified, for use only when
+// their page fails. Every video a call answered, classified or not, has its
+// localized titles put in localized. The first checks IDs are detail checks:
+// when one of them is an ended broadcast the answers cannot settle, the
+// per-format playlists are read too (formatLists), once. Calls are counted in
+// requests; a failed videos.list call is recorded in errs, answers none and
+// ends the lookup, since the key, quota and rate limit it reports hold for
+// the later batches too. The recent step and the live-status probe share it.
 func (a *Adapter) apiDetails(ctx context.Context, queue []string, checks int, stored map[string]Video, localized map[string]map[string]string, requests *int, errs *[]string) (out, unclassified map[string]Video) {
 	out, unclassified = map[string]Video{}, map[string]Video{}
 	if a.Options.APIKey == "" || len(queue) == 0 {
 		return out, unclassified
 	}
-	ids := queue[:min(len(queue), MaxAPIVideos)]
-	*requests++
-	body, err := a.Client.Videos(ctx, a.Options.APIKey, ids)
-	var items map[string]apiVideo
-	if err == nil {
-		items, err = ParseAPIVideos(body)
-	}
-	if err != nil {
-		if ctx.Err() == nil {
-			*errs = append(*errs, safeError(err))
+	queue = queue[:min(len(queue), MaxAPIDetailCalls*MaxAPIVideos)]
+	items := map[string]apiVideo{}
+	ids := []string{}
+	for start := 0; start < len(queue); start += MaxAPIVideos {
+		batch := queue[start:min(start+MaxAPIVideos, len(queue))]
+		*requests++
+		body, err := a.Client.Videos(ctx, a.Options.APIKey, batch)
+		var answered map[string]apiVideo
+		if err == nil {
+			answered, err = ParseAPIVideos(body)
 		}
+		if err != nil {
+			if ctx.Err() == nil {
+				*errs = append(*errs, safeError(err))
+			}
+			break
+		}
+		for id, item := range answered {
+			items[id] = item
+		}
+		ids = append(ids, batch...)
+	}
+	if len(ids) == 0 {
 		return out, unclassified
 	}
 	listed := map[string]formatList{}
@@ -619,7 +644,8 @@ type ProbeResult struct {
 // broadcast state, or every video when the call failed, has its watch page
 // read instead. A failed or incomplete page records its code and leaves that
 // video's snapshot to the caller, unless the API's unclassified answer for an
-// ended broadcast can stand in for it.
+// ended broadcast can stand in for it. After a page that asks to sign in
+// (CodeLoginRequired), the rest are left the same way without a page.
 func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, error) {
 	result := ProbeResult{Videos: []Video{}, Errors: []string{}, Attempted: []string{}, Localized: map[string]map[string]string{}}
 	if len(videos) > MaxLiveProbes {
@@ -631,6 +657,7 @@ func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, e
 		stored[v.ID] = v
 	}
 	fromAPI, unclassified := a.apiDetails(ctx, ids, len(ids), stored, result.Localized, &result.APIRequests, &result.Errors)
+	signIn := false
 	for _, old := range videos {
 		if err := ctx.Err(); err != nil {
 			return result, err
@@ -640,13 +667,18 @@ func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, e
 		// that names none still needs the page.
 		v, answered := fromAPI[old.ID]
 		if !answered || v.LiveStatus == "" {
-			result.Requested++
-			body, err := a.Client.Watch(ctx, old.ID)
-			if err == nil {
-				v, err = ParseWatch(body, old.ID)
+			// Behind the bot check no page is requested; only an unclassified
+			// API answer stands in, as for a failed page.
+			var err error
+			if !signIn {
+				result.Requested++
+				v, err = a.watch(ctx, old.ID)
+				if err != nil {
+					result.Errors = append(result.Errors, safeError(err))
+					signIn = safeError(err) == CodeLoginRequired
+				}
 			}
-			if err != nil {
-				result.Errors = append(result.Errors, safeError(err))
+			if signIn || err != nil {
 				if v, answered = unclassified[old.ID]; !answered {
 					continue
 				}
@@ -656,6 +688,15 @@ func (a *Adapter) ProbeLive(ctx context.Context, videos []Video) (ProbeResult, e
 		result.Inspected++
 	}
 	return result, nil
+}
+
+// watch reads and parses one watch page.
+func (a *Adapter) watch(ctx context.Context, id string) (Video, error) {
+	body, err := a.Client.Watch(ctx, id)
+	if err != nil {
+		return Video{}, err
+	}
+	return ParseWatch(body, id)
 }
 
 func safeError(err error) string {
