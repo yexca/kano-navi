@@ -48,10 +48,11 @@
   how many records were new, already stored or failed, the pages it read,
   whether it reached the end (or should be repeated to continue), and the
   first new records.
-- The Sources page has a rail with each source's timer switch and method
-  chain, the selected source's settings beside it and its manual fetch below
-  them; on a phone they stack in that order. In the rail, switch methods on or
-  off and move them up or down; changes save at once. Methods the server
+- The Sources page has a tab per source. Under it, the selected source's
+  timer switch and method chain sit on the left, its settings beside them and
+  its manual fetch below the settings; on a phone they stack in that order. In
+  the chain, switch methods on or off and move them up or down; changes save
+  at once. Methods the server
   cannot run show the variable they need, a source a `SKIP_*` setting turns
   off shows as locked, and Bilibili shows its one fixed method.
 - The settings of X add an X API panel: the gate and daily cap, where the

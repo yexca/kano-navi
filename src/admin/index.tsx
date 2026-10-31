@@ -93,6 +93,9 @@ const views: ViewEntry[] = [
 ]
 const groups = ["today", "data", "system"] as const
 
+/** The public header's default portrait. */
+const BRAND_AVATAR = "/assets/kano-avatar.jpg"
+
 // Links saved before Content was split into separate views.
 const legacyContent: Record<string, string> = {
   posts: "posts",
@@ -288,9 +291,7 @@ export function AdminApp() {
               navigate("overview")
             }}
           >
-            <span className="adm-mark" aria-hidden>
-              K
-            </span>
+            <img className="adm-brand-avatar" src={BRAND_AVATAR} alt="" />
             <span>
               <strong>KANO</strong>
               <small>{t("admin.brand.console")}</small>

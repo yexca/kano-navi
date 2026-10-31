@@ -10,7 +10,6 @@ import {
   ArrowUp,
   CalendarCheck,
   CalendarClock,
-  ChevronRight,
   Download,
   History,
   Info,
@@ -103,36 +102,75 @@ function When({ value }: { value: string | null | undefined }) {
   )
 }
 
-/**
- * A source in the rail: its timer switch and its method chain (ADR-0004),
- * which timed reads try from the top. Switches and moves save at once. A
- * method this process cannot run is greyed with the variable it needs, a
- * source SKIP_* disables is locked, and Bilibili's one method is read-only.
- * Selecting the entry shows the source's settings and fetch beside it.
- */
-function RailEntry({
+/** A source's tab: its name and whether its timer runs here. */
+function SourceTab({
   schedule,
-  chips,
   selected,
   onSelect,
-  onChange,
 }: {
   schedule: SourceSchedule
-  chips?: ReactNode
   selected: boolean
   onSelect: () => void
-  onChange: (schedule: SourceSchedule) => void
 }) {
   const { t } = useAppSettings()
-  const { api, act, overview } = useAdmin()
-  const [busy, setBusy] = useState(false)
-  // The chain as the operator just arranged it, while the save is on its way.
-  const [pending, setPending] = useState<SourceChain | null>(null)
+  const { overview } = useAdmin()
   const source = schedule.source
   const Icon = stepIcons[source] || Tv
   const locked = schedule.skipped
   const timersOff = overview ? !overview.scheduler.enabled : false
   const running = schedule.enabled && !locked && !timersOff
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      className={cn(selected && "is-active", locked && "is-locked")}
+      onClick={onSelect}
+    >
+      <span className="adm-source-icon">
+        <Icon aria-hidden />
+      </span>
+      <span className="adm-source-name">
+        <strong>{t(`admin.step.${source}`)}</strong>
+        <small>
+          {locked ? <Lock aria-hidden /> : null}
+          {locked
+            ? t("admin.sources.locked")
+            : running
+              ? t("admin.timer.on", {
+                  interval: formatInterval(schedule.intervalMinutes, t),
+                })
+              : schedule.enabled
+                ? t("admin.sources.timerBlocked")
+                : t("admin.sources.timerOff")}
+        </small>
+      </span>
+    </button>
+  )
+}
+
+/**
+ * The selected source's timer switch and its method chain (ADR-0004), which
+ * timed reads try from the top. Switches and moves save at once. A method
+ * this process cannot run is greyed with the variable it needs, a source
+ * SKIP_* disables is locked, and Bilibili's one method is read-only.
+ */
+function ChainPanel({
+  schedule,
+  chips,
+  onChange,
+}: {
+  schedule: SourceSchedule
+  chips?: ReactNode
+  onChange: (schedule: SourceSchedule) => void
+}) {
+  const { t } = useAppSettings()
+  const { api, act } = useAdmin()
+  const [busy, setBusy] = useState(false)
+  // The chain as the operator just arranged it, while the save is on its way.
+  const [pending, setPending] = useState<SourceChain | null>(null)
+  const source = schedule.source
+  const locked = schedule.skipped
   const chain = pending || schedule.chain
   const methods = chain.methods
   const label = (id: string) => t(`admin.chain.method.${source}.${id}`)
@@ -164,40 +202,8 @@ function RailEntry({
   }
   const enabledCount = methods.filter((method) => method.enabled).length
   return (
-    <li
-      className={cn(
-        "adm-rail-entry",
-        selected && "is-selected",
-        locked && "is-locked",
-      )}
-    >
-      <button
-        type="button"
-        className="adm-rail-head"
-        aria-pressed={selected}
-        onClick={onSelect}
-      >
-        <span className="adm-source-icon">
-          <Icon aria-hidden />
-        </span>
-        <span className="adm-source-name">
-          <strong>{t(`admin.step.${source}`)}</strong>
-          <small>
-            {locked ? <Lock aria-hidden /> : null}
-            {locked
-              ? t("admin.sources.locked")
-              : running
-                ? t("admin.timer.on", {
-                    interval: formatInterval(schedule.intervalMinutes, t),
-                  })
-                : schedule.enabled
-                  ? t("admin.sources.timerBlocked")
-                  : t("admin.sources.timerOff")}
-          </small>
-        </span>
-        <ChevronRight className="adm-rail-chevron" aria-hidden />
-      </button>
-      <div className="adm-rail-body">
+    <Panel className="adm-source-chain">
+      <div className="adm-chain-body">
         {chips ? <span className="adm-chip-row">{chips}</span> : null}
         {locked ? (
           <p className="adm-source-note">
@@ -289,8 +295,9 @@ function RailEntry({
             <p className="adm-field-hint">{t("admin.chain.youtubeAPIOff")}</p>
           ) : null}
         </fieldset>
+        <p className="adm-chain-hint">{t("admin.chain.description")}</p>
       </div>
-    </li>
+    </Panel>
   )
 }
 
@@ -1350,9 +1357,10 @@ function ConfirmationPanel({
 const sourceIds: ScheduleSource[] = ["x", "youtube", "bilibili"]
 
 /**
- * The Sources page: a rail with each source's timer switch and method chain,
- * the selected source's settings beside it, and its manual fetch below them.
- * On a narrow screen the three stack in that order.
+ * The Sources page: a tab per source, then the selected source's timer
+ * switch and method chain on the left, its settings beside them, and its
+ * manual fetch below the settings. On a narrow screen the three stack in that
+ * order.
  */
 export function SourcesView({ tab, navigate }: ViewProps) {
   const { t, locale } = useAppSettings()
@@ -1399,80 +1407,95 @@ export function SourcesView({ tab, navigate }: ViewProps) {
       {!data ? (
         <Loading />
       ) : (
-        <div className="adm-sources-layout">
-          <section
-            className="adm-source-rail"
-            aria-label={t("admin.sources.rail")}
+        <>
+          {timersOff ? (
+            <Callout tone="honey" icon={Info}>
+              <p>{t("admin.timer.schedulerOff")}</p>
+            </Callout>
+          ) : null}
+          <div
+            className="adm-tabs is-bare adm-source-tabs"
+            role="tablist"
+            aria-label={t("admin.sources.title")}
           >
-            {timersOff ? (
-              <Callout tone="honey" icon={Info}>
-                <p>{t("admin.timer.schedulerOff")}</p>
-              </Callout>
-            ) : null}
-            <ul className="adm-rail-list">
-              {sourceIds.map((source) => {
-                const found = schedule(source)
-                return found ? (
-                  <RailEntry
-                    key={source}
-                    schedule={found}
-                    chips={chips(source)}
-                    selected={selected === source}
-                    onSelect={() => navigate("sources", source)}
-                    onChange={setSchedule}
-                  />
-                ) : null
-              })}
-            </ul>
-            <p className="adm-rail-hint">{t("admin.chain.description")}</p>
-          </section>
-          <section className="adm-source-detail" aria-label={heading}>
-            <header className="adm-source-header">
-              <h2>{heading}</h2>
-              <p>{t(`admin.sources.${selected}.hint`)}</p>
-            </header>
-            {current ? (
-              <TimerPanel
-                key={selected}
-                schedule={current}
-                lastSuccess={
-                  selected === "bilibili"
-                    ? data.bilibili.lastSuccessAt
-                    : overview?.sources[selected].lastSuccessAt
-                }
-                onChange={setSchedule}
-              />
-            ) : null}
-            {selected === "x" && current ? (
-              <XAPIPanel
-                schedule={current}
-                accounts={data.x.accounts.map((entry) => entry.account)}
-                onChange={setSchedule}
-              />
-            ) : null}
-            {selected === "youtube" ? (
-              <ConfirmationPanel
-                youtube={data.youtube}
-                onChange={(youtube) => sources.setData({ ...data, youtube })}
-              />
-            ) : null}
-          </section>
-          <div className="adm-source-fetch">
-            {selected === "bilibili" ? (
-              <BilibiliSource
-                status={data.bilibili}
-                onAdded={() => void sources.reload()}
-              />
-            ) : (
-              <FetchPanel
-                key={selected}
-                source={selected}
-                sources={data}
-                onOpenRuns={() => navigate("runs")}
-              />
-            )}
+            {sourceIds.map((source) => {
+              const found = schedule(source)
+              return found ? (
+                <SourceTab
+                  key={source}
+                  schedule={found}
+                  selected={selected === source}
+                  onSelect={() => navigate("sources", source)}
+                />
+              ) : null
+            })}
           </div>
-        </div>
+          <div
+            role="tabpanel"
+            className="adm-sources-layout"
+            aria-label={heading}
+          >
+            <section
+              className="adm-source-rail"
+              aria-label={t("admin.chain.title")}
+            >
+              {current ? (
+                <ChainPanel
+                  key={selected}
+                  schedule={current}
+                  chips={chips(selected)}
+                  onChange={setSchedule}
+                />
+              ) : null}
+            </section>
+            <section className="adm-source-detail">
+              <header className="adm-source-header">
+                <h2>{heading}</h2>
+                <p>{t(`admin.sources.${selected}.hint`)}</p>
+              </header>
+              {current ? (
+                <TimerPanel
+                  key={selected}
+                  schedule={current}
+                  lastSuccess={
+                    selected === "bilibili"
+                      ? data.bilibili.lastSuccessAt
+                      : overview?.sources[selected].lastSuccessAt
+                  }
+                  onChange={setSchedule}
+                />
+              ) : null}
+              {selected === "x" && current ? (
+                <XAPIPanel
+                  schedule={current}
+                  accounts={data.x.accounts.map((entry) => entry.account)}
+                  onChange={setSchedule}
+                />
+              ) : null}
+              {selected === "youtube" ? (
+                <ConfirmationPanel
+                  youtube={data.youtube}
+                  onChange={(youtube) => sources.setData({ ...data, youtube })}
+                />
+              ) : null}
+            </section>
+            <div className="adm-source-fetch">
+              {selected === "bilibili" ? (
+                <BilibiliSource
+                  status={data.bilibili}
+                  onAdded={() => void sources.reload()}
+                />
+              ) : (
+                <FetchPanel
+                  key={selected}
+                  source={selected}
+                  sources={data}
+                  onOpenRuns={() => navigate("runs")}
+                />
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )

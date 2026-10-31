@@ -665,7 +665,6 @@ export const adminMessages = {
     "admin.chain.usage": "X API today",
     "admin.chain.usageValue": "{posts} of {cap} posts",
     "admin.chain.streak": "Timeline failure streak",
-    "admin.sources.rail": "Sources and method chains",
     "admin.sources.locked": "Locked",
     "admin.xapi.description":
       "Timed X reads reach the X API only after an account's timeline keeps failing, and only up to a daily cap.",
