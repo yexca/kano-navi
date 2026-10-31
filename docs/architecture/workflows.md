@@ -228,8 +228,8 @@ page. A fresh installation keeps all three disabled.
 
 When a schedule is due, the server process submits its chain as the ad hoc
 run `@source-<source>` (`reconcile` is appended as for every run with a
-source step), labelled `source-schedule` in the run history. **Run now** on a
-source's timer panel (`POST /api/admin/sources/{source}/run`) submits the same
+source step), labelled `source-schedule` in the run history. **Run now** in a
+source's Sources page summary (`POST /api/admin/sources/{source}/run`) submits the same
 chain once, triggered by the operator, and leaves the schedule's next run
 where it was; the history shows it as "X · run now". The follow-up
 steps always run, even when the source wrote nothing: each works from its
@@ -271,7 +271,7 @@ YouTube.
 
 Each X and YouTube schedule also orders its listing methods into a fallback
 chain ([ADR-0004](../decisions/ADR-0004-method-fallback-chains.md)), stored
-in `source_schedules.chain_json` and edited in the source rail of the
+in `source_schedules.chain_json` and edited in the timed reads of the
 Sources page. A read tries the enabled methods from the top and falls to the
 next when the first page fails, when the answer lists none of the account's
 or channel's own records, when the chain skips the method, or on quota and

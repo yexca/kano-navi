@@ -10,6 +10,8 @@ import {
   ArrowUp,
   CalendarCheck,
   CalendarClock,
+  ChevronDown,
+  CircleHelp,
   Download,
   History,
   Info,
@@ -22,7 +24,9 @@ import {
   RotateCw,
   Save,
   ShieldAlert,
+  SlidersHorizontal,
   Tv,
+  Undo2,
   type LucideIcon,
 } from "lucide-react"
 
@@ -43,7 +47,7 @@ import type {
   PushStatus,
   Run,
   ScheduleSource,
-  SourceChain,
+  SourceChainUpdate,
   SourceSchedule,
   SourceSync,
   Sources,
@@ -56,12 +60,15 @@ import {
   ConfirmButton,
   Facts,
   Field,
+  IconButton,
   Loading,
+  Modal,
   PageHeader,
   Panel,
   Segmented,
   StatusBadge,
   Switch,
+  type Tone,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { BilibiliSource } from "@/admin/views/bilibili-parts"
@@ -104,7 +111,40 @@ function When({ value }: { value: string | null | undefined }) {
   )
 }
 
-/** A source's tab: its name and whether its timer runs here. */
+type TimerState = "locked" | "running" | "blocked" | "off"
+
+/** Whether a source's timer runs in this process. */
+function timerState(schedule: SourceSchedule, timersOff: boolean): TimerState {
+  if (schedule.skipped) return "locked"
+  if (!schedule.enabled) return "off"
+  return timersOff ? "blocked" : "running"
+}
+
+const timerTones: Record<TimerState, Tone> = {
+  locked: "neutral",
+  running: "leaf",
+  blocked: "honey",
+  off: "neutral",
+}
+
+/** A timer state as its tab and summary name it. */
+function timerLabel(
+  schedule: SourceSchedule,
+  state: TimerState,
+  t: ReturnType<typeof useAppSettings>["t"],
+) {
+  return state === "locked"
+    ? t("admin.sources.locked")
+    : state === "running"
+      ? t("admin.timer.on", {
+          interval: formatInterval(schedule.intervalMinutes, t),
+        })
+      : state === "blocked"
+        ? t("admin.sources.timerBlocked")
+        : t("admin.sources.timerOff")
+}
+
+/** A source's tab: its name and a dot for whether its timer runs here. */
 function SourceTab({
   schedule,
   selected,
@@ -118,109 +158,445 @@ function SourceTab({
   const { overview } = useAdmin()
   const source = schedule.source
   const Icon = stepIcons[source] || Tv
-  const locked = schedule.skipped
-  const timersOff = overview ? !overview.scheduler.enabled : false
-  const running = schedule.enabled && !locked && !timersOff
+  const state = timerState(
+    schedule,
+    overview ? !overview.scheduler.enabled : false,
+  )
   return (
     <button
       type="button"
       role="tab"
       aria-selected={selected}
-      className={cn(selected && "is-active", locked && "is-locked")}
+      className={cn(selected && "is-active", state === "locked" && "is-locked")}
       onClick={onSelect}
+      title={timerLabel(schedule, state, t)}
     >
       <span className="adm-source-icon">
         <Icon aria-hidden />
       </span>
-      <span className="adm-source-name">
-        <strong>{t(`admin.step.${source}`)}</strong>
-        <small>
-          {locked ? <Lock aria-hidden /> : null}
-          {locked
-            ? t("admin.sources.locked")
-            : running
-              ? t("admin.timer.on", {
-                  interval: formatInterval(schedule.intervalMinutes, t),
-                })
-              : schedule.enabled
-                ? t("admin.sources.timerBlocked")
-                : t("admin.sources.timerOff")}
-        </small>
+      <strong>{t(`admin.step.${source}`)}</strong>
+      {state === "locked" ? (
+        <Lock aria-hidden className="adm-source-lock" />
+      ) : (
+        <i className={cn("adm-source-dot", `is-${state}`)} aria-hidden />
+      )}
+      <span className="adm-visually-hidden">
+        {timerLabel(schedule, state, t)}
       </span>
     </button>
   )
 }
 
 /**
- * The selected source's timer switch and its method chain (ADR-0004), which
- * timed reads try from the top. Switches and moves save at once. A method
- * this process cannot run is greyed with the variable it needs, a source
- * SKIP_* disables is locked, and Bilibili's one method is read-only.
+ * The selected source at a glance: what it reads, whether its timer runs,
+ * when it runs next, how the last run went and its last successful read,
+ * with the timer switch and Run now. The switch saves at once and keeps any
+ * unsaved timed-read edits below.
  */
-function ChainPanel({
+function SourceSummary({
   schedule,
+  lastSuccess,
   chips,
   onChange,
 }: {
   schedule: SourceSchedule
+  lastSuccess: string | null | undefined
   chips?: ReactNode
   onChange: (schedule: SourceSchedule) => void
 }) {
   const { t } = useAppSettings()
-  const { api, act } = useAdmin()
-  const [busy, setBusy] = useState(false)
-  // The chain as the operator just arranged it, while the save is on its way.
-  const [pending, setPending] = useState<SourceChain | null>(null)
+  const { api, act, start, overview } = useAdmin()
+  const [busy, setBusy] = useState("")
+  const id = useId()
   const source = schedule.source
+  const Icon = stepIcons[source] || Tv
   const locked = schedule.skipped
-  const chain = pending || schedule.chain
-  const methods = chain.methods
-  const label = (id: string) => t(`admin.chain.method.${source}.${id}`)
-  const save = async (
-    body: Parameters<typeof api.updateSourceSchedule>[1],
-    next?: SourceChain,
-  ) => {
-    if (busy) return
-    setBusy(true)
-    setPending(next || null)
+  const state = timerState(
+    schedule,
+    overview ? !overview.scheduler.enabled : false,
+  )
+  const toggle = async (enabled: boolean) => {
+    setBusy("toggle")
     const saved = await act(
-      () => api.updateSourceSchedule(source, body),
+      () => api.updateSourceSchedule(source, { enabled }),
       "admin.notice.scheduleSaved",
     )
-    setBusy(false)
-    setPending(null)
+    setBusy("")
     if (saved) onChange(saved)
   }
-  const saveMethods = (next: ChainMethod[]) =>
-    save(
-      { chain: { methods: next.map(({ id, enabled }) => ({ id, enabled })) } },
-      { ...chain, methods: next },
+  const runNow = async () => {
+    setBusy("run")
+    await start({ kind: "source", source })
+    setBusy("")
+  }
+  return (
+    <section className="adm-panel adm-source-summary" aria-labelledby={id}>
+      <header className="adm-source-summary-head">
+        <span className="adm-source-icon">
+          <Icon aria-hidden />
+        </span>
+        <div className="adm-source-summary-title">
+          <h2 id={id}>{t(`admin.step.${source}`)}</h2>
+          <p>{t(`admin.sources.${source}.hint`)}</p>
+        </div>
+        <div className="adm-source-summary-actions">
+          <Switch
+            checked={schedule.enabled}
+            disabled={locked || busy !== ""}
+            onChange={toggle}
+            label={t("admin.timer.enable")}
+          />
+          <Button
+            size="sm"
+            icon={Play}
+            busy={busy === "run"}
+            disabled={locked || busy !== "" || Boolean(overview?.activeRun)}
+            onClick={runNow}
+            title={t("admin.timer.runNowHint")}
+          >
+            {t("admin.timer.runNow")}
+          </Button>
+        </div>
+      </header>
+      {locked ? (
+        <p className="adm-source-note">
+          <Lock aria-hidden />
+          {t("admin.timer.skipped", { flag: skipFlags[source] })}
+        </p>
+      ) : null}
+      <dl className="adm-source-stats">
+        <div>
+          <dt>{t("admin.sources.timer")}</dt>
+          <dd>
+            <Badge tone={timerTones[state]}>
+              {state === "locked" ? (
+                <Lock aria-hidden />
+              ) : (
+                <i
+                  className={cn("adm-source-dot", `is-${state}`)}
+                  aria-hidden
+                />
+              )}
+              {timerLabel(schedule, state, t)}
+            </Badge>
+            {chips}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("admin.timer.nextRun")}</dt>
+          <dd>
+            {state === "running" ? <When value={schedule.nextRunAt} /> : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("admin.timer.lastRun")}</dt>
+          <dd>
+            {schedule.lastRun ? (
+              <>
+                <StatusBadge status={schedule.lastRun.status} />
+                <When value={schedule.lastRun.at} />
+              </>
+            ) : (
+              t("admin.timer.never")
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("admin.sources.lastSuccess")}</dt>
+          <dd>
+            <When value={lastSuccess} />
+          </dd>
+        </div>
+      </dl>
+    </section>
+  )
+}
+
+/** A question-mark button that opens a short explanation in a dialog. */
+function HelpButton({
+  title,
+  children,
+}: {
+  title: string
+  children: ReactNode
+}) {
+  const { t } = useAppSettings()
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <IconButton
+        icon={CircleHelp}
+        label={t("admin.help.about", { topic: title })}
+        className="adm-help-button"
+        onClick={() => setOpen(true)}
+      />
+      <Modal open={open} title={title} onClose={() => setOpen(false)}>
+        <div className="adm-help">{children}</div>
+      </Modal>
+    </>
+  )
+}
+
+/**
+ * A field whose explanation, when it has one, sits behind a question mark
+ * beside its label. The label is its own element, so pressing the question
+ * mark never focuses the control.
+ */
+function HelpField({
+  label,
+  help,
+  hint,
+  children,
+}: {
+  label: string
+  help?: ReactNode
+  hint?: ReactNode
+  children: (id: string) => ReactNode
+}) {
+  const id = useId()
+  return (
+    <div className="adm-field">
+      <span className="adm-field-label adm-label-help">
+        <label htmlFor={id}>{label}</label>
+        {help ? <HelpButton title={label}>{help}</HelpButton> : null}
+      </span>
+      {children(id)}
+      {hint ? <span className="adm-field-hint">{hint}</span> : null}
+    </div>
+  )
+}
+
+/** A count against its limit: the number, the limit and a bar. */
+function Meter({
+  label,
+  value,
+  of,
+  unit,
+}: {
+  label: string
+  value: number
+  of: number
+  unit: string
+}) {
+  const share = of > 0 ? Math.min(value / of, 1) : value > 0 ? 1 : 0
+  return (
+    <li className={cn("adm-meter", share >= 1 && "is-full")}>
+      <span className="adm-meter-label">{label}</span>
+      <span className="adm-meter-value">
+        <strong>{value}</strong>
+        <small>
+          / {of} {unit}
+        </small>
+      </span>
+      <span className="adm-meter-bar" aria-hidden>
+        <i style={{ width: `${share * 100}%` }} />
+      </span>
+    </li>
+  )
+}
+
+/** The timed-read settings the operator edits before one Save. */
+interface TimedDraft {
+  minutes: number
+  sync: SourceSync | null
+  methods: ChainMethod[]
+  gate: number
+  cap: number
+}
+
+const draftOf = (schedule: SourceSchedule): TimedDraft => ({
+  minutes: schedule.intervalMinutes,
+  sync: schedule.sync,
+  methods: schedule.chain.methods,
+  gate: schedule.chain.apiGate ?? 0,
+  cap: schedule.chain.apiDailyCap ?? 1,
+})
+
+const methodsKey = (methods: ChainMethod[]) =>
+  methods.map(({ id, enabled }) => `${id}:${enabled}`).join(",")
+
+/** What a Save sends: only the fields the draft changed. */
+function timedChanges(draft: TimedDraft, saved: TimedDraft) {
+  const chain: SourceChainUpdate = {}
+  if (methodsKey(draft.methods) !== methodsKey(saved.methods))
+    chain.methods = draft.methods.map(({ id, enabled }) => ({ id, enabled }))
+  if (draft.gate !== saved.gate) chain.apiGate = draft.gate
+  if (draft.cap !== saved.cap) chain.apiDailyCap = draft.cap
+  return {
+    ...(draft.minutes !== saved.minutes
+      ? { intervalMinutes: draft.minutes }
+      : {}),
+    ...(draft.sync && !sameSync(draft.sync, saved.sync)
+      ? { sync: draft.sync }
+      : {}),
+    ...(Object.keys(chain).length ? { chain } : {}),
+  }
+}
+
+/**
+ * How the timer reads a source, saved together: the interval and, for X and
+ * YouTube, how much each run reads; the method chain (ADR-0004) that timed
+ * reads try from the top; and for X the gate and daily cap that open the X
+ * API. A method this process cannot run is greyed with the variable it
+ * needs, a source SKIP_* disables keeps its chain locked, and Bilibili's one
+ * method is read-only.
+ */
+function TimedReadsPanel({
+  schedule,
+  accounts,
+  onChange,
+}: {
+  schedule: SourceSchedule
+  accounts: string[]
+  onChange: (schedule: SourceSchedule) => void
+}) {
+  const { t } = useAppSettings()
+  const { api, act } = useAdmin()
+  const saved = draftOf(schedule)
+  const savedKey = JSON.stringify(saved)
+  const [draft, setDraft] = useState(saved)
+  const [busy, setBusy] = useState(false)
+  // A saved change elsewhere, such as the timer switch, keeps the edits.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setDraft(saved), [savedKey])
+  const set = (patch: Partial<TimedDraft>) =>
+    setDraft((current) => ({ ...current, ...patch }))
+  const source = schedule.source
+  const chain = schedule.chain
+  const methods = draft.methods
+  const label = (id: string) => t(`admin.chain.method.${source}.${id}`)
+  const changes = timedChanges(draft, saved)
+  const dirty = Object.keys(changes).length > 0
+  const sync = draft.sync
+  const limit = sync ? (sync.mode === "count" ? sync.count : sync.max) : 0
+  const options = [...new Set([...intervals, draft.minutes])]
+    .filter(
+      (value) =>
+        value >= schedule.minIntervalMinutes &&
+        value <= schedule.maxIntervalMinutes,
     )
+    .sort((a, b) => a - b)
+  if (!options.includes(schedule.minIntervalMinutes))
+    options.unshift(schedule.minIntervalMinutes)
+  const enabledCount = methods.filter((method) => method.enabled).length
   const move = (index: number, by: number) => {
     const next = [...methods]
     const [method] = next.splice(index, 1)
     next.splice(index + by, 0, method)
-    saveMethods(next)
+    set({ methods: next })
   }
-  const enabledCount = methods.filter((method) => method.enabled).length
+  const apiRank = methods.findIndex((method) => method.id === "api")
+  const apiMethod = methods[apiRank]
+  const failures = chain.timelineFailures || {}
+  const streaks = [...new Set([...accounts, ...Object.keys(failures)])]
+  const submit = async (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!dirty) return
+    setBusy(true)
+    const next = await act(
+      () => api.updateSourceSchedule(source, changes),
+      "admin.notice.scheduleSaved",
+    )
+    setBusy(false)
+    if (next) onChange(next)
+  }
   return (
-    <Panel className="adm-source-chain">
-      <div className="adm-chain-body">
-        {chips ? <span className="adm-chip-row">{chips}</span> : null}
-        {locked ? (
-          <p className="adm-source-note">
-            <Lock aria-hidden />
-            {t("admin.timer.skipped", { flag: skipFlags[source] })}
-          </p>
-        ) : null}
-        <Switch
-          checked={schedule.enabled}
-          disabled={locked || busy}
-          onChange={(enabled) => save({ enabled })}
-          label={t("admin.timer.enable")}
-        />
-        <fieldset className="adm-chain" disabled={locked}>
-          <legend className="adm-field-label">{t("admin.chain.title")}</legend>
+    <Panel level={3} icon={CalendarClock} title={t("admin.sources.timedReads")}>
+      <form className="adm-form adm-timed" onSubmit={submit}>
+        <div className="adm-timed-grid">
+          <Field
+            label={t("admin.timer.interval")}
+            hint={
+              source === "bilibili"
+                ? t("admin.timer.floor", {
+                    floor: formatInterval(schedule.minIntervalMinutes, t),
+                  })
+                : undefined
+            }
+          >
+            <select
+              value={draft.minutes}
+              onChange={(e) => set({ minutes: Number(e.target.value) })}
+            >
+              {options.map((value) => (
+                <option key={value} value={value}>
+                  {formatInterval(value, t)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {sync ? (
+            <>
+              <Choice label={t("admin.timer.sync")}>
+                <Segmented
+                  label={t("admin.timer.sync")}
+                  value={sync.mode}
+                  onChange={(mode) =>
+                    set({
+                      sync:
+                        mode === "count"
+                          ? { mode: "count", count: limit }
+                          : { mode: "incremental", max: limit },
+                    })
+                  }
+                  options={[
+                    {
+                      value: "incremental",
+                      label: t("admin.fetch.mode.incremental"),
+                    },
+                    { value: "count", label: t("admin.fetch.mode.count") },
+                  ]}
+                />
+              </Choice>
+              <HelpField
+                label={t(`admin.timer.syncLimit.${sync.mode}.${source}`)}
+                help={
+                  source === "youtube" ? (
+                    <p>{t("admin.timer.syncLimitHint.youtube")}</p>
+                  ) : null
+                }
+                hint={
+                  source === "youtube"
+                    ? undefined
+                    : t(`admin.timer.syncLimitHint.${source}`)
+                }
+              >
+                {(id) => (
+                  <input
+                    id={id}
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={limit}
+                    onChange={(e) => {
+                      const value = Number(e.target.value)
+                      set({
+                        sync:
+                          sync.mode === "count"
+                            ? { mode: "count", count: value }
+                            : { mode: "incremental", max: value },
+                      })
+                    }}
+                    required
+                  />
+                )}
+              </HelpField>
+            </>
+          ) : null}
+        </div>
+        <fieldset
+          className="adm-timed-section adm-chain"
+          disabled={schedule.skipped}
+        >
+          <legend>
+            {t("admin.chain.title")}
+            <HelpButton title={t("admin.chain.title")}>
+              <p>{t("admin.chain.description")}</p>
+            </HelpButton>
+          </legend>
+          {chain.fixed ? (
+            <p className="adm-field-hint">{t("admin.chain.fixed")}</p>
+          ) : null}
           <ol className="adm-chain-list">
             {methods.map((method, index) => (
               <li
@@ -250,13 +626,13 @@ function ChainPanel({
                       // The last enabled method stays on: a chain needs one.
                       disabled={method.enabled && enabledCount === 1}
                       onChange={(enabled) =>
-                        saveMethods(
-                          methods.map((entry) =>
+                        set({
+                          methods: methods.map((entry) =>
                             entry.id === method.id
                               ? { ...entry, enabled }
                               : entry,
                           ),
-                        )
+                        })
                       }
                       label={label(method.id)}
                     />
@@ -289,311 +665,91 @@ function ChainPanel({
               </li>
             ))}
           </ol>
-          {chain.fixed ? (
-            <p className="adm-field-hint">{t("admin.chain.fixed")}</p>
-          ) : null}
           {source === "youtube" &&
           !methods.some((method) => method.id === "api" && method.enabled) ? (
             <p className="adm-field-hint">{t("admin.chain.youtubeAPIOff")}</p>
           ) : null}
         </fieldset>
-        <p className="adm-chain-hint">{t("admin.chain.description")}</p>
-      </div>
-    </Panel>
-  )
-}
-
-/** A source's timer: when it runs next, how the last run went, Run now, and
- * its interval and, for X and YouTube, how much each run reads. Saving keeps
- * the timer on or off as it is. */
-function TimerPanel({
-  schedule,
-  lastSuccess,
-  onChange,
-}: {
-  schedule: SourceSchedule
-  lastSuccess: string | null | undefined
-  onChange: (schedule: SourceSchedule) => void
-}) {
-  const { t } = useAppSettings()
-  const { api, act, start, overview } = useAdmin()
-  const [minutes, setMinutes] = useState(schedule.intervalMinutes)
-  const [sync, setSync] = useState(schedule.sync)
-  const [busy, setBusy] = useState("")
-  const syncKey = JSON.stringify(schedule.sync)
-  useEffect(
-    () => setMinutes(schedule.intervalMinutes),
-    [schedule.intervalMinutes],
-  )
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => setSync(schedule.sync), [syncKey])
-  const source = schedule.source
-  const timersOff = overview ? !overview.scheduler.enabled : false
-  const running = schedule.enabled && !schedule.skipped && !timersOff
-  const options = [...new Set([...intervals, minutes])]
-    .filter(
-      (value) =>
-        value >= schedule.minIntervalMinutes &&
-        value <= schedule.maxIntervalMinutes,
-    )
-    .sort((a, b) => a - b)
-  if (!options.includes(schedule.minIntervalMinutes))
-    options.unshift(schedule.minIntervalMinutes)
-  const limit = sync ? (sync.mode === "count" ? sync.count : sync.max) : 0
-  const dirty =
-    minutes !== schedule.intervalMinutes || !sameSync(sync, schedule.sync)
-  const runNow = async () => {
-    setBusy("run")
-    await start({ kind: "source", source })
-    setBusy("")
-  }
-  return (
-    <Panel
-      level={3}
-      icon={CalendarClock}
-      title={t("admin.timer.title")}
-      description={t(`admin.timer.description.${source}`, {
-        floor: formatInterval(schedule.minIntervalMinutes, t),
-      })}
-      actions={
-        <Button
-          size="sm"
-          icon={Play}
-          busy={busy === "run"}
-          disabled={
-            schedule.skipped || busy !== "" || Boolean(overview?.activeRun)
-          }
-          onClick={runNow}
-          title={t("admin.timer.runNowHint")}
-        >
-          {t("admin.timer.runNow")}
-        </Button>
-      }
-    >
-      <Facts
-        items={[
-          [
-            t("admin.timer.nextRun"),
-            running ? <When value={schedule.nextRunAt} /> : "—",
-          ],
-          [
-            t("admin.timer.lastRun"),
-            schedule.lastRun ? (
-              <>
-                <StatusBadge status={schedule.lastRun.status} />
-                <When value={schedule.lastRun.at} />
-              </>
-            ) : (
-              t("admin.timer.never")
-            ),
-          ],
-          [t("admin.sources.lastSuccess"), <When value={lastSuccess} />],
-        ]}
-      />
-      <form
-        className="adm-form"
-        onSubmit={async (event) => {
-          event.preventDefault()
-          setBusy("save")
-          const next = await act(
-            () =>
-              api.updateSourceSchedule(source, {
-                intervalMinutes: minutes,
-                ...(sync ? { sync } : {}),
-              }),
-            "admin.notice.scheduleSaved",
-          )
-          setBusy("")
-          if (next) onChange(next)
-        }}
-      >
-        <Field label={t("admin.timer.interval")}>
-          <select
-            value={minutes}
-            onChange={(e) => setMinutes(Number(e.target.value))}
-          >
-            {options.map((value) => (
-              <option key={value} value={value}>
-                {formatInterval(value, t)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {sync ? (
-          <>
-            <Segmented
-              label={t("admin.timer.sync")}
-              value={sync.mode}
-              onChange={(mode) =>
-                setSync(
-                  mode === "count"
-                    ? { mode: "count", count: limit }
-                    : { mode: "incremental", max: limit },
-                )
-              }
-              options={[
-                {
-                  value: "incremental",
-                  label: t("admin.fetch.mode.incremental"),
-                },
-                { value: "count", label: t("admin.fetch.mode.count") },
-              ]}
-            />
-            <p className="adm-field-hint">
-              {t(`admin.timer.syncHint.${sync.mode}`)}
-            </p>
-            <Field
-              label={t(`admin.timer.syncLimit.${sync.mode}.${source}`)}
-              hint={t(`admin.timer.syncLimitHint.${source}`)}
-            >
-              <input
-                type="number"
-                min={1}
-                max={200}
-                value={limit}
-                onChange={(e) => {
-                  const value = Number(e.target.value)
-                  setSync(
-                    sync.mode === "count"
-                      ? { mode: "count", count: value }
-                      : { mode: "incremental", max: value },
-                  )
-                }}
-                required
+        {source === "x" && apiMethod ? (
+          <fieldset className="adm-timed-section">
+            <legend>
+              {t("admin.sources.xapi")}
+              <HelpButton title={t("admin.sources.xapi")}>
+                <p>{t("admin.xapi.description")}</p>
+                <dl className="adm-help-terms">
+                  <dt>{t("admin.chain.apiGate")}</dt>
+                  <dd>{t("admin.chain.apiGateHint")}</dd>
+                  <dt>{t("admin.chain.apiDailyCap")}</dt>
+                  <dd>{t("admin.chain.apiDailyCapHint")}</dd>
+                </dl>
+              </HelpButton>
+              {!apiMethod.available ? null : apiMethod.enabled ? (
+                <Badge tone="leaf">
+                  {t("admin.xapi.inChain", { rank: apiRank + 1 })}
+                </Badge>
+              ) : (
+                <Badge>{t("admin.xapi.offInChain")}</Badge>
+              )}
+            </legend>
+            <div className="adm-form-row is-top">
+              <Field label={t("admin.chain.apiGate")}>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={draft.gate}
+                  onChange={(e) => set({ gate: Number(e.target.value) })}
+                  required
+                />
+              </Field>
+              <Field label={t("admin.chain.apiDailyCap")}>
+                <input
+                  type="number"
+                  min={1}
+                  max={10000}
+                  value={draft.cap}
+                  onChange={(e) => set({ cap: Number(e.target.value) })}
+                  required
+                />
+              </Field>
+            </div>
+            <ul className="adm-meters">
+              <Meter
+                label={t("admin.chain.usage")}
+                value={chain.apiUsage?.posts ?? 0}
+                of={chain.apiDailyCap ?? 0}
+                unit={t("admin.chain.usageUnit")}
               />
-            </Field>
-          </>
+              {streaks.map((account) => (
+                <Meter
+                  key={account}
+                  label={`@${account}`}
+                  value={failures[account] ?? 0}
+                  of={chain.apiGate ?? 0}
+                  unit={t("admin.chain.streakUnit")}
+                />
+              ))}
+            </ul>
+          </fieldset>
         ) : null}
-        <div className="adm-form-actions">
+        <div
+          className={cn(
+            "adm-form-actions adm-timed-actions",
+            dirty && "is-dirty",
+          )}
+        >
           {dirty ? (
             <span className="adm-muted">{t("admin.models.unsaved")}</span>
           ) : null}
           <Button
-            type="submit"
             size="sm"
-            variant="primary"
-            icon={Save}
-            busy={busy === "save"}
-            disabled={!dirty || busy !== ""}
+            variant="ghost"
+            icon={Undo2}
+            disabled={!dirty || busy}
+            onClick={() => setDraft(saved)}
           >
-            {t("admin.action.save")}
+            {t("admin.action.discard")}
           </Button>
-        </div>
-      </form>
-    </Panel>
-  )
-}
-
-/**
- * The X API in X's chain (ADR-0004): where the chain has it, the timeline
- * failures that open it and its daily cap, with today's usage and each
- * account's timeline failure streak.
- */
-function XAPIPanel({
-  schedule,
-  accounts,
-  onChange,
-}: {
-  schedule: SourceSchedule
-  accounts: string[]
-  onChange: (schedule: SourceSchedule) => void
-}) {
-  const { t } = useAppSettings()
-  const { api, act } = useAdmin()
-  const chain = schedule.chain
-  const [gate, setGate] = useState(chain.apiGate ?? 0)
-  const [cap, setCap] = useState(chain.apiDailyCap ?? 1)
-  const [busy, setBusy] = useState(false)
-  useEffect(() => setGate(chain.apiGate ?? 0), [chain.apiGate])
-  useEffect(() => setCap(chain.apiDailyCap ?? 1), [chain.apiDailyCap])
-  const rank = chain.methods.findIndex((method) => method.id === "api")
-  const method = chain.methods[rank]
-  const failures = chain.timelineFailures || {}
-  const streaks = [...new Set([...accounts, ...Object.keys(failures)])]
-  const dirty = gate !== chain.apiGate || cap !== chain.apiDailyCap
-  return (
-    <Panel
-      level={3}
-      icon={KeyRound}
-      title={t("admin.chain.method.x.api")}
-      description={t("admin.xapi.description")}
-      actions={
-        !method ? null : !method.available ? (
-          <Badge tone="honey" icon={KeyRound}>
-            {t("admin.chain.needs", { variable: method.requires || "" })}
-          </Badge>
-        ) : method.enabled ? (
-          <Badge tone="leaf">
-            {t("admin.xapi.inChain", { rank: rank + 1 })}
-          </Badge>
-        ) : (
-          <Badge>{t("admin.xapi.offInChain")}</Badge>
-        )
-      }
-    >
-      <Facts
-        items={[
-          [
-            t("admin.chain.usage"),
-            t("admin.chain.usageValue", {
-              posts: chain.apiUsage?.posts ?? 0,
-              cap: chain.apiDailyCap ?? 0,
-            }),
-          ],
-          ...streaks.map((account): [ReactNode, ReactNode] => [
-            `${t("admin.chain.streak")} · @${account}`,
-            String(failures[account] ?? 0),
-          ]),
-        ]}
-      />
-      <form
-        className="adm-form"
-        onSubmit={async (event) => {
-          event.preventDefault()
-          setBusy(true)
-          const next = await act(
-            () =>
-              api.updateSourceSchedule("x", {
-                chain: { apiGate: gate, apiDailyCap: cap },
-              }),
-            "admin.notice.scheduleSaved",
-          )
-          setBusy(false)
-          if (next) onChange(next)
-        }}
-      >
-        <div className="adm-form-row">
-          <Field
-            label={t("admin.chain.apiGate")}
-            hint={t("admin.chain.apiGateHint")}
-          >
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={gate}
-              onChange={(e) => setGate(Number(e.target.value))}
-              required
-            />
-          </Field>
-          <Field
-            label={t("admin.chain.apiDailyCap")}
-            hint={t("admin.chain.apiDailyCapHint")}
-          >
-            <input
-              type="number"
-              min={1}
-              max={10000}
-              value={cap}
-              onChange={(e) => setCap(Number(e.target.value))}
-              required
-            />
-          </Field>
-        </div>
-        <div className="adm-form-actions">
-          {dirty ? (
-            <span className="adm-muted">{t("admin.models.unsaved")}</span>
-          ) : null}
           <Button
             type="submit"
             size="sm"
@@ -620,14 +776,14 @@ function Choice({
   children,
 }: {
   label: string
-  hint: ReactNode
+  hint?: ReactNode
   children: ReactNode
 }) {
   return (
     <div className="adm-field">
       <span className="adm-field-label">{label}</span>
       {children}
-      <span className="adm-field-hint">{hint}</span>
+      {hint ? <span className="adm-field-hint">{hint}</span> : null}
     </div>
   )
 }
@@ -809,14 +965,12 @@ function FetchForm({
             checked={extract}
             onChange={setExtract}
             label={t("admin.fetch.option.extract")}
-            description={t("admin.fetch.option.extractHint")}
           />
         ) : null}
         <Switch
           checked={translate}
           onChange={setTranslate}
           label={t("admin.fetch.option.translate")}
-          description={t("admin.fetch.option.translateHint")}
         />
         {method.refresh ? (
           <Switch
@@ -1002,7 +1156,6 @@ function FetchPanel({
       title={t("admin.fetch.headingFor", {
         source: t(`admin.step.${source}`),
       })}
-      description={t("admin.fetch.intro")}
     >
       <Facts
         items={[
@@ -1033,17 +1186,18 @@ function FetchPanel({
   )
 }
 
-/** One step of YouTube's progressive confirmation. */
+/** One step of YouTube's progressive confirmation, its explanation behind
+ * a question mark beside its title. */
 function Stage({
   icon: StageIcon,
   title,
-  description,
+  help,
   badge,
   children,
 }: {
   icon: LucideIcon
-  title: ReactNode
-  description: ReactNode
+  title: string
+  help: ReactNode
   badge: ReactNode
   children: ReactNode
 }) {
@@ -1055,9 +1209,9 @@ function Stage({
           <span className="adm-confirm-mark">
             <StageIcon aria-hidden />
           </span>
-          <div>
+          <div className="adm-confirm-title">
             <h4 id={id}>{title}</h4>
-            <p>{description}</p>
+            <HelpButton title={title}>{help}</HelpButton>
           </div>
           {badge}
         </header>
@@ -1092,7 +1246,12 @@ function PushStage({
     <Stage
       icon={Radio}
       title={t("admin.push.title")}
-      description={t("admin.push.description")}
+      help={
+        <>
+          <p>{t("admin.push.description")}</p>
+          <p>{t("admin.push.enableHint")}</p>
+        </>
+      }
       badge={
         push.enabled ? (
           <Badge tone={push.verified ? "leaf" : "honey"}>
@@ -1115,11 +1274,7 @@ function PushStage({
             save({ enabled, callbackUrl: callback || null })
           }
           label={t("admin.push.enable")}
-          description={
-            push.available
-              ? t("admin.push.enableHint")
-              : t("admin.push.unavailable")
-          }
+          description={push.available ? null : t("admin.push.unavailable")}
         />
         <Field
           label={t("admin.push.callback")}
@@ -1221,7 +1376,21 @@ function LiveProbeStage({
     <Stage
       icon={RadioTower}
       title={t("admin.liveProbe.title")}
-      description={t("admin.liveProbe.description", { max: probe.maxVideos })}
+      help={
+        <>
+          <p>{t("admin.liveProbe.description", { max: probe.maxVideos })}</p>
+          <p>{t("admin.liveProbe.enableHint")}</p>
+          <dl className="adm-help-terms">
+            <dt>{t("admin.liveProbe.interval")}</dt>
+            <dd>
+              {t("admin.liveProbe.intervalHint", {
+                min: probe.minIntervalMinutes,
+                max: probe.maxIntervalMinutes,
+              })}
+            </dd>
+          </dl>
+        </>
+      }
       badge={
         running ? (
           <Badge tone="leaf">{t("admin.liveProbe.on")}</Badge>
@@ -1243,14 +1412,12 @@ function LiveProbeStage({
           onChange={(enabled) => save({ enabled })}
           label={t("admin.liveProbe.enable")}
           description={
-            probe.available
-              ? t("admin.liveProbe.enableHint")
-              : t("admin.liveProbe.unavailable")
+            probe.available ? null : t("admin.liveProbe.unavailable")
           }
         />
         <Field
           label={t("admin.liveProbe.interval")}
-          hint={t("admin.liveProbe.intervalHint", {
+          hint={t("admin.liveProbe.intervalRange", {
             min: probe.minIntervalMinutes,
             max: probe.maxIntervalMinutes,
           })}
@@ -1322,8 +1489,14 @@ function ConfirmationPanel({
     <Panel
       level={3}
       icon={ListChecks}
-      title={t("admin.confirm.title")}
-      description={t("admin.confirm.description")}
+      title={
+        <>
+          {t("admin.confirm.title")}
+          <HelpButton title={t("admin.confirm.title")}>
+            <p>{t("admin.confirm.description")}</p>
+          </HelpButton>
+        </>
+      }
     >
       <ol className="adm-confirm-steps">
         <PushStage
@@ -1337,7 +1510,7 @@ function ConfirmationPanel({
         <Stage
           icon={CalendarCheck}
           title={t("admin.followUp.title")}
-          description={t("admin.followUp.description")}
+          help={<p>{t("admin.followUp.description")}</p>}
           badge={<Badge>{t("admin.followUp.automatic")}</Badge>}
         >
           <ul
@@ -1408,13 +1581,49 @@ function YTDLPPanel({
   )
 }
 
+/**
+ * A source's rarely changed settings, folded: its read limits and, for
+ * YouTube, the yt-dlp executable.
+ */
+function AdvancedPanel({
+  source,
+  ytdlp,
+  onYTDLP,
+}: {
+  source: "x" | "youtube"
+  ytdlp: YTDLPStatus | undefined
+  onYTDLP: (status: YTDLPStatus) => void
+}) {
+  const { t } = useAppSettings()
+  return (
+    <details className="adm-panel adm-source-advanced">
+      <summary>
+        <SlidersHorizontal aria-hidden />
+        <span>
+          <strong>{t(`admin.sources.advanced.${source}`)}</strong>
+          <small>{t("admin.sources.advancedHint")}</small>
+        </span>
+        <ChevronDown aria-hidden className="adm-source-advanced-chevron" />
+      </summary>
+      <div className="adm-source-advanced-body">
+        <SyncSettingsPanel group={source} bare />
+        {source === "youtube" ? (
+          <YTDLPPanel status={ytdlp} onChange={onYTDLP} />
+        ) : null}
+      </div>
+    </details>
+  )
+}
+
 const sourceIds: ScheduleSource[] = ["x", "youtube", "bilibili"]
 
 /**
- * The Sources page: a tab per source, then the selected source's timer
- * switch and method chain on the left, its settings beside them, and its
- * manual fetch below the settings. On a narrow screen the three stack in that
- * order.
+ * The Sources page: a tab per source, then the selected source's summary
+ * (timer state, runs, the timer switch and Run now). Below it the timed-read
+ * settings, YouTube's progressive confirmation and the folded advanced
+ * settings fill the main column; the manual fetch, or Bilibili's account and
+ * single-upload form, sits beside them. On a narrower screen the side column
+ * follows the main one.
  */
 export function SourcesView({ tab, navigate }: ViewProps) {
   const { t, locale } = useAppSettings()
@@ -1441,24 +1650,10 @@ export function SourcesView({ tab, navigate }: ViewProps) {
     Date.parse(data.bilibili.blockedUntil) > Date.now()
       ? data.bilibili.blockedUntil
       : null
-  const chips = (source: ScheduleSource) =>
-    source === "bilibili" && blockedUntil ? (
-      <Badge tone="danger" icon={ShieldAlert}>
-        {t("admin.bilibili.blockedUntil", {
-          time: formatDateTime(blockedUntil, locale),
-        })}
-      </Badge>
-    ) : null
   const current = schedule(selected)
-  const heading = t("admin.sources.settingsFor", {
-    source: t(`admin.step.${selected}`),
-  })
   return (
     <div className="adm-view">
-      <PageHeader
-        title={t("admin.sources.title")}
-        description={t("admin.sources.description")}
-      />
+      <PageHeader title={t("admin.sources.title")} />
       {!data ? (
         <Loading />
       ) : (
@@ -1485,81 +1680,73 @@ export function SourcesView({ tab, navigate }: ViewProps) {
               ) : null
             })}
           </div>
-          <div
-            role="tabpanel"
-            className="adm-sources-layout"
-            aria-label={heading}
-          >
-            <section
-              className="adm-source-rail"
-              aria-label={t("admin.chain.title")}
+          {current ? (
+            <div
+              role="tabpanel"
+              className="adm-source-page"
+              aria-label={t(`admin.step.${selected}`)}
             >
-              {current ? (
-                <ChainPanel
-                  key={selected}
-                  schedule={current}
-                  chips={chips(selected)}
-                  onChange={setSchedule}
-                />
-              ) : null}
-            </section>
-            <section className="adm-source-detail">
-              <header className="adm-source-header">
-                <h2>{heading}</h2>
-                <p>{t(`admin.sources.${selected}.hint`)}</p>
-              </header>
-              {current ? (
-                <TimerPanel
-                  key={selected}
-                  schedule={current}
-                  lastSuccess={
-                    selected === "bilibili"
-                      ? data.bilibili.lastSuccessAt
-                      : overview?.sources[selected].lastSuccessAt
-                  }
-                  onChange={setSchedule}
-                />
-              ) : null}
-              {selected === "x" && current ? (
-                <XAPIPanel
-                  schedule={current}
-                  accounts={data.x.accounts.map((entry) => entry.account)}
-                  onChange={setSchedule}
-                />
-              ) : null}
-              {selected === "x" ? <SyncSettingsPanel group="x" /> : null}
-              {selected === "youtube" ? (
-                <>
-                  <ConfirmationPanel
-                    youtube={data.youtube}
-                    onChange={(youtube) =>
-                      sources.setData({ ...data, youtube })
-                    }
+              <SourceSummary
+                key={selected}
+                schedule={current}
+                lastSuccess={
+                  selected === "bilibili"
+                    ? data.bilibili.lastSuccessAt
+                    : overview?.sources[selected].lastSuccessAt
+                }
+                chips={
+                  selected === "bilibili" && blockedUntil ? (
+                    <Badge tone="danger" icon={ShieldAlert}>
+                      {t("admin.bilibili.blockedUntil", {
+                        time: formatDateTime(blockedUntil, locale),
+                      })}
+                    </Badge>
+                  ) : null
+                }
+                onChange={setSchedule}
+              />
+              <div className="adm-sources-layout">
+                <div className="adm-source-main">
+                  <TimedReadsPanel
+                    key={selected}
+                    schedule={current}
+                    accounts={data.x.accounts.map((entry) => entry.account)}
+                    onChange={setSchedule}
                   />
-                  <YTDLPPanel
-                    status={ytdlp.data}
-                    onChange={(next) => ytdlp.setData(next)}
-                  />
-                  <SyncSettingsPanel group="youtube" />
-                </>
-              ) : null}
-            </section>
-            <div className="adm-source-fetch">
-              {selected === "bilibili" ? (
-                <BilibiliSource
-                  status={data.bilibili}
-                  onAdded={() => void sources.reload()}
-                />
-              ) : (
-                <FetchPanel
-                  key={selected}
-                  source={selected}
-                  sources={data}
-                  onOpenRuns={() => navigate("runs")}
-                />
-              )}
+                  {selected === "youtube" ? (
+                    <ConfirmationPanel
+                      youtube={data.youtube}
+                      onChange={(youtube) =>
+                        sources.setData({ ...data, youtube })
+                      }
+                    />
+                  ) : null}
+                  {selected === "bilibili" ? null : (
+                    <AdvancedPanel
+                      source={selected}
+                      ytdlp={ytdlp.data}
+                      onYTDLP={(next) => ytdlp.setData(next)}
+                    />
+                  )}
+                </div>
+                <div className="adm-source-aside">
+                  {selected === "bilibili" ? (
+                    <BilibiliSource
+                      status={data.bilibili}
+                      onAdded={() => void sources.reload()}
+                    />
+                  ) : (
+                    <FetchPanel
+                      key={selected}
+                      source={selected}
+                      sources={data}
+                      onOpenRuns={() => navigate("runs")}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : null}
         </>
       )}
     </div>

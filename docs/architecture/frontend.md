@@ -208,21 +208,31 @@ and the decision buttons. A cancellation needs a reason before it can be
 confirmed.
 
 The console's Sources page (`src/admin/views/sources.tsx`) has a row of
-tabs for X, YouTube and Bilibili, each naming whether its timer runs here,
-and three parts for the selected source. On the left are its timer switch
-and its [method chain](workflows.md#method-chains): every method's switch and
-up/down moves, which save at once, a method the process cannot run greyed
-with the variable it needs, and Bilibili's one fixed method read-only. A
-source that `SKIP_*` turns off is locked. Its settings sit beside the chain:
-the timer panel (next and last run, Run now, the interval and the sync
-setting), for X the X API panel (gate, daily cap, today's usage and each
-account's timeline failure streak), and for YouTube the progressive
-confirmation (push, the live-status probe and the read-only
-[follow-up checks](sources.md#follow-up-checks-and-refresh-requests)). The
-manual fetch sits below the settings: method, mode, count or dates, options,
-then the newest fetch's summary; Bilibili shows its single-video form
-there. On a narrower screen the chain moves above the settings, and on a
-phone the tabs share the width and show only the source names.
+tabs for X, YouTube and Bilibili, each with a dot (or a lock) for whether
+its timer runs here and the state as its tooltip.
+The selected source opens with a summary: what it reads, its timer state,
+next run, last run and last successful read, the timer switch (which saves
+at once) and Run now. A source that `SKIP_*` turns off is locked. Below the
+summary the main column holds the timed reads, one form with one Save and
+Discard: the interval and, for X and YouTube, the sync setting; the
+[method chain](workflows.md#method-chains), with every method's switch and
+up/down moves, a method the process cannot run greyed with the variable it
+needs, and Bilibili's one fixed method read-only; and for X the X API
+limits (gate and daily cap, with today's usage and each account's timeline
+failures shown as meters against them). Longer explanations sit in a
+dialog behind a question mark beside a title or label: the chain, the X API
+limits, YouTube's per-run limit, and its progressive confirmation and each
+of its steps.
+Save sends only the changed fields, and the timer switch keeps unsaved
+edits. YouTube adds its progressive confirmation (push, the
+live-status probe and the read-only
+[follow-up checks](sources.md#follow-up-checks-and-refresh-requests)), and
+X and YouTube end with a folded section of read limits, split into timed
+reads and manual fetches (and yt-dlp for YouTube). The manual fetch sits beside the main column: method, mode, count
+or dates, options, then the newest fetch's summary; Bilibili shows its
+account and single-video form there. On a narrower screen the side column
+follows the main one, and on a phone the tabs share the width and show only
+the source names.
 
 The console's post list (`src/admin/views/posts.tsx`) shows a post's quote
 read-only in its own cell under the wording, indented on the sunken surface

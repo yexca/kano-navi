@@ -1324,38 +1324,21 @@
   color: var(--adm-accent);
 }
 
-/* Sources page: a tab per source, then the selected source's timer switch
-   and method chain on the left, its settings beside them and its manual fetch
-   below the settings. The chain spans both rows, so a tall chain leaves its
-   extra height to the fetch row. */
-.adm-sources-layout {
-  display: grid;
-  grid-template-columns: minmax(270px, 320px) minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
-  grid-template-areas:
-    "rail detail"
-    "rail fetch";
-  align-items: start;
-  gap: 20px;
-}
-
-.adm-source-rail {
-  display: grid;
-  grid-area: rail;
-  gap: 12px;
-  min-width: 0;
-}
-
-.adm-source-fetch {
-  grid-area: fetch;
-  min-width: 0;
-}
-
 .adm-source-tabs button {
   gap: 10px;
-  min-height: 60px;
+  min-height: 56px;
   padding: 8px 18px 8px 12px;
   text-align: left;
+}
+
+.adm-source-tabs button strong {
+  font-size: 15px;
+}
+
+.adm-shell .adm-source-tabs .adm-source-lock {
+  width: 13px;
+  height: 13px;
+  color: var(--adm-muted);
 }
 
 .adm-source-tabs button:hover {
@@ -1396,54 +1379,6 @@
   color: var(--adm-muted);
 }
 
-.adm-source-tabs .adm-source-name strong {
-  font-size: 15px;
-}
-
-.adm-source-tabs .adm-source-name small {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 500;
-}
-
-.adm-shell .adm-source-tabs .adm-source-name small svg {
-  width: 12px;
-  height: 12px;
-}
-
-.adm-source-tabs .is-active .adm-source-name small {
-  color: color-mix(in oklab, var(--adm-accent) 75%, var(--adm-text));
-}
-
-.adm-chain-body {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-}
-
-.adm-chain-hint {
-  margin: 0;
-  color: var(--adm-muted);
-  font-size: 12px;
-}
-
-.adm-source-name {
-  display: grid;
-  flex: 1;
-  min-width: 0;
-}
-
-.adm-source-name strong {
-  font-size: 16px;
-  font-weight: 750;
-}
-
-.adm-source-name small {
-  color: var(--adm-muted);
-  font-size: 12px;
-}
-
 .adm-source-note {
   display: flex;
   align-items: flex-start;
@@ -1472,6 +1407,10 @@
   list-style: none;
 }
 
+.adm-panel > .adm-confirm-steps {
+  margin-top: 18px;
+}
+
 .adm-confirm-step + .adm-confirm-step {
   border-top: 1px solid var(--adm-line);
 }
@@ -1494,21 +1433,21 @@
 .adm-confirm-step header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   gap: 12px;
+}
+
+.adm-confirm-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .adm-confirm-step h4 {
   margin: 0;
   font-size: 14px;
   font-weight: 750;
-}
-
-.adm-confirm-step header p {
-  max-width: 64ch;
-  margin: 4px 0 0;
-  color: var(--adm-muted);
-  font-size: 13px;
 }
 
 .adm-confirm-mark {
@@ -1532,41 +1471,425 @@
   list-style: none;
 }
 
-.adm-source-detail {
+/* Sources page: the selected source's summary across the top, then its
+   settings in the main column and its manual fetch beside them. */
+.adm-source-page {
   display: grid;
-  grid-area: detail;
-  gap: 16px;
+  gap: 20px;
+}
+
+.adm-sources-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  align-items: start;
+  gap: 20px;
+}
+
+/* Facts under a panel title keep the panel's spacing. */
+.adm-source-aside .adm-panel > .adm-facts:not(:first-child) {
+  margin-top: 16px;
+}
+
+.adm-source-main,
+.adm-source-aside {
+  display: grid;
+  gap: 20px;
   min-width: 0;
 }
 
-.adm-source-header {
+.adm-source-summary {
+  display: grid;
+  gap: 16px;
+}
+
+.adm-panel.adm-source-summary > * + * {
+  margin-top: 0;
+}
+
+.adm-source-summary-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 12px;
+  gap: 12px 14px;
 }
 
-.adm-source-header h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  font-size: 18px;
-  font-weight: 750;
-}
-
-.adm-source-header h2 svg {
-  width: 20px;
-  height: 20px;
+.adm-source-summary-head .adm-source-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: var(--adm-accent-soft);
   color: var(--adm-accent);
 }
 
-.adm-source-header p {
-  /* A max-width would let the hint share the heading line. */
-  flex-basis: 100%;
+.adm-shell .adm-source-summary-head .adm-source-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.adm-source-summary-title {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.adm-source-summary-title h2 {
   margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.adm-source-summary-title p {
+  margin: 2px 0 0;
   color: var(--adm-muted);
   font-size: 13px;
+}
+
+.adm-source-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+/* The summary's numbers as one ruled strip. */
+.adm-source-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-source-stats > div {
+  min-width: 0;
+  padding: 14px 16px 0;
+}
+
+.adm-source-stats > div:first-child {
+  padding-left: 0;
+}
+
+.adm-source-stats > div + div {
+  border-left: 1px solid var(--adm-line);
+}
+
+.adm-source-stats dt {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-source-stats dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* A long timer state wraps inside its column. */
+.adm-source-stats .adm-badge {
+  max-width: 100%;
+  padding-block: 4px;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.adm-source-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--adm-line-strong);
+}
+
+.adm-source-dot.is-running {
+  background: var(--leaf);
+}
+
+.adm-source-dot.is-blocked {
+  background: var(--honey);
+}
+
+/* Timed reads: the interval row, the method chain and X's API fallback as
+   ruled sections of one form with one Save. */
+.adm-timed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  align-items: start;
+  gap: 14px 18px;
+}
+
+.adm-timed-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--adm-line);
+}
+
+/* A legend does not lay out inside a grid fieldset; floating it does. */
+.adm-timed-section > legend {
+  display: flex;
+  float: left;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.adm-timed-section > legend + * {
+  clear: both;
+}
+
+.adm-timed-section > .adm-field-hint {
+  max-width: 72ch;
+  margin: 0;
+}
+
+.adm-timed-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 -20px -20px;
+  padding: 12px 20px;
+  border-top: 1px solid transparent;
+  border-radius: 0 0 var(--adm-radius) var(--adm-radius);
+  background: var(--adm-surface);
+}
+
+.adm-timed-actions.is-dirty {
+  border-top-color: var(--adm-line);
+  box-shadow: 0 -6px 16px -12px rgb(0 0 0 / 0.35);
+}
+
+/* A question mark beside a section title opens its explanation. */
+.adm-shell .adm-help-button {
+  width: 24px;
+  height: 24px;
+}
+
+.adm-shell .adm-help-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* A field label with its question mark. */
+.adm-label-help {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.adm-shell .adm-label-help .adm-help-button {
+  margin-block: -4px;
+}
+
+.adm-help {
+  display: grid;
+  gap: 12px;
+  max-width: 60ch;
+  color: var(--adm-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.adm-help p {
+  margin: 0;
+}
+
+.adm-help-terms {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.adm-help-terms dt {
+  margin-top: 8px;
+  color: var(--adm-text);
+  font-weight: 650;
+}
+
+.adm-help-terms dd {
+  margin: 0;
+}
+
+/* Counts against their limits: today's X API posts and each account's
+   timeline failures before the X API opens. */
+.adm-meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-meter {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-sunken);
+}
+
+.adm-meter-label {
+  overflow: hidden;
+  color: var(--adm-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-meter-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-meter-value strong {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.adm-meter-value small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-meter-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--adm-line-strong) 70%, transparent);
+}
+
+.adm-meter-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--leaf);
+}
+
+.adm-meter.is-full .adm-meter-bar i {
+  background: var(--honey);
+}
+
+/* Read limits split by the runs they bound. */
+.adm-sync-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.adm-sync-section + .adm-sync-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-sync-section > legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.adm-sync-section > legend + * {
+  clear: both;
+}
+
+/* The folded advanced settings: a summary row that opens onto the read
+   limits (and yt-dlp) laid out flat inside it. */
+.adm-source-advanced {
+  padding: 0;
+}
+
+.adm-source-advanced > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.adm-source-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adm-source-advanced > summary:focus-visible {
+  border-radius: var(--adm-radius);
+  outline: none;
+  box-shadow: var(--adm-focus);
+}
+
+.adm-shell .adm-source-advanced > summary > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--adm-accent);
+}
+
+.adm-source-advanced > summary > span {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.adm-source-advanced > summary strong {
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.adm-source-advanced > summary small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-shell .adm-source-advanced > summary .adm-source-advanced-chevron {
+  color: var(--adm-muted);
+  transition: transform 0.15s ease;
+}
+
+.adm-source-advanced[open] > summary .adm-source-advanced-chevron {
+  transform: rotate(180deg);
+}
+
+.adm-panel.adm-source-advanced > * + * {
+  margin-top: 0;
+}
+
+.adm-source-advanced-body {
+  display: grid;
+  padding: 0 20px 20px;
+}
+
+.adm-source-advanced-body > .adm-panel {
+  padding: 18px 0 0;
+  border: 0;
+  border-top: 1px solid var(--adm-line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.adm-source-advanced-body > .adm-panel + .adm-panel {
+  margin-top: 18px;
 }
 
 .adm-panel-header p {
@@ -5310,16 +5633,10 @@ blockquote.adm-verdict-reason {
   }
 }
 
-/* Below this the Sources page stacks: the method chain on top, then the
- * settings and the manual fetch. */
-@media (max-width: 1180px) {
+/* Below this the manual fetch follows the settings. */
+@media (max-width: 1280px) {
   .adm-sources-layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: none;
-    grid-template-areas:
-      "rail"
-      "detail"
-      "fetch";
   }
 }
 
@@ -5456,30 +5773,36 @@ blockquote.adm-verdict-reason {
     flex-basis: 100%;
   }
 
-  /* On a phone the source tabs share the width and drop their timer line.
-   */
+  /* On a phone the source summary's numbers take two columns. */
+  .adm-source-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 12px;
+  }
+
+  .adm-source-stats > div:nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .adm-timed-actions {
+    margin: 0 -16px -16px;
+    padding: 12px 16px;
+  }
+
+  .adm-source-advanced > summary {
+    padding: 14px 16px;
+  }
+
+  .adm-source-advanced-body {
+    padding: 0 16px 16px;
+  }
+
+  /* On a phone the source tabs share the width. */
   .adm-source-tabs button {
     flex: 1 1 0;
     justify-content: center;
     min-height: 52px;
     padding: 6px 8px;
-  }
-
-  .adm-source-tabs .adm-source-name {
-    flex: none;
-  }
-
-  .adm-source-tabs .adm-source-name small {
-    display: none;
-  }
-
-  .adm-confirm-step header {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .adm-confirm-step header > .adm-badge {
-    grid-column: 2;
-    justify-self: start;
   }
 
   .adm-queue-list li {

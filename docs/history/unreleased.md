@@ -14,7 +14,8 @@
 > - To let X fall back to the official API during FxTwitter outages, enable
 >   `api` in the X chain. It needs `X_API_BEARER_TOKEN` and runs only after
 >   three consecutive timeline failures of an account, for at most 100 posts
->   a Japan day; both are settings in the X API panel of the Sources page.
+>   a Japan day; both are settings in the X API limits of the Sources
+>   page's timed reads.
 > - `GET /api/admin/sources` adds `chain` to each schedule, and
 >   `PUT /api/admin/sources/{source}/schedule` accepts it.
 > - Manual X API fetches read quoted statuses and skip reposts, and their
@@ -76,18 +77,22 @@
   how many records were new, already stored or failed, the pages it read,
   whether it reached the end (or should be repeated to continue), and the
   first new records.
-- The Sources page has a tab per source. Under it, the selected source's
-  timer switch and method chain sit on the left, its settings beside them and
-  its manual fetch below the settings; on a phone they stack in that order. In
-  the chain, switch methods on or off and move them up or down; changes save
-  at once. Methods the server
-  cannot run show the variable they need, a source a `SKIP_*` setting turns
-  off shows as locked, and Bilibili shows its one fixed method.
-- The settings of X add an X API panel: the gate and daily cap, where the
-  chain has the method, today's usage and each account's timeline failure
-  streak. YouTube's settings group push, the live-status probe and the
-  follow-up checks of finished videos (1 hour, 1 day, 3 days and 7 days) as
-  its progressive confirmation.
+- The Sources page has a tab per source, with a dot for whether its timer
+  runs. The selected source opens with a summary of its timer state, next
+  and last run and last successful read, with the timer switch and Run now. Its timed reads follow as one form with
+  one Save: the interval, the sync setting and the method chain, where
+  methods switch on or off and move up or down. The manual fetch sits beside
+  them; on a narrower screen it follows them. Methods the server cannot run
+  show the variable they need, a source a `SKIP_*` setting turns off shows
+  as locked, and Bilibili shows its one fixed method.
+- The timed reads of X add the X API limits: the gate and daily cap, where
+  the chain has the method, and meters of today's usage and each account's
+  timeline failures against them. A question mark beside a title or label,
+  such as the chain, the X API limits and each progressive-confirmation step,
+  opens its explanation. YouTube adds its progressive confirmation: push, the
+  live-status probe and the follow-up checks of finished videos (1 hour,
+  1 day, 3 days and 7 days). Read limits, split into timed reads and manual
+  fetches, and yt-dlp for YouTube, sit in a folded section at the end.
 - The Schedule page has a calendar view beside its list: a month grid whose
   entries are chips styled by review state, where a chip opens the entry and
   a day shows its entries below the grid. The list groups entries under a

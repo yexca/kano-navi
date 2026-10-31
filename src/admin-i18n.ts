@@ -544,8 +544,6 @@ export const adminMessages = {
     "admin.runs.retry": "Retry",
 
     "admin.sources.title": "Sources",
-    "admin.sources.description":
-      "Each source runs on its own timer. Pick a source to change its timer, fetch through one method, or set up YouTube push and live checks.",
     "admin.sources.x.hint":
       "The public FxTwitter timeline, or the full archive with X_API_BEARER_TOKEN.",
     "admin.sources.youtube.hint":
@@ -576,8 +574,6 @@ export const adminMessages = {
     "admin.fetch.noRecords": "Nothing is stored yet; read a date range first.",
     "admin.fetch.run": "Start fetch",
     "admin.fetch.heading": "Manual fetch",
-    "admin.fetch.intro":
-      "Read once through the method you pick. A failed method fails the run; nothing falls back, and the timer's position stays.",
     "admin.fetch.method": "Method",
     "admin.fetch.method.x.timeline": "FxTwitter timeline",
     "admin.fetch.method.x.api": "X API",
@@ -613,10 +609,7 @@ export const adminMessages = {
     "admin.fetch.countRange": "1 to {max}",
     "admin.fetch.options": "Then",
     "admin.fetch.option.extract": "Extract schedules",
-    "admin.fetch.option.extractHint":
-      "Run schedule extraction in the same run; fetched posts join its queue.",
     "admin.fetch.option.translate": "Translate",
-    "admin.fetch.option.translateHint": "Run the translate step afterwards.",
     "admin.fetch.option.refresh": "Refresh stored videos",
     "admin.fetch.option.refreshHint":
       "Rewrite the title and publication time of videos already stored.",
@@ -659,19 +652,13 @@ export const adminMessages = {
     "admin.liveProbe.interval": "Interval (minutes)",
     "admin.liveProbe.intervalHint":
       "{min} to {max} minutes between checks of a stream on air, or of a waiting room still closed 45 minutes after its start. From the start until it goes live, it checks every 3 minutes. A result counts for two intervals; after that the board falls back to the start time.",
+    "admin.liveProbe.intervalRange": "{min} to {max}",
     "admin.liveProbe.lastRun": "Last probe",
     "admin.liveProbe.nextRun": "Next probe",
     "admin.liveProbe.active": "Active videos now",
     "admin.liveProbe.activeCount": "{count} (up to {max} per run)",
     "admin.sources.bilibili.hint":
       "The account's public upload list, read at most once per BILIBILI_MIN_INTERVAL_MINUTES.",
-    "admin.timer.title": "Timer",
-    "admin.timer.description.x":
-      "Reads X, then caches media, extracts schedules and translates. X has no push, so the timer is how new posts arrive.",
-    "admin.timer.description.youtube":
-      "Reads YouTube, then caches thumbnails and translates. Push and the live-status probe catch most changes; the timer is a fallback.",
-    "admin.timer.description.bilibili":
-      "Reads the upload list, then caches covers and translates. Bilibili limits requests, so the interval stays at {floor} or more.",
     "admin.timer.on": "Every {interval}",
     "admin.timer.enable": "Run on a timer",
     "admin.timer.enableHint":
@@ -680,11 +667,8 @@ export const adminMessages = {
     "admin.timer.schedulerOff":
       "Not running: timers are off (WORKFLOW_SCHEDULER_ENABLED=0).",
     "admin.timer.interval": "Interval",
+    "admin.timer.floor": "At least {floor}",
     "admin.timer.sync": "Read mode",
-    "admin.timer.syncHint.incremental":
-      "Read newest first until a stored record. A run that reaches the limit continues where it stopped next time.",
-    "admin.timer.syncHint.count":
-      "Read the newest records every run, stored or not.",
     "admin.timer.syncLimit.incremental.x": "Most new posts per account",
     "admin.timer.syncLimit.count.x": "Newest posts per account",
     "admin.timer.syncLimit.incremental.youtube": "Most new videos per run",
@@ -723,8 +707,9 @@ export const adminMessages = {
     "admin.chain.apiDailyCapHint":
       "At the cap the chain skips the X API until midnight in Japan. Manual fetches count too.",
     "admin.chain.usage": "X API today",
-    "admin.chain.usageValue": "{posts} of {cap} posts",
-    "admin.chain.streak": "Timeline failure streak",
+    "admin.chain.usageUnit": "posts",
+    "admin.chain.streakUnit": "timeline failures",
+    "admin.help.about": "About {topic}",
     "admin.sources.locked": "Locked",
     "admin.xapi.description":
       "Timed X reads reach the X API only after an account's timeline keeps failing, and only up to a daily cap.",
@@ -746,6 +731,8 @@ export const adminMessages = {
     "admin.syncSettings.llm.title": "Model limits",
     "admin.syncSettings.range": "{min}–{max}, default {default}.",
     "admin.syncSettings.shared": "Shared by X and YouTube.",
+    "admin.syncSettings.section.timed": "Timed reads",
+    "admin.syncSettings.section.manual": "Manual fetches",
     "admin.syncSettings.field.xMaxStatusRequests": "Status requests per run",
     "admin.syncSettings.hint.xMaxStatusRequests":
       "Detail requests shared by all accounts, and the page budget of a manual X fetch.",
@@ -1155,7 +1142,13 @@ export const adminMessages = {
       "The source API answer exceeded the size limit.",
     "admin.sources.timerOff": "Timer off",
     "admin.sources.timerBlocked": "Timer on, but not running here",
-    "admin.sources.settingsFor": "{source} settings",
+    "admin.sources.timer": "Timer",
+    "admin.sources.timedReads": "Timed reads",
+    "admin.sources.xapi": "X API limits",
+    "admin.sources.advanced.x": "Read limits",
+    "admin.sources.advanced.youtube": "Read limits and yt-dlp",
+    "admin.sources.advancedHint":
+      "Bounds of each run and the tools behind them. Rarely changed.",
     "admin.nav.detection": "Detection",
     "admin.nav.llm": "LLM",
     "admin.action.discard": "Discard",
@@ -1722,13 +1715,6 @@ export const adminMessages = {
     "admin.liveProbe.activeCount": "{count}（每次最多 {max} 个）",
     "admin.sources.bilibili.hint":
       "账号的公开投稿列表，每 BILIBILI_MIN_INTERVAL_MINUTES 最多读取一次。",
-    "admin.timer.title": "定时器",
-    "admin.timer.description.x":
-      "读取 X，然后缓存媒体、提取日程并翻译。X 没有推送，新贴文只能靠定时器读取。",
-    "admin.timer.description.youtube":
-      "读取 YouTube，然后缓存缩略图并翻译。推送和直播状态探测能捕捉大多数变化，定时器只是兜底。",
-    "admin.timer.description.bilibili":
-      "读取投稿列表，然后缓存封面并翻译。哔哩哔哩限制请求频率，因此间隔不能短于 {floor}。",
     "admin.timer.on": "每 {interval}",
     "admin.timer.enable": "定时运行",
     "admin.timer.enableHint":
@@ -1738,9 +1724,6 @@ export const adminMessages = {
       "未运行：定时器已关闭（WORKFLOW_SCHEDULER_ENABLED=0）。",
     "admin.timer.interval": "间隔",
     "admin.timer.sync": "读取方式",
-    "admin.timer.syncHint.incremental":
-      "从最新开始读到已存的记录为止。达到上限的运行会在下次从中断处继续。",
-    "admin.timer.syncHint.count": "每次读取最新的若干条，无论是否已存。",
     "admin.timer.syncLimit.incremental.x": "每个账号最多新贴文数",
     "admin.timer.syncLimit.count.x": "每个账号最新贴文数",
     "admin.timer.syncLimit.incremental.youtube": "每次最多新视频数",
@@ -2077,7 +2060,6 @@ export const adminMessages = {
       "来源 API 的响应超过了大小限制。",
     "admin.sources.timerOff": "定时器已关闭",
     "admin.sources.timerBlocked": "定时器已开启，但本进程未运行",
-    "admin.sources.settingsFor": "{source} 设置",
     "admin.nav.detection": "日程识别",
     "admin.nav.llm": "LLM 模型",
     "admin.action.discard": "放弃更改",
