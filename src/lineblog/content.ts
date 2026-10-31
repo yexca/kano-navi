@@ -2,6 +2,7 @@ import index from "./post-index.json" with { type: "json" }
 import { inlineImages, isEmojiMedia } from "./post-media.ts"
 import type {
   LineblogBlock,
+  LineblogInline,
   LineblogMedia,
   LineblogPost,
   LineblogPostFile,
@@ -98,6 +99,42 @@ export function postImages(blocks: LineblogBlock[]) {
         : [],
     )
     .filter((image) => image.media && !isEmoji(image.media))
+}
+
+function inlineText(content: LineblogInline[]): string {
+  return content
+    .map((inline) =>
+      inline.type === "text"
+        ? inline.text
+        : inline.type === "link"
+          ? inlineText(inline.content)
+          : "",
+    )
+    .join("")
+}
+
+/**
+ * Text cut to a length on one line, as the smartphone template cut a
+ * profile or an article's description: whitespace runs become one space and
+ * a cut ends in "...".
+ */
+export function shortText(text: string, length: number) {
+  const characters = Array.from(text.replace(/\s+/gu, " ").trim())
+  return characters.length > length
+    ? `${characters.slice(0, length).join("")}...`
+    : characters.join("")
+}
+
+/** The start of a post's own words, for its entry in an article list. */
+export function postExcerpt(blocks: LineblogBlock[], length = 80) {
+  const text = blocks
+    .flatMap((block) =>
+      block.type === "p" || block.type === "quote"
+        ? [inlineText(block.content)]
+        : [],
+    )
+    .join(" ")
+  return shortText(text, length)
 }
 
 /** Readable alt text; the recovery kept file names and "image" as alts. */

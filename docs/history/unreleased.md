@@ -115,7 +115,10 @@
   articles, their photos, pictographs and archived YouTube videos, the
   original-era layouts, monthly archive, the blog's own 前の記事/次の記事
   pager, and each article's archived comments with names, dates, text and
-  ratings but without the commenters' links. A menu-bar picker
+  ratings but without the commenters' links. Phones get the blog's own
+  smartphone template: a sideways menu bar, a one-line profile with a popup,
+  an article list, round page buttons and a monthly pull-down. A menu-bar
+  picker
   keeps one era's header art and profile photo in place of the automatic one.
   English and Simplified Chinese readers can show or hide the AI paragraph
   translations for every article or one article, and the About page credits

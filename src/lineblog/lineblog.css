@@ -992,3 +992,711 @@
     height: 76px;
   }
 }
+
+/* ---- Smartphone template ----------------------------------------------- */
+
+/* Windows up to 600px wide get LINE BLOG's smartphone template (lite2):
+   white boxes on a grey page, after the platform's common.css and the LINE
+   BLOG skin of 2016 to 2018. The skin's greys map onto the page's text and
+   rule tokens; the design's accent marks only the current menu item, as on
+   the blog. Icons are the template's own files in /assets/lineblog/lite2/;
+   they blend into either theme. */
+.lb.lb-lite {
+  --lbl-page: hsl(var(--muted));
+  background: var(--lbl-page);
+  font-family:
+    HelveticaNeue, Roboto, "ヒラギノ角ゴ ProN W3", "Hiragino Kaku Gothic ProN",
+    sans-serif;
+  line-height: 1.4;
+}
+
+.lb.lb-lite a {
+  color: var(--lb-text);
+}
+
+.lbl-pager li > *::before,
+.lbl-article-pager :is(.is-prev, .is-next) a::before,
+.lbl-close::before,
+.lbl-comment-icon,
+.lbl-comment-count::before,
+.lbl-months-button::after,
+.lbl-pagetop a::before {
+  mix-blend-mode: multiply;
+}
+
+.dark .lbl-pager li > *::before,
+.dark .lbl-article-pager :is(.is-prev, .is-next) a::before,
+.dark .lbl-close::before,
+.dark .lbl-comment-icon,
+.dark .lbl-comment-count::before,
+.dark .lbl-months-button::after,
+.dark .lbl-pagetop a::before {
+  filter: invert(1);
+  mix-blend-mode: screen;
+}
+
+/* The header art is the PC art's middle 1040 of 2600px, which holds the
+   blog's drawn title and its figure; the phone art was never archived. */
+.lbl-blog-title {
+  margin: 0;
+  background: var(--lbl-page);
+}
+
+.lbl-blog-title a {
+  display: block;
+  aspect-ratio: 1040 / 390;
+  background: var(--lb-header) center / auto 100% no-repeat;
+}
+
+/* The menu bar: 39px of 13px grey links that scroll sideways; the current
+   one is bold in the accent colour with a 2px bar under it. */
+.lbl-menu {
+  height: 39px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--lb-paper);
+  scrollbar-width: none;
+}
+
+.lbl-menu ul {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lb.lb-lite .lbl-menu li > a {
+  position: relative;
+  display: block;
+  padding: 13px;
+  color: var(--lb-faint);
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.lb.lb-lite .lbl-menu li.is-current > a {
+  color: var(--lb-accent);
+  font-weight: 700;
+}
+
+.lbl-menu li.is-current > a::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  border-bottom: 2px solid var(--lb-accent);
+}
+
+/* The archive's own controls follow the blog's links. */
+.lbl-menu-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 0 10px;
+}
+
+/* The one-line profile: an 11px line in a white strip that opens the
+   profile popup. */
+.lbl-title-line {
+  padding: 10px 10px 0;
+}
+
+.lbl-short-profile {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-bottom: 1px solid var(--lb-rule);
+  background: var(--lb-paper);
+  color: var(--lb-soft);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The profile popup: a white box up to 348px wide over a dark veil, with
+   the template's close button at its top right. The photo takes the 100px
+   round icon of the template's later profile header. */
+.lbl-profile-popup {
+  width: calc(100% - 20px);
+  max-width: 348px;
+  margin: auto;
+  padding: 20px 20px 0;
+  border: 0;
+  background: var(--lb-paper);
+  color: var(--lb-text);
+}
+
+.lbl-profile-popup::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+.lbl-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  padding: 10px;
+  border: 0;
+  background: none;
+}
+
+.lbl-close::before {
+  content: "";
+  display: block;
+  width: 12px;
+  height: 12px;
+  background: url("/assets/lineblog/lite2/usr/lineblog/btn_close.png") center /
+    12px 12px no-repeat;
+}
+
+.lbl-profile-photo {
+  display: block;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 15px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--lb-wash);
+}
+
+.lbl-profile-popup h2 {
+  margin: 0 0 15px;
+  padding-right: 20px;
+  color: var(--lb-ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.lbl-profile-text {
+  margin: 0 0 20px;
+  color: var(--lb-faint);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+/* ---- Smartphone content ------------------------------------------------ */
+
+.lbl-content {
+  padding-top: 10px;
+  scroll-margin-top: 72px;
+}
+
+.lbl-content:focus {
+  outline: none;
+}
+
+.lbl-archives-title {
+  margin: 0;
+  padding: 0 15px 10px 10px;
+  color: var(--lb-soft);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.lbl-archives-title span {
+  color: var(--lb-faint);
+}
+
+.lbl-note {
+  margin: 0 0 10px;
+  padding: 15px;
+  background: var(--lb-paper);
+}
+
+/* The article list: each article a white box with its 20px title, its
+   picture across the box, its opening words in 14px and a footer with the
+   10px date. */
+.lbl-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lbl-list-item {
+  margin-bottom: 10px;
+  background: var(--lb-paper);
+}
+
+.lb.lb-lite .lbl-list-link {
+  display: block;
+  text-decoration: none;
+}
+
+.lbl-list-title {
+  margin: 0;
+  padding: 15px 15px 5px;
+  color: var(--lb-ink);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.lbl-list-translation {
+  margin: 0;
+  padding: 0 15px 5px;
+  color: var(--lb-soft);
+  font-size: 13px;
+}
+
+.lbl-list-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  margin-top: 10px;
+  object-fit: cover;
+  background: var(--lb-wash);
+}
+
+.lbl-list-description {
+  margin: 0;
+  padding: 10px 15px;
+  color: var(--lb-text);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.lbl-list-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  padding: 10px 15px;
+  color: var(--lb-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* An article: a white box with its 20px title, the 10px date, the 14px
+   body, its counts under a rule and the article pager. */
+.lbl-entry {
+  margin-bottom: 10px;
+  background: var(--lb-paper);
+}
+
+.lb-lite .lb-article-header {
+  margin: 0;
+  padding: 15px 15px 0;
+}
+
+.lb-lite .lb-article-title {
+  margin: 0;
+  padding-bottom: 5px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.lb-lite .lb-title-translation {
+  margin: 0 0 5px;
+  font-size: 13px;
+}
+
+.lb-lite .lb-article-date {
+  font-size: 10px;
+  line-height: 18px;
+}
+
+.lb-lite .lb-article-body {
+  margin-bottom: 30px;
+  padding: 15px 15px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.lb.lb-lite .lb-article-body a {
+  color: var(--lb-text);
+  text-decoration: underline;
+}
+
+.lb-lite .lb-article-footer {
+  margin: 0 15px;
+  padding: 10px 0 15px;
+  font-size: 10px;
+}
+
+.lbl-counts {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding: 15px 0;
+  border-top: 1px solid var(--lb-rule);
+  list-style: none;
+}
+
+.lbl-counts li {
+  margin: 0 12px;
+}
+
+.lb.lb-lite .lbl-comment-count {
+  display: flex;
+  align-items: center;
+  color: var(--lb-faint);
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.lbl-comment-count::before {
+  content: "";
+  width: 18px;
+  height: 17px;
+  margin-right: 4px;
+  background: url("/assets/lineblog/lite2/icon_comment02.png") 0 0 / 18px 17px
+    no-repeat;
+}
+
+/* The article pager: 前の記事, ホーム and 次の記事 in a 45px strip, the
+   template's pull-down arrow turned to point left and right. */
+.lbl-article-pager ul {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--lb-rule);
+  list-style: none;
+}
+
+.lbl-article-pager li {
+  position: relative;
+  flex: 1 1 auto;
+  width: 34%;
+}
+
+.lbl-article-pager .is-home {
+  width: 32%;
+  text-align: center;
+}
+
+.lbl-article-pager .is-next {
+  text-align: right;
+}
+
+.lb.lb-lite .lbl-article-pager a {
+  display: block;
+  height: 45px;
+  padding: 0 10px;
+  overflow: hidden;
+  color: var(--lb-ink);
+  font-size: 12px;
+  line-height: 48px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.lb.lb-lite .lbl-article-pager .is-prev a {
+  padding-left: 35px;
+}
+
+.lb.lb-lite .lbl-article-pager .is-next a {
+  padding-right: 35px;
+}
+
+.lbl-article-pager :is(.is-prev, .is-next) a::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 7px;
+  margin-top: -3px;
+  background: url("/assets/lineblog/lite2/usr/lineblog/arrow_pull.png") 0 0 /
+    12px 7px no-repeat;
+}
+
+.lbl-article-pager .is-prev a::before {
+  left: 18px;
+  transform: rotate(90deg);
+}
+
+.lbl-article-pager .is-next a::before {
+  right: 18px;
+  transform: rotate(270deg);
+}
+
+.lbl-article-pager .is-home::before,
+.lbl-article-pager .is-home::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  height: 15px;
+  margin-top: -7px;
+  border-right: 1px solid var(--lb-rule);
+}
+
+.lbl-article-pager .is-home::before {
+  left: 0;
+}
+
+.lbl-article-pager .is-home::after {
+  right: 0;
+}
+
+/* The comment list: the count beside the comment icon, then comments under
+   1px rules with the number and name in bold 10px, the 12px text and the
+   10px time; a rating sits at the bottom right. */
+.lbl-comments {
+  margin-bottom: 10px;
+  padding: 15px 15px 0;
+  background: var(--lb-paper);
+  scroll-margin-top: 72px;
+}
+
+.lbl-comments-title {
+  display: flex;
+  align-items: center;
+  margin: 0 0 15px;
+  color: var(--lb-ink);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.lbl-comment-icon {
+  width: 18px;
+  height: 18px;
+  margin-right: 5px;
+  background: url("/assets/lineblog/lite2/icon_comment02.png") center / 18px
+    17px no-repeat;
+}
+
+.lbl-comments-count {
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.lbl-comments-note {
+  margin: -10px 0 10px;
+  color: var(--lb-faint);
+  font-size: 10px;
+}
+
+.lbl-comment-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lbl-comment {
+  position: relative;
+  padding: 15px 0;
+  border-top: 1px solid var(--lb-rule);
+}
+
+.lbl-comment-author {
+  margin: 0 0 5px;
+  color: var(--lb-text);
+  font-size: 10px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.lbl-comment-id {
+  margin-right: 5px;
+}
+
+.lbl-comment-body {
+  margin: 0 0 5px;
+  color: var(--lb-soft);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.lbl-comment-time {
+  color: var(--lb-faint);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lb-lite .lb-comment-rating {
+  top: auto;
+  bottom: 16px;
+  font-size: 12px;
+}
+
+/* The bottom pager: the page out of all pages, then four 40px round
+   buttons with the template's 17x16 icons, dimmed where there is no page
+   to go to. */
+.lbl-pager {
+  margin-bottom: 10px;
+}
+
+.lbl-fraction {
+  margin: 0 0 10px;
+  font-size: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.lbl-pager ul {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lbl-pager li {
+  padding: 0 8px;
+}
+
+.lbl-pager li.is-off {
+  opacity: 0.5;
+}
+
+.lbl-pager li > * {
+  position: relative;
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--lb-paper);
+  box-shadow: 0 1px 0 var(--lb-rule);
+}
+
+.lbl-pager li > *::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: center / 17px 16px no-repeat;
+}
+
+.lbl-pager .is-first > *::before {
+  background-image: url("/assets/lineblog/lite2/usr/lineblog/icon_pager_first.png");
+}
+
+.lbl-pager .is-prev > *::before {
+  background-image: url("/assets/lineblog/lite2/usr/lineblog/icon_pager_prev.png");
+}
+
+.lbl-pager .is-next > *::before {
+  background-image: url("/assets/lineblog/lite2/usr/lineblog/icon_pager_next.png");
+}
+
+.lbl-pager .is-last > *::before {
+  background-image: url("/assets/lineblog/lite2/usr/lineblog/icon_pager_last.png");
+}
+
+/* The monthly archive: the template's white strip with 月別アーカイブ, or
+   the month shown, in 12px grey and its arrow at the right. It opens the
+   months as a menu grouped by year, each with its article count; the month
+   shown is ticked. */
+.lbl-months {
+  margin-bottom: 10px;
+  background: var(--lb-paper);
+}
+
+.lbl-months-button {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 13px 40px 13px 18px;
+  border: 0;
+  background: none;
+  color: var(--lb-soft);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.lbl-months-button::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  width: 12px;
+  height: 7px;
+  margin-top: -3px;
+  background: url("/assets/lineblog/lite2/usr/lineblog/arrow_pull.png") 0 0 /
+    12px 7px no-repeat;
+  transition: transform 0.15s;
+}
+
+.lbl-months-button[data-state="open"]::after {
+  transform: rotate(180deg);
+}
+
+/* The menu opens outside the page, so it sets its own sizes: the strip's
+   width, and a year's label stays at the top while its months scroll. */
+.lbl-months-menu {
+  width: var(--radix-dropdown-menu-trigger-width);
+  max-height: min(60vh, var(--radix-dropdown-menu-content-available-height));
+  padding-top: 0;
+}
+
+.lbl-months-year {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  margin: 0 -4px;
+  padding-inline: 12px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--popover));
+  font-variant-numeric: tabular-nums;
+}
+
+.lbl-months-item {
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lbl-months-item small {
+  margin-left: auto;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+
+/* The blog's footer: ページ先頭へ at the right, then the blog's name in a
+   9px line on the page's own surface, so it follows the theme. The
+   template's upward arrow was never archived, so its pull-down arrow turns
+   up instead. */
+.lbl-pagetop {
+  margin: 10px 0;
+  font-size: 14px;
+  text-align: right;
+}
+
+.lb.lb-lite .lbl-pagetop a {
+  position: relative;
+  display: inline-block;
+  height: 40px;
+  padding: 0 25px 0 45px;
+  line-height: 40px;
+  text-decoration: none;
+}
+
+.lbl-pagetop a::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 25px;
+  width: 12px;
+  height: 7px;
+  margin-top: -3px;
+  background: url("/assets/lineblog/lite2/usr/lineblog/arrow_pull.png") 0 0 /
+    12px 7px no-repeat;
+  transform: rotate(180deg);
+}
+
+.lbl-copyright {
+  margin: 0;
+  padding: 15px;
+  border-top: 1px solid var(--lb-rule);
+  background: var(--lb-paper);
+  color: var(--lb-faint);
+  font-size: 9px;
+  text-align: center;
+}

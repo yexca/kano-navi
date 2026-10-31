@@ -25,6 +25,21 @@ photos. Small print at the bottom names the site the picture was recovered
 from; most of those original addresses no longer open. Videos that were embedded from YouTube play from the archived copy,
 with a link to the original on YouTube.
 
+## On Phones
+
+On a phone, or in a window up to about 600 pixels wide, the page takes the
+look of LINE BLOG's own smartphone pages instead: the header art cut to its
+title and picture, a menu bar that scrolls sideways with ホーム and
+鹿乃オフィシャルサイト, the **AI** mark and the design picker, and a one-line
+profile that opens the full profile with its photo. The front page lists
+three articles at a time, each with its title, picture, opening words and
+date, and the round buttons at the bottom go to the first, previous, next and
+last pages. An article ends with its comment count, buttons to the older
+article (前の記事), the front page (ホーム) and the newer article (次の記事),
+and its comments. A pull-down under every page opens any month. Kano's own
+phone header and the blog's phone article pages were never archived, so
+these pages follow the template the blog shared with other LINE BLOGs.
+
 ## Comments
 
 Under an article, its comment list shows what readers, and sometimes Kano,

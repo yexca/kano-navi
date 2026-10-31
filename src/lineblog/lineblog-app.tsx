@@ -4,7 +4,14 @@ import type {
   ReactNode,
   SyntheticEvent,
 } from "react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import { flushSync } from "react-dom"
 import { ArrowUp, ChevronDown, ImageOff, Languages, Play } from "lucide-react"
 
@@ -40,9 +47,11 @@ import {
   neighbours,
   pagerPages,
   postDate,
+  postExcerpt,
   postImages,
   postMonth,
   posts,
+  shortText,
 } from "./content"
 import {
   chosenDesign,
@@ -214,19 +223,7 @@ function useLineblogLocation() {
     return () => window.removeEventListener("popstate", onPopState)
   }, [])
 
-  const onClick = useCallback((event: MouseEvent<HTMLElement>) => {
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return
-    const url = viewUrl(event.target)
-    if (!url) return
-    event.preventDefault()
+  const go = useCallback((url: URL) => {
     if (url.href !== window.location.href) {
       window.history.replaceState(
         { ...window.history.state, kanoScroll: window.scrollY },
@@ -246,12 +243,52 @@ function useLineblogLocation() {
     else void loadView(url.search).then(show, show)
   }, [])
 
+  const onClick = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return
+      const url = viewUrl(event.target)
+      if (!url) return
+      event.preventDefault()
+      go(url)
+    },
+    [go],
+  )
+
   const onIntent = useCallback((event: SyntheticEvent<HTMLElement>) => {
     const url = viewUrl(event.target)
     if (url) loadView(url.search).catch(() => undefined)
   }, [])
 
-  return { search, onClick, onIntent }
+  return { search, go, onClick, onIntent }
+}
+
+/**
+ * LINE BLOG served phones its smartphone template at the same addresses.
+ * Phones of the blog's years were 320 to 480 CSS pixels wide upright, and
+ * tablets from 600 got the PC page, so a window up to 600 pixels wide gets
+ * the smartphone template.
+ */
+const PHONE_QUERY = "(max-width: 600px)"
+
+function subscribePhone(onChange: () => void) {
+  const query = window.matchMedia?.(PHONE_QUERY)
+  query?.addEventListener("change", onChange)
+  return () => query?.removeEventListener("change", onChange)
+}
+
+function usePhoneLayout() {
+  return useSyncExternalStore(
+    subscribePhone,
+    () => window.matchMedia?.(PHONE_QUERY).matches ?? false,
+  )
 }
 
 /**
@@ -1110,9 +1147,518 @@ function DesignPicker({
   )
 }
 
+// ---------------------------------------------------------------------------
+// Smartphone template
+// ---------------------------------------------------------------------------
+
+/**
+ * The template's one-line profile under the menu bar opens this popup: the
+ * profile photo, the name and the whole profile text.
+ */
+function ProfilePopup({ design }: { design: LineblogDesign }) {
+  const { t } = useAppSettings()
+  const dialog = useRef<HTMLDialogElement>(null)
+  const close = () => dialog.current?.close()
+  return (
+    <div className="lbl-title-line">
+      <button
+        type="button"
+        className="lbl-short-profile"
+        aria-haspopup="dialog"
+        aria-label={t("lineblog.profile")}
+        onClick={() => dialog.current?.showModal()}
+      >
+        <span lang="ja">{shortText(design.profileText, 50)}</span>
+      </button>
+      <dialog
+        ref={dialog}
+        className="lbl-profile-popup"
+        aria-labelledby="lbl-profile-name"
+        onClick={(event) => {
+          // A click on the backdrop lands on the dialog outside its box.
+          const box = event.currentTarget.getBoundingClientRect()
+          if (
+            event.target === event.currentTarget &&
+            (event.clientX < box.left ||
+              event.clientX > box.right ||
+              event.clientY < box.top ||
+              event.clientY > box.bottom)
+          )
+            close()
+        }}
+      >
+        <button
+          type="button"
+          className="lbl-close"
+          aria-label={t("lineblog.closeProfile")}
+          onClick={close}
+        />
+        <img
+          className="lbl-profile-photo"
+          src={mediaVariantUrl(mediaUrl(design.profile.media), 320)}
+          alt=""
+          width={100}
+          height={100}
+          loading="lazy"
+          decoding="async"
+        />
+        <h2 id="lbl-profile-name" lang="ja">
+          鹿乃
+        </h2>
+        <p className="lbl-profile-text" lang="ja">
+          {design.profileText}
+        </p>
+      </dialog>
+    </div>
+  )
+}
+
+/** An article in the smartphone list: title, picture, opening words, date. */
+function ArticleCard({
+  summary,
+  post,
+  translation,
+}: {
+  summary: LineblogSummary
+  post: LineblogPost
+  translation: Translation | null
+}) {
+  const thumbnail = summary.thumbnail
+  const item = thumbnail ? media.get(thumbnail) : undefined
+  const translatedTitle = translation && post[translation.title]
+  const excerpt = postExcerpt(post.blocks)
+  return (
+    <li className="lbl-list-item">
+      <a className="lbl-list-link" href={articleLink(post)}>
+        <h2 className="lbl-list-title" lang="ja">
+          {post.title}
+        </h2>
+        {translatedTitle && translatedTitle !== post.title ? (
+          <p className="lbl-list-translation" lang={translation.lang}>
+            {translatedTitle}
+          </p>
+        ) : null}
+        {thumbnail ? (
+          <img
+            className="lbl-list-image"
+            src={mediaUrl(thumbnail)}
+            srcSet={mediaSrcSet(mediaUrl(thumbnail), item?.width)}
+            sizes="100vw"
+            alt=""
+            width={item?.width}
+            height={item?.height}
+            loading="lazy"
+            decoding="async"
+          />
+        ) : null}
+        {excerpt ? (
+          <p className="lbl-list-description" lang="ja">
+            {excerpt}
+          </p>
+        ) : null}
+      </a>
+      <p className="lbl-list-footer">
+        <time dateTime={post.published}>{postDate(post.published)}</time>
+      </p>
+    </li>
+  )
+}
+
+/**
+ * The template's article pager under an article: 前の記事 for the older
+ * article, ホーム for the front page and 次の記事 for the newer one.
+ */
+function SmartphoneArticlePager({ post }: { post: LineblogSummary }) {
+  const { t } = useAppSettings()
+  const { newer, older } = neighbours(post.id)
+  return (
+    <nav className="lbl-article-pager" aria-label={t("lineblog.articleNav")}>
+      <ul lang="ja">
+        <li className="is-prev">
+          {older ? (
+            <a
+              href={articleLink(older)}
+              rel="prev"
+              title={older.title}
+              aria-label={`${t("lineblog.older")}: ${older.title}`}
+            >
+              前の記事
+            </a>
+          ) : null}
+        </li>
+        <li className="is-home">
+          <a href="/lineblog" aria-label={t("lineblog.home")}>
+            ホーム
+          </a>
+        </li>
+        <li className="is-next">
+          {newer ? (
+            <a
+              href={articleLink(newer)}
+              rel="next"
+              title={newer.title}
+              aria-label={`${t("lineblog.newer")}: ${newer.title}`}
+            >
+              次の記事
+            </a>
+          ) : null}
+        </li>
+      </ul>
+    </nav>
+  )
+}
+
+/**
+ * The template's comment list: a count beside the comment icon, then each
+ * comment's number and name, its text and its time, newest first.
+ */
+function SmartphoneComments({ comments }: { comments: LineblogComment[] }) {
+  const { t } = useAppSettings()
+  if (!comments.length) return null
+  return (
+    <section
+      className="lbl-comments"
+      id="lb-comments"
+      aria-labelledby="lbl-comments-title"
+    >
+      <h2 className="lbl-comments-title" id="lbl-comments-title">
+        <span className="lbl-comment-icon" aria-hidden="true" />
+        <span className="sr-only">{t("lineblog.comments")}</span>
+        <span className="lbl-comments-count">{comments.length}</span>
+      </h2>
+      <p className="lbl-comments-note">{t("lineblog.commentsNote")}</p>
+      <ol className="lbl-comment-list" lang="ja">
+        {comments.map((comment) => (
+          <li
+            key={comment.number}
+            className={cn("lbl-comment", comment.rating && "has-rating")}
+          >
+            <p className="lbl-comment-author">
+              <span className="lbl-comment-id">{comment.number}.</span>
+              {comment.author}
+            </p>
+            {comment.body ? (
+              <p className="lbl-comment-body">{comment.body}</p>
+            ) : null}
+            <time className="lbl-comment-time" dateTime={comment.posted}>
+              {postDate(comment.posted)}
+            </time>
+            {comment.rating ? <CommentRating rating={comment.rating} /> : null}
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+/**
+ * The template's bottom pager: the page out of all pages, then round
+ * buttons to the first, previous, next and last pages, dimmed where there is
+ * none to go to.
+ */
+function SmartphonePager({
+  page,
+  pageCount,
+}: {
+  page: number
+  pageCount: number
+}) {
+  const { t } = useAppSettings()
+  const steps = [
+    { kind: "first", to: 1, label: t("lineblog.firstPage") },
+    { kind: "prev", to: page - 1, label: t("lineblog.previousPage") },
+    { kind: "next", to: page + 1, label: t("lineblog.nextPage") },
+    { kind: "last", to: pageCount, label: t("lineblog.lastPage") },
+  ]
+  return (
+    <nav className="lbl-pager" aria-label={t("lineblog.pager")}>
+      <p className="lbl-fraction">
+        {page} / {pageCount}
+      </p>
+      <ul>
+        {steps.map(({ kind, to, label }) => {
+          const open = to >= 1 && to <= pageCount && to !== page
+          return (
+            <li key={kind} className={cn(`is-${kind}`, !open && "is-off")}>
+              {open ? (
+                <a
+                  href={lineblogHref(to === 1 ? {} : { page: to })}
+                  rel={
+                    kind === "prev"
+                      ? "prev"
+                      : kind === "next"
+                        ? "next"
+                        : undefined
+                  }
+                >
+                  <span className="sr-only">{label}</span>
+                </a>
+              ) : (
+                <span aria-hidden="true" />
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
+  )
+}
+
+/** The template's monthly archive: a pull-down of every month. */
+function MonthSelect({
+  current,
+  onChoose,
+}: {
+  current: string | null
+  onChoose: (month: string) => void
+}) {
+  const { t } = useAppSettings()
+  return (
+    <section className="lbl-months">
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="lbl-months-button"
+            aria-label={
+              current
+                ? `${t("lineblog.monthArchive")}: ${monthLabel(t, current)}`
+                : t("lineblog.monthArchive")
+            }
+          >
+            {current ? monthLabel(t, current) : t("lineblog.monthArchive")}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="lbl-months-menu overflow-y-auto"
+        >
+          <DropdownMenuRadioGroup
+            // The menu opens at the month shown, once it has its size.
+            ref={(group) => {
+              if (!group) return
+              requestAnimationFrame(() => {
+                const menu = group.closest<HTMLElement>(".lbl-months-menu")
+                const item = group.querySelector<HTMLElement>(
+                  '[data-state="checked"]',
+                )
+                if (menu && item)
+                  menu.scrollTop =
+                    item.offsetTop - (menu.clientHeight - item.offsetHeight) / 2
+              })
+            }}
+            value={current ?? ""}
+            onValueChange={(month) => {
+              if (month !== current) onChoose(month)
+            }}
+          >
+            {archiveMonths.map(({ year, months }) => (
+              <div key={year} role="group" aria-label={year}>
+                <DropdownMenuLabel className="lbl-months-year">
+                  {year}
+                </DropdownMenuLabel>
+                {months.map(({ month, count }) => (
+                  <DropdownMenuRadioItem
+                    key={month}
+                    value={month}
+                    className="lbl-months-item"
+                  >
+                    <span>{monthLabel(t, month)}</span>
+                    <small aria-hidden="true">{count}</small>
+                    <span className="sr-only">
+                      {t("lineblog.monthCount", { count })}
+                    </span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </div>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </section>
+  )
+}
+
+/**
+ * The smartphone template: header art, a menu bar that scrolls sideways, the
+ * one-line profile, then the content in white boxes on a grey page and the
+ * blog's footer.
+ */
+function SmartphoneBlog({
+  view,
+  loaded,
+  offered,
+  translationOn,
+  translationRound,
+  onToggleTranslation,
+  designChoice,
+  design,
+  onChooseDesign,
+  onChooseMonth,
+}: {
+  view: ReturnType<typeof lineblogView>
+  loaded: ReturnType<typeof useViewPosts>
+  offered: Translation | null
+  translationOn: boolean
+  translationRound: number
+  onToggleTranslation: () => void
+  designChoice: string | null
+  design: LineblogDesign
+  onChooseDesign: (id: string | null) => void
+  onChooseMonth: (month: string) => void
+}) {
+  const { t } = useAppSettings()
+  const home = !view.article && !view.month && view.page === 1
+  const comments = view.article ? loadedComments(view.article.id) : undefined
+  return (
+    <div className="lb lb-lite">
+      <header className="lbl-header">
+        <h1 className="lbl-blog-title">
+          <a href="/lineblog" lang="ja">
+            <span className="sr-only">鹿乃 オフィシャルブログ</span>
+          </a>
+        </h1>
+        <nav className="lbl-menu" aria-label={t("lineblog.menu")}>
+          <ul>
+            <li className={cn(home && "is-current")}>
+              <a
+                href="/lineblog"
+                lang="ja"
+                aria-current={home ? "page" : undefined}
+              >
+                ホーム
+              </a>
+            </li>
+            <li>
+              <ExternalLink href={design.officialSite} lang="ja">
+                鹿乃オフィシャルサイト
+              </ExternalLink>
+            </li>
+            <li className="lbl-menu-tools">
+              {offered ? (
+                <TranslationMark
+                  on={translationOn}
+                  all
+                  onToggle={onToggleTranslation}
+                />
+              ) : null}
+              <DesignPicker
+                choice={designChoice}
+                design={design}
+                onChoose={onChooseDesign}
+              />
+            </li>
+          </ul>
+        </nav>
+        <ProfilePopup design={design} />
+      </header>
+
+      <main className="lbl-content" id="lineblog-content" tabIndex={-1}>
+        {view.month ? (
+          <h1 className="lbl-archives-title">
+            {monthLabel(t, view.month)}
+            <span>
+              {" "}
+              ({t("lineblog.monthCount", { count: view.shown.length })})
+            </span>
+          </h1>
+        ) : null}
+        {!view.article && !view.month ? (
+          <h1 className="sr-only">{t("lineblog.kicker")}</h1>
+        ) : null}
+        {view.missingArticle ? (
+          <p className="lb-empty lbl-note">
+            {t("lineblog.notFound")}{" "}
+            <a href="/lineblog">{t("lineblog.backToList")}</a>
+          </p>
+        ) : null}
+        {view.month && !view.shown.length ? (
+          <p className="lb-empty lbl-note">{t("lineblog.monthEmpty")}</p>
+        ) : null}
+        {loaded.posts ? (
+          view.article ? (
+            loaded.posts.map((post) => (
+              <div key={post.id} className="lbl-entry">
+                <Article
+                  post={post}
+                  single
+                  offered={offered}
+                  translationOn={translationOn}
+                  translationRound={translationRound}
+                />
+                <ul className="lbl-counts">
+                  <li>
+                    <a
+                      href="#lb-comments"
+                      className="lbl-comment-count"
+                      aria-label={t("lineblog.commentCount", {
+                        count: comments?.length ?? 0,
+                      })}
+                    >
+                      {comments?.length ?? 0}
+                    </a>
+                  </li>
+                </ul>
+                <SmartphoneArticlePager post={post} />
+              </div>
+            ))
+          ) : loaded.posts.length ? (
+            <ul className="lbl-list">
+              {loaded.posts.map((post, index) => (
+                <ArticleCard
+                  key={post.id}
+                  summary={view.shown[index]}
+                  post={post}
+                  translation={translationOn ? offered : null}
+                />
+              ))}
+            </ul>
+          ) : null
+        ) : loaded.failed ? (
+          <div className="lb-loading lbl-note" role="alert">
+            <p>{t("lineblog.loadFailed")}</p>
+            <button
+              type="button"
+              className="lb-retry"
+              onClick={() => window.location.reload()}
+            >
+              {t("lineblog.retry")}
+            </button>
+          </div>
+        ) : (
+          <div className="lb-loading lbl-note" role="status">
+            <p>{t("lineblog.loading")}</p>
+            <Placeholder lines={6} />
+          </div>
+        )}
+        {view.article && loaded.posts ? (
+          <SmartphoneComments comments={comments ?? []} />
+        ) : null}
+        {!view.article && !view.month ? (
+          <SmartphonePager page={view.page} pageCount={view.pageCount} />
+        ) : null}
+      </main>
+
+      <MonthSelect current={view.month} onChoose={onChooseMonth} />
+
+      <footer className="lbl-footer">
+        <p className="lbl-pagetop">
+          <a href="#top" lang="ja" aria-label={t("lineblog.toTop")}>
+            ページ先頭へ
+          </a>
+        </p>
+        <p className="lbl-copyright" lang="ja">
+          鹿乃 オフィシャルブログ
+        </p>
+      </footer>
+    </div>
+  )
+}
+
 export function LineblogApp() {
   const { t, locale } = useAppSettings()
-  const { search, onClick, onIntent } = useLineblogLocation()
+  const { search, go, onClick, onIntent } = useLineblogLocation()
+  const phone = usePhoneLayout()
   const view = useMemo(() => lineblogView(search), [search])
   const loaded = useViewPosts(search, view.shown)
   const [translationOn, setTranslationOn] = useState(readTranslation)
@@ -1170,117 +1716,134 @@ export function LineblogApp() {
       <SkipLink href="#lineblog-content">{t("lineblog.skip")}</SkipLink>
       <SiteHeader page="lineblog" />
 
-      <div className="lb">
-        <header className="lb-banner">
-          <a href="/lineblog" className="lb-banner-link" lang="ja">
-            <span className="sr-only">鹿乃 オフィシャルブログ</span>
-          </a>
-        </header>
-
-        <nav className="lb-menu" aria-label={t("lineblog.menu")}>
-          <div className="lb-menu-inner">
-            <a
-              href="/lineblog"
-              className="lb-menu-home"
-              aria-current={
-                !view.article && !view.month && view.page === 1
-                  ? "page"
-                  : undefined
-              }
-            >
-              <img
-                src={mediaUrl(homeIcon.media)}
-                alt={t("lineblog.home")}
-                width={30}
-                height={66}
-                decoding="async"
-              />
+      {phone ? (
+        <SmartphoneBlog
+          view={view}
+          loaded={loaded}
+          offered={offered}
+          translationOn={translationOn}
+          translationRound={translationRound}
+          onToggleTranslation={toggleTranslation}
+          designChoice={designChoice}
+          design={design}
+          onChooseDesign={chooseDesign}
+          onChooseMonth={(month) =>
+            go(new URL(lineblogHref({ month }), window.location.href))
+          }
+        />
+      ) : (
+        <div className="lb">
+          <header className="lb-banner">
+            <a href="/lineblog" className="lb-banner-link" lang="ja">
+              <span className="sr-only">鹿乃 オフィシャルブログ</span>
             </a>
-            <ExternalLink href={design.officialSite} lang="ja">
-              鹿乃オフィシャルサイト
-            </ExternalLink>
-            <div className="lb-menu-tools">
-              {offered ? (
-                <TranslationMark
-                  on={translationOn}
-                  all
-                  onToggle={toggleTranslation}
-                />
-              ) : null}
-              <DesignPicker
-                choice={designChoice}
-                design={design}
-                onChoose={chooseDesign}
-              />
-            </div>
-          </div>
-        </nav>
+          </header>
 
-        <div className="lb-container">
-          <main className="lb-main" id="lineblog-content" tabIndex={-1}>
-            {view.month ? (
-              <header className="lb-list-header">
-                <p>{t("lineblog.monthArchive")}</p>
-                <h1>{monthLabel(t, view.month)}</h1>
-                <small>
-                  {t("lineblog.monthCount", { count: view.shown.length })}
-                </small>
-              </header>
-            ) : null}
-            {view.missingArticle ? (
-              <p className="lb-empty">
-                {t("lineblog.notFound")}{" "}
-                <a href="/lineblog">{t("lineblog.backToList")}</a>
-              </p>
-            ) : null}
-            {view.month && !view.shown.length ? (
-              <p className="lb-empty">{t("lineblog.monthEmpty")}</p>
-            ) : null}
-            {!view.article && !view.month ? (
-              <h1 className="sr-only">{t("lineblog.kicker")}</h1>
-            ) : null}
-            {loaded.posts ? (
-              loaded.posts.map((post) => (
-                <Article
-                  key={post.id}
-                  post={post}
-                  single={Boolean(view.article)}
-                  offered={offered}
-                  translationOn={translationOn}
-                  translationRound={translationRound}
+          <nav className="lb-menu" aria-label={t("lineblog.menu")}>
+            <div className="lb-menu-inner">
+              <a
+                href="/lineblog"
+                className="lb-menu-home"
+                aria-current={
+                  !view.article && !view.month && view.page === 1
+                    ? "page"
+                    : undefined
+                }
+              >
+                <img
+                  src={mediaUrl(homeIcon.media)}
+                  alt={t("lineblog.home")}
+                  width={30}
+                  height={66}
+                  decoding="async"
                 />
-              ))
-            ) : loaded.failed ? (
-              <div className="lb-loading" role="alert">
-                <p>{t("lineblog.loadFailed")}</p>
-                <button
-                  type="button"
-                  className="lb-retry"
-                  onClick={() => window.location.reload()}
-                >
-                  {t("lineblog.retry")}
-                </button>
+              </a>
+              <ExternalLink href={design.officialSite} lang="ja">
+                鹿乃オフィシャルサイト
+              </ExternalLink>
+              <div className="lb-menu-tools">
+                {offered ? (
+                  <TranslationMark
+                    on={translationOn}
+                    all
+                    onToggle={toggleTranslation}
+                  />
+                ) : null}
+                <DesignPicker
+                  choice={designChoice}
+                  design={design}
+                  onChoose={chooseDesign}
+                />
               </div>
-            ) : (
-              <div className="lb-loading" role="status">
-                <p>{t("lineblog.loading")}</p>
-                <Placeholder lines={6} />
-              </div>
-            )}
-            {view.article ? <ArticlePager post={view.article} /> : null}
-            {view.article && loaded.posts ? (
-              <Comments comments={loadedComments(view.article.id) ?? []} />
-            ) : null}
-            {!view.article && !view.month ? (
-              <Pager page={view.page} pageCount={view.pageCount} />
-            ) : null}
-          </main>
-          <Sidebar current={currentMonth} design={design} />
+            </div>
+          </nav>
+
+          <div className="lb-container">
+            <main className="lb-main" id="lineblog-content" tabIndex={-1}>
+              {view.month ? (
+                <header className="lb-list-header">
+                  <p>{t("lineblog.monthArchive")}</p>
+                  <h1>{monthLabel(t, view.month)}</h1>
+                  <small>
+                    {t("lineblog.monthCount", { count: view.shown.length })}
+                  </small>
+                </header>
+              ) : null}
+              {view.missingArticle ? (
+                <p className="lb-empty">
+                  {t("lineblog.notFound")}{" "}
+                  <a href="/lineblog">{t("lineblog.backToList")}</a>
+                </p>
+              ) : null}
+              {view.month && !view.shown.length ? (
+                <p className="lb-empty">{t("lineblog.monthEmpty")}</p>
+              ) : null}
+              {!view.article && !view.month ? (
+                <h1 className="sr-only">{t("lineblog.kicker")}</h1>
+              ) : null}
+              {loaded.posts ? (
+                loaded.posts.map((post) => (
+                  <Article
+                    key={post.id}
+                    post={post}
+                    single={Boolean(view.article)}
+                    offered={offered}
+                    translationOn={translationOn}
+                    translationRound={translationRound}
+                  />
+                ))
+              ) : loaded.failed ? (
+                <div className="lb-loading" role="alert">
+                  <p>{t("lineblog.loadFailed")}</p>
+                  <button
+                    type="button"
+                    className="lb-retry"
+                    onClick={() => window.location.reload()}
+                  >
+                    {t("lineblog.retry")}
+                  </button>
+                </div>
+              ) : (
+                <div className="lb-loading" role="status">
+                  <p>{t("lineblog.loading")}</p>
+                  <Placeholder lines={6} />
+                </div>
+              )}
+              {view.article ? <ArticlePager post={view.article} /> : null}
+              {view.article && loaded.posts ? (
+                <Comments comments={loadedComments(view.article.id) ?? []} />
+              ) : null}
+              {!view.article && !view.month ? (
+                <Pager page={view.page} pageCount={view.pageCount} />
+              ) : null}
+            </main>
+            <Sidebar current={currentMonth} design={design} />
+          </div>
+          <a href="#top" className="lb-to-top" aria-label={t("lineblog.toTop")}>
+            <ArrowUp aria-hidden="true" />
+          </a>
         </div>
-        <a href="#top" className="lb-to-top" aria-label={t("lineblog.toTop")}>
-          <ArrowUp aria-hidden="true" />
-        </a>
-      </div>
+      )}
 
       <SiteFooter disclaimer={t("lineblog.disclaimer")} />
     </div>

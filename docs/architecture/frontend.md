@@ -29,7 +29,10 @@ shared navigation restores. Each article file and comments file is its own
 build chunk: the page's code waits for the articles its address shows (and a
 single article's comments), a move keeps the current view on screen until
 the next view's files have loaded (pointing at or focusing a link starts
-that load), and a failed article load offers a reload. Its
+that load), and a failed article load offers a reload. Windows up to 600
+pixels wide render the blog's smartphone template and wider ones its PC
+layout, switching on a media query; see
+[Smartphone Template](../development/lineblog-archive.md#smartphone-template). Its
 media load from `/media/lineblog/<name>`, including the header and profile
 art of the design of the newest article shown; see
 [LINE BLOG archive maintenance](../development/lineblog-archive.md). The four

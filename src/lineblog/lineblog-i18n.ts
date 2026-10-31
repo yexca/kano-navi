@@ -27,6 +27,7 @@ export const lineblogMessages = {
     "lineblog.pageNumber": ({ page }: { page: number }) => `第 ${page} 页`,
     "lineblog.previousPage": "上一页",
     "lineblog.nextPage": "下一页",
+    "lineblog.firstPage": "第一页",
     "lineblog.lastPage": "最后一页",
     "lineblog.articleNav": "前后文章",
     "lineblog.newer": "较新的文章",
@@ -53,6 +54,9 @@ export const lineblogMessages = {
     "lineblog.openImage": "查看大图",
     "lineblog.imageViewer": "文章图片",
     "lineblog.photo": "照片",
+    "lineblog.closeProfile": "关闭博主资料",
+    "lineblog.commentCount": ({ count }: { count: number }) =>
+      `${count} 条评论`,
     "lineblog.toTop": "回到顶部",
     "lineblog.comments": "评论列表",
     "lineblog.commentsNote": "网页存档中保留下来的评论。",
@@ -90,6 +94,7 @@ export const lineblogMessages = {
     "lineblog.pageNumber": ({ page }: { page: number }) => `${page}ページ目`,
     "lineblog.previousPage": "前のページへ",
     "lineblog.nextPage": "次のページへ",
+    "lineblog.firstPage": "最初のページへ",
     "lineblog.lastPage": "最後のページへ",
     "lineblog.articleNav": "前後の記事",
     "lineblog.newer": "新しい記事",
@@ -115,6 +120,9 @@ export const lineblogMessages = {
     "lineblog.openImage": "画像を拡大",
     "lineblog.imageViewer": "記事の画像",
     "lineblog.photo": "写真",
+    "lineblog.closeProfile": "プロフィールを閉じる",
+    "lineblog.commentCount": ({ count }: { count: number }) =>
+      `コメント ${count} 件`,
     "lineblog.toTop": "ページの先頭へ",
     "lineblog.comments": "コメント一覧",
     "lineblog.commentsNote": "保存ページに残っていたコメントです。",
@@ -156,6 +164,7 @@ export const lineblogMessages = {
     "lineblog.pageNumber": ({ page }: { page: number }) => `Page ${page}`,
     "lineblog.previousPage": "Previous page",
     "lineblog.nextPage": "Next page",
+    "lineblog.firstPage": "First page",
     "lineblog.lastPage": "Last page",
     "lineblog.articleNav": "Nearby posts",
     "lineblog.newer": "Newer post",
@@ -183,6 +192,9 @@ export const lineblogMessages = {
     "lineblog.openImage": "Open image",
     "lineblog.imageViewer": "Post images",
     "lineblog.photo": "Photo",
+    "lineblog.closeProfile": "Close the profile",
+    "lineblog.commentCount": ({ count }: { count: number }) =>
+      `${count} comment${count === 1 ? "" : "s"}`,
     "lineblog.toTop": "Back to top",
     "lineblog.comments": "Comments",
     "lineblog.commentsNote":

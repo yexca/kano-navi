@@ -28,7 +28,9 @@ import {
   neighbours,
   pagerPages,
   postDate,
+  postExcerpt,
   posts,
+  shortText,
 } from "../src/lineblog/content.ts"
 import {
   chosenDesign,
@@ -445,6 +447,32 @@ test("the page query selects an article, a month or a page", () => {
   assert.deepEqual(pagerPages(1, 33), [1, 2, 3, 4, 5])
   assert.deepEqual(pagerPages(33, 33), [29, 30, 31, 32, 33])
   assert.deepEqual(pagerPages(2, 3), [1, 2, 3])
+})
+
+test("the smartphone list shows a post's opening words cut to one line", () => {
+  const excerpt = postExcerpt(
+    [
+      {
+        type: "p",
+        content: [
+          { type: "text", text: "おはよう\n\n" },
+          { type: "image", alt: "", media: "000000000000.png" },
+          {
+            type: "link",
+            href: "https://example.com/",
+            content: [{ type: "text", text: "リンク" }],
+          },
+        ],
+        en: [[{ type: "text", text: "not used" }]],
+      },
+      { type: "youtube", videoId: "x", watch: "https://example.com/v" },
+      { type: "quote", content: [{ type: "text", text: "  引用  " }] },
+    ],
+    12,
+  )
+  assert.equal(excerpt, "おはよう リンク 引用")
+  assert.equal(shortText("一二三四五六", 4), "一二三四...")
+  assert.equal(shortText("😀😀😀", 3), "😀😀😀")
 })
 
 test("post times show in Japan time", () => {
