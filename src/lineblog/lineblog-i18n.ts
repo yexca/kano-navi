@@ -11,6 +11,7 @@ export const lineblogMessages = {
     "lineblog.translationOn": "显示中文翻译",
     "lineblog.allArticles": "所有文章",
     "lineblog.design": "博客外观",
+    "lineblog.officialSites": "鹿乃的官方网站",
     "lineblog.designAuto": "自动",
     "lineblog.designAutoHint": "随所显示文章的日期变化",
     "lineblog.designPeriod": ({ from, to }: { from: string; to: string }) =>
@@ -77,6 +78,7 @@ export const lineblogMessages = {
     "lineblog.translationOn": "中国語訳を表示",
     "lineblog.allArticles": "すべての記事",
     "lineblog.design": "ブログのデザイン",
+    "lineblog.officialSites": "鹿乃オフィシャルサイト",
     "lineblog.designAuto": "自動",
     "lineblog.designAutoHint": "表示中の記事の日付に合わせて変わります",
     "lineblog.designPeriod": ({ from, to }: { from: string; to: string }) =>
@@ -143,6 +145,7 @@ export const lineblogMessages = {
     "lineblog.translationOn": "Show the English translation",
     "lineblog.allArticles": "All articles",
     "lineblog.design": "Blog design",
+    "lineblog.officialSites": "Kano's official sites",
     "lineblog.designAuto": "Auto",
     "lineblog.designAutoHint": "Follows the dates of the articles shown",
     "lineblog.designPeriod": ({ from, to }: { from: string; to: string }) =>

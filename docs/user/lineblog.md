@@ -9,7 +9,9 @@ The blog changed its design a few times; each page shows the design the blog
 had when its articles were posted. The design picker at the right of the menu
 bar keeps one of the blog's designs, with its header art and profile photo,
 on every page instead; **Auto** returns to the design of the articles shown.
-The choice is remembered on this device.
+The choice is remembered on this device. 鹿乃オフィシャルサイト in the menu
+bar opens a list of the official sites the blog linked over the years, with
+the months each one was linked.
 
 ## Reading
 
@@ -29,8 +31,9 @@ with a link to the original on YouTube.
 
 On a phone, or in a window up to about 600 pixels wide, the page takes the
 look of LINE BLOG's own smartphone pages instead: the header art cut to its
-title and picture, a menu bar that scrolls sideways with ホーム and
-鹿乃オフィシャルサイト, the **AI** mark and the design picker, and a one-line
+title and picture, a menu bar whose ホーム and 鹿乃オフィシャルサイト scroll
+sideways while the **AI** mark and the design picker stay at its right end,
+and a one-line
 profile that opens the full profile with its photo. The front page lists
 three articles at a time, each with its title, picture, opening words and
 date, and the round buttons at the bottom go to the first, previous, next and
@@ -57,8 +60,12 @@ bar carries the same **AI** mark as translated video titles. It is lit while
 the translations show: select it to hide the translations of every article,
 and select it again to show them; the choice is remembered on this device. The same mark on an
 article's date line switches that article alone, until the menu bar's mark
-is used again. Both translations come with the recovered archive and are AI
-translations of the Japanese posts.
+is used again. The blog's profile is followed by its translation, and the
+recent posts list each title's translation under it; each has its own mark
+that works the same way. While the menu bar's mark is lit, the menu bar's
+ホーム and 鹿乃オフィシャルサイト links show their translations beside them,
+without a mark of their own. The article translations come with the recovered
+archive and are AI translations of the Japanese posts.
 
 ## What Was Not Preserved
 

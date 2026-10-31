@@ -13,12 +13,20 @@ import {
   useSyncExternalStore,
 } from "react"
 import { flushSync } from "react-dom"
-import { ArrowUp, ChevronDown, ImageOff, Languages, Play } from "lucide-react"
+import {
+  ArrowUp,
+  ArrowUpRight,
+  ChevronDown,
+  ImageOff,
+  Languages,
+  Play,
+} from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -58,8 +66,8 @@ import {
   designFor,
   designOptions,
   homeIcon,
+  officialSites,
   type LineblogDesign,
-  type LineblogDesignOption,
 } from "./designs"
 import { loadedComments, loadView, viewLoaded } from "./post-files"
 import type {
@@ -81,8 +89,20 @@ const DESIGN_KEY = "kano-lineblog-design"
 
 /** The translation each content language shows; Japanese shows none. */
 const TRANSLATIONS = {
-  "zh-CN": { blocks: "zh", title: "titleZh", lang: "zh-CN" },
-  en: { blocks: "en", title: "titleEn", lang: "en" },
+  "zh-CN": {
+    blocks: "zh",
+    title: "titleZh",
+    profile: "profileTextZh",
+    lang: "zh-CN",
+    menu: { home: "首页", site: "鹿乃官方网站" },
+  },
+  en: {
+    blocks: "en",
+    title: "titleEn",
+    profile: "profileTextEn",
+    lang: "en",
+    menu: { home: "Home", site: "Kano Official Site" },
+  },
 } as const
 
 type Translation = (typeof TRANSLATIONS)[keyof typeof TRANSLATIONS]
@@ -127,6 +147,74 @@ function TranslationMark({
       <Languages aria-hidden="true" />
       {t("translation.machineShort")}
     </button>
+  )
+}
+
+/**
+ * The own translation switch of an article, the profile or the recent posts:
+ * it holds until the menu bar's switch is used.
+ */
+function useOwnTranslation(translationOn: boolean, translationRound: number) {
+  const [own, setOwn] = useState<{ round: number; on: boolean } | null>(null)
+  const on = own?.round === translationRound ? own.on : translationOn
+  return [on, () => setOwn({ round: translationRound, on: !on })] as const
+}
+
+/**
+ * A menu-bar link's Japanese label and, while the menu bar's switch shows
+ * translations, the archive's own translation after it, without an AI mark.
+ */
+function MenuLabel({
+  label,
+  item,
+  translation,
+}: {
+  label: string
+  item: keyof Translation["menu"]
+  translation: Translation | null
+}) {
+  return (
+    <>
+      {label}
+      {translation ? (
+        <small className="lb-menu-translation" lang={translation.lang}>
+          {translation.menu[item]}
+        </small>
+      ) : null}
+    </>
+  )
+}
+
+/** The blog's profile text, followed by its translation and the AI mark. */
+function ProfileText({
+  design,
+  offered,
+  translationOn,
+  translationRound,
+  className,
+}: {
+  design: LineblogDesign
+  offered: Translation | null
+  translationOn: boolean
+  /** Counts uses of the menu bar's switch. */
+  translationRound: number
+  className: string
+}) {
+  const [on, toggle] = useOwnTranslation(translationOn, translationRound)
+  return (
+    <>
+      <p className={className} lang="ja">
+        {design.profileText}
+      </p>
+      {offered ? (
+        <p className={cn(className, `${className}-translation`)}>
+          {on ? (
+            <span lang={offered.lang}>{design[offered.profile]} </span>
+          ) : null}
+          <TranslationMark on={on} onToggle={toggle} />
+        </p>
+      ) : null}
+    </>
   )
 }
 
@@ -697,9 +785,7 @@ function Article({
   const { t } = useAppSettings()
   const images = useMemo(() => postImages(post.blocks), [post])
   const translated = offered && hasTranslation(post, offered) ? offered : null
-  // The article's own switch holds until the menu bar's is used.
-  const [own, setOwn] = useState<{ round: number; on: boolean } | null>(null)
-  const on = own?.round === translationRound ? own.on : translationOn
+  const [on, toggle] = useOwnTranslation(translationOn, translationRound)
   const translation = on ? translated : null
   const translatedTitle = translation && post[translation.title]
   const [open, setOpen] = useState(-1)
@@ -725,12 +811,7 @@ function Article({
         ) : null}
         <p className="lb-article-date">
           <time dateTime={post.published}>{postDate(post.published)}</time>
-          {translated ? (
-            <TranslationMark
-              on={on}
-              onToggle={() => setOwn({ round: translationRound, on: !on })}
-            />
-          ) : null}
+          {translated ? <TranslationMark on={on} onToggle={toggle} /> : null}
         </p>
       </header>
       <div className="lb-article-body" lang="ja">
@@ -948,11 +1029,22 @@ function monthLabel(t: ReturnType<typeof useAppSettings>["t"], month: string) {
 function Sidebar({
   current,
   design,
+  offered,
+  translationOn,
+  translationRound,
 }: {
   current: string | null
   design: LineblogDesign
+  offered: Translation | null
+  translationOn: boolean
+  translationRound: number
 }) {
   const { t } = useAppSettings()
+  const [recentOn, toggleRecent] = useOwnTranslation(
+    translationOn,
+    translationRound,
+  )
+  const translation = recentOn ? offered : null
   const currentYear = current?.slice(0, 4) ?? archiveMonths[0]?.year
   return (
     <aside className="lb-sidebar">
@@ -972,17 +1064,27 @@ function Sidebar({
         <p className="lb-profile-job" lang="ja">
           ボーカリスト
         </p>
-        <p className="lb-profile-text" lang="ja">
-          {design.profileText}
-        </p>
+        <ProfileText
+          design={design}
+          offered={offered}
+          translationOn={translationOn}
+          translationRound={translationRound}
+          className="lb-profile-text"
+        />
       </section>
       <section className="lb-side" aria-labelledby="lb-recent">
-        <h2 className="lb-side-title" id="lb-recent">
-          {t("lineblog.recent")}
-        </h2>
+        <div className="lb-side-head">
+          <h2 className="lb-side-title" id="lb-recent">
+            {t("lineblog.recent")}
+          </h2>
+          {offered ? (
+            <TranslationMark on={recentOn} onToggle={toggleRecent} />
+          ) : null}
+        </div>
         <ul className="lb-recent">
           {posts.slice(0, 10).map((post) => {
             const thumbnail = post.thumbnail
+            const translatedTitle = translation && post[translation.title]
             return (
               <li key={post.id}>
                 <a href={articleLink(post)}>
@@ -1000,7 +1102,12 @@ function Sidebar({
                   ) : (
                     <span className="lb-recent-blank" aria-hidden="true" />
                   )}
-                  <span lang="ja">{post.title}</span>
+                  <span className="lb-recent-title">
+                    <span lang="ja">{post.title}</span>
+                    {translatedTitle && translatedTitle !== post.title ? (
+                      <small lang={translation.lang}>{translatedTitle}</small>
+                    ) : null}
+                  </span>
                 </a>
               </li>
             )
@@ -1038,15 +1145,17 @@ function Sidebar({
   )
 }
 
+/** The months a design or official site was in use, from Japan dates. */
 function designPeriod(
   t: ReturnType<typeof useAppSettings>["t"],
-  option: LineblogDesignOption,
+  since: string,
+  until?: string,
 ) {
   const month = (date: string) => date.slice(0, 7).replace("-", "/")
   // The first design dates from before the blog's first post.
-  const oldest = posts.at(-1)?.published.slice(0, 10) ?? option.id
-  const from = month(option.id < oldest ? oldest : option.id)
-  const to = option.until ? month(option.until) : ""
+  const oldest = posts.at(-1)?.published.slice(0, 10) ?? since
+  const from = month(since < oldest ? oldest : since)
+  const to = until ? month(until) : ""
   // A design shown for part of one month reads as that month.
   if (to === from) return from
   return t("lineblog.designPeriod", { from, to })
@@ -1067,7 +1176,9 @@ function DesignPicker({
 }) {
   const { t } = useAppSettings()
   const chosen = designOptions.find((option) => option.id === choice)
-  const current = chosen ? designPeriod(t, chosen) : t("lineblog.designAuto")
+  const current = chosen
+    ? designPeriod(t, chosen.id, chosen.until)
+    : t("lineblog.designAuto")
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -1130,7 +1241,7 @@ function DesignPicker({
                 aria-hidden="true"
               />
               <span className="lb-design-copy">
-                <strong>{designPeriod(t, option)}</strong>
+                <strong>{designPeriod(t, option.id, option.until)}</strong>
               </span>
               <span
                 className="lb-design-accent"
@@ -1145,6 +1256,67 @@ function DesignPicker({
   )
 }
 
+/**
+ * The menu bar's 鹿乃オフィシャルサイト opens the official sites the blog
+ * linked over the years, each with the months it was linked.
+ */
+function OfficialSiteMenu({
+  translation,
+}: {
+  translation: Translation | null
+}) {
+  const { t } = useAppSettings()
+  const [open, setOpen] = useState(false)
+  // The phone menu scrolls sideways, so a touch opens the list only once it
+  // ends as a tap, not when a swipe starts on the link. A tap on the open
+  // list's link closes it, though pressing it already dismissed the list.
+  const touch = useRef<{ open: boolean } | null>(null)
+  return (
+    <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger
+        asChild
+        onPointerDown={(event) => {
+          touch.current = event.pointerType === "mouse" ? null : { open }
+          if (touch.current) event.preventDefault()
+        }}
+        onClick={() => {
+          if (touch.current) setOpen(!touch.current.open)
+        }}
+      >
+        <button type="button" className="lb-site-button">
+          <span lang="ja">
+            <MenuLabel
+              label="鹿乃オフィシャルサイト"
+              item="site"
+              translation={translation}
+            />
+          </span>
+          <ChevronDown aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        collisionPadding={16}
+        className="lb-site-menu"
+      >
+        <DropdownMenuLabel>{t("lineblog.officialSites")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {officialSites.map((site) => (
+          <DropdownMenuItem key={site.url} asChild className="lb-site-item">
+            <ExternalLink href={site.url}>
+              <span className="lb-design-copy">
+                <strong>{site.url.replace(/^https?:\/\//u, "")}</strong>
+                <small>{designPeriod(t, site.since, site.until)}</small>
+              </span>
+              <ArrowUpRight aria-hidden="true" />
+            </ExternalLink>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Smartphone template
 // ---------------------------------------------------------------------------
@@ -1153,7 +1325,17 @@ function DesignPicker({
  * The template's one-line profile under the menu bar opens this popup: the
  * profile photo, the name and the whole profile text.
  */
-function ProfilePopup({ design }: { design: LineblogDesign }) {
+function ProfilePopup({
+  design,
+  offered,
+  translationOn,
+  translationRound,
+}: {
+  design: LineblogDesign
+  offered: Translation | null
+  translationOn: boolean
+  translationRound: number
+}) {
   const { t } = useAppSettings()
   const dialog = useRef<HTMLDialogElement>(null)
   const close = () => dialog.current?.close()
@@ -1203,9 +1385,13 @@ function ProfilePopup({ design }: { design: LineblogDesign }) {
         <h2 id="lbl-profile-name" lang="ja">
           鹿乃
         </h2>
-        <p className="lbl-profile-text" lang="ja">
-          {design.profileText}
-        </p>
+        <ProfileText
+          design={design}
+          offered={offered}
+          translationOn={translationOn}
+          translationRound={translationRound}
+          className="lbl-profile-text"
+        />
       </dialog>
     </div>
   )
@@ -1524,31 +1710,38 @@ function SmartphoneBlog({
                 lang="ja"
                 aria-current={home ? "page" : undefined}
               >
-                ホーム
+                <MenuLabel
+                  label="ホーム"
+                  item="home"
+                  translation={translationOn ? offered : null}
+                />
               </a>
             </li>
             <li>
-              <ExternalLink href={design.officialSite} lang="ja">
-                鹿乃オフィシャルサイト
-              </ExternalLink>
-            </li>
-            <li className="lbl-menu-tools">
-              {offered ? (
-                <TranslationMark
-                  on={translationOn}
-                  all
-                  onToggle={onToggleTranslation}
-                />
-              ) : null}
-              <DesignPicker
-                choice={designChoice}
-                design={design}
-                onChoose={onChooseDesign}
-              />
+              <OfficialSiteMenu translation={translationOn ? offered : null} />
             </li>
           </ul>
+          <div className="lbl-menu-tools">
+            {offered ? (
+              <TranslationMark
+                on={translationOn}
+                all
+                onToggle={onToggleTranslation}
+              />
+            ) : null}
+            <DesignPicker
+              choice={designChoice}
+              design={design}
+              onChoose={onChooseDesign}
+            />
+          </div>
         </nav>
-        <ProfilePopup design={design} />
+        <ProfilePopup
+          design={design}
+          offered={offered}
+          translationOn={translationOn}
+          translationRound={translationRound}
+        />
       </header>
 
       <main className="lbl-content" id="lineblog-content" tabIndex={-1}>
@@ -1756,9 +1949,7 @@ export function LineblogApp() {
                   decoding="async"
                 />
               </a>
-              <ExternalLink href={design.officialSite} lang="ja">
-                鹿乃オフィシャルサイト
-              </ExternalLink>
+              <OfficialSiteMenu translation={translationOn ? offered : null} />
               <div className="lb-menu-tools">
                 {offered ? (
                   <TranslationMark
@@ -1835,7 +2026,13 @@ export function LineblogApp() {
                 <Pager page={view.page} pageCount={view.pageCount} />
               ) : null}
             </main>
-            <Sidebar current={currentMonth} design={design} />
+            <Sidebar
+              current={currentMonth}
+              design={design}
+              offered={offered}
+              translationOn={translationOn}
+              translationRound={translationRound}
+            />
           </div>
           <a href="#top" className="lb-to-top" aria-label={t("lineblog.toTop")}>
             <ArrowUp aria-hidden="true" />

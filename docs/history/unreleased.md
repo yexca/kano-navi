@@ -242,8 +242,13 @@
   picker
   keeps one era's header art and profile photo in place of the automatic one.
   English and Simplified Chinese readers can show or hide the AI paragraph
-  translations for every article or one article, and the About page credits
-  the fan recovery project.
+  translations for every article or one article, and the blog's profile and
+  the titles of its recent posts carry their own translations and **AI**
+  switches. The menu bar's ホーム and 鹿乃オフィシャルサイト links show their
+  translations beside them, and 鹿乃オフィシャルサイト opens a list of both
+  official sites the blog linked, with their months. On phones the **AI** mark
+  and the design picker stay at the right of the menu bar while its links
+  scroll. The About page credits the fan recovery project.
 - Today's weekly schedule row uses a berry date disc and accent rule on
   phones and tablets, while the site header shows the name with an
   `Unofficial` mark on wide screens.

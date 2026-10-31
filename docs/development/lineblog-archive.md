@@ -69,7 +69,8 @@ gets its media.
   archived (one from 2018-01 to 2018-05, one shown on 2018-12-04); those
   periods keep the photo before or after them. Each design also carries the
   official-site address of the menu bar, which changed with the 2018-05-18
-  design. A reader can pick one design in place
+  design; the menu bar's 鹿乃オフィシャルサイト lists every address with the
+  months it was linked. A reader can pick one design in place
   of the automatic one: the picker offers each run of designs with the same
   header, profile photo and accent once, applying the run's latest design,
   and the browser remembers the choice.

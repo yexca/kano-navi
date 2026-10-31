@@ -21,6 +21,10 @@ export type LineblogDesign = {
   accent: string
   /** The profile text beside it, kept in its original Japanese. */
   profileText: string
+  /** The profile text's Simplified Chinese translation. */
+  profileTextZh: string
+  /** The profile text's English translation. */
+  profileTextEn: string
   /** The official site the menu bar linked as 鹿乃オフィシャルサイト. */
   officialSite: string
   header: LineblogArt
@@ -104,6 +108,25 @@ const PROFILE_LEAD =
   "内なる強さが秘められた優しい歌声\n動画共有サイトを中心に活動している人気の女性ボーカリスト。"
 const PROFILE_TWO_SINGLES = `${PROFILE_LEAD}1stSG「Stellar-rium」はTVアニメ「放課後のプレアデス」OP曲、2ndSG「ディアブレイブ」は「ヘヴィーオブジェクト」ED曲。`
 const PROFILE_FOUR_SINGLES = `${PROFILE_LEAD}1stSG「Stellar-rium」はTVアニメ「放課後のプレアデス」OP、2ndSG「ディアブレイブ」は「ヘヴィーオブジェクト」ED、3rdSG「nameless」は「天鏡のアルデラミン」ED、4thSG「day by day」は「ソード・オラトリア」ED。`
+const PROFILE_LEAD_ZH =
+  "蕴藏着内在力量的温柔歌声\n以视频分享网站为中心活动的人气女歌手。"
+const PROFILE_TWO_SINGLES_ZH = `${PROFILE_LEAD_ZH}1st单曲《Stellar-rium》为TV动画《放学后的昴宿星》OP曲，2nd单曲《ディアブレイブ》为《重装武器》ED曲。`
+const PROFILE_FOUR_SINGLES_ZH = `${PROFILE_LEAD_ZH}1st单曲《Stellar-rium》为TV动画《放学后的昴宿星》OP，2nd单曲《ディアブレイブ》为《重装武器》ED，3rd单曲《nameless》为《天镜的极北之星》ED，4th单曲《day by day》为《剑姬神圣谭》ED。`
+const PROFILE_LEAD_EN =
+  "A gentle singing voice with a hidden inner strength\nA popular female vocalist active mainly on video-sharing sites."
+const PROFILE_TWO_SINGLES_EN = `${PROFILE_LEAD_EN} Her 1st single "Stellar-rium" is the opening theme of the TV anime "Wish Upon the Pleiades", and her 2nd single "Dear Brave" the ending theme of "Heavy Object".`
+const PROFILE_FOUR_SINGLES_EN = `${PROFILE_LEAD_EN} Her 1st single "Stellar-rium" is the opening of the TV anime "Wish Upon the Pleiades", her 2nd single "Dear Brave" the ending of "Heavy Object", her 3rd single "nameless" the ending of "Alderamin on the Sky", and her 4th single "day by day" the ending of "Sword Oratoria".`
+
+const twoSingles = {
+  profileText: PROFILE_TWO_SINGLES,
+  profileTextZh: PROFILE_TWO_SINGLES_ZH,
+  profileTextEn: PROFILE_TWO_SINGLES_EN,
+}
+const fourSingles = {
+  profileText: PROFILE_FOUR_SINGLES,
+  profileTextZh: PROFILE_FOUR_SINGLES_ZH,
+  profileTextEn: PROFILE_FOUR_SINGLES_EN,
+}
 
 /*
  * Two profile photos were never archived: the one shown from 2018-01-13 to
@@ -114,7 +137,7 @@ export const designs: LineblogDesign[] = [
   {
     since: "2015-01-01",
     accent: "#913143",
-    profileText: PROFILE_TWO_SINGLES,
+    ...twoSingles,
     officialSite: SITE_WHV,
     header: header2015,
     profile: profile2015,
@@ -124,7 +147,7 @@ export const designs: LineblogDesign[] = [
   {
     since: "2016-03-18",
     accent: "#f2746f",
-    profileText: PROFILE_TWO_SINGLES,
+    ...twoSingles,
     officialSite: SITE_WHV,
     header: header2016,
     profile: profile2016,
@@ -132,7 +155,7 @@ export const designs: LineblogDesign[] = [
   {
     since: "2017-03-13",
     accent: "#f2746f",
-    profileText: PROFILE_FOUR_SINGLES,
+    ...fourSingles,
     officialSite: SITE_WHV,
     header: header2016,
     profile: profile2016,
@@ -140,7 +163,7 @@ export const designs: LineblogDesign[] = [
   {
     since: "2017-04-14",
     accent: "#f2746f",
-    profileText: PROFILE_FOUR_SINGLES,
+    ...fourSingles,
     officialSite: SITE_WHV,
     header: header2016,
     profile: profile2017,
@@ -148,7 +171,7 @@ export const designs: LineblogDesign[] = [
   {
     since: "2017-04-29",
     accent: "#826856",
-    profileText: PROFILE_FOUR_SINGLES,
+    ...fourSingles,
     officialSite: SITE_WHV,
     header: header2017,
     profile: profile2017,
@@ -156,7 +179,7 @@ export const designs: LineblogDesign[] = [
   {
     since: "2018-05-18",
     accent: "#826856",
-    profileText: PROFILE_FOUR_SINGLES,
+    ...fourSingles,
     officialSite: SITE_AMEBA,
     header: header2017,
     profile: profile2018,
@@ -164,7 +187,7 @@ export const designs: LineblogDesign[] = [
   {
     since: "2018-07-21",
     accent: "#376c9c",
-    profileText: PROFILE_FOUR_SINGLES,
+    ...fourSingles,
     officialSite: SITE_AMEBA,
     header: header2017,
     profile: profile2018,
@@ -172,7 +195,7 @@ export const designs: LineblogDesign[] = [
   {
     since: "2018-12-04",
     accent: "#376c9c",
-    profileText: PROFILE_FOUR_SINGLES,
+    ...fourSingles,
     officialSite: SITE_AMEBA,
     header: header2018,
     profile: profile2019,
@@ -207,6 +230,26 @@ export const designOptions = designs.reduce<LineblogDesignOption[]>(
     if (last) last.until = design.since
     options.push({ id: design.since, design })
     return options
+  },
+  [],
+)
+
+export type LineblogOfficialSite = {
+  url: string
+  /** Japan date (inclusive) from which the menu bar linked it. */
+  since: string
+  /** Japan date (exclusive) of the next site, if any. */
+  until?: string
+}
+
+/** The official sites the menu bar linked, oldest first. */
+export const officialSites = designs.reduce<LineblogOfficialSite[]>(
+  (sites, design) => {
+    const last = sites.at(-1)
+    if (last?.url === design.officialSite) return sites
+    if (last) last.until = design.since
+    sites.push({ url: design.officialSite, since: design.since })
+    return sites
   },
   [],
 )

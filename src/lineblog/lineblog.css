@@ -90,7 +90,8 @@
   padding-inline: var(--gutter);
 }
 
-.lb .lb-menu-inner a {
+.lb .lb-menu-inner a,
+.lb .lb-menu-inner .lb-site-button {
   position: relative;
   display: block;
   padding: 27px 15px 25px;
@@ -100,12 +101,16 @@
   line-height: 1;
 }
 
-.lb .lb-menu-inner a:hover {
+.lb .lb-menu-inner a:hover,
+.lb .lb-menu-inner .lb-site-button:hover,
+.lb .lb-menu-inner .lb-site-button[data-state="open"] {
   color: var(--lb-accent);
   text-decoration: none;
 }
 
-.lb-menu-inner a:hover::after {
+.lb-menu-inner a:hover::after,
+.lb-menu-inner .lb-site-button:hover::after,
+.lb-menu-inner .lb-site-button[data-state="open"]::after {
   content: "";
   position: absolute;
   bottom: 0;
@@ -130,6 +135,48 @@
   width: 30px;
   height: 65px;
   object-fit: none;
+}
+
+/* 鹿乃オフィシャルサイト opens the list of the official sites. */
+.lb .lb-menu-inner button.lb-site-button,
+.lb.lb-lite .lbl-menu li > button.lb-site-button {
+  display: inline-flex;
+  white-space: nowrap;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.lb-site-button svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+.lb-site-menu {
+  width: min(320px, calc(100vw - 32px));
+}
+
+.lb-site-item {
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.lb-site-item .lb-design-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A menu link's translation follows its Japanese label in a lighter weight. */
+.lb-menu-translation {
+  margin-left: 6px;
+  font-size: 0.85em;
+  font-weight: 400;
+  opacity: 0.8;
 }
 
 /* The archive's own controls, after the blog's links: every article's
@@ -217,6 +264,13 @@
 .lb-design-copy small {
   color: hsl(var(--muted-foreground));
   font-size: 11px;
+}
+
+/* A highlighted item's hint takes the item's highlighted text colour. */
+.lb-design-item[data-highlighted] .lb-design-copy small,
+.lb-site-item[data-highlighted] .lb-design-copy small {
+  color: inherit;
+  opacity: 0.8;
 }
 
 .lb-design-accent {
@@ -856,8 +910,24 @@
   white-space: pre-line;
 }
 
+.lb-profile-text-translation {
+  margin-top: 10px;
+}
+
 .lb-side {
   margin-bottom: 60px;
+}
+
+/* A side title and, for the recent posts, their translation switch. */
+.lb-side-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.lb-side-head .lb-side-title {
+  margin: 0;
 }
 
 .lb-side-title {
@@ -881,6 +951,17 @@
   gap: 15px;
   color: var(--lb-text);
   line-height: 1.5;
+}
+
+.lb-recent-title {
+  display: grid;
+  min-width: 0;
+}
+
+.lb-recent-title small {
+  color: var(--lb-soft);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .lb-recent img,
@@ -1050,24 +1131,32 @@
 
 /* The menu bar: 39px of 13px grey links that scroll sideways; the current
    one is bold in the accent colour with a 2px bar under it. */
+/* The blog's links scroll sideways; the archive's controls stay at the end. */
 .lbl-menu {
+  display: flex;
   height: 39px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   background: var(--lb-paper);
-  scrollbar-width: none;
 }
 
 .lbl-menu ul {
   display: flex;
-  width: max-content;
-  min-width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
   margin: 0;
   padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
   list-style: none;
+  scrollbar-width: none;
 }
 
-.lb.lb-lite .lbl-menu li > a {
+.lbl-menu ul::-webkit-scrollbar {
+  display: none;
+}
+
+.lb.lb-lite .lbl-menu li > a,
+.lb.lb-lite .lbl-menu li > .lb-site-button {
   position: relative;
   display: block;
   padding: 13px;
@@ -1092,13 +1181,13 @@
   border-bottom: 2px solid var(--lb-accent);
 }
 
-/* The archive's own controls follow the blog's links. */
 .lbl-menu-tools {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   padding: 0 10px;
+  border-left: 1px solid var(--lb-rule);
 }
 
 /* The one-line profile: an 11px line in a white strip that opens the
@@ -1182,6 +1271,10 @@
   font-size: 11px;
   line-height: 1.5;
   white-space: pre-line;
+}
+
+.lbl-profile-text-translation {
+  margin-top: -12px;
 }
 
 /* ---- Smartphone content ------------------------------------------------ */
