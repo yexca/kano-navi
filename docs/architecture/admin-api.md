@@ -243,9 +243,10 @@ one, and rejects other fields and intervals outside 5–360 minutes with
 | `POST /events/{id}/unmerge` |                                                                                                                         | `{event}`         |
 | `DELETE /events/{id}`       |                                                                                                                         | `204` (tombstone) |
 
-`provenance` is `automatic` or `manual`; `cancellation` is `none`,
+`provenance` is `automatic`, `manual` or `unconfirmed` (automatic and not
+locked by an operator); `cancellation` is `none`,
 `llm_suspected` or `manual_confirmed`; `order` is `asc` or `desc` (default);
-`deleted=1` includes tombstones. Event fields are `title`, `detail`,
+`deleted=1` includes tombstones and `deleted=only` lists only them. Event fields are `title`, `detail`,
 `startsOn`, `startsAt`, `endsAt`, `timePrecision`, `eventType`, `status`,
 `url`, `cancellationStatus` and `cancellationReason` (required for
 `manual_confirmed`). Every write is manual: it locks the event against
@@ -350,18 +351,18 @@ has neither.
 
 ## Videos
 
-| Method and path             | Body / query                                              | Result                                       |
-| --------------------------- | --------------------------------------------------------- | -------------------------------------------- |
-| `GET /videos`               | `page`, `pageSize` (≤ 200), `status`, `kind`, `thumbnail` | list plus `featuredVideoId`, `featuredVideo` |
-| `PUT /videos/featured`      | `{videoId}` (`null` restores automatic selection)         | `{featuredVideoId}`                          |
-| `GET /videos/{id}/history`  |                                                           | `{video, revisions, thumbnails}`             |
-| `PUT /videos/{id}`          | `{title?, kind?, thumbnail?, isShort?}`                   | `{video}`                                    |
-| `POST /videos/{id}/refresh` |                                                           | `202 {video, started, run}`                  |
-| `POST /videos/bilibili`     | `{input}` (BV ID or bilibili.com video link)              | `{video, started, run}`                      |
-| `GET /videos/merges`        |                                                           | `{items}` merge suggestions                  |
-| `GET /videos/{id}/merges`   |                                                           | `{items}` for one Bilibili upload            |
-| `POST /videos/{id}/merge`   | `{into}` (YouTube video ID or watch link)                 | `{video}`                                    |
-| `POST /videos/{id}/unmerge` |                                                           | `{video}`                                    |
+| Method and path             | Body / query                                                                                          | Result                                       |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `GET /videos`               | `page`, `pageSize` (≤ 200), `status`, `kind`, `thumbnail`, `source`, `search`, `merge`, `translation` | list plus `featuredVideoId`, `featuredVideo` |
+| `PUT /videos/featured`      | `{videoId}` (`null` restores automatic selection)                                                     | `{featuredVideoId}`                          |
+| `GET /videos/{id}/history`  |                                                                                                       | `{video, revisions, thumbnails}`             |
+| `PUT /videos/{id}`          | `{title?, kind?, thumbnail?, isShort?}`                                                               | `{video}`                                    |
+| `POST /videos/{id}/refresh` |                                                                                                       | `202 {video, started, run}`                  |
+| `POST /videos/bilibili`     | `{input}` (BV ID or bilibili.com video link)                                                          | `{video, started, run}`                      |
+| `GET /videos/merges`        |                                                                                                       | `{items}` merge suggestions                  |
+| `GET /videos/{id}/merges`   |                                                                                                       | `{items}` for one Bilibili upload            |
+| `POST /videos/{id}/merge`   | `{into}` (YouTube video ID or watch link)                                                             | `{video}`                                    |
+| `POST /videos/{id}/unmerge` |                                                                                                       | `{video}`                                    |
 
 Each video's `thumbnailUrl` is the local `/media/<id>?v=<sha256>` URL of its
 cached thumbnail, or `null` until that file is ready; the remote CDN address is
@@ -372,7 +373,12 @@ is listed, or `null` while the board chooses automatically.
 
 Changing the featured video advances the dashboard revision.
 
-`GET /videos` also accepts `source` (`youtube` or `bilibili`).
+`status` is `published`, `upcoming` or `live`; `thumbnail` is `ready`,
+`present` or `missing`; `source` is `youtube` or `bilibili`. `search` matches
+the shown title, the platform title or the video ID. `merge=visible` excludes
+uploads merged into another video and `merge=merged` lists only them;
+`translation` is `incomplete`, `complete` or `requested`, as for posts, over
+the videos the translate step covers.
 
 ### Bilibili uploads
 

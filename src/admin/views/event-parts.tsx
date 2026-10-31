@@ -74,7 +74,7 @@ export function MergeBadge({ event }: { event: AdminEvent }) {
 }
 
 /** The Japan date `days` away from `day`. */
-function shiftDay(day: string, days: number) {
+export function shiftDay(day: string, days: number) {
   const date = new Date(`${day}T12:00:00+09:00`)
   date.setUTCDate(date.getUTCDate() + days)
   return japanDay(date.toISOString())

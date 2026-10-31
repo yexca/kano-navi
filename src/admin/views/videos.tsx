@@ -6,6 +6,7 @@ import {
   History,
   ImageOff,
   Pencil,
+  Search,
   Sparkles,
   Star,
   StarOff,
@@ -19,6 +20,7 @@ import {
   Badge,
   Button,
   Empty,
+  IconButton,
   Loading,
   PageHeader,
   Pager,
@@ -31,8 +33,8 @@ import {
   TranslationBacklog,
   TranslationCell,
 } from "@/admin/views/translation-parts"
-import { BilibiliIcon } from "@/admin/views/run-parts"
-import { VideoEditor } from "@/admin/views/video-editor"
+import { stepIcons } from "@/admin/views/run-parts"
+import { formatLength, VideoEditor } from "@/admin/views/video-editor"
 
 /** Only local, already cached media is shown; never a remote CDN URL. */
 function localUrl(value: string | null | undefined) {
@@ -60,9 +62,11 @@ function VideoWhen({ video }: { video: AdminVideo }) {
 function FeaturedVideo({
   video,
   onClear,
+  onEdit,
 }: {
   video: AdminVideo | null
   onClear: () => Promise<void>
+  onEdit: (video: AdminVideo) => void
 }) {
   const { t } = useAppSettings()
   const [busy, setBusy] = useState(false)
@@ -100,6 +104,14 @@ function FeaturedVideo({
         <Button
           size="sm"
           variant="ghost"
+          icon={Pencil}
+          onClick={() => onEdit(video)}
+        >
+          {t("admin.videos.edit")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
           icon={StarOff}
           busy={busy}
           onClick={async () => {
@@ -125,16 +137,28 @@ function FeaturedVideo({
 }
 
 /** Corrections, platform history and a pending refresh, when there are any. */
-function VideoMarks({ video }: { video: AdminVideo }) {
+function VideoMarks({
+  video,
+  featured,
+}: {
+  video: AdminVideo
+  featured: boolean
+}) {
   const { t } = useAppSettings()
   const corrected =
     video.manualTitle !== null ||
     video.manualKind !== null ||
     video.manualThumbnail !== null ||
     video.manualIsShort !== null
-  if (!corrected && !video.revisions && !video.refreshRequestedAt) return null
+  if (!featured && !corrected && !video.revisions && !video.refreshRequestedAt)
+    return null
   return (
-    <span className="adm-video-marks">
+    <span className="adm-chip-row">
+      {featured ? (
+        <Badge tone="berry" icon={Star}>
+          {t("admin.videos.featured")}
+        </Badge>
+      ) : null}
       {corrected ? (
         <Badge tone="sky" icon={Pencil}>
           {t("admin.videos.corrected")}
@@ -154,7 +178,39 @@ function VideoMarks({ video }: { video: AdminVideo }) {
   )
 }
 
-function VideoCard({
+/** The platform, when, kind, length and format on one line. */
+function VideoMeta({ video }: { video: AdminVideo }) {
+  const { t, locale } = useAppSettings()
+  const PlatformIcon = stepIcons[video.source]
+  const length = formatLength(video.durationSeconds)
+  return (
+    <span className="adm-video-meta">
+      {PlatformIcon ? (
+        <span
+          className="adm-video-platform"
+          title={t(`admin.videos.source.${video.source}`)}
+        >
+          <PlatformIcon aria-hidden />
+          <span className="adm-visually-hidden">
+            {t(`admin.videos.source.${video.source}`)}
+          </span>
+        </span>
+      ) : null}
+      <time>
+        {video.isUpcoming
+          ? t("admin.videos.scheduled", {
+              time: formatDateTime(video.scheduledAt, locale),
+            })
+          : formatDateTime(video.publishedAt, locale)}
+      </time>
+      {video.kind ? <span>{video.kind}</span> : null}
+      {length ? <span>{length}</span> : null}
+      {video.isShort ? <span>{t("admin.videos.format.short")}</span> : null}
+    </span>
+  )
+}
+
+function VideoRow({
   video,
   featured,
   onFeature,
@@ -174,28 +230,39 @@ function VideoCard({
   // Bilibili uploads are not on the board yet, so they cannot be featured.
   const bilibili = video.source === "bilibili"
   return (
-    <article className={`adm-video${featured ? " is-featured" : ""}`}>
-      <div className="adm-video-thumb">
+    <li
+      className={`adm-video-row${featured ? " is-featured" : ""}${video.mergedInto ? " is-merged" : ""}`}
+    >
+      {/* A pointer shortcut to the dialog; the title is the keyboard path. */}
+      <span
+        className="adm-video-thumb"
+        aria-hidden
+        onClick={() => onEdit(video)}
+      >
         {thumbnail ? (
           <img src={thumbnail} alt="" loading="lazy" />
         ) : (
-          <ImageOff aria-hidden />
+          <ImageOff />
         )}
-        {featured ? (
-          <Badge tone="berry" icon={Star}>
-            {t("admin.videos.featured")}
-          </Badge>
-        ) : bilibili ? (
-          <Badge tone="sky" icon={BilibiliIcon}>
-            {t("admin.videos.source.bilibili")}
-          </Badge>
-        ) : null}
-      </div>
-      <div className="adm-video-body">
-        <strong>{video.title}</strong>
-        <VideoWhen video={video} />
-        <VideoMarks video={video} />
+      </span>
+      <div className="adm-video-main">
+        <button
+          type="button"
+          className="adm-video-title"
+          onClick={() => onEdit(video)}
+          title={
+            video.manualTitle !== null && video.manualTitle !== undefined
+              ? video.sourceTitle
+              : undefined
+          }
+        >
+          {video.title}
+        </button>
+        <VideoMeta video={video} />
+        <VideoMarks video={video} featured={featured} />
         <MergeLine video={video} onChanged={onMerged} onMerge={onEdit} />
+      </div>
+      <div className="adm-video-translation">
         <TranslationCell
           owner="video"
           id={video.id}
@@ -204,34 +271,26 @@ function VideoCard({
           onChanged={onTranslated}
         />
       </div>
-      <footer className="adm-video-actions">
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={Pencil}
-          onClick={() => onEdit(video)}
-        >
-          {t("admin.videos.edit")}
-        </Button>
+      <div className="adm-row-actions adm-video-row-actions">
         {featured ? (
-          <Button
-            size="sm"
-            variant="ghost"
+          <IconButton
             icon={StarOff}
+            label={t("admin.videos.unfeature")}
+            className="is-on"
             onClick={() => onFeature(null)}
-          >
-            {t("admin.videos.unfeature")}
-          </Button>
+          />
         ) : bilibili ? null : (
-          <Button
-            size="sm"
-            variant="ghost"
+          <IconButton
             icon={Star}
+            label={t("admin.videos.feature")}
             onClick={() => onFeature(video)}
-          >
-            {t("admin.videos.feature")}
-          </Button>
+          />
         )}
+        <IconButton
+          icon={Pencil}
+          label={t("admin.videos.edit")}
+          onClick={() => onEdit(video)}
+        />
         <a
           className="adm-icon-button"
           href={video.url}
@@ -242,29 +301,52 @@ function VideoCard({
         >
           <ExternalLink aria-hidden />
         </a>
-      </footer>
-    </article>
+      </div>
+    </li>
   )
+}
+
+type VideoView = "all" | "upcoming" | "bilibili" | "translation"
+
+/**
+ * Each tab is an operator task. Uploads merged into another video show on
+ * that video, so only the Bilibili tab lists them as rows of their own.
+ */
+const viewFilters: Record<VideoView, Record<string, string>> = {
+  all: { merge: "visible" },
+  upcoming: { status: "upcoming", merge: "visible" },
+  bilibili: { source: "bilibili" },
+  translation: { translation: "incomplete" },
 }
 
 function VideoList() {
   const { t } = useAppSettings()
   const { api, act } = useAdmin()
-  const [status, setStatus] = useState<"" | "published" | "upcoming" | "live">(
-    "",
-  )
-  const [source, setSource] = useState<"" | "youtube" | "bilibili">("")
+  const [view, setView] = useState<VideoView>("all")
+  const [search, setSearch] = useState("")
+  const [query, setQuery] = useState("")
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<string | null>(null)
-  // A merge or undo changes two cards and the suggestions, so all reload.
+  // A merge or undo changes two rows and the suggestions, so all reload.
   const [merges, setMerges] = useState(0)
   const videos = useResource(
-    () => api.videos({ status, source, page, pageSize: 24 }),
-    [status, source, page, merges],
+    () =>
+      api.videos({
+        ...viewFilters[view],
+        search: query,
+        page,
+        pageSize: 30,
+      }),
+    [view, query, page, merges],
   )
+  const submitSearch = () => {
+    if (search === query) return
+    setQuery(search)
+    setPage(1)
+  }
   const merged = () => setMerges((value) => value + 1)
   const data = videos.data
-  // A saved correction replaces its card, and the pinned copy, in place.
+  // A saved correction replaces its row, and the pinned copy, in place.
   const replace = (video: AdminVideo) =>
     videos.setData(
       (current) =>
@@ -300,69 +382,89 @@ function VideoList() {
         <FeaturedVideo
           video={data.featuredVideo}
           onClear={() => feature(null)}
+          onEdit={(video) => setEditing(video.id)}
         />
       ) : null}
       <MergeSuggestions reloadKey={merges} onMerged={merged} />
-      <div className="adm-toolbar">
-        <Segmented
-          label={t("admin.videos.filter")}
-          value={status}
-          onChange={(value) => {
-            setStatus(value)
-            setPage(1)
-          }}
-          options={[
-            { value: "", label: t("admin.videos.all") },
-            { value: "upcoming", label: t("admin.videos.upcoming") },
-            { value: "live", label: t("admin.videos.live") },
-            { value: "published", label: t("admin.videos.published") },
-          ]}
-        />
-        <Segmented
-          label={t("admin.videos.source")}
-          value={source}
-          onChange={(value) => {
-            setSource(value)
-            setPage(1)
-          }}
-          options={[
-            { value: "", label: t("admin.videos.all") },
-            { value: "youtube", label: t("admin.videos.source.youtube") },
-            { value: "bilibili", label: t("admin.videos.source.bilibili") },
-          ]}
-        />
-        <TranslationBacklog
-          owner="video"
-          onQueued={() => void videos.reload()}
-        />
-      </div>
-      {!data ? (
-        <Loading />
-      ) : data.items.length ? (
-        <>
-          <div className="adm-video-grid">
-            {data.items.map((video) => (
-              <VideoCard
-                key={video.id}
-                video={video}
-                featured={video.id === data.featuredVideoId}
-                onFeature={feature}
-                onEdit={(chosen) => setEditing(chosen.id)}
-                onTranslated={() => void videos.reload()}
-                onMerged={merged}
-              />
-            ))}
-          </div>
-          <Pager
-            page={data.page}
-            totalPages={data.totalPages}
-            total={data.total}
-            onPage={setPage}
+      <Panel>
+        <div className="adm-list-tools">
+          <Segmented
+            label={t("admin.videos.view")}
+            value={view}
+            options={(
+              ["all", "upcoming", "bilibili", "translation"] as const
+            ).map((value) => ({
+              value,
+              label: t(`admin.videos.view.${value}`),
+            }))}
+            onChange={(value) => {
+              setView(value)
+              setPage(1)
+            }}
           />
-        </>
-      ) : (
-        <Empty icon={ImageOff} title={t("admin.videos.empty")} />
-      )}
+          <form
+            className="adm-search"
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault()
+              submitSearch()
+            }}
+          >
+            <Search aria-hidden />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onBlur={submitSearch}
+              placeholder={t("admin.videos.search")}
+              aria-label={t("admin.videos.search")}
+            />
+          </form>
+        </div>
+        <div className="adm-list-bar">
+          <span className="adm-muted">
+            {data ? t("admin.pager.total", { total: data.total }) : null}
+          </span>
+          <TranslationBacklog
+            owner="video"
+            onQueued={() => void videos.reload()}
+          />
+        </div>
+        {!data ? (
+          <Loading />
+        ) : data.items.length ? (
+          <>
+            <ul className="adm-video-list">
+              {data.items.map((video) => (
+                <VideoRow
+                  key={video.id}
+                  video={video}
+                  featured={video.id === data.featuredVideoId}
+                  onFeature={feature}
+                  onEdit={(chosen) => setEditing(chosen.id)}
+                  onTranslated={() => void videos.reload()}
+                  onMerged={merged}
+                />
+              ))}
+            </ul>
+            <Pager
+              page={data.page}
+              totalPages={data.totalPages}
+              total={data.total}
+              onPage={setPage}
+            />
+          </>
+        ) : (
+          <Empty
+            icon={ImageOff}
+            title={
+              query || view !== "all"
+                ? t("admin.videos.noMatch")
+                : t("admin.videos.empty")
+            }
+          />
+        )}
+      </Panel>
       {editing ? (
         <VideoEditor
           videoId={editing}
@@ -395,9 +497,7 @@ export function VideosView({ navigate }: ViewProps) {
           </Button>
         }
       />
-      <Panel>
-        <VideoList />
-      </Panel>
+      <VideoList />
     </div>
   )
 }

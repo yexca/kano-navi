@@ -153,12 +153,36 @@ linking to x.com. Quoted wording is shown as written, without translations.
 A quote an operator hid is absent from the snapshot, so the board shows the
 post without it.
 
-The console's schedule entry dialog (`src/admin/views/schedule.tsx`) is
+The console's schedule (`src/admin/views/schedule.tsx`) has a list and a
+calendar view; the browser remembers the last one in local storage. Both
+share a search field and status tabs for the review tasks: All, Not
+confirmed, Suspected (cancellation) and Deleted. The list groups entries
+under one heading per Japan date, with the day's count and a button that
+opens a new entry on that date; Upcoming, Past and All dates tabs set the
+date range beside it. Each row (`schedule-parts.tsx`) shows the time in
+Japan (or All day), the title, which opens the entry dialog, and its badges;
+an unconfirmed entry has a labelled Confirm button before the icon actions.
+The calendar (`schedule-calendar.tsx`) shows a Monday-first month grid
+without merged duplicates. Each entry is a chip with its time and title,
+styled by review state as the legend below names; a chip opens the entry,
+and a day opens its rows below the grid with the same actions and its new
+entry button. On a narrow grid the chips become dots. The entry dialog is
 either timed or all day. A timed entry needs a start time; its length
 defaults to the [calendar feed's](public-api.md#public-feeds) length for the
 type without saving an end, so the board keeps treating a stream as
 open-ended, while presets and a custom end save `endsAt`. A preview line
 renders the entry as calendar subscribers will see it.
+
+The console's video list (`src/admin/views/videos.tsx`) puts the featured
+video and the Bilibili merge suggestions above a list with a search field
+and task tabs: All, Upcoming, Bilibili and Missing translation. Uploads
+merged into another video appear on that video's row, so only the Bilibili
+tab lists them on their own. Each row shows the
+thumbnail, the title, which opens the correction dialog, the platform, time,
+kind, length and format, its badges and merge line, the translation chips,
+and the feature, correct and open actions. The correction dialog
+(`video-editor.tsx`) previews the chosen thumbnail beside the facts and
+fields and keeps refresh, cancel and save in its footer.
 
 The console's Sources page (`src/admin/views/sources.tsx`) has a row of
 tabs for X, YouTube and Bilibili, each naming whether its timer runs here,

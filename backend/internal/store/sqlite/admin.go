@@ -295,10 +295,14 @@ type AdminPostFilter struct {
 
 // AdminVideoFilter narrows the video list. Status is "published",
 // "upcoming" or "live"; Thumbnail is "ready", "present" or "missing";
-// Source is "youtube" or "bilibili".
+// Source is "youtube" or "bilibili". Search matches the shown or platform
+// title and the video ID; Merge is "visible" (excluding uploads merged into
+// another video) or "merged"; Translation is "incomplete", "complete" or
+// "requested" over the videos the translate step covers.
 type AdminVideoFilter struct {
 	Page, PageSize                  int
 	Status, Kind, Thumbnail, Source string
+	Search, Merge, Translation      string
 }
 
 // AdminEventFilter narrows the event list. Cancellation is "none",
@@ -307,6 +311,9 @@ type AdminEventFilter struct {
 	Page, PageSize                                     int
 	Ascending, IncludeDeleted                          bool
 	Search, Provenance, Source, Cancellation, From, To string
+	// Provenance is "automatic", "manual" or "unconfirmed" (automatic and
+	// not locked by an operator). OnlyDeleted lists tombstones only.
+	OnlyDeleted bool
 	// Merge is "merged" (only merged duplicates), "visible" (excluding them,
 	// as every public reader does) or empty for both.
 	Merge string
@@ -557,6 +564,26 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 		clauses = append(clauses, "COALESCE(v.manual_kind,v.kind) = ?")
 		args = append(args, kind)
 	}
+	if search := strings.TrimSpace(f.Search); search != "" {
+		pattern := likePattern(search)
+		clauses = append(clauses, "(COALESCE(v.manual_title,v.title) LIKE ? ESCAPE '\\' OR v.title LIKE ? ESCAPE '\\' OR v.id LIKE ? ESCAPE '\\')")
+		args = append(args, pattern, pattern, pattern)
+	}
+	switch f.Merge {
+	case "merged":
+		clauses = append(clauses, "v.merged_into IS NOT NULL")
+	case "visible":
+		clauses = append(clauses, "v.merged_into IS NULL")
+	}
+	scope := fmt.Sprintf(videoTranslationScope, "v")
+	switch f.Translation {
+	case "incomplete":
+		clauses = append(clauses, scope+" AND "+TranslationIncompleteSQL(TranslationOwnerVideo, "v"))
+	case "complete":
+		clauses = append(clauses, scope+" AND NOT "+TranslationIncompleteSQL(TranslationOwnerVideo, "v"))
+	case "requested":
+		clauses = append(clauses, TranslationRequestedSQL(TranslationOwnerVideo, "v"))
+	}
 	switch f.Thumbnail {
 	case "ready":
 		clauses = append(clauses, "EXISTS (SELECT 1 FROM media_assets m WHERE m.source_url=v.thumbnail_url AND m.status='ready')")
@@ -806,7 +833,9 @@ func (s *Store) ListAdminEvents(ctx context.Context, f AdminEventFilter) (AdminP
 	page, pageSize := boundPage(f.Page, f.PageSize, 100, 25)
 	clauses := []string{"1=1"}
 	args := []any{}
-	if !f.IncludeDeleted {
+	if f.OnlyDeleted {
+		clauses = append(clauses, "e.deleted_at IS NOT NULL")
+	} else if !f.IncludeDeleted {
 		clauses = append(clauses, "e.deleted_at IS NULL")
 	}
 	if search := strings.TrimSpace(f.Search); search != "" {
@@ -814,9 +843,12 @@ func (s *Store) ListAdminEvents(ctx context.Context, f AdminEventFilter) (AdminP
 		clauses = append(clauses, "(e.title LIKE ? ESCAPE '\\' OR e.detail LIKE ? ESCAPE '\\' OR e.status LIKE ? ESCAPE '\\')")
 		args = append(args, p, p, p)
 	}
-	if f.Provenance == "automatic" || f.Provenance == "manual" {
+	switch f.Provenance {
+	case "automatic", "manual":
 		clauses = append(clauses, "e.provenance=?")
 		args = append(args, f.Provenance)
+	case "unconfirmed":
+		clauses = append(clauses, "e.provenance='automatic' AND e.manual_locked=0")
 	}
 	if source := strings.TrimSpace(f.Source); source != "" {
 		clauses = append(clauses, "e.source=?")

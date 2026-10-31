@@ -14,7 +14,7 @@ import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { MergeSection } from "@/admin/views/merge-parts"
 
 /** The kinds the board labels; an empty choice follows the platform. */
-const videoKinds = ["VIDEO", "MUSIC", "LIVE ARCHIVE", "GAMEPLAY", "TALK"]
+export const videoKinds = ["VIDEO", "MUSIC", "LIVE ARCHIVE", "GAMEPLAY", "TALK"]
 
 /** A format choice: empty follows the feed, otherwise Short or not. */
 const formatChoice = (isShort: boolean | null) =>
@@ -30,7 +30,8 @@ const formatLabel = (isShort: boolean | null) =>
 const pinKey = (file: { mediaId: string; sha256: string } | null) =>
   file ? `${file.mediaId}/${file.sha256}` : ""
 
-function duration(seconds: number | null) {
+/** A video's length as h:mm:ss or m:ss; null while unknown. */
+export function formatLength(seconds: number | null) {
   if (!seconds) return null
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
@@ -162,91 +163,161 @@ export function VideoEditor({
           time: formatDateTime(item.fetchedAt, locale),
         })
   const current = data?.thumbnails.find((item) => item.current)
+  // The preview follows the thumbnail choice before it is saved.
+  const chosen = draft?.thumbnail
+    ? data?.thumbnails.find((item) => pinKey(item) === draft.thumbnail)?.url
+    : (current?.url ?? data?.video.thumbnailUrl)
+  const preview = chosen ?? null
   return (
-    <Modal open wide title={t("admin.videos.editTitle")} onClose={close}>
+    <Modal
+      open
+      wide
+      className="adm-video-editor"
+      title={t("admin.videos.editTitle")}
+      onClose={close}
+      footer={
+        video ? (
+          <>
+            {video.source === "youtube" || bilibili ? (
+              <Button
+                icon={RefreshCw}
+                busy={busy === "refresh"}
+                onClick={refresh}
+              >
+                {bilibili
+                  ? t("admin.videos.refreshBilibiliButton")
+                  : t("admin.videos.refresh")}
+              </Button>
+            ) : null}
+            <a
+              className="adm-link"
+              href={video.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("admin.videos.open")}
+              <ExternalLink aria-hidden />
+            </a>
+            <span className="adm-spacer" />
+            <Button onClick={close}>{t("admin.action.cancel")}</Button>
+            <Button
+              type="submit"
+              form="adm-video-form"
+              variant="primary"
+              busy={busy === "save"}
+              disabled={!draft}
+            >
+              {t("admin.action.save")}
+            </Button>
+          </>
+        ) : null
+      }
+    >
       {!data || !video || !draft ? (
         <Loading />
       ) : (
-        <form className="adm-form" onSubmit={save}>
-          <p className="adm-note">{t("admin.videos.correctionHint")}</p>
-          <Facts
-            items={[
-              [t("admin.videos.platformTitle"), video.sourceTitle],
-              [
-                t("admin.videos.lastChecked"),
-                video.checkedAt
-                  ? formatDateTime(video.checkedAt, locale)
-                  : t("admin.videos.neverChecked"),
-              ],
-              [t("admin.videos.duration"), duration(video.durationSeconds)],
-              [
-                t("admin.videos.refreshState"),
-                video.refreshRequestedAt
-                  ? t("admin.videos.refreshPending", {
-                      time: formatDateTime(video.refreshRequestedAt, locale),
-                    })
-                  : bilibili
-                    ? t("admin.videos.refreshBilibili")
-                    : t("admin.videos.refreshIdle"),
-              ],
-            ]}
-          />
-          <MergeSection
-            video={video}
-            onChanged={() => {
-              void history.reload()
-              onMerged?.()
-            }}
-          />
-          <Field
-            label={t("admin.videos.field.title")}
-            hint={t("admin.videos.field.titleHint")}
-          >
-            <input
-              value={draft.title}
-              placeholder={video.sourceTitle}
-              maxLength={300}
-              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-            />
-          </Field>
-          <Field label={t("admin.videos.field.kind")}>
-            <select
-              value={draft.kind}
-              onChange={(e) => setDraft({ ...draft, kind: e.target.value })}
-            >
-              <option value="">
-                {t("admin.videos.kind.platform", {
-                  kind: video.sourceKind || "—",
-                })}
-              </option>
-              {videoKinds.map((kind) => (
-                <option key={kind} value={kind}>
-                  {kind}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {video.source === "youtube" ? (
-            <Field
-              label={t("admin.videos.field.format")}
-              hint={t("admin.videos.format.hint")}
-            >
-              <select
-                value={draft.format}
-                onChange={(e) => setDraft({ ...draft, format: e.target.value })}
+        <form id="adm-video-form" className="adm-form" onSubmit={save}>
+          <div className="adm-video-editor-top">
+            <aside className="adm-video-editor-preview">
+              <span className="adm-video-thumb">
+                {preview ? (
+                  <img src={preview} alt="" />
+                ) : (
+                  <ImageOff aria-hidden />
+                )}
+              </span>
+              <Facts
+                items={[
+                  [t("admin.videos.platformTitle"), video.sourceTitle],
+                  [
+                    t("admin.videos.lastChecked"),
+                    video.checkedAt
+                      ? formatDateTime(video.checkedAt, locale)
+                      : t("admin.videos.neverChecked"),
+                  ],
+                  [
+                    t("admin.videos.duration"),
+                    formatLength(video.durationSeconds),
+                  ],
+                  [
+                    t("admin.videos.refreshState"),
+                    video.refreshRequestedAt
+                      ? t("admin.videos.refreshPending", {
+                          time: formatDateTime(
+                            video.refreshRequestedAt,
+                            locale,
+                          ),
+                        })
+                      : bilibili
+                        ? t("admin.videos.refreshBilibili")
+                        : t("admin.videos.refreshIdle"),
+                  ],
+                ]}
+              />
+            </aside>
+            <div className="adm-video-editor-fields">
+              <p className="adm-note">{t("admin.videos.correctionHint")}</p>
+              <Field
+                label={t("admin.videos.field.title")}
+                hint={t("admin.videos.field.titleHint")}
               >
-                <option value="">
-                  {t("admin.videos.format.platform", {
-                    format: t(formatLabel(video.sourceIsShort)),
-                  })}
-                </option>
-                <option value="short">{t("admin.videos.format.short")}</option>
-                <option value="regular">
-                  {t("admin.videos.format.regular")}
-                </option>
-              </select>
-            </Field>
-          ) : null}
+                <input
+                  value={draft.title}
+                  placeholder={video.sourceTitle}
+                  maxLength={300}
+                  onChange={(e) =>
+                    setDraft({ ...draft, title: e.target.value })
+                  }
+                />
+              </Field>
+              <div className="adm-form-row is-top">
+                <Field label={t("admin.videos.field.kind")}>
+                  <select
+                    value={draft.kind}
+                    onChange={(e) =>
+                      setDraft({ ...draft, kind: e.target.value })
+                    }
+                  >
+                    <option value="">
+                      {t("admin.videos.kind.platform", {
+                        kind: video.sourceKind || "—",
+                      })}
+                    </option>
+                    {videoKinds.map((kind) => (
+                      <option key={kind} value={kind}>
+                        {kind}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                {video.source === "youtube" ? (
+                  <Field
+                    label={t("admin.videos.field.format")}
+                    hint={t("admin.videos.format.hint")}
+                  >
+                    <select
+                      value={draft.format}
+                      onChange={(e) =>
+                        setDraft({ ...draft, format: e.target.value })
+                      }
+                    >
+                      <option value="">
+                        {t("admin.videos.format.platform", {
+                          format: t(formatLabel(video.sourceIsShort)),
+                        })}
+                      </option>
+                      <option value="short">
+                        {t("admin.videos.format.short")}
+                      </option>
+                      <option value="regular">
+                        {t("admin.videos.format.regular")}
+                      </option>
+                    </select>
+                  </Field>
+                ) : null}
+              </div>
+            </div>
+          </div>
           <fieldset className="adm-field adm-thumb-picker">
             <legend className="adm-field-label">
               {t("admin.videos.field.thumbnail")}
@@ -274,6 +345,13 @@ export function VideoEditor({
               {t("admin.videos.thumbnail.hint")}
             </span>
           </fieldset>
+          <MergeSection
+            video={video}
+            onChanged={() => {
+              void history.reload()
+              onMerged?.()
+            }}
+          />
           <section className="adm-video-history">
             <h3>
               <History aria-hidden />
@@ -320,33 +398,6 @@ export function VideoEditor({
               <p className="adm-muted">{t("admin.videos.historyEmpty")}</p>
             )}
           </section>
-          <div className="adm-form-actions adm-video-editor-actions">
-            {video.source === "youtube" || bilibili ? (
-              <Button
-                icon={RefreshCw}
-                busy={busy === "refresh"}
-                onClick={refresh}
-              >
-                {bilibili
-                  ? t("admin.videos.refreshBilibiliButton")
-                  : t("admin.videos.refresh")}
-              </Button>
-            ) : null}
-            <a
-              className="adm-link"
-              href={video.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("admin.videos.open")}
-              <ExternalLink aria-hidden />
-            </a>
-            <span className="adm-spacer" />
-            <Button onClick={close}>{t("admin.action.cancel")}</Button>
-            <Button type="submit" variant="primary" busy={busy === "save"}>
-              {t("admin.action.save")}
-            </Button>
-          </div>
         </form>
       )}
     </Modal>

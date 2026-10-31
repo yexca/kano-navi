@@ -22,6 +22,7 @@ func (a *api) listEvents(w http.ResponseWriter, r *http.Request) {
 		PageSize:       queryInt(r, "pageSize", 25),
 		Ascending:      query(r, "order") == "asc",
 		IncludeDeleted: queryFlag(r, "deleted"),
+		OnlyDeleted:    query(r, "deleted") == "only",
 		Search:         query(r, "search"),
 		Provenance:     query(r, "provenance"),
 		Source:         query(r, "source"),
@@ -60,12 +61,15 @@ func (a *api) listPosts(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) listVideos(w http.ResponseWriter, r *http.Request) {
 	page, err := a.Store.ListAdminVideos(r.Context(), sqlite.AdminVideoFilter{
-		Page:      queryInt(r, "page", 1),
-		PageSize:  queryInt(r, "pageSize", 50),
-		Status:    query(r, "status"),
-		Kind:      query(r, "kind"),
-		Thumbnail: query(r, "thumbnail"),
-		Source:    query(r, "source"),
+		Page:        queryInt(r, "page", 1),
+		PageSize:    queryInt(r, "pageSize", 50),
+		Status:      query(r, "status"),
+		Kind:        query(r, "kind"),
+		Thumbnail:   query(r, "thumbnail"),
+		Source:      query(r, "source"),
+		Search:      query(r, "search"),
+		Merge:       query(r, "merge"),
+		Translation: query(r, "translation"),
 	})
 	if err != nil {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")

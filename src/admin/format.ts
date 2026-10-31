@@ -66,6 +66,20 @@ export function formatDay(day: string | null | undefined, locale: string) {
   }).format(new Date(`${day}T12:00:00+09:00`))
 }
 
+/** A stored Japan date's short weekday name. */
+export function formatWeekday(day: string, locale: string) {
+  return formatter(locale, { weekday: "short" }).format(
+    new Date(`${day}T12:00:00+09:00`),
+  )
+}
+
+/** The month and year of a stored Japan date. */
+export function formatMonth(day: string, locale: string) {
+  return formatter(locale, { year: "numeric", month: "long" }).format(
+    new Date(`${day}T12:00:00+09:00`),
+  )
+}
+
 export function formatRelative(
   value: string | null | undefined,
   locale: string,

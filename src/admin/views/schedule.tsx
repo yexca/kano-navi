@@ -2,40 +2,29 @@ import { useState, type SubmitEvent } from "react"
 import {
   CalendarCheck,
   CalendarPlus,
-  CheckCheck,
-  Combine,
-  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
   Link2,
-  Pencil,
   Search,
-  Split,
-  Trash2,
-  Undo2,
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import {
-  eventStatusLabel,
   formatDateTime,
   formatDay,
+  formatMonth,
   japanClock,
   japanDay,
   japanInstant,
   japanToday,
 } from "@/admin/format"
 import type { AdminEvent, EventInput } from "@/admin/types"
-import { eventDetailText } from "@/lib/event-text"
 import {
-  Badge,
   Button,
-  ConfirmButton,
   DateRange,
   Empty,
   Field,
-  FilterReset,
-  FilterSelect,
-  FilterToggle,
   IconButton,
   Loading,
   Modal,
@@ -45,13 +34,9 @@ import {
   Segmented,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
-import {
-  CancellationBadge,
-  EventMergeDialog,
-  EventWhen,
-  MergeBadge,
-  ProvenanceBadge,
-} from "@/admin/views/event-parts"
+import { EventMergeDialog, shiftDay } from "@/admin/views/event-parts"
+import { ScheduleCalendar, shiftMonth } from "@/admin/views/schedule-calendar"
+import { DayHeading, EventRow, groupByDay } from "@/admin/views/schedule-parts"
 
 const eventTypes = ["stream", "member", "appearance", "release", "event"]
 
@@ -84,13 +69,13 @@ interface Draft {
   cancellationReason: string
 }
 
-function draftOf(event: AdminEvent | null): Draft {
+function draftOf(event: AdminEvent | null, day?: string): Draft {
   const startsAt = Date.parse(event?.startsAt || "")
   const minutes = (Date.parse(event?.endsAt || "") - startsAt) / 60_000
   return {
     title: event?.title || "",
     detail: event?.detail || "",
-    startsOn: event?.startsOn || japanToday(),
+    startsOn: event?.startsOn || day || japanToday(),
     // A new entry starts timed so a date-only entry is a deliberate choice.
     timed: event ? Boolean(event.startsAt) : true,
     start: japanClock(event?.startsAt),
@@ -156,14 +141,17 @@ function inputOf(draft: Draft): EventInput {
 
 function EventDialog({
   event,
+  day,
   onClose,
 }: {
   event: AdminEvent | null
+  /** The date a new entry starts on; today when unset. */
+  day?: string
   onClose: (saved?: boolean) => void
 }) {
   const { t, locale } = useAppSettings()
   const { api, act } = useAdmin()
-  const [draft, setDraft] = useState(() => draftOf(event))
+  const [draft, setDraft] = useState(() => draftOf(event, day))
   const [busy, setBusy] = useState(false)
   // The rarer fields open on their own only when the entry already uses them.
   const [moreOpen] = useState(
@@ -228,6 +216,13 @@ function EventDialog({
       }
     >
       <form id="adm-entry-form" className="adm-form" onSubmit={save}>
+        {event ? (
+          <p className="adm-muted adm-entry-updated">
+            {t("admin.schedule.updated", {
+              time: formatDateTime(event.updatedAt, locale),
+            })}
+          </p>
+        ) : null}
         <Field label={t("admin.schedule.field.title")}>
           <input
             className="adm-entry-title"
@@ -443,48 +438,102 @@ function EventDialog({
   )
 }
 
-const blankFilters = {
-  search: "",
-  provenance: "",
-  cancellation: "",
-  merge: "",
-  from: "",
-  to: "",
-  deleted: false,
+type Scope = "upcoming" | "past" | "all"
+
+/** The date range each scope tab sets; any other range is custom. */
+function scopeRange(scope: Scope, today: string) {
+  if (scope === "upcoming") return { from: today, to: "" }
+  if (scope === "past") return { from: "", to: shiftDay(today, -1) }
+  return { from: "", to: "" }
+}
+
+function scopeOf(from: string, to: string, today: string): Scope | "" {
+  return (
+    (["upcoming", "past", "all"] as const).find((scope) => {
+      const range = scopeRange(scope, today)
+      return range.from === from && range.to === to
+    }) ?? ""
+  )
+}
+
+type ScheduleMode = "list" | "calendar"
+type Status = "all" | "unconfirmed" | "suspected" | "deleted"
+
+/** Each status tab is a review task; All keeps merged duplicates, dimmed. */
+const statusFilters: Record<Status, Record<string, string>> = {
+  all: {},
+  unconfirmed: { provenance: "unconfirmed" },
+  suspected: { cancellation: "llm_suspected" },
+  deleted: { deleted: "only" },
+}
+
+const modeKey = "adm-schedule-view"
+
+/** The view this browser used last; storage may be unavailable. */
+function storedMode(): ScheduleMode {
+  try {
+    return window.localStorage.getItem(modeKey) === "calendar"
+      ? "calendar"
+      : "list"
+  } catch {
+    return "list"
+  }
 }
 
 export function ScheduleView(_: ViewProps) {
   const { t, locale } = useAppSettings()
-  const { api, act } = useAdmin()
-  // The list opens on today onward; clearing the filters shows every date.
-  const [filters, setFilters] = useState(() => ({
-    ...blankFilters,
-    from: japanToday(),
-  }))
+  const { api } = useAdmin()
+  const today = japanToday()
+  const [mode, setMode] = useState(storedMode)
+  const [status, setStatus] = useState<Status>("all")
   const [search, setSearch] = useState("")
+  const [query, setQuery] = useState("")
+  // The list opens on today onward; the calendar on this month.
+  const [range, setRange] = useState(() => scopeRange("upcoming", today))
+  const [month, setMonth] = useState(() => shiftMonth(today, 0))
   const [page, setPage] = useState(1)
-  const [editing, setEditing] = useState<AdminEvent | null | undefined>(
-    undefined,
-  )
+  const [editing, setEditing] = useState<
+    { event: AdminEvent | null; day?: string } | undefined
+  >(undefined)
   const [merging, setMerging] = useState<AdminEvent | null>(null)
+  // Bumped after a dialog saves, so whichever view is shown reads again.
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = () => setReloadKey((value) => value + 1)
+  const filters = { ...statusFilters[status], search: query }
+  const scope = scopeOf(range.from, range.to, today)
   const events = useResource(
     () =>
-      api.events({
-        ...filters,
-        page,
-        pageSize: 25,
-        order: filters.from ? "asc" : "desc",
-      }),
-    [filters, page],
+      mode === "list"
+        ? api.events({
+            ...filters,
+            ...range,
+            page,
+            pageSize: 50,
+            // A range with a start reads forward from it; the past and all
+            // dates read back from the newest.
+            order: range.from ? "asc" : "desc",
+          })
+        : Promise.resolve(null),
+    [mode, status, query, range, page, reloadKey],
   )
-  const update = (patch: Partial<typeof filters>) => {
-    setFilters((current) => ({ ...current, ...patch }))
+  const changeMode = (next: ScheduleMode) => {
+    setMode(next)
+    try {
+      window.localStorage.setItem(modeKey, next)
+    } catch {
+      // The choice simply is not remembered.
+    }
+  }
+  const changeRange = (patch: { from?: string; to?: string }) => {
+    setRange((current) => ({ ...current, ...patch }))
+    setPage(1)
+  }
+  const submitSearch = () => {
+    if (search === query) return
+    setQuery(search)
     setPage(1)
   }
   const data = events.data
-  const active = (
-    Object.keys(blankFilters) as (keyof typeof blankFilters)[]
-  ).filter((key) => filters[key] !== blankFilters[key]).length
 
   return (
     <div className="adm-view">
@@ -495,203 +544,139 @@ export function ScheduleView(_: ViewProps) {
           <Button
             variant="primary"
             icon={CalendarPlus}
-            onClick={() => setEditing(null)}
+            onClick={() => setEditing({ event: null })}
           >
             {t("admin.schedule.create")}
           </Button>
         }
       />
       <Panel>
-        <form
-          className="adm-filters"
-          onSubmit={(event) => {
-            event.preventDefault()
-            update({ search })
-          }}
-        >
-          <label className="adm-search">
+        <div className="adm-schedule-bar">
+          <Segmented
+            label={t("admin.schedule.view")}
+            value={mode}
+            options={[
+              { value: "list", label: t("admin.schedule.view.list") },
+              { value: "calendar", label: t("admin.schedule.view.calendar") },
+            ]}
+            onChange={changeMode}
+          />
+          {mode === "list" ? (
+            <div className="adm-schedule-dates">
+              <Segmented
+                label={t("admin.schedule.scope")}
+                value={scope}
+                options={(["upcoming", "past", "all"] as const).map(
+                  (value) => ({
+                    value,
+                    label: t(`admin.schedule.scope.${value}`),
+                  }),
+                )}
+                onChange={(value) => {
+                  if (value) changeRange(scopeRange(value, today))
+                }}
+              />
+              <DateRange
+                from={range.from}
+                to={range.to}
+                onChange={changeRange}
+              />
+            </div>
+          ) : (
+            <div className="adm-month-nav">
+              <IconButton
+                icon={ChevronLeft}
+                label={t("admin.schedule.month.previous")}
+                onClick={() => setMonth(shiftMonth(month, -1))}
+              />
+              <strong aria-live="polite">{formatMonth(month, locale)}</strong>
+              <IconButton
+                icon={ChevronRight}
+                label={t("admin.schedule.month.next")}
+                onClick={() => setMonth(shiftMonth(month, 1))}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={month === shiftMonth(today, 0)}
+                onClick={() => setMonth(shiftMonth(today, 0))}
+              >
+                {t("admin.schedule.month.today")}
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="adm-list-tools">
+          <Segmented
+            label={t("admin.schedule.status")}
+            value={status}
+            options={(
+              ["all", "unconfirmed", "suspected", "deleted"] as const
+            ).map((value) => ({
+              value,
+              label: t(`admin.schedule.status.${value}`),
+            }))}
+            onChange={(value) => {
+              setStatus(value)
+              setPage(1)
+            }}
+          />
+          <form
+            className="adm-search"
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault()
+              submitSearch()
+            }}
+          >
             <Search aria-hidden />
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              onBlur={() => search !== filters.search && update({ search })}
+              onBlur={submitSearch}
               placeholder={t("admin.schedule.search")}
               aria-label={t("admin.schedule.search")}
             />
-          </label>
-          <FilterSelect
-            label={t("admin.schedule.filter.provenance")}
-            value={filters.provenance}
-            onChange={(provenance) => update({ provenance })}
-          >
-            <option value="">{t("admin.filter.any")}</option>
-            <option value="automatic">{t("admin.event.automatic")}</option>
-            <option value="manual">{t("admin.event.manual")}</option>
-          </FilterSelect>
-          <FilterSelect
-            label={t("admin.schedule.filter.cancellation")}
-            value={filters.cancellation}
-            onChange={(cancellation) => update({ cancellation })}
-          >
-            <option value="">{t("admin.filter.any")}</option>
-            <option value="none">{t("admin.schedule.cancel.none")}</option>
-            <option value="llm_suspected">{t("admin.event.suspected")}</option>
-            <option value="manual_confirmed">
-              {t("admin.event.cancelled")}
-            </option>
-          </FilterSelect>
-          <FilterSelect
-            label={t("admin.schedule.filter.merge")}
-            value={filters.merge}
-            onChange={(merge) => update({ merge })}
-          >
-            <option value="">{t("admin.schedule.filter.anyMerge")}</option>
-            <option value="visible">
-              {t("admin.schedule.filter.visible")}
-            </option>
-            <option value="merged">{t("admin.schedule.filter.merged")}</option>
-          </FilterSelect>
-          <DateRange
-            from={filters.from}
-            to={filters.to}
-            onChange={(range) => update(range)}
+          </form>
+        </div>
+        {mode === "calendar" ? (
+          <ScheduleCalendar
+            month={month}
+            // Merged duplicates stay off the grid; the list shows them.
+            filters={{ ...filters, merge: "visible" }}
+            reloadKey={reloadKey}
+            onEdit={(event) => setEditing({ event })}
+            onMerge={setMerging}
+            onCreate={(day) => setEditing({ event: null, day })}
           />
-          <FilterToggle
-            checked={filters.deleted}
-            onChange={(deleted) => update({ deleted })}
-          >
-            {t("admin.schedule.filter.deleted")}
-          </FilterToggle>
-          <FilterReset
-            count={active}
-            onReset={() => {
-              setSearch("")
-              update(blankFilters)
-            }}
-          />
-        </form>
-        {!data ? (
+        ) : !data ? (
           <Loading />
         ) : data.items.length ? (
           <>
-            <div
-              className="adm-table"
-              role="table"
-              aria-label={t("admin.schedule.title")}
-            >
-              {data.items.map((event) => (
-                <div
-                  key={event.id}
-                  role="row"
-                  className={`adm-event-row${event.deletedAt ? " is-deleted" : ""}${event.mergedInto ? " is-merged" : ""}`}
-                >
-                  <span role="cell">
-                    <EventWhen event={event} />
-                  </span>
-                  <span role="cell" className="adm-event-main">
-                    <strong>{event.title}</strong>
-                    {event.detail ? (
-                      <small>{eventDetailText(event.detail, t)}</small>
-                    ) : null}
-                    <span className="adm-chip-row">
-                      <Badge>
-                        {t(`admin.event.type.${event.eventType || "event"}`)}
-                      </Badge>
-                      <ProvenanceBadge event={event} />
-                      <CancellationBadge event={event} />
-                      <MergeBadge event={event} />
-                      {event.status ? (
-                        <Badge tone="sky">
-                          {eventStatusLabel(event.status, t)}
-                        </Badge>
-                      ) : null}
-                      {event.deletedAt ? (
-                        <Badge tone="danger">
-                          {t("admin.schedule.deleted")}
-                        </Badge>
-                      ) : null}
-                    </span>
-                  </span>
-                  <span role="cell" className="adm-event-updated">
-                    {formatDateTime(event.updatedAt, locale)}
-                  </span>
-                  <span role="cell" className="adm-row-actions">
-                    {event.url ? (
-                      <a
-                        className="adm-icon-button"
-                        href={event.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={t("admin.review.eventLink")}
-                        title={t("admin.review.eventLink")}
-                      >
-                        <ExternalLink aria-hidden />
-                      </a>
-                    ) : null}
-                    {event.mergedInto && !event.deletedAt ? (
-                      <IconButton
-                        icon={Split}
-                        label={t("admin.schedule.unmerge")}
-                        onClick={async () => {
-                          if (
-                            await act(
-                              () => api.unmergeEvent(event.id),
-                              "admin.notice.eventUnmerged",
-                            )
-                          )
-                            void events.reload()
-                        }}
+            <div className="adm-schedule-days">
+              {groupByDay(data.items).map(({ day, events: items }) => (
+                <section key={day} className="adm-day">
+                  <DayHeading
+                    day={day}
+                    today={today}
+                    count={items.length}
+                    onCreate={(chosen) =>
+                      setEditing({ event: null, day: chosen })
+                    }
+                  />
+                  <ul className="adm-event-list">
+                    {items.map((event) => (
+                      <EventRow
+                        key={event.id}
+                        event={event}
+                        onEdit={(chosen) => setEditing({ event: chosen })}
+                        onMerge={setMerging}
+                        onChanged={reload}
                       />
-                    ) : !event.deletedAt ? (
-                      <IconButton
-                        icon={Combine}
-                        label={t("admin.schedule.merge.open")}
-                        onClick={() => setMerging(event)}
-                      />
-                    ) : null}
-                    {!event.manualLocked && !event.deletedAt ? (
-                      <IconButton
-                        icon={CheckCheck}
-                        label={t("admin.schedule.confirm")}
-                        onClick={async () => {
-                          if (
-                            await act(
-                              () => api.confirmEvent(event.id),
-                              "admin.notice.eventConfirmed",
-                            )
-                          )
-                            void events.reload()
-                        }}
-                      />
-                    ) : null}
-                    <IconButton
-                      icon={event.deletedAt ? Undo2 : Pencil}
-                      label={
-                        event.deletedAt
-                          ? t("admin.schedule.restore")
-                          : t("admin.schedule.edit")
-                      }
-                      onClick={() => setEditing(event)}
-                    />
-                    {!event.deletedAt ? (
-                      <ConfirmButton
-                        size="sm"
-                        variant="ghost"
-                        icon={Trash2}
-                        aria-label={t("admin.schedule.delete")}
-                        onConfirm={async () => {
-                          // A delete answers null; a failure is undefined.
-                          const result = await act(
-                            () => api.deleteEvent(event.id),
-                            "admin.notice.eventDeleted",
-                          )
-                          if (result !== undefined) void events.reload()
-                        }}
-                      />
-                    ) : null}
-                  </span>
-                </div>
+                    ))}
+                  </ul>
+                </section>
               ))}
             </div>
             <Pager
@@ -709,10 +694,11 @@ export function ScheduleView(_: ViewProps) {
       </Panel>
       {editing !== undefined ? (
         <EventDialog
-          event={editing}
+          event={editing.event}
+          day={editing.day}
           onClose={(saved) => {
             setEditing(undefined)
-            if (saved) void events.reload()
+            if (saved) reload()
           }}
         />
       ) : null}
@@ -721,7 +707,7 @@ export function ScheduleView(_: ViewProps) {
           event={merging}
           onClose={(merged) => {
             setMerging(null)
-            if (merged) void events.reload()
+            if (merged) reload()
           }}
         />
       ) : null}

@@ -2366,6 +2366,10 @@ button.adm-run-line:hover {
  * change: a medium table moves the account above the text, a narrow one
  * stacks the row.
  */
+.adm-table {
+  display: grid;
+}
+
 .adm-post-table {
   container-type: inline-size;
 }
@@ -2743,35 +2747,476 @@ button.adm-run-line:hover {
 
 /* --------------------------------------------------------------- schedule */
 
-.adm-table {
+/* The view switch on the left; the list's dates or the calendar's month on
+   the right. */
+.adm-schedule-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.adm-schedule-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.adm-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.adm-month-nav strong {
+  min-width: 132px;
+  font-size: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A list's task tabs beside its search field. */
+.adm-list-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.adm-list-tools .adm-search {
+  flex: 1 1 240px;
+}
+
+/* The task tabs stay on one line and scroll on a phone. */
+.adm-list-tools .adm-segmented {
+  flex-wrap: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.adm-list-tools .adm-segmented button {
+  flex: none;
+  padding-inline: 11px;
+}
+
+.adm-list-tools .adm-search input {
+  height: 36px;
+  border-radius: 999px;
+}
+
+/*
+ * The month grid. Chip styles show an entry's review state, which the
+ * legend names: dashed for not yet confirmed, filled for confirmed or
+ * manual, honey for a suspected and struck through for a confirmed
+ * cancellation. A narrow grid shows dots instead of chips.
+ */
+.adm-cal-wrap {
+  container-type: inline-size;
   display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.adm-cal {
+  overflow: hidden;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+}
+
+.adm-cal-weekdays,
+.adm-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.adm-cal-weekdays {
+  background: var(--adm-sunken);
+}
+
+.adm-cal-weekdays span {
+  padding: 6px 8px;
+  color: var(--adm-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.adm-cal-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  min-height: 100px;
+  overflow: hidden;
+  padding: 6px;
+  border-top: 1px solid var(--adm-line);
+  border-left: 1px solid var(--adm-line);
+  cursor: pointer;
+}
+
+.adm-cal-cell:nth-child(7n + 1) {
+  border-left: 0;
+}
+
+.adm-cal-cell:hover {
+  background: color-mix(in oklab, hsl(var(--muted)) 35%, transparent);
+}
+
+.adm-cal-cell.is-outside {
+  background: var(--adm-sunken);
+}
+
+.adm-cal-cell.is-selected {
+  box-shadow: inset 0 0 0 2px var(--adm-accent);
+}
+
+.adm-cal-date {
+  align-self: flex-start;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--adm-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.adm-cal-cell.is-outside .adm-cal-date {
+  color: var(--adm-muted);
+  font-weight: 500;
+}
+
+.adm-cal-cell.is-today .adm-cal-date {
+  background: var(--adm-accent);
+  color: hsl(var(--background));
+}
+
+.adm-cal-date:focus-visible,
+.adm-cal-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--adm-focus);
+}
+
+.adm-cal-chips {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-cal-chip {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--adm-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.adm-cal-chip:hover {
+  border-color: var(--adm-accent);
+}
+
+.adm-cal-chip-time {
+  flex: none;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-cal-chip-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-cal-more {
+  padding-left: 6px;
+  color: var(--adm-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+:is(.adm-cal-chip, .adm-cal-swatch).is-unconfirmed {
+  border: 1px dashed color-mix(in oklab, var(--lavender) 70%, transparent);
+  background: color-mix(in oklab, var(--lavender) 8%, transparent);
+}
+
+:is(.adm-cal-chip, .adm-cal-swatch).is-confirmed {
+  background: color-mix(in oklab, var(--sky) 18%, transparent);
+}
+
+:is(.adm-cal-chip, .adm-cal-swatch).is-suspected {
+  background: color-mix(in oklab, var(--honey) 24%, transparent);
+}
+
+:is(.adm-cal-chip, .adm-cal-swatch).is-cancelled,
+.adm-cal-chip.is-deleted {
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
+  color: var(--adm-muted);
+  text-decoration: line-through;
+}
+
+.adm-cal-dots {
+  display: none;
+}
+
+.adm-cal-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sky);
+}
+
+.adm-cal-dots i.is-unconfirmed {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--lavender);
+}
+
+.adm-cal-dots i.is-suspected {
+  background: var(--honey);
+}
+
+.adm-cal-dots i:is(.is-cancelled, .is-deleted) {
+  background: var(--danger);
+}
+
+.adm-cal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  font-size: 12px;
+}
+
+.adm-cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  color: var(--adm-muted);
+  list-style: none;
+}
+
+.adm-cal-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-cal-swatch {
+  width: 18px;
+  height: 10px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+
+.adm-cal-empty {
+  padding: 12px 4px;
+  font-size: 13px;
+}
+
+@container (max-width: 640px) {
+  .adm-cal-weekdays span {
+    padding: 6px 2px;
+    text-align: center;
+  }
+
+  .adm-cal-cell {
+    align-items: center;
+    min-height: 54px;
+    padding: 4px 2px;
+  }
+
+  .adm-cal-date {
+    align-self: center;
+  }
+
+  .adm-cal-chips {
+    display: none;
+  }
+
+  .adm-cal-dots {
+    display: flex;
+    gap: 3px;
+  }
+}
+
+/*
+ * Entries grouped by Japan date: a day heading with its count and a quick
+ * add, then each entry's time, title and badges, and actions. The title
+ * opens the entry dialog. A narrow list moves the actions under the title.
+ */
+.adm-schedule-days {
+  container-type: inline-size;
+  display: grid;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.adm-day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 6px;
+  border-bottom: 1px solid var(--adm-line-strong);
+}
+
+.adm-day-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-day-head h3 em {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--adm-sunken);
+  color: var(--adm-muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.adm-day-head.is-today h3 em {
+  background: var(--adm-accent-soft);
+  color: var(--adm-accent);
+}
+
+.adm-day-head small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-day-head .adm-icon-button {
+  margin-left: auto;
+}
+
+.adm-event-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .adm-event-row {
   display: grid;
-  grid-template-columns: 130px minmax(0, 1fr) 120px auto;
-  align-items: center;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  grid-template-areas: "time main actions";
+  align-items: start;
   gap: 16px;
-  padding: 12px 4px;
+  padding: 10px 4px;
 }
 
 .adm-event-row + .adm-event-row {
   border-top: 1px solid var(--adm-line);
 }
 
-.adm-event-row.is-deleted,
-.adm-event-row.is-merged {
+.adm-event-row.is-deleted .adm-event-time,
+.adm-event-row.is-deleted .adm-event-main,
+.adm-event-row.is-merged .adm-event-time,
+.adm-event-row.is-merged .adm-event-main {
   opacity: 0.6;
+}
+
+.adm-event-row.is-deleted .adm-event-title {
+  text-decoration: line-through;
+}
+
+.adm-event-time {
+  display: grid;
+  grid-area: time;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-event-time strong {
+  font-size: 15px;
+}
+
+.adm-event-time.is-all-day strong {
+  color: var(--adm-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.adm-event-time small {
+  color: var(--adm-muted);
+  font-size: 12px;
 }
 
 .adm-event-main {
   display: grid;
+  grid-area: main;
+  justify-items: start;
   gap: 4px;
   min-width: 0;
 }
 
+.adm-event-title {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--adm-text);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.adm-event-title:hover {
+  color: var(--adm-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.adm-event-title:focus-visible {
+  border-radius: 4px;
+  outline: none;
+  box-shadow: var(--adm-focus);
+}
+
 .adm-event-main .adm-chip-row {
   min-width: 0;
+}
+
+.adm-event-main small {
+  color: var(--adm-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.adm-event-actions {
+  grid-area: actions;
+}
+
+.adm-event-actions > .adm-button {
+  margin-right: 4px;
 }
 
 /* A merge target title or a post's retry time can be long; it wraps instead
@@ -2784,42 +3229,186 @@ button.adm-run-line:hover {
   overflow-wrap: anywhere;
 }
 
-.adm-event-main small {
-  color: var(--adm-muted);
+.adm-entry-updated {
   font-size: 12px;
+}
+
+@container (max-width: 600px) {
+  .adm-event-row {
+    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-areas:
+      "time main"
+      ". actions";
+    gap: 8px 12px;
+  }
+
+  .adm-event-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* ---------------------------------------------------------------- content */
+
+/*
+ * The video list: one row per video with its thumbnail, title and facts,
+ * translation state and actions. The title opens the correction dialog. It
+ * follows its own width: a narrow list moves the translation and actions
+ * under the title.
+ */
+.adm-video-list {
+  container-type: inline-size;
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-video-row {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr) minmax(0, 220px) auto;
+  grid-template-areas: "thumb main translation actions";
+  align-items: center;
+  gap: 16px;
+  padding: 12px 4px;
+}
+
+.adm-video-row + .adm-video-row {
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-video-row.is-featured {
+  margin-inline: -8px;
+  padding-inline: 12px;
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-accent-soft);
+}
+
+.adm-video-row.is-featured + .adm-video-row,
+.adm-video-row + .adm-video-row.is-featured {
+  border-top-color: transparent;
+}
+
+.adm-video-row.is-merged .adm-video-thumb,
+.adm-video-row.is-merged .adm-video-title {
+  opacity: 0.6;
+}
+
+.adm-video-row > .adm-video-thumb {
+  grid-area: thumb;
+  overflow: hidden;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.adm-video-main {
+  display: grid;
+  grid-area: main;
+  justify-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.adm-video-title {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--adm-text);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow-wrap: anywhere;
 }
 
-.adm-event-updated {
+.adm-video-title:hover {
+  color: var(--adm-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.adm-video-title:focus-visible {
+  border-radius: 4px;
+  outline: none;
+  box-shadow: var(--adm-focus);
+}
+
+.adm-video-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
   color: var(--adm-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------------------------------------------------------------- content */
-
-.adm-video-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 14px;
+.adm-video-platform {
+  display: inline-flex;
 }
 
-/* Cards in a row share their height; the actions sit on each card's foot. */
-.adm-video {
-  display: flex;
-  flex-direction: column;
+.adm-video-platform svg {
+  width: 15px;
+  height: 15px;
+}
+
+.adm-video-translation {
+  grid-area: translation;
   min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--adm-line);
-  border-radius: var(--adm-radius-sm);
-  background: var(--adm-surface);
 }
 
-.adm-video.is-featured {
-  border-color: var(--berry);
-  box-shadow: 0 0 0 1px var(--berry);
+.adm-video-row-actions {
+  grid-area: actions;
 }
 
+.adm-video-row-actions .adm-icon-button.is-on {
+  color: var(--berry);
+}
+
+/* The list's count on the left and the translation backlog on the right. */
+.adm-list-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 14px 0 4px;
+  font-size: 13px;
+}
+
+@container (max-width: 760px) {
+  .adm-video-row {
+    grid-template-columns: 112px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "thumb main actions"
+      "thumb translation actions";
+    align-items: start;
+    row-gap: 8px;
+  }
+}
+
+@container (max-width: 520px) {
+  .adm-video-row {
+    grid-template-columns: 96px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "thumb main main"
+      "translation translation actions";
+    align-items: center;
+    gap: 8px 12px;
+  }
+
+  .adm-video-row > .adm-video-thumb,
+  .adm-video-main {
+    align-self: start;
+  }
+}
+
+/* A thumbnail frame, used by the list, the merge rows and the dialog. */
 .adm-video-thumb {
   position: relative;
   display: grid;
@@ -2829,7 +3418,7 @@ button.adm-run-line:hover {
   color: var(--adm-muted);
 }
 
-/* Pinned to the 16:9 frame so a vertical Shorts cover cannot grow the card. */
+/* Pinned to the 16:9 frame so a vertical Shorts cover cannot grow it. */
 .adm-video-thumb img {
   position: absolute;
   inset: 0;
@@ -2838,58 +3427,66 @@ button.adm-run-line:hover {
   object-fit: cover;
 }
 
-.adm-video-thumb .adm-badge {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  background: var(--adm-surface);
+/* The correction dialog: the chosen thumbnail and the facts beside the
+   fields, then the thumbnail files, the merge and the history. */
+.adm-modal.adm-video-editor {
+  width: min(880px, calc(100vw - 32px));
 }
 
-.adm-video-body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  min-width: 0;
-  padding: 12px 12px 10px;
+.adm-video-editor-top {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
 }
 
-.adm-video-body > * {
-  max-width: 100%;
+.adm-video-editor-preview {
+  display: grid;
+  gap: 14px;
 }
 
-/* Two lines are kept for every title so the dates below line up. */
-.adm-video-body > strong {
-  display: -webkit-box;
-  min-height: calc(2 * 1.45em);
+.adm-video-editor-preview .adm-video-thumb {
   overflow: hidden;
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  border-radius: var(--adm-radius-sm);
 }
 
-.adm-video-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 8px;
-  border-top: 1px solid var(--adm-line);
+.adm-video-editor-preview .adm-facts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.adm-video-actions .adm-icon-button {
-  margin-left: auto;
+.adm-video-editor-fields {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
 }
 
-.adm-video-body small {
-  color: var(--adm-muted);
-  font-size: 12px;
+.adm-video-editor-fields .adm-note {
+  margin: 0;
 }
 
-.adm-video-marks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.adm-modal-body > footer > .adm-spacer {
+  flex: 1;
+}
+
+@media (max-width: 720px) {
+  .adm-video-editor-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-video-editor-preview {
+    grid-template-columns: 160px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .adm-video-editor-preview .adm-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .adm-video-editor-preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* A card's merge line: the badge, the other copy's link and the undo. */
@@ -3177,10 +3774,6 @@ button.adm-run-line:hover {
 .adm-video-history-body small {
   color: var(--adm-muted);
   font-size: 12px;
-}
-
-.adm-video-editor-actions .adm-spacer {
-  flex: 1;
 }
 
 /* The Bilibili panel's add form: the field grows, the button sits beside it. */
@@ -4318,19 +4911,6 @@ button.adm-run-line:hover {
 
   .adm-step-cards {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .adm-event-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 12px;
-  }
-
-  .adm-event-row > :first-child {
-    grid-column: 1 / -1;
-  }
-
-  .adm-event-updated {
-    display: none;
   }
 
   .adm-featured {

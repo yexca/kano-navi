@@ -63,6 +63,23 @@
   streak. YouTube's settings group push, the live-status probe and the
   follow-up checks of finished videos (1 hour, 1 day, 3 days and 7 days) as
   its progressive confirmation.
+- The Schedule page has a calendar view beside its list: a month grid whose
+  entries are chips styled by review state, where a chip opens the entry and
+  a day shows its entries below the grid. The list groups entries under a
+  heading per Japan date with its count and a button that adds an entry on
+  that day, with Upcoming, Past and All dates tabs beside the date range.
+  The filters are a search field and All, Not confirmed, Suspected and
+  Deleted tabs. Clicking a title opens the entry, unconfirmed entries show a
+  labelled Confirm button, and the entry dialog shows when the entry last
+  changed.
+- The Videos page lists videos as compact rows with a search field and All,
+  Upcoming, Bilibili and Missing translation tabs; uploads merged into
+  another video appear on that video's row. Clicking a title opens the
+  correction dialog, which previews the chosen thumbnail and keeps Save in
+  its footer.
+- `GET /api/admin/videos` accepts `search`, `merge` and `translation`, and
+  `GET /api/admin/events` accepts `provenance=unconfirmed` and
+  `deleted=only`.
 - Run results name the method that served each X account or the YouTube
   channel and every method tried with its code.
 - A run whose media step left images queued explains how many remain, and the

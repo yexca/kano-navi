@@ -103,3 +103,82 @@ func TestAdminVideosReturnPinnedVideoOutsideThePage(t *testing.T) {
 		t.Fatalf("automatic selection returned %v/%+v", page.FeaturedVideoID, page.FeaturedVideo)
 	}
 }
+
+func TestAdminVideoFiltersSearchAndMerge(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	testutil.Exec(t, path, `INSERT INTO videos (id,source,title,manual_title,published_at,url,kind) VALUES ('yt1','youtube','Platform song','Corrected song','2026-10-01T00:00:00.000Z','https://www.youtube.com/watch?v=yt1','video')`)
+	testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,url,kind) VALUES ('yt2','youtube','Chat 100%','2026-10-02T00:00:00.000Z','https://www.youtube.com/watch?v=yt2','live')`)
+	testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,url,kind,merged_into,merge_source) VALUES ('BV1copy','bilibili','Platform song repost','2026-10-01T06:00:00.000Z','https://www.bilibili.com/video/BV1copy','video','yt1','rule')`)
+	store, err := OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ids := func(f AdminVideoFilter) string {
+		t.Helper()
+		page, err := store.ListAdminVideos(context.Background(), f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := []string{}
+		for _, video := range page.Items {
+			got = append(got, video.ID)
+		}
+		return strings.Join(got, ",")
+	}
+	for _, c := range []struct {
+		filter AdminVideoFilter
+		want   string
+	}{
+		// The shown title, the platform title and the ID all match.
+		{AdminVideoFilter{Search: "corrected"}, "yt1"},
+		{AdminVideoFilter{Search: "platform song"}, "BV1copy,yt1"},
+		{AdminVideoFilter{Search: "BV1"}, "BV1copy"},
+		// LIKE wildcards in the search are literal.
+		{AdminVideoFilter{Search: "100%"}, "yt2"},
+		{AdminVideoFilter{Merge: "visible"}, "yt2,yt1"},
+		{AdminVideoFilter{Merge: "merged"}, "BV1copy"},
+		{AdminVideoFilter{Search: "song", Merge: "visible"}, "yt1"},
+	} {
+		if got := ids(c.filter); got != c.want {
+			t.Errorf("%+v listed %q, want %q", c.filter, got, c.want)
+		}
+	}
+}
+
+func TestAdminEventFiltersUnconfirmedAndDeleted(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	insert := `INSERT INTO events (id,source,title,starts_on,provenance,manual_locked,deleted_at,created_at,updated_at) VALUES (?,?,?,'2026-10-10',?,?,?,'','')`
+	testutil.Exec(t, path, insert, "auto", "x", "Automatic stream", "automatic", 0, nil)
+	testutil.Exec(t, path, insert, "locked", "x", "Confirmed stream", "automatic", 1, nil)
+	testutil.Exec(t, path, insert, "manual", "manual", "Manual release", "manual", 1, nil)
+	testutil.Exec(t, path, insert, "gone", "x", "Deleted entry", "automatic", 1, "2026-10-09T00:00:00Z")
+	store, err := OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	for _, c := range []struct {
+		filter AdminEventFilter
+		want   string
+	}{
+		// Confirming locks an automatic entry, so it leaves the unconfirmed list.
+		{AdminEventFilter{Provenance: "unconfirmed", Ascending: true}, "auto"},
+		{AdminEventFilter{Provenance: "automatic", Ascending: true}, "auto,locked"},
+		{AdminEventFilter{Ascending: true}, "auto,locked,manual"},
+		{AdminEventFilter{IncludeDeleted: true, Ascending: true}, "auto,gone,locked,manual"},
+		{AdminEventFilter{OnlyDeleted: true}, "gone"},
+	} {
+		page, err := store.ListAdminEvents(context.Background(), c.filter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := []string{}
+		for _, event := range page.Items {
+			got = append(got, event.ID)
+		}
+		if strings.Join(got, ",") != c.want {
+			t.Errorf("%+v listed %v, want %q", c.filter, got, c.want)
+		}
+	}
+}
