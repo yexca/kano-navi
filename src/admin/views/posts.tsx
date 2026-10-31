@@ -15,7 +15,7 @@ import {
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
-import { formatDateTime } from "@/admin/format"
+import { japanStamp } from "@/admin/format"
 import type { AdminPost, AdminPostImage, Sources } from "@/admin/types"
 import {
   Badge,
@@ -70,7 +70,7 @@ function PostImageViewer({
   start: number
   onClose: () => void
 }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const [index, setIndex] = useState(start)
   const count = images.length
   const image = images[index]
@@ -93,8 +93,7 @@ function PostImageViewer({
       className="adm-image-viewer"
       title={
         <>
-          <PostAccount post={post} /> ·{" "}
-          {formatDateTime(post.publishedAt, locale)}
+          <PostAccount post={post} /> · {japanStamp(post.publishedAt)}
         </>
       }
       onClose={onClose}
@@ -188,7 +187,7 @@ function PostImage({ post }: { post: AdminPost }) {
  * for the next X synchronization.
  */
 function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const [busy, setBusy] = useState<"" | "visibility" | "refresh">("")
   const [viewing, setViewing] = useState<number | null>(null)
@@ -227,7 +226,7 @@ function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
             ) : null}
             {quote.publishedAt ? (
               <time dateTime={quote.publishedAt}>
-                {formatDateTime(quote.publishedAt, locale)}
+                {japanStamp(quote.publishedAt)}
               </time>
             ) : null}
           </span>
@@ -243,7 +242,7 @@ function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
           {queued ? (
             <Badge tone="running" icon={RefreshCw}>
               {t("admin.posts.refreshQueued", {
-                time: formatDateTime(queued, locale),
+                time: japanStamp(queued),
               })}
             </Badge>
           ) : null}
@@ -343,7 +342,6 @@ function PostTableRow({
   post: AdminPost
   onDone: () => void
 }) {
-  const { locale } = useAppSettings()
   const [route, setRoute] = useState("")
   return (
     <div role="row" className="adm-post-table-row">
@@ -351,9 +349,7 @@ function PostTableRow({
         <strong>
           <PostAccount post={post} />
         </strong>
-        <time dateTime={post.publishedAt}>
-          {formatDateTime(post.publishedAt, locale)}
-        </time>
+        <time dateTime={post.publishedAt}>{japanStamp(post.publishedAt)}</time>
       </div>
       <div role="cell" className="adm-post-body">
         <p className="adm-post-text">{post.text}</p>

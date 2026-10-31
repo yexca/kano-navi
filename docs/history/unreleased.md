@@ -48,6 +48,8 @@
   refreshes, first-run age, full-sync cap, video pages, manual fetch pages,
   request timeout and spacing), and the LLM page has the translation limits.
   Saved values apply from the next run.
+- The Posts page shows times as Japan-time `YYYY-MM-DD HH:mm` in every
+  language: a post's and its quote's publication and a queued refresh.
 
 - The manual fetch on the Sources page picks a method first, then what it
   reads, the count or dates, and the steps that follow: the FxTwitter timeline
