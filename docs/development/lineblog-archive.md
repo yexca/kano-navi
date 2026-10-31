@@ -2,9 +2,12 @@
 
 The [LINE BLOG archive](../user/lineblog.md) page shows the 99 articles of
 Kano's 2015–2019 LINE BLOG with their pictures and videos. The content comes
-from a maintainer's local recovery archive, which was rebuilt from Internet
-Archive captures. This page covers where the content lives, how it is
-packaged, and what an instance needs to show it.
+from the Kano_LINE_Blog_Recovery archive, rebuilt from Internet Archive
+captures. Packaging reads a local checkout of its
+[yexca/Kano_LINE_Blog_Recovery](https://github.com/yexca/Kano_LINE_Blog_Recovery)
+fork, which also holds the blog's design art and the recovered pictures. This
+page covers where the content lives, how it is packaged, and how an instance
+gets its media.
 
 ## Content and Media
 
@@ -100,7 +103,7 @@ tweet and one photo with no public copy.
 ## Packaging
 
 To rebuild the article files, index, media catalog and `data/lineblog/` from
-the recovery archive, run:
+a checkout of the recovery archive, run:
 
 ```bash
 npm run lineblog:package -- --from /path/to/Kano_LINE_Blog_Recovery
@@ -232,25 +235,68 @@ turns up in its place.
 
 ## Deployments
 
-`data/lineblog/` belongs to the ignored `data/` directory, so an instance shows
-the articles' text from the image and their media once that directory is in
-place: run the packaging command on the host, or copy `data/lineblog/` from a
-packaged checkout, and preserve it with the rest of `data/`. To carry it as
-one file, bundle it in a packaged checkout and extract it in the directory
-that holds the instance's `data/` (beside `docker-compose.yml` for Docker):
+The image carries the articles' text, index, comments and media catalog, so
+an instance needs only the media files in `data/lineblog/`, which belongs to
+the ignored `data/` directory. A missing file shows an unavailable state on
+the page while keeping the original links; without the design art the header
+and profile keep a plain background.
+
+The archive's `media/` already uses the names packaging gives the media, so
+an instance takes its files as they are, with no packaging and no Node. In the
+directory that holds `docker-compose.yml`, clone the archive (about 1 GiB):
 
 ```bash
-tar -cf lineblog-media.tar data/lineblog/*.jpg data/lineblog/*.png data/lineblog/*.mp4
+git clone --depth 1 https://github.com/yexca/Kano_LINE_Blog_Recovery.git
+```
+
+The two videos over 100 MiB are stored as split archives in `media-parts/`;
+restore them into `media/`, where the archive's `.gitignore` keeps them out
+of its own status:
+
+```bash
+cat Kano_LINE_Blog_Recovery/media-parts/5deac0f60979.mp4.tar.gz.part-* | tar -xzf - -C Kano_LINE_Blog_Recovery/media
 ```
 
 ```bash
-tar -xf lineblog-media.tar
+cat Kano_LINE_Blog_Recovery/media-parts/ecc3e9bbd6b0.mp4.tar.gz.part-* | tar -xzf - -C Kano_LINE_Blog_Recovery/media
 ```
 
-The files only need to be readable by the server; it reads them on request,
-so no restart is needed. A missing file
-shows an unavailable state on the page while keeping the original links;
-without the design art the header and profile keep a plain background.
+`media/` then holds every file of the media catalog, plus a few archive
+files that no article references and the page never links. Put it in place
+in one of two ways:
+
+- **Mount it read-only.** The server only reads `/app/data/lineblog/` in the
+  container (resized copies go to the variant cache under `data/cache/`), so
+  the clone's `media/` can stay where it is. Add a
+  `docker-compose.override.yml` beside `docker-compose.yml`, which Compose
+  reads with it:
+
+  ```yaml
+  services:
+    kano:
+      volumes:
+        - ./Kano_LINE_Blog_Recovery/media:/app/data/lineblog:ro
+  ```
+
+  Run `docker compose up -d` to recreate the container with the mount. A
+  later `git pull` in the clone updates the media in place.
+
+- **Copy it into `./data`.** The `./data` mount already maps
+  `./data/lineblog/` to the container, so no restart is needed, and the
+  clone can be removed afterwards:
+
+  ```bash
+  mkdir -p data/lineblog && cp Kano_LINE_Blog_Recovery/media/* data/lineblog/
+  ```
+
+A picture of the archive answers once the media are in place:
+
+```bash
+curl -I http://localhost:7657/media/lineblog/941e5735900c.jpg
+```
+
+A `200` with `Content-Type: image/jpeg` confirms it; a `404` means the file
+is not where the container looks.
 
 ## Verification
 

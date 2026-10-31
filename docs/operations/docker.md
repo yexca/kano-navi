@@ -24,7 +24,8 @@ Fresh deployments start with empty X/YouTube snapshots and no LLM providers.
 Add providers and the model queue in `/admin`, then use a source's Run now or
 enable its timer on the Sources page to populate source data. Fixed history
 images are already bundled. The LINE BLOG archive's text is bundled too; its
-media live in `./data/lineblog/`, packaged on the host as described in
+media live in `./data/lineblog/` or a read-only mount over it, taken from
+the recovery archive as described in
 [LINE BLOG archive maintenance](../development/lineblog-archive.md#deployments).
 Existing `./data` snapshots, archive media and provider configuration survive
 upgrades.
