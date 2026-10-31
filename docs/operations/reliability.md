@@ -6,15 +6,17 @@
 - A source failure does not clear another source or any existing snapshot; errors are available for maintainer diagnosis.
 - A media failure never downgrades an existing ready file. An invalid LLM result
   never replaces existing events.
-- `meta.fetchedAt` is the latest completed `success` or `partial` synchronization
-  time. With no such run it is `null`, and the page shows “Not synced yet” instead
-  of a timestamp or healthy snapshot. Profile dates, post/video publication
-  dates, and API reads do not count as synchronization. A failed attempt changes
-  `meta.lastSync` and the warning state but retains the previous snapshot time.
-  This is synchronization freshness, not the latest message's publication time;
-  original platform pages remain authoritative.
-- `meta.sourceFetchedAt` reports X and YouTube separately. Only successful
-  incremental, recent-window or latest-count reads advance those times;
+- `meta.lastSync` is the latest completed run whatever its outcome, and the
+  board shows its status and time as the overall state; with no run it is
+  `null`, and the page shows “Not synced yet” instead of a time or healthy
+  state. `meta.fetchedAt` is the latest completed `success` or `partial` run's
+  time, so a failed attempt changes `meta.lastSync` but retains it. Profile
+  dates, post/video publication dates, and API reads do not count as
+  synchronization. This is synchronization freshness, not the latest message's
+  publication time; original platform pages remain authoritative.
+- `meta.sourceFetchedAt` reports X, YouTube and Bilibili separately. Only
+  successful incremental, recent-window or latest-count reads, and Bilibili's
+  successful account reads, advance those times;
   historical backfills and media-only runs cannot make old sources look fresh.
   Recent-window timestamps never exceed the window's end. Timeline windows
   keep the successful head-page read time across resumed pages; clearing a

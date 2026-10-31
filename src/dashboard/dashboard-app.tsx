@@ -18,7 +18,6 @@ import { featuredVideoIdOf } from "./derive-dashboard"
 import { syncStateFor } from "./freshness"
 import {
   addDays,
-  formatStamp,
   japanToday,
   localDateKey,
   monthStartOf,
@@ -249,8 +248,6 @@ export function DashboardApp() {
   const { profile, summary, meta } = dashboard
   const windowDays = meta.postWindowDays || POST_WINDOW_DAYS
   const syncState = syncStateFor(meta, error, now, t)
-  const syncIso = meta.fetchedAt
-  const syncTime = syncIso ? formatStamp(syncIso) : t("sync.waiting")
   const counts = summary.counts || {
     posts: dashboard.posts.length,
     upcomingEvents: 0,
@@ -293,8 +290,6 @@ export function DashboardApp() {
           counts={counts}
           postWindowDays={windowDays}
           syncState={syncState}
-          syncTime={syncTime}
-          syncIso={syncIso}
           isLoading={isLoading}
           isRefreshing={isRefreshing}
           onRefresh={refresh}

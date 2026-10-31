@@ -121,6 +121,9 @@
 - Today's weekly schedule row uses a berry date disc and accent rule on
   phones and tablets, while the site header shows the name with an
   `Unofficial` mark on wide screens.
+- The board's sync status shows the latest collection run's outcome and time,
+  and lists the last successful read of X, YouTube and bilibili separately,
+  each marked out of date after a day.
 - Past posts can be read row by row in a single-column view, with the device
   remembering the choice; the month dialogs are larger on wide screens.
 - Posts on X always lists the eight newest posts of each account, so the

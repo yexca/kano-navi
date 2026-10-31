@@ -321,17 +321,18 @@ func TestDashboardSourceFreshnessIsSanitizedAndIndependentOfHistoryWork(t *testi
 	handler := dashboardHandler(t, func(path string) {
 		testutil.Exec(t, path, `INSERT INTO sync_state(source,account_id,last_success_at,metadata_json) VALUES
 		 ('x-timeline-window','private-checkpoint','2026-10-11T00:00:00Z','{"window":{"mode":"recent","endTime":"2026-10-10T20:00:00Z"},"headFetchedAt":"2026-10-10T20:05:00Z","raw":"synthetic-private-metadata"}'),
-		 ('youtube-window','private-range','2026-10-11T00:00:00Z','{"window":{"mode":"range","endTime":"2026-10-11T00:00:00Z"}}')`)
+		 ('youtube-window','private-range','2026-10-11T00:00:00Z','{"window":{"mode":"range","endTime":"2026-10-11T00:00:00Z"}}'),
+		 ('bilibili','private-account','2026-10-10T18:00:00Z','{"session":{"buvid3":"synthetic-private-device"}}')`)
 	})
 	status, _, payload, body := dashboardPayload(t, handler, "/api/dashboard")
 	if status != http.StatusOK {
 		t.Fatalf("status=%d body=%s", status, body)
 	}
 	freshness := payload["meta"].(map[string]any)["sourceFetchedAt"].(map[string]any)
-	if len(freshness) != 2 || freshness["x"] != "2026-10-10T20:00:00.000Z" || freshness["youtube"] != nil {
+	if len(freshness) != 3 || freshness["x"] != "2026-10-10T20:00:00.000Z" || freshness["youtube"] != nil || freshness["bilibili"] != "2026-10-10T18:00:00.000Z" {
 		t.Fatalf("source freshness=%v", freshness)
 	}
-	for _, private := range []string{"private-checkpoint", "private-range", "synthetic-private-metadata", "metadata_json", "last_success_at"} {
+	for _, private := range []string{"private-checkpoint", "private-range", "private-account", "synthetic-private-device", "synthetic-private-metadata", "metadata_json", "last_success_at"} {
 		if strings.Contains(body, private) {
 			t.Fatalf("public freshness leaked %s", private)
 		}

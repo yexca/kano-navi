@@ -16,14 +16,14 @@ func TestSourceFreshnessUsesRecentReadsAndOriginalWindowEnd(t *testing.T) {
 	}
 	defer s.Close()
 	ctx := context.Background()
-	freshness := func(x, youtube string) {
+	freshness := func(x, youtube, bilibili string) {
 		t.Helper()
 		got, err := s.sourceFetchedAt(ctx)
-		if err != nil || len(got) != 2 || stringValue(got["x"]) != x || stringValue(got["youtube"]) != youtube {
-			t.Fatalf("freshness=%v err=%v, want x=%q youtube=%q", got, err, x, youtube)
+		if err != nil || len(got) != 3 || stringValue(got["x"]) != x || stringValue(got["youtube"]) != youtube || stringValue(got["bilibili"]) != bilibili {
+			t.Fatalf("freshness=%v err=%v, want x=%q youtube=%q bilibili=%q", got, err, x, youtube, bilibili)
 		}
 	}
-	freshness("", "")
+	freshness("", "", "")
 	// Backfills, operator-selected ranges, malformed dates and bookkeeping are
 	// successful work, but they say nothing about the newest source content.
 	testutil.Exec(t, p, `INSERT INTO sync_state(source,account_id,last_success_at,metadata_json) VALUES
@@ -33,21 +33,23 @@ func TestSourceFreshnessUsesRecentReadsAndOriginalWindowEnd(t *testing.T) {
 	 ('x-window','metadata','2026-03-10T00:00:00Z','{invalid'),
 	 ('x-timeline-window','before','2026-03-10T00:00:00Z','{"window":{"mode":"before"}}'),
 	 ('x-timeline-window','legacy-count','2026-03-10T00:00:00Z','{"window":{"mode":"count","count":30}}'),
-	 ('x-budget','synthetic','2026-03-10T00:00:00Z','{}'),
-	 ('bilibili','synthetic','2026-03-10T00:00:00Z','{}')`)
-	freshness("", "")
+	 ('x-budget','synthetic','2026-03-10T00:00:00Z','{}')`)
+	freshness("", "", "")
+	// A Bilibili account that was only attempted has no successful read.
 	testutil.Exec(t, p, `INSERT INTO sync_state(source,account_id,last_success_at,metadata_json) VALUES
 	 ('x','first','2026-03-08T12:00:00+09:00','{"raw":"private-metadata"}'),
 	 ('x','second','2026-03-08T02:00:00Z','{}'),
-	 ('youtube-window','recent','2026-03-10T00:00:00Z','{"window":{"mode":"recent","endTime":"2026-03-09T00:00:00Z"}}')`)
-	freshness("2026-03-08T03:00:00.000Z", "2026-03-09T00:00:00.000Z")
+	 ('youtube-window','recent','2026-03-10T00:00:00Z','{"window":{"mode":"recent","endTime":"2026-03-09T00:00:00Z"}}'),
+	 ('bilibili','attempted',NULL,'{"lastAttemptAt":"2026-03-10T00:00:00.000Z","lastError":"bilibili_risk_control"}')`)
+	freshness("2026-03-08T03:00:00.000Z", "2026-03-09T00:00:00.000Z", "")
 	testutil.Exec(t, p, `INSERT INTO sync_state(source,account_id,last_success_at,metadata_json) VALUES
-	 ('x-timeline-window','recent','2026-03-10T00:00:00Z','{"window":{"mode":"recent","endTime":"2026-03-09T08:00:00Z"},"headFetchedAt":"2026-03-09T08:05:00Z"}')`)
-	freshness("2026-03-09T08:00:00.000Z", "2026-03-09T00:00:00.000Z")
+	 ('x-timeline-window','recent','2026-03-10T00:00:00Z','{"window":{"mode":"recent","endTime":"2026-03-09T08:00:00Z"},"headFetchedAt":"2026-03-09T08:05:00Z"}'),
+	 ('bilibili','synthetic','2026-03-09T06:00:00Z','{}')`)
+	freshness("2026-03-09T08:00:00.000Z", "2026-03-09T00:00:00.000Z", "2026-03-09T06:00:00.000Z")
 	testutil.Exec(t, p, `INSERT INTO sync_state(source,account_id,last_success_at,metadata_json) VALUES
 	 ('x-timeline-window','count','2026-03-10T01:00:00Z','{"window":{"mode":"count","count":30},"headFetchedAt":"2026-03-10T01:00:00Z"}'),
 	 ('youtube','incremental','2026-03-10T02:00:00Z','{}')`)
-	freshness("2026-03-10T01:00:00.000Z", "2026-03-10T02:00:00.000Z")
+	freshness("2026-03-10T01:00:00.000Z", "2026-03-10T02:00:00.000Z", "2026-03-09T06:00:00.000Z")
 }
 
 func TestTimelineCheckpointFreshnessDoesNotAdvanceOnContinuationOrCleanup(t *testing.T) {
@@ -102,7 +104,7 @@ func TestSourceFreshnessWithoutCheckpointTableRemainsUnknown(t *testing.T) {
 	}
 	defer s.Close()
 	got, err := s.sourceFetchedAt(context.Background())
-	if err != nil || len(got) != 2 || got["x"] != nil || got["youtube"] != nil {
+	if err != nil || len(got) != 3 || got["x"] != nil || got["youtube"] != nil || got["bilibili"] != nil {
 		t.Fatalf("freshness=%v err=%v", got, err)
 	}
 }

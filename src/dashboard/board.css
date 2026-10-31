@@ -707,10 +707,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* One line of platform icons, each followed by its last successful sync. */
 .profile-sources {
-  display: grid;
+  display: flex;
   width: 100%;
-  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
   margin: 0;
   padding: 0 12px;
   color: var(--soft);
@@ -720,19 +723,26 @@
 }
 
 .profile-sources > div {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
-  gap: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.profile-sources dt {
+  display: flex;
+}
+
+.profile-sources dt svg {
+  width: 12px;
+  height: 12px;
 }
 
 .profile-sources dd {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 8px;
   margin: 0;
 }
 
-.profile-source-stale {
+.profile-sources > .is-stale {
   color: var(--honey);
   font-weight: 700;
 }

@@ -3,7 +3,6 @@ export const dashboardMessages = {
     "meta.title": "鹿乃在做什么",
     "meta.description":
       "鹿乃まほろ的非官方近况整理页：X 动态、配信日程、YouTube 与资料入口。",
-    "header.lastUpdated": "同步于",
     "header.bannerAlt": "鹿乃まほろ的草莓与格纹主题横幅",
     "spotlight.onAir": "直播中",
     "countdown.unitDays": "天",
@@ -37,7 +36,8 @@ export const dashboardMessages = {
     "sync.snapshot": "快照正常",
     "sync.waiting": "尚未同步",
     "sync.stale": "数据较旧",
-    "sync.sourceTimes": "各来源最后同步时间",
+    "sync.latestRun": "最近运行",
+    "sync.sourceTimes": "各来源最后成功同步时间",
     "toast.reloaded": "已重新读取快照",
     "toast.failed": ({ message }: { message: any }) => `读取失败 · ${message}`,
     "error.api": "暂时无法连接本地 API，页面保留当前内容。",
@@ -164,7 +164,6 @@ export const dashboardMessages = {
     "meta.title": "鹿乃ちゃん何してるか",
     "meta.description":
       "鹿乃まほろの非公式まとめページ。X、配信予定、YouTube、公開リンクをひと目で。",
-    "header.lastUpdated": "最終同期",
     "header.bannerAlt": "鹿乃まほろの苺とギンガムチェックのバナー",
     "spotlight.onAir": "配信中",
     "countdown.unitDays": "日",
@@ -199,7 +198,8 @@ export const dashboardMessages = {
     "sync.snapshot": "スナップショット正常",
     "sync.waiting": "未同期",
     "sync.stale": "更新が古い",
-    "sync.sourceTimes": "ソースごとの最終同期日時",
+    "sync.latestRun": "最新の実行",
+    "sync.sourceTimes": "ソースごとの最終同期成功日時",
     "toast.reloaded": "スナップショットを再読み込みしました",
     "toast.failed": ({ message }: { message: any }) =>
       `読み込み失敗 · ${message}`,
@@ -330,7 +330,6 @@ export const dashboardMessages = {
     "meta.title": "What’s Kano Up To?",
     "meta.description":
       "An unofficial Kano Mahoro status board: X posts, stream schedule, YouTube, and public links at a glance.",
-    "header.lastUpdated": "Synced",
     "header.bannerAlt": "Kano Mahoro's strawberry and gingham banner",
     "spotlight.onAir": "On air",
     "countdown.unitDays": "days",
@@ -365,7 +364,8 @@ export const dashboardMessages = {
     "sync.snapshot": "Healthy",
     "sync.waiting": "Not synced yet",
     "sync.stale": "Out of date",
-    "sync.sourceTimes": "Last sync by source",
+    "sync.latestRun": "Latest run",
+    "sync.sourceTimes": "Last successful sync by source",
     "toast.reloaded": "Snapshot reloaded",
     "toast.failed": ({ message }: { message: any }) =>
       `Load failed · ${message}`,

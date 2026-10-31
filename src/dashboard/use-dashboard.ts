@@ -25,6 +25,7 @@ const emptyDashboard: Dashboard = {
   scheduleImages: [],
   meta: {
     fetchedAt: null,
+    sourceFetchedAt: { x: null, youtube: null, bilibili: null },
     lastSync: null,
     postWindowDays: POST_WINDOW_DAYS,
     xAccounts: ["kano_2525", "_Kanotic"],

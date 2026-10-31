@@ -20,9 +20,10 @@ the stage's fallback: the newest non-upcoming video that is not a Short,
 unless the operator featured that Short; a video of unknown format stays
 eligible. Metadata includes configured X accounts and the Featured video ID.
 
-`meta.sourceFetchedAt` contains only `x` and `youtube` ISO timestamps or null,
-derived from successful incremental source reads and the head pages of manual
-timeline fetches. Other manual fetches do not refresh it; a stored recent-window
+`meta.sourceFetchedAt` contains only `x`, `youtube` and `bilibili` ISO
+timestamps or null, derived from successful incremental source reads, the head
+pages of manual timeline fetches and the Bilibili account's last successful
+read. Other manual fetches do not refresh it; a stored recent-window
 checkpoint counts up to its window's end time. Timeline `count` and `all`
 fetches retain their successful head-page read time, so resuming old pages
 does not refresh the source; a timeline checkpoint without that time leaves

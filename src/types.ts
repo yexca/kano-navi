@@ -223,8 +223,15 @@ export interface Dashboard {
   meta: {
     fetchedAt: string | null
     /** Successful current-source reads; historical backfills do not refresh these. */
-    sourceFetchedAt?: Record<"x" | "youtube", string | null>
-    lastSync: { status: string; startedAt?: string; finishedAt?: string } | null
+    sourceFetchedAt?: Partial<
+      Record<"x" | "youtube" | "bilibili", string | null>
+    >
+    /** The latest completed run, whatever its outcome. */
+    lastSync: {
+      status: string
+      startedAt?: string
+      finishedAt?: string | null
+    } | null
     postWindowDays: number
     xAccounts: string[]
     featuredVideoId: string | null

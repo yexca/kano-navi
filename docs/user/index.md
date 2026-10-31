@@ -32,10 +32,12 @@ archive and the AI models that helped build the site, and states the license.
 
 ## Freshness and Sources
 
-The board shows what it last collected from X and YouTube; it is not a live
-feed. On the board, a small dot in the header shows the state of that
-snapshot, and the profile card shows when it was taken, with a reload button
-that loads the latest one. An open board picks up a newly stored snapshot by
+The board shows what it last collected from X, YouTube and bilibili; it is not
+a live feed. On the board, a small dot in the header shows how the site's
+latest collection run went. The profile card shows that run's outcome and
+time, when each of X, YouTube and bilibili was last read successfully, and a
+reload button that loads the latest snapshot. A platform not read successfully
+for a day is marked out of date. An open board picks up a newly stored snapshot by
 itself within a few seconds, without a reload.
 When a platform is unavailable, the board keeps showing what it already
 knows.

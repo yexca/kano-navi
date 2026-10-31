@@ -244,14 +244,17 @@ wake listeners. The 30-second local time derivation below runs separately.
 
 ## Time-dependent Snapshot State
 
-The profile card shows separate X and YouTube successful-read times from
-`meta.sourceFetchedAt`. A source becomes stale after 24 hours; the local clock
-updates that warning without a request. Missing timestamps, and ones more
-than five minutes ahead of the local clock (a visitor clock slightly behind
-the server still shows a fresh read), remain waiting. One unread source makes
-a known snapshot partial, and API or failed-run warnings take priority. A
-payload without per-source metadata falls back to `meta.fetchedAt`. This is a
-display threshold, not a synchronization timer.
+The overall state, shown by the header dot and the profile card, is the
+latest completed run in `meta.lastSync`: its outcome and its finish time (its
+start time when it has none). An API failure takes priority, then a run that
+is neither `success` nor `partial` (needs review); a `partial` run is partial
+and a run older than 24 hours is out of date. Below it, the profile card lists
+the last successful X, YouTube and bilibili reads from `meta.sourceFetchedAt`,
+each marked out of date after 24 hours; these source times do not change the
+overall state. The local clock updates both warnings without a request.
+Missing timestamps, and ones more than five minutes ahead of the local clock
+(a visitor clock slightly behind the server still shows a fresh read), remain
+waiting. This is a display threshold, not a synchronization timer.
 
 The board rederives event/video availability, counts, and focus candidates from
 its local snapshot every 30 seconds and when the page regains visibility/focus,

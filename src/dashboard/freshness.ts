@@ -6,13 +6,18 @@ export const STALE_AFTER_MS = 24 * 60 * 60 * 1000
 // timestamp further ahead is not trusted.
 export const CLOCK_SKEW_MS = 5 * 60 * 1000
 
+export const SYNC_SOURCES = ["x", "youtube", "bilibili"] as const
+export type SyncSource = (typeof SYNC_SOURCES)[number]
+
 type Freshness = "fresh" | "stale" | "waiting"
 
 export interface SyncState {
   tone: "leaf" | "honey" | "danger" | "muted"
   label: string
+  /** When the latest completed run finished, or null before any run. */
+  runAt: string | null
   sources: {
-    source: "x" | "youtube"
+    source: SyncSource
     timestamp: string | null
     state: Freshness
   }[]
@@ -27,55 +32,47 @@ export function freshnessAt(
   return now - at >= STALE_AFTER_MS ? "stale" : "fresh"
 }
 
-/** Recomputed from the retained snapshot when the local clock changes. */
+/**
+ * The overall state is the latest run's outcome and age; each source keeps its
+ * own last successful read. Recomputed from the retained snapshot when the
+ * local clock changes.
+ */
 export function syncStateFor(
   meta: Dashboard["meta"],
   error: unknown,
   now: number,
   t: Translator,
 ): SyncState {
-  const sourceFetchedAt = meta.sourceFetchedAt
-  const sources: SyncState["sources"] = sourceFetchedAt
-    ? (["x", "youtube"] as const).map((source) => {
-        const timestamp = sourceFetchedAt[source]
-        const state = freshnessAt(timestamp, now)
-        return {
-          source,
-          timestamp: state === "waiting" ? null : timestamp,
-          state,
-        }
-      })
-    : []
-  // Older APIs have one snapshot timestamp, without per-source assurances.
-  const states = sources.length
-    ? sources.map(({ state }) => state)
-    : [freshnessAt(meta.fetchedAt, now)]
+  const sources = SYNC_SOURCES.map((source) => {
+    const timestamp = meta.sourceFetchedAt?.[source] ?? null
+    const state = freshnessAt(timestamp, now)
+    return { source, timestamp: state === "waiting" ? null : timestamp, state }
+  })
+  const run = meta.lastSync
+  const runAt = run ? (run.finishedAt ?? run.startedAt ?? null) : null
+  const runState = freshnessAt(runAt, now)
   let tone: SyncState["tone"] = "leaf"
   let key = "sync.snapshot"
   if (error) {
     tone = "danger"
     key = "sync.apiUnavailable"
-  } else if (
-    meta.lastSync &&
-    !["success", "partial"].includes(meta.lastSync.status)
-  ) {
+  } else if (run && !["success", "partial"].includes(run.status)) {
     tone = "danger"
     key = "sync.needsReview"
-  } else if (
-    freshnessAt(meta.fetchedAt, now) === "waiting" ||
-    states.every((state) => state === "waiting")
-  ) {
+  } else if (runState === "waiting") {
     tone = "muted"
     key = "sync.waiting"
-  } else if (states.includes("stale")) {
+  } else if (runState === "stale") {
     tone = "honey"
     key = "sync.stale"
-  } else if (
-    states.includes("waiting") ||
-    meta.lastSync?.status === "partial"
-  ) {
+  } else if (run?.status === "partial") {
     tone = "honey"
     key = "sync.partial"
   }
-  return { tone, label: t(key), sources }
+  return {
+    tone,
+    label: t(key),
+    runAt: runState === "waiting" ? null : runAt,
+    sources,
+  }
 }

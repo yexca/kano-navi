@@ -15,8 +15,8 @@ const t = (key: string) => key
 function meta(overrides: Partial<Dashboard["meta"]> = {}): Dashboard["meta"] {
   return {
     fetchedAt: recent,
-    lastSync: { status: "success" },
-    sourceFetchedAt: { x: recent, youtube: recent },
+    lastSync: { status: "success", startedAt: recent, finishedAt: recent },
+    sourceFetchedAt: { x: recent, youtube: recent, bilibili: recent },
     postWindowDays: 3,
     xAccounts: [],
     featuredVideoId: null,
@@ -31,44 +31,53 @@ test("freshness ages locally at the inclusive 24-hour boundary", () => {
     "fresh",
   )
   const snapshot = meta()
-  assert.equal(syncStateFor(snapshot, null, now, t).label, "sync.snapshot")
-  assert.equal(
-    syncStateFor(snapshot, null, now + STALE_AFTER_MS, t).label,
-    "sync.stale",
+  const healthy = syncStateFor(snapshot, null, now, t)
+  assert.equal(healthy.label, "sync.snapshot")
+  assert.equal(healthy.runAt, recent)
+  const aged = syncStateFor(snapshot, null, now + STALE_AFTER_MS, t)
+  assert.equal(aged.label, "sync.stale")
+  assert.deepEqual(
+    aged.sources.map(({ state }) => state),
+    ["stale", "stale", "stale"],
   )
-  assert.equal(snapshot.sourceFetchedAt?.x, recent)
 })
 
-test("a recent overall sync cannot hide a stale or never-synced source", () => {
-  const stale = syncStateFor(
-    meta({ sourceFetchedAt: { x: "2025-12-30T00:00:00Z", youtube: recent } }),
+test("the overall state follows the latest run while each source keeps its last success", () => {
+  const running = "2026-01-01T23:30:00Z"
+  const state = syncStateFor(
+    meta({
+      lastSync: { status: "success", startedAt: recent, finishedAt: running },
+      sourceFetchedAt: {
+        x: "2025-12-30T00:00:00Z",
+        youtube: recent,
+        bilibili: null,
+      },
+    }),
     null,
     now,
     t,
   )
-  assert.equal(stale.label, "sync.stale")
-  assert.equal(stale.tone, "honey")
+  assert.equal(state.label, "sync.snapshot")
+  assert.equal(state.tone, "leaf")
+  assert.equal(state.runAt, running)
   assert.deepEqual(
-    stale.sources.map(({ state }) => state),
-    ["stale", "fresh"],
+    state.sources.map(({ source, state }) => [source, state]),
+    [
+      ["x", "stale"],
+      ["youtube", "fresh"],
+      ["bilibili", "waiting"],
+    ],
   )
+  // A run without a finish time is dated by its start.
   assert.equal(
     syncStateFor(
-      meta({ sourceFetchedAt: { x: null, youtube: recent } }),
+      meta({ lastSync: { status: "partial", startedAt: recent } }),
       null,
       now,
       t,
-    ).label,
-    "sync.partial",
+    ).runAt,
+    recent,
   )
-  const empty = syncStateFor(
-    meta({ sourceFetchedAt: { x: null, youtube: null } }),
-    null,
-    now,
-    t,
-  )
-  assert.equal(empty.label, "sync.waiting")
-  assert.equal(empty.tone, "muted")
 })
 
 test("missing, invalid and future timestamps never look healthy", () => {
@@ -88,14 +97,36 @@ test("missing, invalid and future timestamps never look healthy", () => {
     now,
     t,
   )
-  assert.equal(invalid.label, "sync.waiting")
   assert.deepEqual(
-    invalid.sources.map(({ timestamp }) => timestamp),
-    [null, null],
+    invalid.sources.map(({ timestamp, state }) => [timestamp, state]),
+    [
+      [null, "waiting"],
+      [null, "waiting"],
+      [null, "waiting"],
+    ],
   )
-  assert.equal(
-    syncStateFor(meta({ fetchedAt: null }), null, now, t).label,
-    "sync.waiting",
+  const never = syncStateFor(meta({ lastSync: null }), null, now, t)
+  assert.equal(never.label, "sync.waiting")
+  assert.equal(never.tone, "muted")
+  assert.equal(never.runAt, null)
+  const future = syncStateFor(
+    meta({
+      lastSync: { status: "success", finishedAt: "2026-01-03T00:00:00Z" },
+    }),
+    null,
+    now,
+    t,
+  )
+  assert.equal(future.label, "sync.waiting")
+  assert.equal(future.runAt, null)
+  const empty = syncStateFor(meta({ sourceFetchedAt: undefined }), null, now, t)
+  assert.deepEqual(
+    empty.sources.map(({ source, timestamp }) => [source, timestamp]),
+    [
+      ["x", null],
+      ["youtube", null],
+      ["bilibili", null],
+    ],
   )
 })
 
@@ -111,39 +142,39 @@ test("a visitor clock slightly behind the server still shows fresh reads", () =>
     "waiting",
   )
   const skewed = syncStateFor(
-    meta({ fetchedAt: ahead, sourceFetchedAt: { x: ahead, youtube: ahead } }),
+    meta({
+      lastSync: { status: "success", finishedAt: ahead },
+      sourceFetchedAt: { x: ahead, youtube: ahead, bilibili: ahead },
+    }),
     null,
     now,
     t,
   )
   assert.equal(skewed.label, "sync.snapshot")
+  assert.equal(skewed.runAt, ahead)
   assert.deepEqual(
     skewed.sources.map(({ timestamp }) => timestamp),
-    [ahead, ahead],
+    [ahead, ahead, ahead],
   )
 })
 
-test("API and sync failures take precedence while retaining source times", () => {
-  const snapshot = meta({ lastSync: { status: "failed" } })
+test("API and run failures take precedence while retaining run and source times", () => {
+  const snapshot = meta({
+    lastSync: { status: "failed", startedAt: recent, finishedAt: recent },
+  })
   const failed = syncStateFor(snapshot, null, now, t)
   assert.equal(failed.label, "sync.needsReview")
   assert.equal(failed.tone, "danger")
+  assert.equal(failed.runAt, recent)
   const offline = syncStateFor(snapshot, new Error("offline"), now, t)
   assert.equal(offline.label, "sync.apiUnavailable")
   assert.equal(offline.sources[0].timestamp, recent)
-  assert.equal(
-    syncStateFor(meta({ lastSync: { status: "partial" } }), null, now, t).label,
-    "sync.partial",
+  const partial = syncStateFor(
+    meta({ lastSync: { status: "partial", finishedAt: recent } }),
+    null,
+    now,
+    t,
   )
-})
-
-test("older snapshots fall back to their single timestamp without inventing source reads", () => {
-  const snapshot = meta({ sourceFetchedAt: undefined })
-  const fresh = syncStateFor(snapshot, null, now, t)
-  assert.equal(fresh.label, "sync.snapshot")
-  assert.deepEqual(fresh.sources, [])
-  assert.equal(
-    syncStateFor(snapshot, null, now + STALE_AFTER_MS, t).label,
-    "sync.stale",
-  )
+  assert.equal(partial.label, "sync.partial")
+  assert.equal(partial.tone, "honey")
 })

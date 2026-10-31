@@ -32,10 +32,16 @@ import {
   visitorIsInJapan,
 } from "../format"
 import { pickCompanion, pickSpotlight, spotlightIsLive } from "../spotlight"
-import type { SyncState } from "../freshness"
+import type { SyncSource, SyncState } from "../freshness"
 import { videoLinks } from "../video-groups"
 import { PlatformBadge, PlatformLinks } from "./platform-links"
 import { TranslatedTitle } from "./translated-title"
+
+const SOURCES: Record<SyncSource, { name: string; Icon: typeof XLogo }> = {
+  x: { name: "X", Icon: XLogo },
+  youtube: { name: "YouTube", Icon: YouTubeLogo },
+  bilibili: { name: "bilibili", Icon: BilibiliLogo },
+}
 
 function dateOnlyParts(key: string, locale: Locale) {
   const [year, month, day] = key.split("-").map(Number)
@@ -454,8 +460,6 @@ function ProfileCard({
   counts,
   postWindowDays,
   syncState,
-  syncTime,
-  syncIso,
   isRefreshing,
   onRefresh,
   t,
@@ -465,8 +469,6 @@ function ProfileCard({
   counts: { posts: number; upcomingEvents: number; videos: number }
   postWindowDays: number
   syncState: SyncState
-  syncTime: string
-  syncIso: string | null
   isRefreshing: boolean
   onRefresh: () => void
   t: Translator
@@ -543,10 +545,12 @@ function ProfileCard({
           <span className="sync-dot" aria-hidden="true" />
           <span className="profile-sync-copy">
             <strong>{syncState.label}</strong>
-            {syncIso ? (
+            {syncState.runAt ? (
               <small>
-                {t("header.lastUpdated")}{" "}
-                <time dateTime={syncIso}>{syncTime}</time>{" "}
+                {t("sync.latestRun")}{" "}
+                <time dateTime={syncState.runAt}>
+                  {formatStamp(syncState.runAt)}
+                </time>{" "}
                 {t("common.timezoneShort")}
               </small>
             ) : null}
@@ -566,25 +570,33 @@ function ProfileCard({
         </div>
         {syncState.sources.length ? (
           <dl className="profile-sources" aria-label={t("sync.sourceTimes")}>
-            {syncState.sources.map(({ source, timestamp, state }) => (
-              <div key={source}>
-                <dt>{source === "x" ? "X" : "YouTube"}</dt>
-                <dd>
-                  {timestamp ? (
-                    <time dateTime={timestamp}>
-                      {formatStamp(timestamp)} {t("common.timezoneShort")}
-                    </time>
-                  ) : (
-                    t("sync.waiting")
-                  )}
-                  {state === "stale" ? (
-                    <span className="profile-source-stale">
-                      {t("sync.stale")}
-                    </span>
-                  ) : null}
-                </dd>
-              </div>
-            ))}
+            {syncState.sources.map(({ source, timestamp, state }) => {
+              const { name, Icon } = SOURCES[source]
+              const note =
+                state === "fresh"
+                  ? null
+                  : t(state === "stale" ? "sync.stale" : "sync.waiting")
+              return (
+                <div
+                  key={source}
+                  className={state === "stale" ? "is-stale" : undefined}
+                  title={note ? `${name} · ${note}` : name}
+                >
+                  <dt>
+                    <Icon aria-hidden="true" />
+                    <span className="sr-only">{name}</span>
+                  </dt>
+                  <dd>
+                    {timestamp ? (
+                      <time dateTime={timestamp}>{formatStamp(timestamp)}</time>
+                    ) : (
+                      <span aria-hidden="true">—</span>
+                    )}
+                    {note ? <span className="sr-only">{note}</span> : null}
+                  </dd>
+                </div>
+              )
+            })}
           </dl>
         ) : null}
       </div>
@@ -599,8 +611,6 @@ export function NowStage(props: {
   counts: { posts: number; upcomingEvents: number; videos: number }
   postWindowDays: number
   syncState: SyncState
-  syncTime: string
-  syncIso: string | null
   isLoading: boolean
   isRefreshing: boolean
   onRefresh: () => void
