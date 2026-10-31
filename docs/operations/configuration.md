@@ -24,7 +24,6 @@
 | `MCP_ENABLED`                   | `1`                                 | Expose the stateless `/mcp` endpoint                              |
 | `MCP_CONTROL_TOKEN`             | Empty                               | Bearer token for MCP mutation tools                               |
 | `X_HANDLES`                     | `kano_2525,_Kanotic`                | Comma-separated public X account names                            |
-| `X_HANDLE`                      | Empty                               | Single-account compatibility fallback                             |
 | `X_API_BEARER_TOKEN`            | Empty                               | Optional environment-only X API credential: fetches, chain method |
 | `YOUTUBE_API_KEY`               | Empty                               | Optional environment-only Data API key: YouTube sync and fetches  |
 | `SOURCE_HISTORY_MAX_PAGES`      | `4`                                 | Manual fetch pages per account or channel (1–20), within X budget |
@@ -32,7 +31,6 @@
 | `X_DISCOVERY_LIMIT`             | `50`                                | Full-sync cap of unstored X statuses per account; pages of 20     |
 | `X_MAX_STATUS_REQUESTS`         | `12`                                | Maximum X detail requests per run; manual X fetch page budget     |
 | `X_REFRESH_KNOWN`               | `1`                                 | Known X posts refreshed per run                                   |
-| `X_SCHEDULE_REFRESH_LIMIT`      | `1`                                 | Missing schedule source posts prioritized per account             |
 | `YOUTUBE_CHANNEL_ID`            | Main channel                        | YouTube channel identifier                                        |
 | `YOUTUBE_BOOTSTRAP_VIDEOS`      | `6`                                 | First-run RSS entries stored                                      |
 | `YOUTUBE_MAX_DETAIL_REQUESTS`   | `12`                                | Reservation pages inspected per run                               |
@@ -42,8 +40,6 @@
 | `BILIBILI_SESSDATA`             | Empty                               | Optional environment-only Bilibili login cookie                   |
 | `SYNC_TIMEOUT_MS`               | `7000`                              | Timeout for a source network request                              |
 | `SYNC_REQUEST_DELAY_MS`         | `150`                               | Delay between source detail requests                              |
-| `MEDIA_DOWNLOAD_TIMEOUT_MS`     | `10000`                             | Timeout for an image request                                      |
-| `MEDIA_MAX_BYTES`               | `10485760`                          | Maximum bytes accepted for one image                              |
 | `SKIP_X`, `SKIP_YOUTUBE`        | `0`                                 | Set to `1` to skip that source's step and its timer               |
 | `SKIP_BILIBILI`                 | `0`                                 | Set to `1` to skip the Bilibili step, timer and console reads     |
 | `SKIP_MEDIA`, `SKIP_LLM`        | `0`                                 | Set a post-processing stage flag to `1` to skip it                |

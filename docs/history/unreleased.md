@@ -191,6 +191,10 @@
 <details>
 <summary><strong>Runtime and development</strong></summary>
 
+- `.env.example` and the configuration reference drop `X_HANDLE`,
+  `X_SCHEDULE_REFRESH_LIMIT`, `MEDIA_DOWNLOAD_TIMEOUT_MS` and
+  `MEDIA_MAX_BYTES`, which the server does not read; existing `.env` entries
+  for them have no effect and can be deleted.
 - Release images are published for `linux/arm64` as well as `linux/amd64`
   under the same tags, so ARM hosts such as a Raspberry Pi 4/5 or an Apple
   silicon Mac pull a native image. The Dockerfiles cross-compile the Go
