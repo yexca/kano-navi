@@ -1,4 +1,4 @@
-import type { Locale, Translations, Translator, Video } from "@/types"
+import type { Translations, Translator, Video } from "@/types"
 
 import {
   TranslationNote,
@@ -21,17 +21,15 @@ export function TranslatedTitle({
   title,
   translations,
   href,
-  locale,
   t,
 }: {
   className: string
   title: string
   translations?: Translations | null
   href?: string | null
-  locale: Locale
   t: Translator
 }) {
-  const state = useTranslatedText(title, translations, null, locale)
+  const state = useTranslatedText(title, translations, null)
   const text = state.shown ? cleanVideoTitle(state.text) : title
   const wording = href ? (
     <ExternalLink
@@ -61,19 +59,16 @@ export function TranslatedTitle({
 export function TranslatedHeading({
   title,
   video,
-  locale,
   t,
 }: {
   title: string
   video: Video
-  locale: Locale
   t: Translator
 }) {
   const state = useTranslatedText(
     title,
     video.translations,
     video.sourceLanguage,
-    locale,
   )
   return (
     <>

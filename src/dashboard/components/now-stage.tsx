@@ -241,7 +241,6 @@ function FullTicket({
               title={item.title}
               translations={(item.video || item.event)?.translations}
               href={url}
-              locale={locale}
               t={t}
             />
             <TicketWhen item={item} locale={locale} now={now} t={t} />
@@ -302,7 +301,6 @@ function CompactTicket({
             title={item.title}
             translations={(item.video || item.event)?.translations}
             href={item.url}
-            locale={locale}
             t={t}
           />
           <TicketWhen item={item} locale={locale} now={now} t={t} />
@@ -377,7 +375,6 @@ function LatestCard({
           title={companion.title}
           translations={companion.video.translations}
           href={links[0].url}
-          locale={locale}
           t={t}
         />
         {companion.time ? (

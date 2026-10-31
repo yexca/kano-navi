@@ -50,8 +50,9 @@ translated. The links commenters left to their own blogs are not kept.
 
 ## Translation
 
-In Simplified Chinese and English, each paragraph is followed by its
-translation into that language; Japanese shows the original only. The menu
+With Simplified Chinese or English as the content language (see
+[Pages and Settings](index.md#pages-and-settings)), each paragraph is followed
+by its translation into that language; Japanese shows the original only. The menu
 bar carries the same **AI** mark as translated video titles: select it to
 hide the translations of every article, and select **Original** to show them
 again; the choice is remembered on this device. The same mark on an

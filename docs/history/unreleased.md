@@ -131,6 +131,10 @@
 <details>
 <summary><strong>Public pages</strong></summary>
 
+- The language menu has an interface language and a separate content
+  language for video and schedule titles, posts and LINE BLOG translations.
+  Content follows the interface by default, so existing visitors see no
+  change until they pick one.
 - The Overview console has an off-by-default switch for a localized mainland
   China site suggestion when the reverse proxy reports that country.
 - A new LINE BLOG page brings back Kano's 2015–2019 archive with 99 Japanese

@@ -79,7 +79,7 @@ await loadView(window.location.search).catch(() => undefined)
 const TRANSLATION_KEY = "kano-lineblog-translation"
 const DESIGN_KEY = "kano-lineblog-design"
 
-/** The translation each interface language shows; Japanese shows none. */
+/** The translation each content language shows; Japanese shows none. */
 const TRANSLATIONS = {
   "zh-CN": { blocks: "zh", title: "titleZh", lang: "zh-CN" },
   en: { blocks: "en", title: "titleEn", lang: "en" },
@@ -1656,7 +1656,7 @@ function SmartphoneBlog({
 }
 
 export function LineblogApp() {
-  const { t, locale } = useAppSettings()
+  const { t, contentLocale } = useAppSettings()
   const { search, go, onClick, onIntent } = useLineblogLocation()
   const phone = usePhoneLayout()
   const view = useMemo(() => lineblogView(search), [search])
@@ -1664,7 +1664,7 @@ export function LineblogApp() {
   const [translationOn, setTranslationOn] = useState(readTranslation)
   const [translationRound, setTranslationRound] = useState(0)
   const [designChoice, setDesignChoice] = useState(readDesign)
-  const offered = locale === "ja" ? null : TRANSLATIONS[locale]
+  const offered = contentLocale === "ja" ? null : TRANSLATIONS[contentLocale]
 
   useEffect(() => {
     const title = view.article

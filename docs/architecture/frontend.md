@@ -117,7 +117,9 @@ cannot be listed there statically: the build
 (`scripts/vite-page-preload.ts`) writes a small script ahead of the entry
 that adds `modulepreload` and style `preload` links for them only when the
 address is the board, so they download alongside the entry. The shared
-settings provider owns persistent theme and language; page message providers
+settings provider owns persistent theme, interface language (`kano-locale`)
+and content language (`kano-content-locale`, a locale or `interface` to
+follow the interface); page message providers
 extend its translator without duplicating preferences. The base dictionary
 holds the copy shared by pages (header, footer, navigation, page status and
 the translation toggle); the board's own copy is in
@@ -216,8 +218,14 @@ the quote cell spans the row.
 
 Post text and video titles come with server-resolved `translations` (see
 [Translations](data-model.md#translations)). `src/components/translated-text.tsx`
-chooses what a reader sees: English and Chinese readers get their locale's
-translation by default and Japanese readers always get the source. Block
+chooses what a reader sees from the content language, not the interface
+locale: English and Chinese content gets that locale's translation by default
+and Japanese content always gets the source. The header's language menu
+(`src/components/preference-controls.tsx`) sets both; the content language
+defaults to "Same as interface", and the operator console shows only the
+interface choice. The LINE BLOG paragraph translations and the schedule
+month grid follow the same content locale, while feed links, history copy
+and the bilibili-first rule follow the interface locale. Block
 text such as a post uses `TranslatedText`, which labels the origin (AI,
 platform or editor) and offers a Show original button. A card title uses
 `TranslationToggle`, a compact switch that reads "AI" (or "Translated" for

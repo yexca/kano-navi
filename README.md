@@ -75,8 +75,9 @@ and Simplified Chinese, in light and dark themes, on phones and desktops.
   <tr>
     <td colspan="2" valign="top">
       <h3>🌏 Your language</h3>
-      English, Japanese, and Simplified Chinese, with video titles in your
-      language when a translation exists.
+      English, Japanese, and Simplified Chinese, with video titles and posts
+      in your language when a translation exists. Content can follow the
+      interface or use a language of its own.
     </td>
   </tr>
 </table>

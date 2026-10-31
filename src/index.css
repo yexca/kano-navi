@@ -207,6 +207,9 @@
 
   .language-menu-content {
     min-width: 152px;
+    max-width: min(260px, calc(100vw - 32px));
+    max-height: var(--radix-dropdown-menu-content-available-height);
+    overflow-y: auto;
     border-radius: 14px;
     box-shadow: var(--shadow-md);
   }

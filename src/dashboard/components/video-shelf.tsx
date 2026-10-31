@@ -242,12 +242,7 @@ function LeadCard({
         {usesFocus && focus.title ? (
           <h3>{title}</h3>
         ) : (
-          <TranslatedHeading
-            title={title}
-            video={video}
-            locale={locale}
-            t={t}
-          />
+          <TranslatedHeading title={title} video={video} t={t} />
         )}
         {usesFocus && focus.description ? <p>{focus.description}</p> : null}
         <div className="video-lead-actions">
@@ -319,7 +314,6 @@ function VideoTicket({
             title={title}
             translations={video.translations}
             href={links[0].url}
-            locale={locale}
             t={t}
           />
         </span>
@@ -358,7 +352,6 @@ function VideoCard({
           title={title}
           translations={video.translations}
           href={links[0].url}
-          locale={locale}
           t={t}
         />
       </div>
@@ -457,7 +450,6 @@ function VideoRow({
             title={title}
             translations={video.translations}
             href={links[0].url}
-            locale={locale}
             t={t}
           />
         </span>

@@ -22,7 +22,11 @@ Every page shares one header with the site name (with an "Unofficial" mark on
 wide screens), the page links (Now, Journey, Line Blog, About), a live
 Japan-time clock, and language and theme controls.
 
-- **Languages:** English, Japanese, and Simplified Chinese. Your choice is
+- **Languages:** English, Japanese, and Simplified Chinese. The language
+  menu sets the interface language and, separately, the content language:
+  the language of video and schedule titles, posts, and LINE BLOG
+  translations. Content follows the interface until you pick another
+  language; Japanese content shows the original wording. Both choices are
   remembered on this device.
 - **Themes:** light and dark, following your system until you pick one.
 - **Layouts:** every page works on phones, tablets, and desktops.

@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Languages } from "lucide-react"
 
+import { useAppSettings } from "@/app-settings"
 import { cn } from "@/lib/utils"
 import type { Locale, Translation, Translations, Translator } from "@/types"
 
@@ -15,8 +16,8 @@ const sourceLangs: Record<string, string> = {
 const platforms = new Set(["youtube", "bilibili"])
 
 /**
- * The translation a reader of the locale sees instead of the source wording,
- * or null: Japanese readers and untranslated wording keep the source.
+ * The translation a reader of the content locale sees instead of the source
+ * wording, or null: Japanese content and untranslated wording keep the source.
  */
 export function pickTranslation(
   translations: Translations | undefined | null,
@@ -52,21 +53,24 @@ export interface TranslatedTextState {
   toggle: () => void
 }
 
-/** Shows a reader's translation by default and lets them switch back. */
+/**
+ * Shows the translation in the reader's content language by default and lets
+ * them switch back.
+ */
 export function useTranslatedText(
   original: string,
   translations: Translations | undefined | null,
   sourceLanguage: string | undefined | null,
-  locale: Locale,
 ): TranslatedTextState {
+  const { contentLocale } = useAppSettings()
   const [showOriginal, setShowOriginal] = useState(false)
-  const available = pickTranslation(translations, locale)
+  const available = pickTranslation(translations, contentLocale)
   const shown = available && !showOriginal ? available : null
   return {
     text: shown ? shown.text : original,
     shown,
     available,
-    lang: shown ? locale : sourceLangs[sourceLanguage || ""],
+    lang: shown ? contentLocale : sourceLangs[sourceLanguage || ""],
     toggle: () => setShowOriginal((value) => !value),
   }
 }
@@ -109,23 +113,16 @@ export function TranslatedText({
   original,
   translations,
   sourceLanguage,
-  locale,
   t,
   className,
 }: {
   original: string
   translations?: Translations | null
   sourceLanguage?: string | null
-  locale: Locale
   t: Translator
   className?: string
 }) {
-  const state = useTranslatedText(
-    original,
-    translations,
-    sourceLanguage,
-    locale,
-  )
+  const state = useTranslatedText(original, translations, sourceLanguage)
   return (
     <>
       <p className={className} lang={state.lang}>

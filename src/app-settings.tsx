@@ -12,22 +12,38 @@ import { syncFeedLinks } from "@/lib/feeds"
 import type { Dispatch, SetStateAction, ReactNode } from "react"
 import type { Locale, Translator } from "@/types"
 
+/** The language of synced titles and posts: a locale, or the interface's. */
+export type ContentLanguage = Locale | "interface"
+
 interface AppSettings {
   locale: Locale
+  /** The content language the reader picked. */
+  contentLanguage: ContentLanguage
+  /** The locale whose translations of titles and posts show. */
+  contentLocale: Locale
   isDark: boolean
   setLocale: (locale: Locale) => void
+  setContentLanguage: (language: ContentLanguage) => void
   setIsDark: Dispatch<SetStateAction<boolean>>
   t: Translator
 }
 
 const settingsContext = createContext<AppSettings | null>(null)
 
+function isLocale(value: unknown): value is Locale {
+  return localeOptions.some((option) => option.value === value)
+}
+
 function readLocale(): Locale {
   if (typeof window === "undefined") return "en"
   const savedLocale = window.localStorage.getItem("kano-locale")
-  return localeOptions.some((option) => option.value === savedLocale)
-    ? (savedLocale as Locale)
-    : "en"
+  return isLocale(savedLocale) ? savedLocale : "en"
+}
+
+function readContentLanguage(): ContentLanguage {
+  if (typeof window === "undefined") return "interface"
+  const saved = window.localStorage.getItem("kano-content-locale")
+  return isLocale(saved) ? saved : "interface"
 }
 
 function readTheme() {
@@ -41,13 +57,20 @@ function readTheme() {
 
 export function AppSettingsProvider({ children }: { children?: ReactNode }) {
   const [locale, setLocaleState] = useState(readLocale)
+  const [contentLanguage, setContentLanguageState] =
+    useState(readContentLanguage)
   const [isDark, setIsDarkState] = useState(readTheme)
 
   const setLocale = useCallback((nextLocale: Locale) => {
-    if (localeOptions.some((option) => option.value === nextLocale)) {
-      setLocaleState(nextLocale)
-    }
+    if (isLocale(nextLocale)) setLocaleState(nextLocale)
   }, [])
+
+  const setContentLanguage = useCallback((next: ContentLanguage) => {
+    if (next === "interface" || isLocale(next)) setContentLanguageState(next)
+  }, [])
+
+  const contentLocale =
+    contentLanguage === "interface" ? locale : contentLanguage
 
   const setIsDark = useCallback((nextValue: SetStateAction<boolean>) => {
     setIsDarkState((current) =>
@@ -68,9 +91,31 @@ export function AppSettingsProvider({ children }: { children?: ReactNode }) {
     window.localStorage.setItem("kano-locale", locale)
   }, [locale])
 
+  useEffect(() => {
+    window.localStorage.setItem("kano-content-locale", contentLanguage)
+  }, [contentLanguage])
+
   const value = useMemo(
-    () => ({ isDark, locale, setIsDark, setLocale, t }),
-    [isDark, locale, setIsDark, setLocale, t],
+    () => ({
+      contentLanguage,
+      contentLocale,
+      isDark,
+      locale,
+      setContentLanguage,
+      setIsDark,
+      setLocale,
+      t,
+    }),
+    [
+      contentLanguage,
+      contentLocale,
+      isDark,
+      locale,
+      setContentLanguage,
+      setIsDark,
+      setLocale,
+      t,
+    ],
   )
 
   return (

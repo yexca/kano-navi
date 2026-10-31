@@ -138,7 +138,7 @@ function Login({ onLogin }: { onLogin: (password: string) => Promise<void> }) {
   return (
     <main className="adm-login">
       <div className="adm-login-tools">
-        <PreferenceControls />
+        <PreferenceControls content={false} />
       </div>
       <form onSubmit={submit}>
         <span className="adm-mark is-large" aria-hidden>
@@ -369,7 +369,7 @@ export function AdminApp() {
               >
                 {t(`admin.mode.${data.session.mode}`)}
               </Badge>
-              <PreferenceControls />
+              <PreferenceControls content={false} />
               {data.session.requiresPassword ? (
                 <Button
                   variant="ghost"

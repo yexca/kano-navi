@@ -23,6 +23,7 @@ import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
 import { ExternalLink, followCardLink } from "@/site/links"
 import { eventDetailText } from "@/lib/event-text"
 import { mediaSrcSet } from "@/lib/media"
+import { useAppSettings } from "@/app-settings"
 import { pickTranslation } from "@/components/translated-text"
 import {
   addDays,
@@ -138,7 +139,6 @@ function GuideEvent({
           title={cleanVideoTitle(event.title)}
           translations={event.translations}
           href={event.url}
-          locale={locale}
           t={t}
         />
         {event.detail ? (
@@ -285,6 +285,7 @@ function MonthGrid({
   now: number
   t: Translator
 }) {
+  const { contentLocale } = useAppSettings()
   const month = monthStart.getMonth()
   const first = startOfWeek(monthStart)
   const last = new Date(monthStart.getFullYear(), month + 1, 0)
@@ -347,8 +348,8 @@ function MonthGrid({
                       ? formatJapanTime(event.startsAt)
                       : null
                     const title = cleanVideoTitle(
-                      pickTranslation(event.translations, locale)?.text ||
-                        event.title,
+                      pickTranslation(event.translations, contentLocale)
+                        ?.text || event.title,
                     )
                     const label = `${time || t("common.pendingConfirmation")} ${title} · ${t(`schedule.status.${status}`)}`
                     const Wrapper = event.url ? ExternalLink : "span"

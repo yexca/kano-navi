@@ -274,7 +274,6 @@ function PostNote({
     post.text,
     post.translations,
     post.sourceLanguage,
-    locale,
   )
   const textRef = useRef<HTMLParagraphElement>(null)
   const quoteRef = useRef<HTMLParagraphElement>(null)
