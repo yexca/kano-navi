@@ -9,7 +9,7 @@ Read these first:
 - `docs/architecture/core-boundaries.md`
 
 Before changing an area, read its docs. Backend paths are relative to
-`backend-go/`.
+`backend/`.
 
 | Area                                  | Main paths                                                                                         | Docs                                                                                                |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -37,7 +37,7 @@ The browser reads a prepared SQLite snapshot through the local API. External
 reads belong to server-side workflows and their helpers.
 ```
 
-- The backend is the Go service in `backend-go/`; releases, development and CI
+- The backend is the Go service in `backend/`; releases, development and CI
   run it. TypeScript is the frontend and the maintenance scripts only.
 - Page loads, refreshes, and revision requests never fetch X, YouTube, or model
   providers. A failed source retains known snapshots and records its outcome.

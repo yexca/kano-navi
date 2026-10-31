@@ -10,10 +10,10 @@ DOCKER_IMAGE ?= kano-navi:ci
 GOVULNCHECK_VERSION ?= v1.8.0
 GOLANGCI_LINT_VERSION ?= v2.13.1
 ACTIONLINT_VERSION ?= v1.7.12
-GO_BINARY ?= backend-go/bin/kano-go$(if $(filter Windows_NT,$(OS)),.exe,)
+GO_BINARY ?= backend/bin/kano-go$(if $(filter Windows_NT,$(OS)),.exe,)
 # package.json owns the version; Go builds receive it at link time.
 APP_VERSION = $(shell $(NODE) -p "require('./package.json').version")
-GO_LDFLAGS = -X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version=$(APP_VERSION)
+GO_LDFLAGS = -X github.com/yexca/kano-navi/backend/internal/buildinfo.Version=$(APP_VERSION)
 
 .PHONY: help install dev dev-client dev-server build preview start seed sync go-check go-format-check go-test
 .PHONY: go-build go-start go-docker-build go-lint go-vet go-race actionlint
@@ -62,22 +62,22 @@ go-format-check:
 	$(NODE) scripts/go-check.mjs --format-only
 
 go-test:
-	$(GO) -C backend-go test ./...
-	$(GO) -C backend-go vet ./...
+	$(GO) -C backend test ./...
+	$(GO) -C backend vet ./...
 
 # Static analysis uses the linters listed in scripts/golangci-lint.yml.
 go-lint:
-	$(GO) -C backend-go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config=../scripts/golangci-lint.yml --color=never ./...
+	$(GO) -C backend run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --config=../scripts/golangci-lint.yml --color=never ./...
 
 go-vet:
-	$(GO) -C backend-go vet ./...
+	$(GO) -C backend vet ./...
 
 # The race detector needs cgo and a C compiler.
 go-race:
-	$(GO) -C backend-go test -race -timeout=20m ./...
+	$(GO) -C backend test -race -timeout=20m ./...
 
 go-build:
-	$(GO) -C backend-go build -trimpath -ldflags "$(GO_LDFLAGS)" -o $(patsubst backend-go/%,%,$(GO_BINARY)) ./cmd/kano-go
+	$(GO) -C backend build -trimpath -ldflags "$(GO_LDFLAGS)" -o $(patsubst backend/%,%,$(GO_BINARY)) ./cmd/kano-go
 
 go-start: start
 
@@ -140,7 +140,7 @@ npm-audit-signatures:
 	$(NPM) audit signatures
 
 go-audit:
-	$(GO) -C backend-go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+	$(GO) -C backend run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 docker-build:
 	$(DOCKER_BUILD) $(DOCKER_BUILD_ARGS) -t $(DOCKER_IMAGE) .

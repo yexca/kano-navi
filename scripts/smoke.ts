@@ -86,7 +86,7 @@ async function runLocalSmoke() {
   let server: ChildProcess | undefined
   try {
     execFileSync(go, ["build", "-o", binary, "./cmd/kano-go"], {
-      cwd: path.join(root, "backend-go"),
+      cwd: path.join(root, "backend"),
       stdio: ["ignore", "inherit", "inherit"],
     })
     // A second seed protects the idempotent initialization contract.

@@ -4,7 +4,7 @@
 
 The database file is `data/database/kano.sqlite`. `kano-go serve`, `seed` and
 `sync` open it through `OpenStandalone`
-(`backend-go/internal/store/sqlite/schema_upgrade.go`), which creates the
+(`backend/internal/store/sqlite/schema_upgrade.go`), which creates the
 directory and then, in one transaction:
 
 - gives a file without tables the canonical schema embedded from
@@ -68,7 +68,7 @@ downloader boundary.
 
 ### Workflow Tables
 
-`backend-go/internal/store/sqlite/workflow_migrations.go` creates the durable
+`backend/internal/store/sqlite/workflow_migrations.go` creates the durable
 run queue with `CREATE TABLE IF NOT EXISTS` and adds missing columns, then
 checks that every table has the columns its recorded version requires:
 
@@ -127,7 +127,7 @@ zero, and the first read of a new day starts it over.
 
 ## Seed versus Synchronization
 
-`backend-go/internal/store/sqlite/static-seed.json` holds the static profile,
+`backend/internal/store/sqlite/static-seed.json` holds the static profile,
 milestone timeline, and resource directory. Every open inserts the static IDs
 that are missing, plus the `dashboard_revision`, the default `x_accounts`
 and the `llm_route_targets_migrated` marker when absent. New environments
@@ -355,7 +355,7 @@ wording, so a changed post or title retires it until the translate step
 replaces it. A manual row always counts; the console flags it when the
 wording changed after it was written. Platform rows are owned by the source
 writers that store them (`UpsertPlatformTranslationTx`,
-`DeletePlatformTranslationTx` in `backend-go/internal/store/sqlite/translations.go`),
+`DeletePlatformTranslationTx` in `backend/internal/store/sqlite/translations.go`),
 which keep them current and remove them when the platform no longer provides
 one; readers do not compare their hash. YouTube synchronization writes the
 `en` and `zh-CN` titles a creator localized (platform `youtube`, see
@@ -406,7 +406,7 @@ name them, so re-extraction, retirement and relisting of the source row, or a
 reservation refresh, keep the merge. `merge_source` names the owner:
 
 - `rule`: the deterministic `reconcile` workflow step
-  (`backend-go/internal/store/sqlite/event_merge.go`). It recomputes its own
+  (`backend/internal/store/sqlite/event_merge.go`). It recomputes its own
   decisions from the current rows on every run, so it is idempotent and
   releases a merge whose target was deleted, merged or moved to another
   date, or whose event became manual or locked or now holds another owner's
@@ -525,7 +525,7 @@ them, so rereading either platform keeps the merge. `merge_source` names the
 owner as for [event merges](#duplicate-merging):
 
 - `rule`: the `reconcile` workflow step
-  (`backend-go/internal/store/sqlite/video_merge.go`), which recomputes its
+  (`backend/internal/store/sqlite/video_merge.go`), which recomputes its
   decisions from the current rows on every run and releases a merge whose
   basis no longer holds. `merge_reason` is `rule:time_duration_title`.
 - `manual`: an operator merge (`merge_reason` `manual`), which the rule never
@@ -575,7 +575,7 @@ wording (including `raw_json.search_text`) and applies the existing text/image
 and manual-review gates. The index is non-unique because multiple stored records
 can share a source URL.
 
-backend-go/internal/store/sqlite owns the schema (`bootstrap.sql`), the
+backend/internal/store/sqlite owns the schema (`bootstrap.sql`), the
 additive upgrade behavior (`schema_upgrade.go`) and the workflow tables
 (`workflow_migrations.go`). Update this
 contract, seed behavior, and relevant tests together. Never silently drop
@@ -584,7 +584,7 @@ recreate deleted providers. See [Database operations](../operations/database.md)
 
 ## Implementation Ownership
 
-### Persistence: `backend-go/internal/store/sqlite`
+### Persistence: `backend/internal/store/sqlite`
 
 This package creates the SQLite schema, provides seed/upsert/query functions, and
 keeps the database at `data/database/kano.sqlite`. Raw source data may be retained in

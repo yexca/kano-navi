@@ -32,7 +32,7 @@ function withMessages(Page: ComponentType, messages: PageMessages) {
   }
 }
 
-// Keep in step with spaPages in backend-go/internal/httpapi/static.go.
+// Keep in step with spaPages in backend/internal/httpapi/static.go.
 const routes: Record<string, () => Promise<ComponentType>> = {
   // Keep in step with the board's preload in vite.config.ts.
   "/": async () => {

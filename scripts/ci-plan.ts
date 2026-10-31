@@ -46,7 +46,7 @@ export const scriptJobs: Record<string, Job[]> = {
 }
 
 const documentation =
-  /^(docs\/|[^/]+\.md$|backend-go\/README\.md$|\.github\/ISSUE_TEMPLATE\/)/
+  /^(docs\/|[^/]+\.md$|backend\/README\.md$|\.github\/ISSUE_TEMPLATE\/)/
 // Read by Style alone: formatting, the scanner and the deployment examples
 // that no validation job starts.
 const styleOnly =
@@ -62,11 +62,11 @@ function jobsFor(path: string): Job[] | null {
     return Object.hasOwn(scriptJobs, name) ? scriptJobs[name] : null
   }
   // The frontend tests read the static seed to keep its copy in step.
-  if (path === "backend-go/internal/store/sqlite/static-seed.json")
+  if (path === "backend/internal/store/sqlite/static-seed.json")
     return [...backendJobs, "frontend"]
   // The Go gate builds this image; the release image has its own Dockerfile.
-  if (path === "backend-go/Dockerfile") return ["go"]
-  if (path.startsWith("backend-go/")) return backendJobs
+  if (path === "backend/Dockerfile") return ["go"]
+  if (path.startsWith("backend/")) return backendJobs
   if (path.startsWith("src/") || path.startsWith("public/")) return frontendJobs
   if (frontendConfig.test(path)) return frontendJobs
   if (path.startsWith("tests/")) return ["frontend"]

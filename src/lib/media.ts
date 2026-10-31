@@ -1,5 +1,5 @@
 // Smaller copies of images. The server makes them on first request at a fixed
-// list of widths (backend-go/internal/mediavariant) for cached source media,
+// list of widths (backend/internal/mediavariant) for cached source media,
 // LINE BLOG archive images and the fixed history collection, and keeps the
 // original untouched; full-image viewers keep loading the original URL.
 

@@ -2,14 +2,14 @@
 
 ## Prerequisites
 
-- Go 1.26.10 or newer (the version in `backend-go/go.mod`, matching CI and Docker)
+- Go 1.26.10 or newer (the version in `backend/go.mod`, matching CI and Docker)
 - Node.js 24.22.1 or newer in the 24 LTS line (`.nvmrc` pins the version CI
   and Docker use)
 - npm 10+
 - Git
 - A C compiler such as gcc, only for `make go-race` and `make ci-backend`
 
-The backend is the Go module in `backend-go/`; it uses the pure-Go
+The backend is the Go module in `backend/`; it uses the pure-Go
 `modernc.org/sqlite` driver, so building and running it needs no C toolchain.
 Only the race detector needs cgo and a C compiler. Its package layout,
 commands and startup order are in [Backend](../architecture/backend.md).
@@ -40,7 +40,7 @@ make dev
 ```
 
 `make dev` (`scripts/run-app.mjs`) builds the Go backend into
-`backend-go/bin/`, starts it on `127.0.0.1:KANO_API_PORT` (default `7658`)
+`backend/bin/`, starts it on `127.0.0.1:KANO_API_PORT` (default `7658`)
 and starts Vite at `http://localhost:7657`. Vite serves the frontend with hot
 reload and proxies `/api`, `/media`, and `/mcp` to the backend with the
 browser's Host header, so the page and the API stay on one origin. Either

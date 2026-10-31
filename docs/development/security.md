@@ -3,7 +3,7 @@
 ## External Request Rules
 
 - Keep all external requests in the reviewed server-side packages under
-  `backend-go/internal/` (`source/`, `mediadownload/`, and the provider
+  `backend/internal/` (`source/`, `mediadownload/`, and the provider
   clients of `schedule/` and `llmadmin/`), with fixed HTTP(S) destinations,
   timeouts, limits, and failure handling.
 - Never embed usernames, passwords, tokens, or cookies in a URL. Do not write credentials from a response into `raw_json`, logs, or the UI.
@@ -92,7 +92,7 @@ checks are separate from source privacy and deterministic CI; CI and make ci
 verify the signatures of every fresh installation. Review the lockfile and
 outbound boundaries on upgrades. No npm dependency needs an install script: the
 image build installs with `--ignore-scripts`, and SQLite is the pure-Go
-`modernc.org/sqlite` driver pinned in `backend-go/go.mod`. Review `go.sum`
+`modernc.org/sqlite` driver pinned in `backend/go.mod`. Review `go.sum`
 changes like the lockfile.
 
 Dependabot opens weekly grouped pull requests for GitHub Actions (including the
@@ -102,7 +102,7 @@ withdrawn. Its commit messages follow the
 [commit convention](commit-and-release.md#commit-convention). Review such a
 pull request like any other dependency change. The Node version in `.nvmrc`,
 `package.json` engines and the Dockerfiles, the Go version in
-`backend-go/go.mod` and the Dockerfiles, and the Go tool versions pinned in the
+`backend/go.mod` and the Dockerfiles, and the Go tool versions pinned in the
 Makefile are upgraded by hand in one change.
 
 ## Related Docs

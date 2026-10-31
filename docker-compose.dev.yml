@@ -24,4 +24,4 @@ services:
       - .:/app
       - /app/node_modules
       # Keep the container's Linux backend binary out of the host checkout.
-      - /app/backend-go/bin
+      - /app/backend/bin

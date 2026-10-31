@@ -8,14 +8,14 @@ are compared, not asserted.
 ## Backend Benchmark
 
 The Go store keeps a synthetic 10,000-record snapshot benchmark. Run it from
-`backend-go/`:
+`backend/`:
 
 ```bash
 go test ./internal/store/sqlite -run '^$' -bench BenchmarkDashboardSynthetic10k
 ```
 
 The fixture in
-`backend-go/internal/store/sqlite/dashboard_benchmark_test.go` writes 10,000
+`backend/internal/store/sqlite/dashboard_benchmark_test.go` writes 10,000
 synthetic posts, events and videos into a temporary snapshot and times the
 three-day dashboard projection. It uses no seed, provider or workflow
 configuration, no source or model calls and no operator data, and writes

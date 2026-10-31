@@ -119,9 +119,9 @@ everything shares container port `7657`, published on loopback.
 Set `KANO_PORT` to change the host port. The repository is mounted for
 frontend hot reload; a Windows or macOS host sends no file events into the
 container, so the Compose file sets `KANO_WATCH_POLLING=1` and Vite polls the
-sources (not `data/`, `backend-go/`, `dist/`, `.claude/` or `.codegraph/`).
+sources (not `data/`, `backend/`, `dist/`, `.claude/` or `.codegraph/`).
 Anonymous volumes keep Linux dependencies and the Linux backend binary
-separate from any host `node_modules` and `backend-go/bin`. Rebuild after
+separate from any host `node_modules` and `backend/bin`. Rebuild after
 dependency changes; `--renew-anon-volumes` refreshes those volumes. Backend
 source changes require `docker compose -f docker-compose.dev.yml restart`,
 which rebuilds the binary. The existing `./data`

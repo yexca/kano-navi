@@ -115,7 +115,7 @@ trailing-slash routes work through the existing SPA fallback, and
 (`src/lib/page-path.ts`). Any other path
 shows a localized not-found view with a link back to the board instead of the
 board itself; the server answers it with status 404, so `src/main.tsx` and
-`spaPages` in `backend-go/internal/httpapi/static.go` list the same pages.
+`spaPages` in `backend/internal/httpapi/static.go` list the same pages.
 History, the LINE BLOG archive and About
 remain static and never mount the dashboard hook or request its API.
 

@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
 const root = join(import.meta.dirname, "..")
-const moduleRoot = join(root, "backend-go")
+const moduleRoot = join(root, "backend")
 const go = process.env.GO || "go"
 const binary = join(
   moduleRoot,
@@ -23,7 +23,7 @@ const binary = join(
 )
 // package.json owns the version; the binary reports it in MCP serverInfo.
 const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
-const versionFlag = `-X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version=${version}`
+const versionFlag = `-X github.com/yexca/kano-navi/backend/internal/buildinfo.Version=${version}`
 const [first = "dev", ...rest] = process.argv.slice(2)
 const modes = [
   "dev",

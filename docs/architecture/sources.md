@@ -585,7 +585,7 @@ Polling remains the baseline. The operator turns push on in `/admin` (Content
 `/api/websub/youtube`. The standalone process then subscribes the channel's
 feed topic at Google's hub (`https://pubsubhubbub.appspot.com/subscribe`)
 within seconds, without a restart, and again at every startup.
-`backend-go/internal/source/youtube/websub` owns the protocol and its admin
+`backend/internal/source/youtube/websub` owns the protocol and its admin
 module:
 
 - `GET /api/admin/sources/youtube/push` returns the settings and runtime status:
@@ -807,7 +807,7 @@ and loopback address guard for provider URLs applies to model discovery too.
 API hosts can omit `/v1`: bare origins use `/v1`, while OpenRouter and Gemini
 use their preset API roots. Explicit versioned roots and custom paths are
 preserved, and a pasted inference endpoint is reduced to its API root.
-`backend-go/internal/llmadmin/catalog.go` applies this rule to server calls,
+`backend/internal/llmadmin/catalog.go` applies this rule to server calls,
 and `src/lib/llm-endpoints.ts` applies the same rule to UI previews.
 Anthropic requests use `x-api-key` and `anthropic-version: 2023-06-01`.
 Model discovery follows `has_more`/`last_id` with 100 models per page and a
@@ -890,7 +890,7 @@ bypass that readiness gate.
 A status a post quotes (`qrt` in the detail answer, `quote` on a timeline
 page) is never a post of its own: it does not enter `posts`, the timeline
 cursor, the pending queue or extraction. The adapter
-(`backend-go/internal/source/x/quote.go`) reads it into a sanitized
+(`backend/internal/source/x/quote.go`) reads it into a sanitized
 projection stored beside the quoting post in `posts.quote_json`: the quoted
 status ID, its author's handle and display name, its wording (as written,
 untranslated), its publication time, and an x.com URL built from the
@@ -962,7 +962,7 @@ requested dates.
 A schedule image (`assets.kind = schedule`) is public only after two gates:
 
 1. The board-notice gate (`scheduleBoardPattern`,
-   `backend-go/internal/schedule/store.go`) checks that the source post's
+   `backend/internal/schedule/store.go`) checks that the source post's
    own wording (its stored `raw_json.search_text` when present, otherwise
    its text) reads as a weekly or multi-day board notice. The stored post `label` is not part of that input, because the
    looser post classifier labels any `配信予定` post as `SCHEDULE / 日程`.

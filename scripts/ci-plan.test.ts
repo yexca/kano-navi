@@ -28,7 +28,7 @@ test("documentation-only PRs skip planned jobs while unknown paths require full 
       "docs/development/testing.md",
       "README.md",
       "AGENTS.md",
-      "backend-go/README.md",
+      "backend/README.md",
       ".github/ISSUE_TEMPLATE/bug_report.yml",
       ".env.example",
       "docker-compose.yml",
@@ -55,17 +55,20 @@ test("documentation-only PRs skip planned jobs while unknown paths require full 
 
 test("application paths select the jobs that consume them", () => {
   for (const path of [
-    "backend-go/internal/httpapi/server.go",
-    "backend-go/go.mod",
-    "backend-go/go.sum",
-    "backend-go/internal/store/sqlite/bootstrap.sql",
+    "backend/internal/httpapi/server.go",
+    "backend/go.mod",
+    "backend/go.sum",
+    "backend/internal/store/sqlite/bootstrap.sql",
   ])
     assert.deepEqual(selected(path), ["backend", "go", "smoke", "docker"], path)
-  assert.deepEqual(
-    selected("backend-go/internal/store/sqlite/static-seed.json"),
-    ["backend", "go", "frontend", "smoke", "docker"],
-  )
-  assert.deepEqual(selected("backend-go/Dockerfile"), ["go"])
+  assert.deepEqual(selected("backend/internal/store/sqlite/static-seed.json"), [
+    "backend",
+    "go",
+    "frontend",
+    "smoke",
+    "docker",
+  ])
+  assert.deepEqual(selected("backend/Dockerfile"), ["go"])
   for (const path of [
     "src/main.tsx",
     "public/robots.txt",
@@ -117,13 +120,13 @@ test("a validation script selects the jobs that run it, and every script has a d
 })
 
 test("mixed and renamed paths plan the union of their jobs", () => {
-  assert.deepEqual(selected("backend-go/internal/old.go", "docs/retired.md"), [
+  assert.deepEqual(selected("backend/internal/old.go", "docs/retired.md"), [
     "backend",
     "go",
     "smoke",
     "docker",
   ])
-  assert.deepEqual(selected("tests/polling.test.ts", "backend-go/Dockerfile"), [
+  assert.deepEqual(selected("tests/polling.test.ts", "backend/Dockerfile"), [
     "go",
     "frontend",
   ])

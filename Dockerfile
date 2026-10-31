@@ -19,16 +19,16 @@ ARG TARGETARCH
 
 WORKDIR /src
 
-COPY backend-go/go.mod backend-go/go.sum ./
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-COPY backend-go/ ./
+COPY backend/ ./
 # package.json owns the version; the binary reports it in MCP serverInfo.
 COPY package.json /tmp/package.json
 RUN VERSION="$(grep -m1 '^  "version"' /tmp/package.json | sed 's/.*"version": "\([^"]*\)".*/\1/')" \
   && echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
   && CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" go build -trimpath \
-    -ldflags "-X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version=${VERSION}" \
+    -ldflags "-X github.com/yexca/kano-navi/backend/internal/buildinfo.Version=${VERSION}" \
     -o /out/kano-go ./cmd/kano-go \
   && mkdir -p /out/data
 
@@ -53,12 +53,12 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
-COPY backend-go/go.mod backend-go/go.sum ./backend-go/
-RUN go -C backend-go mod download
+COPY backend/go.mod backend/go.sum ./backend/
+RUN go -C backend mod download
 
 COPY . .
 # Warm the build cache so the first start does not compile every dependency.
-RUN go -C backend-go build -o /tmp/kano-go ./cmd/kano-go && rm /tmp/kano-go
+RUN go -C backend build -o /tmp/kano-go ./cmd/kano-go && rm /tmp/kano-go
 EXPOSE 7657
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

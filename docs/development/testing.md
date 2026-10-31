@@ -77,7 +77,7 @@ scanner tests live under `scripts/`. Do not add tests for prose or a purely
 visual change without a documented interaction or responsive contract. Do not
 mirror internal implementation.
 
-Backend coverage, by package under `backend-go/internal/`:
+Backend coverage, by package under `backend/internal/`:
 
 - `store/sqlite`: dashboard and calendar projections and their bounds over a
   10,000-record synthetic history, stream identity, manual locks and
@@ -150,7 +150,7 @@ isolated instance: run `kano-go serve` from a temporary directory with
 it with `KANO_API_PORT`. Do not exercise a development build against the
 operator's `data/` directory. The synthetic 10,000-record benchmark is
 `go test ./internal/store/sqlite -run '^$' -bench BenchmarkDashboardSynthetic10k`
-in `backend-go/`; see [Performance measurements](performance.md).
+in `backend/`; see [Performance measurements](performance.md).
 
 Production smoke creates a disposable container from the built image, uses
 synthetic production authentication, disables the source timers, and publishes a
@@ -202,7 +202,7 @@ sides of renames and deleted paths:
 | Only documentation, issue forms, `.env.example`, Compose or formatter settings | None                                                       |
 | Go backend source, tests, SQL or module files                                  | Backend, Go gate, API smoke, Docker image                  |
 | The static seed                                                                | Backend, Go gate, Frontend, API smoke, Docker image        |
-| `backend-go/Dockerfile`                                                        | Go gate                                                    |
+| `backend/Dockerfile`                                                           | Go gate                                                    |
 | Frontend source, `public/`, frontend configuration, npm manifest or lockfile   | Frontend, Docker image                                     |
 | Frontend tests                                                                 | Frontend                                                   |
 | Root `Dockerfile`, `.dockerignore`, or `LICENSE`                               | Docker image                                               |
@@ -233,7 +233,7 @@ permissions. Checkout does not persist credentials. Caches speed installation
 and image layers but never skip validation targets. Actions are pinned to
 reviewed commit SHAs. Every Node job uses the local
 `.github/actions/setup-node` action, which installs the version in `.nvmrc`;
-that version and the Go version in backend-go/go.mod match the Docker build
+that version and the Go version in backend/go.mod match the Docker build
 toolchain.
 
 `make ci-frontend` type-checks the frontend, scripts and tests before Vite

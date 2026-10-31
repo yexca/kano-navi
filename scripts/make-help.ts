@@ -10,7 +10,7 @@ const groups = {
       "Build the Go backend and serve the whole site (configure production auth first)",
     seed: "Add missing static seed records to the runtime database",
     sync: "Fetch configured external sources once and update runtime snapshots",
-    "go-build": "Build the Go backend binary into backend-go/bin",
+    "go-build": "Build the Go backend binary into backend/bin",
   },
   Validation: {
     format: "Format supported files (writes changes)",

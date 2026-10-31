@@ -1,5 +1,5 @@
 // Public feed addresses. The server renders them from the same snapshot as
-// the board (backend-go/internal/feeds); calendar apps and feed readers poll
+// the board (backend/internal/feeds); calendar apps and feed readers poll
 // this site, never X or YouTube.
 
 import type { Locale } from "../types.ts"

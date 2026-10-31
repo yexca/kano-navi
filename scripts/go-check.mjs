@@ -13,7 +13,7 @@ import { tmpdir } from "node:os"
 import { spawnSync } from "node:child_process"
 
 const root = join(import.meta.dirname, "..")
-const moduleRoot = join(root, "backend-go")
+const moduleRoot = join(root, "backend")
 const go = process.env.GO || "go"
 const docker = process.env.DOCKER || "docker"
 const dockerImage = process.env.GO_DOCKER_IMAGE || "kano-navi-go:ci"
@@ -71,7 +71,7 @@ run(
 run(
   "Docker independent Go service image",
   docker,
-  ["build", "-f", "backend-go/Dockerfile", "-t", dockerImage, "backend-go"],
+  ["build", "-f", "backend/Dockerfile", "-t", dockerImage, "backend"],
   { cwd: root },
 )
 run(

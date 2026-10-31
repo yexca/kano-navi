@@ -64,8 +64,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: backend-go/go.mod
-          cache-dependency-path: backend-go/go.sum
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: Install locked dependencies
         run: make install
       - name: Check formatting, docs, workflows, CI policy, and source privacy
@@ -85,8 +85,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: backend-go/go.mod
-          cache-dependency-path: backend-go/go.sum
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: Run Go lint, vet and race-enabled contracts
         run: make ci-backend
 
@@ -104,8 +104,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: backend-go/go.mod
-          cache-dependency-path: backend-go/go.sum
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: Check formatting, cross-builds and the read-only container
         run: make go-check
 
@@ -145,8 +145,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: backend-go/go.mod
-          cache-dependency-path: backend-go/go.sum
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: Check isolated seed and HTTP snapshot through the Go backend
         run: make smoke
 
@@ -171,7 +171,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/kano-buildx-cache
-          key: docker-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Dockerfile', '.dockerignore', 'package.json', 'package-lock.json', 'backend-go/**', 'src/**', 'public/**', 'index.html', 'tsconfig*.json', 'vite.config.ts', 'tailwind.config.ts', 'Makefile', 'LICENSE') }}
+          key: docker-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Dockerfile', '.dockerignore', 'package.json', 'package-lock.json', 'backend/**', 'src/**', 'public/**', 'index.html', 'tsconfig*.json', 'vite.config.ts', 'tailwind.config.ts', 'Makefile', 'LICENSE') }}
           restore-keys: docker-${{ runner.os }}-${{ runner.arch }}-
       - name: Build production image (Go backend and built frontend)
         run: >-

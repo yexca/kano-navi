@@ -105,7 +105,7 @@ redirects and controlled `x_*` error codes.
 
 ### X API method
 
-`backend-go/internal/source/history` calls only
+`backend/internal/source/history` calls only
 `https://api.x.com/2/tweets/search/all`
 ([X full-archive search](https://docs.x.com/x-api/posts/search/quickstart/full-archive-search),
 which needs full-archive access). The environment-only credential travels in
@@ -331,7 +331,7 @@ stored Bilibili interval below `BILIBILI_MIN_INTERVAL_MINUTES` to that floor.
 ## Modular Steps and Timers
 
 Synchronization is split into modular steps declared in
-`backend-go/internal/jobs` (`StepOrder`), executed in this order: `x`,
+`backend/internal/jobs` (`StepOrder`), executed in this order: `x`,
 `youtube`, `bilibili`, `media`, `schedule`, `translate`, `reconcile`. `kano-go sync` (`make sync`) runs every step
 and records the ones disabled by `SKIP_*` as skipped.
 A one-off step run (the Runs page, `POST /api/admin/runs` with
@@ -499,7 +499,7 @@ its failure status, and always release the single-flight queue after settlement.
 
 ## Implementation Ownership
 
-backend-go/internal/jobs owns the ordered step catalog and presents durable
+backend/internal/jobs owns the ordered step catalog and presents durable
 workflow runs as operator jobs. internal/workflow maps steps to their adapters
 (`SourceSteps`), executes runs with leases, retries and recovery, and owns the
 single-flight queue, and the timer that starts due source schedules

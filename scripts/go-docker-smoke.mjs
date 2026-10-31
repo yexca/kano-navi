@@ -28,7 +28,7 @@ try {
     run(
       go,
       ["run", "./cmd/kano-fixture", "-database", databasePath],
-      join(root, "backend-go"),
+      join(root, "backend"),
       true,
     ),
   )

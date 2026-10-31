@@ -29,7 +29,7 @@ the source time unknown. Media-only runs,
 cursor cleanup and API reads do not advance these source timestamps. Internal
 account IDs, checkpoints and fetch errors remain protected.
 
-`backend-go/internal/publicview` owns shared public event, synchronization,
+`backend/internal/publicview` owns shared public event, synchronization,
 and selected profile-media projections for HTTP and MCP. A public sync summary
 contains only id, source, start/finish times, status, and a fixed status
 message. Public profile slots contain only id, slot, source, sourceUrl,
@@ -191,7 +191,7 @@ names (the board's `site.name`), the event descriptions' provenance and
 unofficial notes, the generated YouTube details (`YouTube Live`,
 `YouTube Premiere` and the older stored forms it still recognizes) and the
 Atom subtitle and summaries — comes from a small table in
-`backend-go/internal/feeds/locale.go`. Stored data is unchanged: only
+`backend/internal/feeds/locale.go`. Stored data is unchanged: only
 rendering picks the language. A non-English Atom feed declares `xml:lang`, has
 the feed ID `urn:kano-navi:feed:<lang>` and its self link keeps the `lang`
 query.

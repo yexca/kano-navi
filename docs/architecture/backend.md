@@ -1,6 +1,6 @@
 # Backend
 
-The backend is the Go module in `backend-go/`. `kano-go serve` runs the public
+The backend is the Go module in `backend/`. `kano-go serve` runs the public
 API, the operator console, workflows and timers, schedule extraction, MCP and
 the built frontend from one process, against the SQLite snapshot and the
 `data/` tree. Releases, the published image, local development and CI all run
@@ -30,7 +30,7 @@ From the repository root:
 
 ```bash
 make build   # frontend into dist/
-make start   # builds backend-go/bin/kano-go and runs `kano-go serve`
+make start   # builds backend/bin/kano-go and runs `kano-go serve`
 make seed    # or: make sync
 ```
 
@@ -146,7 +146,7 @@ row. The step catalog, queue, timers and manual fetches are described in
 
 Run with flags only and no command, the binary opens an existing snapshot in
 SQLite `mode=ro` on `:7658` and serves the public reads without migrations,
-seeds or writes. `backend-go/Dockerfile` packages this mode, and
+seeds or writes. `backend/Dockerfile` packages this mode, and
 `scripts/go-docker-smoke.mjs` (part of `make go-check`) mounts a synthetic
 `data/` tree read-only and verifies that no database sidecar, WAL, journal or
 directory is created. Its `-enable-*` and `-initialize` flags are
@@ -231,7 +231,7 @@ Those tags describe the board. When the server serves `index.html` for
 `/history`, `/lineblog` or `/about`, it replaces the page's `<title>`, `description`,
 `og:title`, `og:description` and `og:url` (and Twitter title and description
 tags, if present) with that page's English title, description and path; the
-route table `spaPages` in `backend-go/internal/httpapi/static.go` holds them
+route table `spaPages` in `backend/internal/httpapi/static.go` holds them
 next to the list of known pages. `/`, `/admin` and missing pages keep the
 file's own tags. Link previews need absolute URLs, which a static file cannot
 know, so the server then rewrites the page's root-relative `content="/..."`

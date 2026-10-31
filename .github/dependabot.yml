@@ -1,7 +1,7 @@
 # Dependency update policy: docs/development/security.md#dependency-updates
 #
 # The Node and Go toolchains are repeated across .nvmrc, package.json engines,
-# backend-go/go.mod and both Dockerfiles. Upgrade them by hand in one change.
+# backend/go.mod and both Dockerfiles. Upgrade them by hand in one change.
 # Docker is not listed: every base image is a toolchain image or scratch.
 version: 2
 updates:
@@ -22,7 +22,7 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: gomod
-    directory: /backend-go
+    directory: /backend
     schedule:
       interval: weekly
       day: monday

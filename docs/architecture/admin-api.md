@@ -1,7 +1,7 @@
 # Admin API
 
 The operator console at `/admin` is the only client of `/api/admin`. The API
-is a resource-oriented JSON surface served by `backend-go/internal/adminapi`,
+is a resource-oriented JSON surface served by `backend/internal/adminapi`,
 which owns one route table (Go `http.ServeMux` method patterns), the session
 and origin guards, and the shared response conventions. Feature packages
 (`llmadmin`, `contentadmin`, YouTube `websub`) contribute route handlers;

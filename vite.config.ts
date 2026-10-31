@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
           binaryInterval: 1000,
           ignored: [
             "**/data/**",
-            "**/backend-go/**",
+            "**/backend/**",
             "**/dist/**",
             "**/.claude/**",
             "**/.codegraph/**",

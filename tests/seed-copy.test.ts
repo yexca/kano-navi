@@ -8,7 +8,7 @@ type SeedRow = { title: string | null; detail: string | null }
 const seed: { timeline: SeedRow[]; resources: SeedRow[] } = JSON.parse(
   readFileSync(
     new URL(
-      "../backend-go/internal/store/sqlite/static-seed.json",
+      "../backend/internal/store/sqlite/static-seed.json",
       import.meta.url,
     ),
     "utf8",

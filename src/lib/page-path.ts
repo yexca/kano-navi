@@ -1,5 +1,5 @@
 // The page a location shows. Keep in step with spaPages in
-// backend-go/internal/httpapi/static.go, which answers the same paths 200.
+// backend/internal/httpapi/static.go, which answers the same paths 200.
 
 /**
  * Trailing slashes are dropped, and /index.html, the file the server answers

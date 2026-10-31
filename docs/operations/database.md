@@ -55,7 +55,7 @@ before enabling source timers. Avoid simultaneous Windows/Linux access to
 the same SQLite file.
 
 Use additive schema upgrades in
-backend-go/internal/store/sqlite/schema_upgrade.go. Startup upgrades an older
+backend/internal/store/sqlite/schema_upgrade.go. Startup upgrades an older
 snapshot in one transaction and never clears it; back up data/ before the
 first start of a new release all the same. Seeding fills missing
 static IDs; it is not a database restore. The -overwrite option intentionally

@@ -40,7 +40,7 @@ successful snapshot while a source is unavailable.
 1. The browser requests `/api/dashboard?days=3` after loading.
 2. The API reads SQLite, calculates each event's `isUpcoming`, resolves ready
    media to `/media/<id>`, derives the `summary` block, and returns the snapshot
-   plus public synchronization metadata (`backend-go/internal/publicview`).
+   plus public synchronization metadata (`backend/internal/publicview`).
 3. The page shows the snapshot time. If the API is unavailable after a load, it keeps the known state and shows a retry affordance.
 4. A maintainer or an authorized MCP client starts an asynchronous job. The
    single-flight job manager writes a `sync_runs` row with `job_id` and

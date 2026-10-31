@@ -1,6 +1,6 @@
 node_modules/
 dist/
-backend-go/bin/
+backend/bin/
 # SQLite, downloaded media, and profile selections are local runtime state.
 data/
 # Local reference material and deployment bundles, never published.

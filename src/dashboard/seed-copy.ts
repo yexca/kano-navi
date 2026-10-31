@@ -1,7 +1,7 @@
 import type { Locale } from "../types.ts"
 
 // Localized copy for the static timeline and link seeds in
-// backend-go/internal/store/sqlite/static-seed.json. SQLite stores one text
+// backend/internal/store/sqlite/static-seed.json. SQLite stores one text
 // per row, so the board looks the stored text up here by its exact seed
 // wording. A row whose text no longer matches its seed shows as stored.
 // Brand names that read the same in every language need no entry.
