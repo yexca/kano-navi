@@ -51,3 +51,39 @@ func TestDashboardPostsFillTheNewestEightBeyondTheWindow(t *testing.T) {
 		})
 	}
 }
+
+func TestDashboardPostsListEachAccountsNewestEight(t *testing.T) {
+	now := time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)
+	path := testutil.NewSnapshot(t)
+	insert := func(account string, n int, start time.Time) {
+		for i := range n {
+			id := fmt.Sprintf("%s-%03d", account, i)
+			at := start.Add(-time.Duration(i) * time.Minute).Format(time.RFC3339Nano)
+			testutil.Exec(t, path, `INSERT INTO posts (id,source,account_handle,text,published_at,url) VALUES (?,'x',?,?,?,?)`, id, account, id, at, "https://example.invalid/"+id)
+		}
+	}
+	// A busy account fills the window's 100; the quiet one posted long ago.
+	insert("busy", 120, now.Add(-time.Hour))
+	insert("Quiet", 10, now.AddDate(0, 0, -20))
+	store, err := OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	dashboard, err := store.GetDashboard(context.Background(), 3, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int{}
+	for _, post := range dashboard.Posts {
+		if post.AccountHandle != nil {
+			counts[*post.AccountHandle]++
+		}
+	}
+	if counts["busy"] != 100 || counts["Quiet"] != 8 || len(dashboard.Posts) != 108 {
+		t.Fatalf("posts=%d per account=%v, want 100 busy and 8 Quiet", len(dashboard.Posts), counts)
+	}
+	if dashboard.Summary.Counts.Posts != 120 {
+		t.Fatalf("count=%d, want the window's 120", dashboard.Summary.Counts.Posts)
+	}
+}

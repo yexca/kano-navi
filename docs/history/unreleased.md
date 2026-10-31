@@ -123,6 +123,8 @@
   `Unofficial` mark on wide screens.
 - Past posts can be read row by row in a single-column view, with the device
   remembering the choice; the month dialogs are larger on wide screens.
+- Posts on X always lists the eight newest posts of each account, so the
+  account filter fills the wall for a quiet account too.
 
 </details>
 

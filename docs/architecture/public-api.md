@@ -10,9 +10,10 @@ described in [Backend](backend.md).
 whitelisted synchronization summary; it does not return a database path or
 label. `GET /api/dashboard?days=3` clamps days to 1 through 30 and returns
 profile, summary, posts, events, videos, focus, timeline, resources, schedule
-assets, media status, and metadata. Posts are those published within the
-window plus, however old, the eight newest, at most 100; MCP `dashboard_read`
-and `posts_list` read the same list. `counts.posts` counts the window only.
+assets, media status, and metadata. Posts are the newest 100 published within
+the window plus, however old, the eight newest of each account; MCP
+`dashboard_read` and `posts_list` read the same list. `counts.posts` counts
+the window only.
 The summary contains `nextEvent`, `nextStream`, `latestVideo`, `latestPost`,
 and counts; `latestPost` survives an empty requested window. `latestVideo` is
 the stage's fallback: the newest non-upcoming video that is not a Short,

@@ -572,15 +572,20 @@ type postRow struct {
 	quoteJSON sql.NullString
 }
 
-// dashboardMinPosts is how many of the newest posts the board always lists,
-// however old, so a quiet window still fills the wall's whole rows (two rows
-// of up to four columns; see src/dashboard/post-rows.ts).
-const dashboardMinPosts = 8
+// dashboardAccountPosts is how many of each account's newest posts the board
+// always lists, however old, so every account's filter fills the wall's whole
+// rows on its own (two rows of up to four columns; see
+// src/dashboard/post-rows.ts), like the per-kind limits of the video shelf.
+const dashboardAccountPosts = 8
 
-// queryPosts lists the posts published since the window start, and at least
-// the newest dashboardMinPosts of them.
+// queryPosts lists the newest 100 posts published since the window start
+// and, for every account, the newest dashboardAccountPosts of its posts.
 func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, source, account_handle, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, CASE WHEN quote_hidden_at IS NULL THEN quote_json END FROM posts WHERE julianday(published_at) >= julianday(?) OR id IN (SELECT id FROM posts ORDER BY julianday(published_at) DESC, id ASC LIMIT ?) ORDER BY julianday(published_at) DESC, id ASC LIMIT 100`, since, dashboardMinPosts)
+	instant := "julianday(published_at)"
+	rows, err := s.db.QueryContext(ctx, `SELECT id, source, account_handle, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, CASE WHEN quote_hidden_at IS NULL THEN quote_json END FROM posts WHERE id IN (
+		SELECT id FROM (SELECT id FROM posts WHERE `+instant+` >= julianday(?) ORDER BY `+instant+` DESC, id ASC LIMIT 100)
+		UNION SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY lower(COALESCE(account_handle, '')) ORDER BY `+instant+` DESC, id ASC) AS n FROM posts) WHERE n <= ?
+	) ORDER BY `+instant+` DESC, id ASC`, since, dashboardAccountPosts)
 	if err != nil {
 		return nil, dbErr(err)
 	}
