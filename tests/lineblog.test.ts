@@ -464,6 +464,14 @@ test("a page takes the blog's design of its newest article", () => {
   assert.equal(designFor("2017-04-14").profile.media, "5b5533c91f9f.jpg")
   assert.equal(designFor("2017-04-29").accent, "#826856")
   assert.equal(designFor("2018-07-21").accent, "#376c9c")
+  assert.equal(
+    designFor("2018-05-17").officialSite,
+    "https://whv-amusic.com/kano/",
+  )
+  assert.equal(
+    designFor("2018-05-18").officialSite,
+    "https://kano-official.amebaownd.com/",
+  )
   assert.equal(designFor("2018-12-03").header.media, "03adb75fc762.jpg")
   assert.equal(designFor("2019-03-20").profile.media, "e4293469ed7c.jpg")
   assert.equal(designFor(undefined), designs[designs.length - 1])

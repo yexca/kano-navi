@@ -30,6 +30,8 @@ export type LineblogDesign = {
 const OBS = "https://obs.line-scdn.net/"
 
 const SITE_WHV = "https://whv-amusic.com/kano/"
+// First shown by the 2018-05-18 index capture; the 2018-04-23 one still
+// linked SITE_WHV.
 const SITE_AMEBA = "https://kano-official.amebaownd.com/"
 
 const header2015: LineblogArt = {
@@ -155,7 +157,7 @@ export const designs: LineblogDesign[] = [
     since: "2018-05-18",
     accent: "#826856",
     profileText: PROFILE_FOUR_SINGLES,
-    officialSite: SITE_WHV,
+    officialSite: SITE_AMEBA,
     header: header2017,
     profile: profile2018,
   },
@@ -163,7 +165,7 @@ export const designs: LineblogDesign[] = [
     since: "2018-07-21",
     accent: "#376c9c",
     profileText: PROFILE_FOUR_SINGLES,
-    officialSite: SITE_WHV,
+    officialSite: SITE_AMEBA,
     header: header2017,
     profile: profile2018,
   },
@@ -171,7 +173,7 @@ export const designs: LineblogDesign[] = [
     since: "2018-12-04",
     accent: "#376c9c",
     profileText: PROFILE_FOUR_SINGLES,
-    officialSite: SITE_WHV,
+    officialSite: SITE_AMEBA,
     header: header2018,
     profile: profile2019,
   },
