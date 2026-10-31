@@ -34,8 +34,10 @@ import { ArchiveDialog } from "./components/archive-dialog"
 import { LinkDirectory } from "./components/link-directory"
 import { NowStage } from "./components/now-stage"
 import {
+  type PostArchiveLayout,
   PostArchive,
   PostArchiveFilter,
+  PostArchiveLayoutToggle,
   PostWall,
 } from "./components/post-wall"
 import { VideoArchive, VideoShelf } from "./components/video-shelf"
@@ -49,6 +51,19 @@ interface ViewerImage {
 
 /** Images offered to the viewer; entries whose media is not cached are skipped. */
 type ViewerCandidate = Omit<ViewerImage, "url"> & { url: string | null }
+
+/** This device remembers the post archive's layout. */
+const POST_LAYOUT_KEY = "kano-post-archive-layout"
+
+function readPostLayout(): PostArchiveLayout {
+  try {
+    return window.localStorage.getItem(POST_LAYOUT_KEY) === "list"
+      ? "list"
+      : "masonry"
+  } catch {
+    return "masonry"
+  }
+}
 
 /** Heading copy of each month dialog, with the loaded month's total. */
 function archiveCopy(
@@ -115,6 +130,16 @@ export function DashboardApp() {
     dashboard.meta.revision,
     snapshotVersion,
   )
+  const [postLayout, setPostLayoutState] =
+    useState<PostArchiveLayout>(readPostLayout)
+  const setPostLayout = useCallback((layout: PostArchiveLayout) => {
+    setPostLayoutState(layout)
+    try {
+      window.localStorage.setItem(POST_LAYOUT_KEY, layout)
+    } catch {
+      // The choice still applies until the page closes.
+    }
+  }, [])
   const [toast, setToast] = useState<{
     key: string
     values?: Record<string, string>
@@ -358,13 +383,20 @@ export function DashboardApp() {
           }
           toolbar={
             archiveView.kind === "posts" ? (
-              <PostArchiveFilter
-                accounts={meta.xAccounts || []}
-                account={archiveView.account || null}
-                setAccount={setArchiveAccount}
-                counts={archive.archive?.accountCounts}
-                t={t}
-              />
+              <div className="archive-tools">
+                <PostArchiveFilter
+                  accounts={meta.xAccounts || []}
+                  account={archiveView.account || null}
+                  setAccount={setArchiveAccount}
+                  counts={archive.archive?.accountCounts}
+                  t={t}
+                />
+                <PostArchiveLayoutToggle
+                  layout={postLayout}
+                  setLayout={setPostLayout}
+                  t={t}
+                />
+              </div>
             ) : null
           }
           onClose={closeArchive}
@@ -389,6 +421,7 @@ export function DashboardApp() {
           ) : archiveView.kind === "posts" ? (
             <PostArchive
               archive={archive.archive as ArchiveSnapshot<Post> | null}
+              layout={postLayout}
               isLoading={archive.isLoading}
               error={archive.error}
               onRetry={archive.reload}

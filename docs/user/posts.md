@@ -15,6 +15,10 @@ it in full.
 
 **Past posts** (a clock icon on phones) browses every post the board has
 stored, month by month, with the same account filter and per-account counts.
+Posts appear newest first in a masonry wall that reads row by row, left to
+right, or in a single column; on wider screens the layout switch beside the
+filter picks one, and this device remembers the choice. Phones always show
+one column.
 
 ## Related Docs
 

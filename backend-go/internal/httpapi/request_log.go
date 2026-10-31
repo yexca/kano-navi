@@ -23,6 +23,8 @@ func RequestLog(next http.Handler, output io.Writer) http.Handler {
 			route = r.URL.Path
 		default:
 			switch {
+			case strings.HasPrefix(r.URL.Path, "/media/lineblog/"):
+				route = "/media/lineblog/:name"
 			case strings.HasPrefix(r.URL.Path, "/media/profile/"):
 				route = "/media/profile/:slot"
 			case strings.HasPrefix(r.URL.Path, "/media/"):

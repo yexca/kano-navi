@@ -31,6 +31,8 @@ const groups = {
       "Check Go formatting, contracts, cross-builds, and disposable containers",
     "go-format-check": "Check Go formatting without Docker",
     smoke: "Check a seeded temporary SQLite snapshot through the Go backend",
+    "ci-fast":
+      "Run fast local format, documentation, and source privacy checks",
     "ci-style":
       "Check formatting, documentation, workflows, and source privacy",
     "ci-backend": "Run Go lint, vet, and race-enabled contract tests",

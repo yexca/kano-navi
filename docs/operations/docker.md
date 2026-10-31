@@ -23,8 +23,11 @@ To use the equivalent GHCR image, set
 Fresh deployments start with empty X/YouTube snapshots and no LLM providers.
 Add providers and the model queue in `/admin`, then use a source's Run now or
 enable its timer on the Sources page to populate source data. Fixed history
-images are already bundled. Existing `./data` snapshots and provider
-configuration survive upgrades.
+images are already bundled. The LINE BLOG archive's text is bundled too; its
+media live in `./data/lineblog/`, packaged on the host as described in
+[LINE BLOG archive maintenance](../development/lineblog-archive.md#deployments).
+Existing `./data` snapshots, archive media and provider configuration survive
+upgrades.
 
 ## Reverse Proxy
 
@@ -34,8 +37,9 @@ Same-origin browser mutations work even if the proxy rewrites Host. Clients
 without Fetch Metadata need the original public Host and forwarded protocol
 to match any supplied `Origin`.
 
-The production listener gzip-compresses public JSON and build text directly;
-a proxy is not required for gzip. Preserve `Content-Encoding`, `Vary` and
+The production listener gzip-compresses public JSON directly and sends the
+build's text from its precompressed Brotli and gzip siblings; a proxy is not
+required for compression. Preserve `Content-Encoding`, `Vary` and
 validators and avoid recompressing an already encoded response. Exclude admin,
 authentication, MCP and runtime media from any additional proxy compression.
 Preserve the admin/MCP `no-transform` directive.
@@ -53,8 +57,11 @@ back to asking for the revision every 30 seconds and keep working.
 
 ## Build and Maintenance
 
-Deploy `dist/` together with its `.vite/manifest.json`: manifest-listed hashed
-JS/CSS is immutable for one year, while HTML and fixed assets revalidate.
+Deploy `dist/` together with its `.vite/manifest.json` and the `.br` and `.gz`
+siblings the build writes next to its text files: manifest-listed hashed
+JS/CSS and hash-addressed history images are immutable for one year, while
+HTML and other fixed assets revalidate. Copy siblings with or after their
+originals; a sibling older than its original is ignored.
 Keep earlier hashed files available during a rolling deployment when possible;
 an already open page can request its old lazy chunks. If a chunk is unavailable,
 the page's reload action obtains the latest revalidated HTML.
@@ -135,8 +142,8 @@ its own data volume and synthetic authentication, checks public pages and API
 contracts, and removes the container and anonymous volume afterwards.
 It does not mount the operator data/ directory or load .env.
 
-The runtime stage copies the `kano-go` binary, `dist/`, `public/` and a CA
-bundle. The embedded schema and static seeds are compiled into the binary.
+The runtime stage copies the `kano-go` binary, `dist/` with its
+precompressed siblings, `public/` and a CA bundle. The embedded schema and static seeds are compiled into the binary.
 Production starts through `kano-go serve`, validates authentication before
 opening SQLite and stores runtime state only in the `/app/data` volume.
 

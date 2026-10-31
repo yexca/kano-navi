@@ -35,10 +35,14 @@ export const scriptJobs: Record<string, Job[]> = {
   "golangci-lint.yml": ["backend"],
   "make-help.ts": ["frontend"],
   "package-history-media.ts": ["frontend"],
+  "package-lineblog.ts": ["frontend"],
   "privacy-allowlist.json": [],
   "production-smoke.ts": ["frontend", "docker"],
   "run-app.mjs": [],
   "smoke.ts": ["frontend", "smoke", "docker"],
+  // Build plugins loaded by vite.config.ts.
+  "vite-page-preload.ts": frontendJobs,
+  "vite-precompress.ts": frontendJobs,
 }
 
 const documentation =

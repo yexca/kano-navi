@@ -19,7 +19,7 @@ GO_LDFLAGS = -X github.com/yexca/kano-navi/backend-go/internal/buildinfo.Version
 .PHONY: go-build go-start go-docker-build go-lint go-vet go-race actionlint
 .PHONY: format format-check typecheck docs-check check-docs sensitive-check check-sensitive privacy-check test-sensitive test-frontend
 .PHONY: audit npm-audit npm-audit-production npm-audit-signatures go-audit
-.PHONY: smoke docker-build production-smoke ci-style ci-backend ci-frontend check ci-local ci
+.PHONY: smoke docker-build production-smoke ci-fast ci-style ci-backend ci-frontend check ci-local ci
 .PHONY: ci-plan ci-results test-ci-plan
 
 help:
@@ -147,6 +147,10 @@ docker-build:
 
 production-smoke:
 	$(NODE) scripts/production-smoke.ts $(DOCKER_IMAGE)
+
+# Fast local feedback for ordinary edits. It uses the installed toolchain and
+# never installs dependencies, runs tests, starts Docker, or contacts sources.
+ci-fast: format-check go-format-check docs-check sensitive-check
 
 # Narrow checks use the existing locked installation and never fetch source data.
 ci-style: format-check go-format-check docs-check actionlint test-sensitive test-ci-plan sensitive-check

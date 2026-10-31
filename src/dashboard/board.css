@@ -952,8 +952,8 @@
   background: var(--berry);
 }
 
-.guide-day.is-today .guide-day-name,
-.guide-day.is-today .guide-day-number {
+.guide-day.is-today .guide-day-head .guide-day-name,
+.guide-day.is-today .guide-day-head .guide-day-number {
   color: #fff;
 }
 
@@ -1225,8 +1225,38 @@
     font-size: 24px;
   }
 
+  /* A row of the list marks today the way the month grid does: its date in a
+     berry disc, with an accent rule instead of a filled header. */
+  .guide-day.is-today {
+    box-shadow: inset 3px 0 0 var(--berry);
+  }
+
+  .guide-day.is-today .guide-day-head {
+    background: none;
+  }
+
+  .guide-day.is-today .guide-day-head .guide-day-name {
+    color: var(--berry);
+  }
+
+  .guide-day.is-today .guide-day-head .guide-day-number {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--berry);
+    font-size: 20px;
+  }
+
   .guide-day-today {
     margin: 2px 0 0;
+    padding: 0;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .guide-day-events,
@@ -1247,18 +1277,19 @@
   }
 }
 
+/* An empty day folds to one line; today keeps its full date. */
 @media (max-width: 1040px) {
-  .guide-day.is-empty {
+  .guide-day.is-empty:not(.is-today) {
     padding-block: 2px;
   }
 
-  .guide-day.is-empty .guide-day-head {
+  .guide-day.is-empty:not(.is-today) .guide-day-head {
     display: flex;
     gap: 6px;
     padding: 6px 0;
   }
 
-  .guide-day.is-empty .guide-day-number {
+  .guide-day.is-empty:not(.is-today) .guide-day-number {
     font-size: 16px;
   }
 }
@@ -2739,33 +2770,99 @@ a.month-event:hover {
   height: 14px;
 }
 
-/* The Past posts dialog keeps a masonry wall of full posts. */
+/*
+ * The Past posts dialog shows full posts as a masonry wall that reads row by
+ * row (cells placed by PostMasonry; the gap matches MASONRY_GAP) or as a
+ * single column.
+ */
 .post-wall.is-masonry {
+  position: relative;
   display: block;
-  columns: 3 300px;
-  column-gap: 16px;
 }
 
-.post-wall.is-masonry > .post-note {
-  margin: 0 0 16px;
-  break-inside: avoid;
+.post-masonry-cell {
+  position: absolute;
+  left: calc(var(--masonry-column) * (100% + 16px) / var(--masonry-columns));
+  width: calc(
+    (100% - (var(--masonry-columns) - 1) * 16px) / var(--masonry-columns)
+  );
 }
 
-.post-wall.is-masonry .post-note-media {
+.post-wall.is-list {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 600px;
+  margin-inline: auto;
+}
+
+.post-wall.is-archive .post-note-media {
   grid-template-rows: none;
   aspect-ratio: auto;
 }
 
-.post-wall.is-masonry .post-note-media > * {
+.post-wall.is-archive .post-note-media > * {
   aspect-ratio: 1;
 }
 
-.post-wall.is-masonry .post-note-media.count-1 > * {
+.post-wall.is-archive .post-note-media.count-1 > * {
   aspect-ratio: 16 / 10;
 }
 
-.post-wall.is-masonry .post-note-media.count-3 > :first-child {
+.post-wall.is-archive .post-note-media.count-3 > :first-child {
   aspect-ratio: auto;
+}
+
+.segmented.is-icons button {
+  display: grid;
+  padding: 6px 10px;
+  place-items: center;
+}
+
+.segmented.is-icons svg {
+  width: 16px;
+  height: 16px;
+}
+
+/*
+ * The account filter and the layout switch share one row; when it is
+ * cramped, the accounts scroll sideways without a visible scrollbar.
+ */
+.archive-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.archive-tools > .segmented:not(.is-icons) {
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.archive-tools > .segmented:not(.is-icons)::-webkit-scrollbar {
+  display: none;
+}
+
+.archive-tools > .segmented button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.archive-tools > .segmented.is-icons {
+  flex: none;
+}
+
+/*
+ * The head is as wide as the wall below it. Narrower than two masonry columns
+ * (MASONRY_MIN_WIDTH twice plus the gap), both layouts are one column, so the
+ * switch has nothing to choose.
+ */
+@container archive-head (width < 616px) {
+  .archive-tools > .segmented.is-icons {
+    display: none;
+  }
 }
 
 /* A long board post opens whole in this sheet, so the wall keeps its rows. */
@@ -3038,9 +3135,9 @@ a.month-event:hover {
 /* ---------------------------------------------------------- month dialogs */
 
 .archive-dialog {
-  width: min(1100px, calc(100vw - 24px));
+  width: min(1320px, calc(100vw - 48px));
   max-width: none;
-  height: min(880px, calc(100dvh - 24px));
+  height: min(1000px, calc(100dvh - 48px));
   max-height: none;
   margin: auto;
   padding: 0;
@@ -3065,6 +3162,7 @@ a.month-event:hover {
 
 .archive-dialog-head {
   position: relative;
+  container: archive-head / inline-size;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
@@ -3087,12 +3185,25 @@ a.month-event:hover {
   min-width: 0;
 }
 
-.archive-dialog-heading h2 {
-  margin: 4px 0 0;
+/* The note follows the title on its line and wraps below it when cramped. */
+.archive-dialog-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-top: 4px;
+}
+
+.archive-dialog-title h2 {
+  margin: 0;
   font-family: var(--font-display);
   font-size: clamp(20px, 2.2vw, 26px);
   font-weight: 800;
   line-height: 1.15;
+}
+
+.archive-dialog-title .section-title-note {
+  margin: 0;
 }
 
 .archive-dialog-bar {
@@ -3180,6 +3291,10 @@ a.month-event:hover {
   .archive-month-label {
     min-width: 0;
     flex: 1 1 auto;
+  }
+
+  .archive-tools {
+    flex: 1 1 100%;
   }
 }
 

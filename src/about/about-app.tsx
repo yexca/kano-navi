@@ -11,6 +11,8 @@ import "./about.css"
 const AUTHOR = "yexca"
 const REPOSITORY_URL = "https://github.com/yexca/kano-navi"
 const LICENSE_URL = `${REPOSITORY_URL}/blob/main/LICENSE`
+const LINEBLOG_RECOVERY_URL =
+  "https://github.com/ZhFuwe/Kano_LINE_Blog_Recovery"
 const developmentModels = ["GPT-5.6-Sol", "Claude Opus 5.5", "GPT-6.1-Sol"]
 const technologyGroups = [
   {
@@ -100,6 +102,7 @@ export function AboutApp() {
           <Chapter number={1} title={t("about.overview")}>
             <p>{t("about.overviewOne")}</p>
             <p>{t("about.overviewTwo")}</p>
+            <p>{t("about.overviewLineblog")}</p>
             <a className="text-link" href="/history">
               {t("archive.fullHistory")}
               <ArrowRight aria-hidden="true" />
@@ -129,7 +132,14 @@ export function AboutApp() {
               ))}
             </dl>
           </Chapter>
-          <Chapter number={4} title={t("about.notice")}>
+          <Chapter number={4} title={t("about.credits")}>
+            <p>{t("about.creditsLineblog")}</p>
+            <ExternalLink className="text-link" href={LINEBLOG_RECOVERY_URL}>
+              {t("about.creditsRecovery")}
+              <ArrowUpRight aria-hidden="true" />
+            </ExternalLink>
+          </Chapter>
+          <Chapter number={5} title={t("about.notice")}>
             <p>{t("about.unofficial")}</p>
             <p>{t("about.accuracy")}</p>
             <p>{t("about.rights")}</p>

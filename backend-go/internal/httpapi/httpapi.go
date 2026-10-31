@@ -53,6 +53,10 @@ func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, options Sta
 	if now == nil {
 		now = time.Now
 	}
+	// The fixed history images share the store's variant cache.
+	if site, ok := options.Static.(*staticSite); ok && store != nil {
+		site.variants = store
+	}
 	return &Handler{
 		store:        store,
 		now:          now,
@@ -159,6 +163,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.videos(w, r)
 	default:
 		switch {
+		case strings.HasPrefix(r.URL.Path, "/media/lineblog/"):
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				writeMethodNotAllowed(w, "GET, HEAD")
+				return
+			}
+			h.lineblogMedia(w, r, strings.TrimPrefix(r.URL.Path, "/media/lineblog/"))
 		case strings.HasPrefix(r.URL.Path, "/media/profile/"):
 			if r.Method != http.MethodGet && r.Method != http.MethodHead {
 				writeMethodNotAllowed(w, "GET, HEAD")

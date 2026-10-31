@@ -106,7 +106,9 @@ before a module handler runs.
 
 Responses stay stable and sanitized: `raw_json`, stack traces, credentials and
 absolute local paths never reach the browser. Ready runtime media is served
-only through the opaque-ID `/media/:id` route.
+only through the opaque-ID `/media/:id` route; the recovered LINE BLOG files
+in `data/lineblog/` are served by archive name through `/media/lineblog/:name`
+(see [Media cache](media-cache.md#line-blog-archive-media)).
 
 ## Authentication and Origin
 
@@ -159,12 +161,29 @@ the [calendar and Atom feeds](public-api.md#public-feeds), plus build
 HTML/JavaScript/CSS, negotiate gzip through `Accept-Encoding`. The
 [revision stream](public-api.md#revision-stream) is never compressed, since
 gzip would hold its events back. Bodies below 1 KiB remain uncompressed. The
-listener does not produce Brotli or deflate; clients that advertise only those
-receive the identity representation. `Vary: Accept-Encoding` also accompanies
-eligible identity and conditional responses. Existing weak ETags validate the
-uncompressed representation across encodings; 304 and HEAD have no compressed
-body. Range responses, non-success responses, already encoded bodies and
-`no-transform` responses are not compressed.
+listener compresses on the fly with gzip only; clients that advertise only
+Brotli or deflate receive the identity representation of those responses.
+`Vary: Accept-Encoding` also accompanies eligible identity and conditional
+responses. Existing weak ETags validate the uncompressed representation
+across encodings; 304 and HEAD have no compressed body. Range responses,
+non-success responses, already encoded bodies and `no-transform` responses
+are not compressed on the fly.
+
+The build precompresses its own text. `npm run build` (and the image's
+`vite build`) writes a Brotli `.br` and a gzip `.gz` sibling at the strongest
+settings next to every HTML, JavaScript, CSS, JSON and SVG file in `dist/`
+(outside `dist/.vite/`) of at least 1 KiB, when the sibling is smaller
+(`scripts/vite-precompress.ts`). The static site sends the first sibling the
+request's `Accept-Encoding` admits, `br` before `gzip`, with
+`Content-Encoding`, `Vary: Accept-Encoding`, the original's `Content-Type`
+and `Cache-Control`, and the sibling's length. Last-Modified stays the
+original's, so conditional requests answer alike for every encoding; HEAD
+and 304 carry no body, and a range request on an encoded response addresses
+the sibling's bytes. A sibling older than its original is stale and ignored.
+`index.html` responses that carry rewritten share tags (a page's own tags,
+the public origin, or a 404) never use the stored sibling and fall back to
+on-the-fly gzip like any text without a sibling. Siblings have no URL of
+their own: a request for `….br` or `….gz` of such a file is a missing page.
 
 Admin/authentication responses, MCP (including streams and reflected protocol
 inputs), runtime media and images are excluded. Public JSON compression is
@@ -174,12 +193,16 @@ apply unconditional compression at a reverse proxy. Admin and MCP additionally
 send `Cache-Control: no-store, no-transform` so intermediaries also have an
 explicit transformation prohibition.
 
-Only content-hashed JS/CSS in `dist/assets` listed in Vite's
-`dist/.vite/manifest.json` receive `public, max-age=31536000, immutable`.
-HTML (including SPA fallback routes), fixed history images, icons and other
-files receive `public, max-age=0, must-revalidate`. A path that is neither a
-build file nor one of the frontend's pages (`/`, `/history`, `/about`,
-`/admin`, with or without a trailing slash) still receives `index.html`, which
+Content-hashed JS/CSS in `dist/assets` listed in Vite's
+`dist/.vite/manifest.json` receive `public, max-age=31536000, immutable`. So
+does a fixed history file under `/assets/history/` (and its `w` copies) when
+the request's single `v` is the SHA-256 of the file's bytes, which the server
+checks ([Immutable Fixed Files](media-cache.md#immutable-fixed-files));
+without `v`, or
+with any other `v`, it revalidates. HTML (including SPA fallback routes),
+icons and other files receive `public, max-age=0, must-revalidate`. A path that is neither a
+build file nor one of the frontend's pages (`/`, `/history`, `/lineblog`,
+`/about`, `/admin`, with or without a trailing slash) still receives `index.html`, which
 shows the frontend's not-found view, but with status 404. `robots.txt` comes
 from `public/` and disallows `/admin`, `/api/` and `/mcp` but allows the two
 public feeds, `/api/calendar.ics` and `/api/feed.xml`, whose subscription
@@ -205,7 +228,7 @@ revision streams first, then waits for the remaining requests up to
 `index.html` carries static Open Graph and Twitter card tags (site name,
 description, the bundled banner) and `rel="alternate"` links to both feeds.
 Those tags describe the board. When the server serves `index.html` for
-`/history` or `/about`, it replaces the page's `<title>`, `description`,
+`/history`, `/lineblog` or `/about`, it replaces the page's `<title>`, `description`,
 `og:title`, `og:description` and `og:url` (and Twitter title and description
 tags, if present) with that page's English title, description and path; the
 route table `spaPages` in `backend-go/internal/httpapi/static.go` holds them

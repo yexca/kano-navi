@@ -3,8 +3,9 @@
 ## Presentation: `src/`
 
 `src/main.tsx` routes between the public board, the static `/history`
-page in `src/history/`, the static `/about` page in `src/about/`, and `/admin`.
-Links between the three public pages open in place: the next page's code
+page in `src/history/`, the static `/lineblog` archive in `src/lineblog/`, the
+static `/about` page in `src/about/`, and `/admin`.
+Links between the four public pages open in place: the next page's code
 loads while the current page stays on screen (hovering or focusing a link
 starts that load), then the pages cross-fade under a fixed header with the
 View Transition API. Back and forward restore each entry's scroll position,
@@ -18,8 +19,19 @@ language before the first paint so no load flashes the other theme. History copy
 static; verified fixed images ship in `public/assets/history/` and `dist/`.
 `scripts/package-history-media.ts` updates these files from a local reference
 archive without network requests.
-See [History archive maintenance](../development/history-archive.md). The three public
-pages share `src/site/`: `site-shell.tsx` (header with page navigation and
+See [History archive maintenance](../development/history-archive.md). The
+`/lineblog` article index and per-article files are static JSON written by
+`scripts/package-lineblog.ts`; the page picks an article, a month or a page
+from its query (`?article=`, `?month=`, `?page=`) and moves between them in
+place, pushing an entry whose scroll the shared navigation restores. Each
+article file is its own build chunk: the page's code waits for the articles
+its address shows, a move keeps the current view on screen until the next
+view's articles have loaded (pointing at or focusing a link starts that
+load), and a failed load offers a reload. Its
+media load from `/media/lineblog/<name>`, including the header and profile
+art of the design of the newest article shown; see
+[LINE BLOG archive maintenance](../development/lineblog-archive.md). The four
+public pages share `src/site/`: `site-shell.tsx` (header with page navigation and
 Japan clock, footer, skip link, section title, empty and loading states;
 narrow screens show the site name and fold the page links into a menu behind
 the `kano-seal.tsx` deer seal),
@@ -81,11 +93,22 @@ Shared primitives must remain independent of dashboard, history, and admin
 features. Extract cohesive helpers when needed; avoid a repository-wide move
 for a small change.
 
-`/admin`, `/history`, and `/about` use React lazy imports with independent page
-CSS and translation chunks. The shared settings provider owns persistent theme
-and language; page message providers extend its translator without duplicating
-preferences. Shared navigation labels remain in the base dictionary. Suspense
-shows a localized loading status, and a page error boundary offers a full-page
+Every page, the board included, loads through a dynamic import with its own
+CSS and translation chunks, so a direct visit downloads the shared runtime
+(React, the settings provider and the base dictionary) and that page's code
+only. The first page's import starts as soon as `src/main.tsx` runs. Because
+the server answers every page with the same `index.html`, the board's chunks
+cannot be listed there statically: the build
+(`scripts/vite-page-preload.ts`) writes a small script ahead of the entry
+that adds `modulepreload` and style `preload` links for them only when the
+address is the board, so they download alongside the entry. The shared
+settings provider owns persistent theme and language; page message providers
+extend its translator without duplicating preferences. The base dictionary
+holds the copy shared by pages (header, footer, navigation, page status and
+the translation toggle); the board's own copy is in
+`src/dashboard/dashboard-i18n.ts`. While a page's code loads, the current
+page stays on screen, or on a direct visit a localized loading status
+appears after a short delay; a page error boundary offers a full-page
 reload when a chunk fails (including after a deployment). Direct visits and
 trailing-slash routes work through the existing SPA fallback, and
 `/index.html`, which the server answers as a file, is the board
@@ -93,7 +116,7 @@ trailing-slash routes work through the existing SPA fallback, and
 shows a localized not-found view with a link back to the board instead of the
 board itself; the server answers it with status 404, so `src/main.tsx` and
 `spaPages` in `backend-go/internal/httpapi/static.go` list the same pages.
-History/about
+History, the LINE BLOG archive and About
 remain static and never mount the dashboard hook or request its API.
 
 English is the base locale. Every message exists in English, a key missing
@@ -175,10 +198,12 @@ carries its `lang` attribute. The console's
 completeness chips and translation editor are in
 `src/admin/views/translation-parts.tsx`, shared by posts and videos.
 
-Board images from the media cache load through `srcset`: `src/lib/media.ts`
-lists the server's [resized copies](media-cache.md#resized-copies) below an
-image's known width, and each card passes a `sizes` hint for its layout. The
-full-image viewer, profile media and bundled assets keep their single URL.
+Board images from the media cache, LINE BLOG archive images and the fixed
+history images load through `srcset`: `src/lib/media.ts` lists the server's
+[resized copies](media-cache.md#resized-copies) below an image's known width,
+and each card or thumbnail passes a `sizes` hint for its layout. The
+full-image viewers, profile media and other bundled assets keep their single
+URL.
 The schedule header's Subscribe menu (`calendar-subscribe.tsx`) offers the
 [calendar feed](public-api.md#public-feeds) as a `webcal:` link and a copyable
 `https` address built by `src/lib/feeds.ts` from the page's origin. Both carry
@@ -316,6 +341,7 @@ beside them.
 - [Testing](../development/testing.md)
 - [User guide](../user/index.md)
 - [History archive maintenance](../development/history-archive.md)
+- [LINE BLOG archive maintenance](../development/lineblog-archive.md)
 
 ## Polling and Calendar Recovery
 
@@ -372,7 +398,15 @@ share the board's visibility pause and snapshot backoff rather than starting a
 separate archive timer. Changing the month or the post
 account, or closing the dialog, cancels the read and discards late pages.
 Picking a day in the month grid lists its entries beside the grid (below it on
-phones) and can show that week on the board. An image viewer opened from the
+phones) and can show that week on the board. The post archive lays out full
+posts either as a masonry wall or as a single column, a choice kept in
+`localStorage` (`kano-post-archive-layout`). The masonry measures each post
+and places it, in order, under the column that ends highest
+(`masonryLayout` in `src/dashboard/post-rows.ts`), so it reads row by row
+while the cells stay in post order for keyboard and screen readers; it
+re-measures when the wall or a post resizes. A container query on the dialog
+head hides the layout switch while the wall is narrower than two masonry
+columns, where both layouts are one column. An image viewer opened from the
 post archive stacks above it; Escape closes the topmost dialog and focus
 returns to its opener.
 Images match their applicable inclusive period, without an updated-at fallback.

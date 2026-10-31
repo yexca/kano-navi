@@ -15,6 +15,11 @@ introduce a separate token system for a single page.
 - / is the public snapshot board. Refresh reads the local API and preserves known
   state when a request fails.
 - /history is static, sourced content with local fixed images and original links.
+- /lineblog is the static LINE BLOG archive. It reproduces the archived blog's
+  own layout (its header art, white menu bar with its Home icon, article column beside a
+  profile sidebar, its font stack and accent colour) inside the shared
+  header and footer; its surfaces and text still come from the shared tokens,
+  so both themes apply.
 - /about is a static project, attribution, and code-license page.
 - /admin is the hidden operator console. Its styles use adm- prefixed selectors.
   Do not add it to public navigation. Lazy page loads show a localized status

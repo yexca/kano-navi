@@ -3,7 +3,7 @@ export const aboutMessages = {
     "about.label": "关于本站",
     "about.metaTitle": "关于本站 · 鹿乃在做什么",
     "about.metaDescription":
-      "“鹿乃在做什么”的项目介绍、AI 开发致谢、技术栈与许可说明。",
+      "“鹿乃在做什么”的项目介绍、AI 开发致谢、技术栈、资料来源与许可说明。",
     "about.skip": "跳转到项目介绍",
     "about.tagline": "鹿乃まほろ · 非官方近况整理页",
     "about.by": "作者 {author}",
@@ -16,6 +16,8 @@ export const aboutMessages = {
       "本站是为鹿乃まほろ的粉丝制作的非官方近况整理页，汇集公开的 X 动态、配信与活动日程、YouTube 更新，以及相关资料入口。独立的旅程页面记录从 2010 年至今的公开活动节点与图片档案。",
     "about.overviewTwo":
       "页面读取服务端保存的本地快照，浏览或刷新页面不会直接抓取外部平台。日程时间以日本时间显示，信息的新鲜度取决于同步频率；来源暂时不可用时，保留已有记录。",
+    "about.overviewLineblog":
+      "Line Blog 页面是鹿乃 2015–2019 年 LINE BLOG 的非官方存档，文章保留日文原文。",
     "about.builtWithAi": "使用 AI 构建",
     "about.aiCredit":
       "本项目由 {author} 在 AI Agent 的协助下开发。以下是参与项目开发的模型。",
@@ -24,6 +26,10 @@ export const aboutMessages = {
     "about.group.frontend": "前端",
     "about.group.backend": "后端",
     "about.group.delivery": "运行与交付",
+    "about.credits": "资料来源与致谢",
+    "about.creditsLineblog":
+      "Line Blog 页面的文章、图片、视频和中文翻译主要来自 ZhFuwe 整理的 Kano_LINE_Blog_Recovery 项目。",
+    "about.creditsRecovery": "查看 Kano_LINE_Blog_Recovery",
     "about.notice": "使用与许可说明",
     "about.unofficial":
       "本站为粉丝制作，与鹿乃まほろ本人、所属机构及相关组织无隶属关系，也不代表官方立场。",
@@ -39,7 +45,7 @@ export const aboutMessages = {
     "about.label": "このサイトについて",
     "about.metaTitle": "このサイトについて · 鹿乃ちゃん何してるか",
     "about.metaDescription":
-      "「鹿乃ちゃん何してるか」の概要、AI 開発への謝辞、技術構成とライセンスについて。",
+      "「鹿乃ちゃん何してるか」の概要、AI 開発への謝辞、技術構成、出典とライセンスについて。",
     "about.skip": "プロジェクト紹介へ",
     "about.tagline": "鹿乃まほろ · 非公式近況まとめ",
     "about.by": "作者 {author}",
@@ -52,6 +58,8 @@ export const aboutMessages = {
       "本サイトは鹿乃まほろのファンによる非公式の近況まとめサイトです。公開 X 投稿、配信・イベント予定、YouTube 更新、関連リンクをまとめています。別ページの活動記録では、2010 年から現在までの公開活動と画像資料を紹介しています。",
     "about.overviewTwo":
       "ページはサーバーに保存されたローカルのスナップショットを読み込み、閲覧や更新操作で外部サービスを直接取得することはありません。予定は日本時間で表示し、情報の鮮度は同期頻度によります。取得元が一時的に利用できない場合も既存の記録を保持します。",
+    "about.overviewLineblog":
+      "Line Blog ページは、鹿乃の 2015〜2019 年の LINE BLOG の非公式アーカイブです。記事は日本語の原文のままです。",
     "about.builtWithAi": "AI とともに開発",
     "about.aiCredit":
       "本プロジェクトは {author} が AI Agent の支援を受けて開発しました。以下は開発に使用したモデルです。",
@@ -60,6 +68,10 @@ export const aboutMessages = {
     "about.group.frontend": "フロントエンド",
     "about.group.backend": "バックエンド",
     "about.group.delivery": "実行環境・配布",
+    "about.credits": "出典と謝辞",
+    "about.creditsLineblog":
+      "Line Blog ページの記事、画像、動画、簡体字中国語訳は、主に ZhFuwe さんによる Kano_LINE_Blog_Recovery プロジェクトに基づいています。",
+    "about.creditsRecovery": "Kano_LINE_Blog_Recovery を見る",
     "about.notice": "ご利用とライセンスについて",
     "about.unofficial":
       "本サイトはファンによる制作であり、鹿乃まほろ本人、所属事務所、関連団体とは関係ありません。公式の見解を示すものではありません。",
@@ -75,7 +87,7 @@ export const aboutMessages = {
     "about.label": "About",
     "about.metaTitle": "About · What’s Kano Up To?",
     "about.metaDescription":
-      "Project overview, AI development credits, technology stack, and license for What’s Kano Up To?",
+      "Project overview, AI development credits, technology stack, sources, and license for What’s Kano Up To?",
     "about.skip": "Skip to project information",
     "about.tagline": "Kano Mahoro · Unofficial status board",
     "about.by": "By {author}",
@@ -89,6 +101,8 @@ export const aboutMessages = {
       "This site is an unofficial status board made for Kano Mahoro fans. It brings together public X posts, stream and event schedules, YouTube updates, and resource links. A separate journey page collects public milestones and visual archives from 2010 to the present.",
     "about.overviewTwo":
       "Pages read local snapshots saved by the server. Browsing or refreshing a page does not fetch external platforms directly. Schedules use Japan time, and freshness depends on synchronization frequency. Existing records remain available when a source is temporarily unavailable.",
+    "about.overviewLineblog":
+      "The Line Blog page is an unofficial archive of Kano's 2015–2019 LINE BLOG, with posts in their original Japanese.",
     "about.builtWithAi": "Built with AI",
     "about.aiCredit":
       "This project was developed by {author} with assistance from AI Agents. These models contributed to its development.",
@@ -97,6 +111,10 @@ export const aboutMessages = {
     "about.group.frontend": "Frontend",
     "about.group.backend": "Backend",
     "about.group.delivery": "Runtime & delivery",
+    "about.credits": "Sources & credits",
+    "about.creditsLineblog":
+      "The Line Blog page's posts, images, videos, and Simplified Chinese translations come mainly from the Kano_LINE_Blog_Recovery project by ZhFuwe.",
+    "about.creditsRecovery": "View Kano_LINE_Blog_Recovery",
     "about.notice": "Usage & license",
     "about.unofficial":
       "This is a fan-made site with no affiliation to Kano Mahoro, her agency, or related organizations. It does not represent an official position.",

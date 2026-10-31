@@ -13,8 +13,11 @@
 
 ## Before Committing
 
-Run make ci and make sensitive-check, inspect scanner findings manually, and
-review git diff --cached. Stage only files within the requested boundary.
+For a routine commit, run `make ci-fast` and the smallest affected-area
+target, then run `make sensitive-check`, inspect scanner findings manually,
+and review `git diff --cached`. Run `make ci` before releases, major
+refactors, dependency or CI infrastructure changes, and other broad
+validation boundaries. Stage only files within the requested boundary.
 Never stage runtime state, secrets, or unrelated user changes. Agents create
 commits and push only on an explicit user request. Keep the configured signing
 path when committing; do not disable signing to work around a missing signer.

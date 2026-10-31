@@ -31,12 +31,31 @@ test("cached media of unknown width lists every copy", () => {
   assert.equal(mediaVariantUrl(`/media/${id}`, 640), `/media/${id}?w=640`)
 })
 
+test("archive and history images list smaller copies too", () => {
+  const archived = "/media/lineblog/0123456789ab.jpg"
+  assert.equal(
+    mediaSrcSet(archived, 700),
+    [
+      `${archived}?w=320 320w`,
+      `${archived}?w=640 640w`,
+      `${archived} 700w`,
+    ].join(", "),
+  )
+  const fixed = `/assets/history/01_synthetic.png?v=${"c".repeat(64)}`
+  assert.equal(mediaVariantUrl(fixed, 320), `${fixed}&w=320`)
+  assert.equal(mediaSrcSet(fixed, 320), `${fixed} 320w`)
+})
+
 test("other image URLs get no srcset", () => {
   for (const url of [
     null,
     undefined,
     "",
     "/assets/kano-banner.jpg",
+    "/assets/history/01_synthetic.gif",
+    "/assets/history/nested/01_synthetic.jpg",
+    "/media/lineblog/0123456789ab.mp4",
+    "/media/lineblog/0123456789AB.jpg",
     "/media/profile/banner?v=abc",
     "/media/not-a-hash",
     "https://pbs.twimg.com/media/synthetic.jpg",

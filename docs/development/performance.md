@@ -33,28 +33,32 @@ nothing into the repository.
   without a temporary sort. Startup adds the index to older snapshots, and
   the schema upgrade tests check that it exists.
 - Public dashboard, revision and health JSON, the calendar and Atom feeds
-  and the build's text files are gzip-compressed; admin, authentication,
-  MCP and runtime media are not.
-  Hashed build files are immutable and everything else revalidates. HTTP
+  are gzip-compressed on the fly, and the build's text files are sent from
+  Brotli or gzip siblings written at build time; admin, authentication,
+  MCP and runtime media are not compressed.
+  Hashed build files and hash-addressed fixed images are immutable and
+  everything else revalidates. HTTP
   tests cover encoding negotiation, validators, 304, HEAD and ranges. The
   rules are in the
   [backend transfer contract](../architecture/backend.md#text-transfer-and-static-caching).
-- The homepage loads only its entry chunk and stylesheet, the local avatar
-  and banner, and its local dashboard and revision reads. `/admin`,
-  `/history` and `/about` and their translations are lazy chunks requested
-  only by their own pages (`src/main.tsx`).
+- Every page, the homepage included, is a lazy chunk with its translations,
+  requested only by its own page (`src/main.tsx`). The homepage loads the
+  entry, its own chunks (preloaded from `index.html`), the local avatar and
+  banner, and its local dashboard and revision reads.
 
 ## Measuring a Change
 
 Run the benchmark on the base and the changed revision on the same machine,
 with no build running concurrently, and compare matched results. For page
 weight, run `make ci-frontend` and compare the chunk sizes Vite reports for
-the homepage entry and each lazy page. For request behavior, serve the
+the entry, the shared chunks and each lazy page; the build manifest
+(`dist/.vite/manifest.json`) lists which chunks a page imports. For request
+behavior, serve the
 production build against a disposable development backend (see
-[Testing](testing.md#test-scope)) and review all four pages at desktop and
+[Testing](testing.md#test-scope)) and review all five pages at desktop and
 mobile widths, including direct visits, refresh, a failed snapshot read with
-automatic recovery and a failed lazy chunk with retry. Visiting `/history` or
-`/about` must not issue dashboard reads.
+automatic recovery and a failed lazy chunk with retry. Visiting `/history`,
+`/lineblog` or `/about` must not issue dashboard reads.
 
 Report results as local synthetic measurements, not production latency,
 capacity or SLA figures, and do not record them in this document.

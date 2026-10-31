@@ -8,8 +8,8 @@ bilibili copies of the same work.
 A large lead card shows the maintainer's featured video, or else the newest
 cover, original song, or premiere, with its date, length, and a link for each
 platform. Beside it, upcoming reservations appear as date tickets, soonest
-first; a reservation that has started reads as on air. The previous work
-follows.
+first; a reservation that has started reads as on air. Up to three earlier
+works remain beside those reservations.
 
 ## Archives and Shorts
 

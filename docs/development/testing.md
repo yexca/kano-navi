@@ -11,17 +11,21 @@ sources. See [Backend](../architecture/backend.md).
 
 `make test-frontend` runs the frontend tests in `tests/`: the dashboard and
 admin request hooks, the month archive reads, polling, the pure view and
-filter helpers, `robots.txt`, and the history catalog and packaging.
+filter helpers, `robots.txt`, the board's preload in `index.html` and its
+own copy, and the history catalog and packaging.
 
 The Makefile is the canonical validation entry point. GitHub Actions invokes
-its targets so local and hosted checks protect the same contracts. Use the
-smallest target that covers the change; aggregate checks are for broad changes,
-CI/tooling work, and pre-commit validation.
+its targets so local and hosted checks protect the same contracts. Use
+`make ci-fast` for ordinary local feedback, then add the smallest affected-area
+target when the change needs compilation or tests. Aggregate checks are for
+broad changes, CI/tooling work, releases, and pre-commit validation at those
+boundaries.
 
 ## Validation Targets
 
 | Change or task                                         | Target                | Requirements                             |
 | ------------------------------------------------------ | --------------------- | ---------------------------------------- |
+| Fast local format, docs and privacy feedback           | make ci-fast          | Installed Node.js and Go                 |
 | Documentation links                                    | make docs-check       | Node.js                                  |
 | Formatting, docs, workflows, CI plan, scanner, privacy | make ci-style         | Locked dependencies and Go               |
 | SQLite, API, sync, media or extraction                 | make ci-backend       | Go and a C compiler                      |
@@ -35,6 +39,11 @@ CI/tooling work, and pre-commit validation.
 | Install then full validation                           | make ci               | Node/npm, Go and Docker                  |
 | Manual privacy review before handoff or commit         | make sensitive-check  | Node and Git                             |
 | Dependency advisories and npm registry signatures      | make audit            | Locked installation, Go and network      |
+
+`make ci-fast` runs only formatting, documentation-link and sensitive-information
+checks; it does not reinstall dependencies, run tests, or start Docker. Use it
+for small edits, then add `make typecheck`, `make go-test` or `make test-frontend`
+when the affected code needs that check.
 
 make ci-style runs make go-format-check, the gofmt step of make go-check on LF
 copies of the Go sources, so make check catches Go formatting without Docker.
@@ -80,8 +89,9 @@ Backend coverage, by package under `backend-go/internal/`:
   writes and retain timeline head-page times across resumed pages. Admin post
   tests cover ID search before pagination and inclusive Japan-date boundaries.
 - `httpapi`: public reads, media containment and validators, compression and
-  static caching, the admin session and origin guard, event mutations, and the
-  operator console routes for workflows, jobs and manual source fetches.
+  precompressed siblings and static and fixed-media caching, the admin session
+  and origin guard, event mutations, and the operator console routes for
+  workflows, jobs and manual source fetches.
 - `workflow` and `jobs`: single-flight reservation, leases, retry, recovery,
   cancellation, timers, and the source, media and history steps; each job
   kind's steps and history label, and run listings that match each run's
@@ -128,7 +138,9 @@ prevention, stale responses and disposal. `tests/latest-wins.test.ts` checks
 that LLM queue saves keep one request in flight per queue, send only the
 latest waiting order and drop edits made on top of a refused save.
 `tests/history-media.test.ts` checks
-the history catalog, the shipped image bytes and packaging validation. No
+the history catalog, the shipped image bytes and packaging validation.
+`tests/lineblog.test.ts` packages a synthetic LINE BLOG archive and checks the
+tracked article and media catalogs and the page's query views. No
 timing thresholds enter CI.
 
 To review the real hooks and responsive UI against a backend, start an

@@ -18,11 +18,12 @@ data/database/kano.sqlite  -- snapshot, cursors, settings, and media metadata
           +--> data/x/       -- ignored content-addressed X media files
           +--> data/youtube/ -- ignored content-addressed YouTube media files
           +--> data/avatar/  -- ignored selected profile media
+          +--> data/lineblog/ -- ignored packaged LINE BLOG archive media
           |
           v
-kano-go serve     -- dashboard, admin API, health, /media/<id>, and /mcp
+kano-go serve     -- dashboard, admin API, health, /media/<id>, /media/lineblog/<name>, and /mcp
           |
-          +--> src/site/, src/dashboard/, src/history/, src/about/ -- public pages
+          +--> src/site/, src/dashboard/, src/history/, src/lineblog/, src/about/ -- public pages
           +--> src/admin/ -- hidden operator console
           |
           +--> internal/jobs, internal/workflow -- single-flight durable jobs

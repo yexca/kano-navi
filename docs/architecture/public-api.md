@@ -79,7 +79,8 @@ the stream needs are with the deployment guide.
 
 Media responses follow the [media HTTP contract](media-cache.md#http-contract).
 Selected profile media uses `/media/profile/avatar` and
-`/media/profile/banner`.
+`/media/profile/banner`, and the LINE BLOG archive's files use
+[`/media/lineblog/<name>`](media-cache.md#line-blog-archive-media).
 
 ## Bounded Public Calendar
 

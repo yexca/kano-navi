@@ -2,25 +2,41 @@ import type { Locale, Translator } from "@/types"
 import { useState } from "react"
 import { ArrowUpRight, ImageOff, Images } from "lucide-react"
 
+import { mediaSrcSet } from "@/lib/media"
 import { ExternalLink } from "@/site/links"
 import { localized, sourceName } from "./media"
 
 export type HistoryMediaItem =
   (typeof import("./media"))["historyMedia"][number]
 
-/** Local fixed image; a missing file shows an explicit unavailable state. */
+/** How wide each history thumbnail shows (src/history/history.css). */
+export const HISTORY_IMAGE_SIZES = {
+  portrait: "(max-width: 820px) 360px, 460px",
+  identity: "48px",
+  milestone: "(max-width: 760px) 320px, 240px",
+  gallery:
+    "(max-width: 480px) 100vw, (max-width: 720px) 50vw, (max-width: 960px) 34vw, 300px",
+} as const
+
+/**
+ * Local fixed image; a missing file shows an explicit unavailable state.
+ * With sizes it offers the server's smaller copies; without, as in the
+ * viewer, it loads the original.
+ */
 export function HistoryImage({
   item,
   locale,
   t,
   eager = false,
   decorative = false,
+  sizes,
 }: {
   item: HistoryMediaItem
   locale: Locale
   t: Translator
   eager?: boolean
   decorative?: boolean
+  sizes?: string
 }) {
   const [failed, setFailed] = useState(false)
   if (failed) {
@@ -38,6 +54,8 @@ export function HistoryImage({
   return (
     <img
       src={item.url}
+      srcSet={sizes ? mediaSrcSet(item.url, item.width) : undefined}
+      sizes={sizes}
       alt={decorative ? "" : localized(item.title, locale)}
       width={item.width}
       height={item.height}
@@ -73,7 +91,13 @@ export function MilestoneMedia({
             title: localized(item.title, locale),
           })}
         >
-          <HistoryImage item={item} locale={locale} t={t} decorative />
+          <HistoryImage
+            item={item}
+            locale={locale}
+            t={t}
+            decorative
+            sizes={HISTORY_IMAGE_SIZES.milestone}
+          />
           {item.frameTime ? (
             <span className="frame-time">{item.frameTime}</span>
           ) : null}
@@ -109,7 +133,12 @@ export function GalleryTile({
           title: localized(item.title, locale),
         })}
       >
-        <HistoryImage item={item} locale={locale} t={t} />
+        <HistoryImage
+          item={item}
+          locale={locale}
+          t={t}
+          sizes={HISTORY_IMAGE_SIZES.gallery}
+        />
         {item.frameTime ? (
           <span className="frame-time">{item.frameTime}</span>
         ) : null}

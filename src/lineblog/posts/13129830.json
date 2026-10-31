@@ -1,0 +1,425 @@
+{
+  "post": {
+    "id": "13129830",
+    "published": "2017-04-24T08:00:11.000Z",
+    "title": "LINEの自動返信をね？",
+    "url": "https://lineblog.me/kano/archives/13129830.html",
+    "archive": "https://web.archive.org/web/20170424195223/http://lineblog.me/kano/archives/13129830.html",
+    "blocks": [
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "こんにちは、鹿乃です\n"
+          },
+          {
+            "type": "image",
+            "alt": "image",
+            "media": "cdeb40b4f82b.png",
+            "source": "https://parts.lineblog.me/img/emoji/line/1/00043.png"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "大家好，我是鹿乃"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Hello, I'm Kano"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "今日はいい天気ですね〜"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "今天天气真好呢～"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "The weather is nice today~"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "お散歩がはかどるうう。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "散步都能走得更起劲了呢。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "It's great for taking walks."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "image",
+            "alt": "_var_mobile_Media_DCIM_100APPLE_IMG_0400.JPG",
+            "media": "f87892912112.jpg",
+            "source": "https://obs.line-scdn.net/0hTur1O5d1C1pPSCXA6K90DQ4VDTU2KxFSJTAcYDoeAXQ6JBxaJzIebDUWSTkDGEpXDlVMXxoeAz8gOCd5dCpHYhcICTk5cTdWL10wIGpNXWhjeEQOcy1END9JVmlrPU0LcSYRPDpJ"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "最近の100円ショップはすごいですね。可愛い文房具がたくさん！しあわせだ(о´∀`о)"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "最近的百元店真厉害呀。可爱的文具好多！好幸福呀(о´∀`о)"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "100-yen shops these days are amazing. So many cute stationery items! I'm so happy (о´∀`о)"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "最近はコピック、水彩色鉛筆が欲しいなとよく色々なサイトとにらめっこしています。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "最近老想要Copic马克笔和水彩铅笔，常常对着各种网站看来看去。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Lately I've been glaring at all sorts of websites because I want Copic markers and watercolor pencils."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "え、えええ、絵心はまったくないけど塗り絵のご趣味をね(´-ω-`)汗"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "诶、诶诶诶，虽然我完全没有绘画天赋，不过想发展一下涂色这个爱好嘛(´-ω-`)汗"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "I-I have absolutely no artistic talent, but my hobby is coloring books, you see (´-ω-`) sweat"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "そういえば、公式LINEの自動返信のレパートリーを増やそうと思っています！"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "对了，我打算给官方LINE的自动回复增加些新花样！"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "By the way, I'm thinking of adding more to the official LINE's auto-reply repertoire!"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "なにかよいアイディアがあったらLINEブログのコメントに書いて教えてください\n"
+          },
+          {
+            "type": "image",
+            "alt": "image",
+            "media": "cdeb40b4f82b.png",
+            "source": "https://parts.lineblog.me/img/emoji/line/1/00043.png"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "如果大家有什么好点子，请写在LINE博客的评论里告诉我"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "If you have any good ideas, please tell me by writing them in the comments on the LINE blog"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "image",
+            "alt": "image",
+            "media": "a71b65410e5f.png",
+            "source": "https://parts.lineblog.me/img/emoji/line/1/00111.png"
+          }
+        ]
+      },
+      {
+        "type": "youtube",
+        "videoId": "A8jUgcSgcQg",
+        "watch": "https://www.youtube.com/watch?v=A8jUgcSgcQg",
+        "video": "1c89458f6db3.mp4",
+        "cover": "71a7d811d22f.jpg",
+        "archive": "https://web.archive.org/web/20170424195223/https://www.youtube.com/watch?v=A8jUgcSgcQg",
+        "coverSource": "https://i.ytimg.com/vi/A8jUgcSgcQg/hqdefault.jpg"
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "アニメイトさんでリリイベの参加券をこれから入手しようとしてくださっている方は、下記サイトさまを参考にしてください。参加券あるなしをわかりやすくまとめてくださってます。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "接下来准备去animate门店入手发售活动参加券的朋友，请参考下面的网站。上面把参加券的有无情况整理得非常清楚。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "If you're planning to get a release event entry ticket at Animate, please refer to the site below. They've put together clearly which stores still have tickets and which don't."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "更新タイミングによっては参加券なくなってしまっている場合もございますがご了承ください(＞人＜;)"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "根据更新时机不同，有时参加券可能已经发放完毕，敬请谅解(＞人＜;)"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Depending on when it was last updated, the tickets may already be gone, so please bear that in mind (＞人＜;)"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "card",
+        "title": "鹿乃「day by day」発売記念イベント - アニメイト",
+        "url": "https://www.animate.co.jp/event/90363/",
+        "archive": "https://web.archive.org/web/20170424195223/https://www.animate.co.jp/event/90363/",
+        "image": {
+          "type": "image",
+          "alt": "鹿乃「day by day」発売記念イベント - アニメイト",
+          "media": "ebf047d38e46.png",
+          "source": "https://www.animate.co.jp/shared/img/ogp.png"
+        }
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "SHIBUYA TSUTAYAさんのリリイベ参加券の頒布は終了しています。ありがとうございます！"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "涩谷TSUTAYA店的发售活动参加券已经发放结束了。谢谢大家！"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Distribution of release event entry tickets at SHIBUYA TSUTAYA has ended. Thank you!"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "ではではまた〜鹿乃でした(о´∀`о)ノ"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "那么那么，下次见～我是鹿乃(о´∀`о)ノ"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Well then, see you again~ This was Kano (о´∀`о)ノ"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "✖︎ 鹿乃 ✖︎"
+          }
+        ]
+      }
+    ],
+    "titleZh": "说到LINE的自动回复呢？",
+    "titleEn": "About the LINE auto-reply, you know?"
+  },
+  "media": [
+    {
+      "name": "1c89458f6db3.mp4",
+      "mimeType": "video/mp4",
+      "byteSize": 8832320,
+      "sha256": "b2bd1dd41ea10bab4f8ffefb7fb69af37618a2e41a2534a8bc77a3827e44dad0"
+    },
+    {
+      "name": "71a7d811d22f.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 9132,
+      "sha256": "71a7d811d22f19d78a9c933200cb26af189e674bf671d0dd7e189fa846ea8b37",
+      "width": 480,
+      "height": 360
+    },
+    {
+      "name": "a71b65410e5f.png",
+      "mimeType": "image/png",
+      "byteSize": 2144,
+      "sha256": "a71b65410e5f50550515d6a7d13e94c19b45542a3c8988fcbd77cd1eaee4ee4c",
+      "width": 78,
+      "height": 78
+    },
+    {
+      "name": "cdeb40b4f82b.png",
+      "mimeType": "image/png",
+      "byteSize": 2880,
+      "sha256": "cdeb40b4f82b50f52723d02aa3503e47c0d3205beb9df9fdf8811050fa2714a3",
+      "width": 78,
+      "height": 78
+    },
+    {
+      "name": "ebf047d38e46.png",
+      "mimeType": "image/png",
+      "byteSize": 538849,
+      "sha256": "ebf047d38e466d62e894f293df61903cabc3ef99b0e23b134a5f4edf18e393a7",
+      "width": 1200,
+      "height": 630
+    },
+    {
+      "name": "f87892912112.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 1777557,
+      "sha256": "f878929121121cac5469d6f3adbaa0b8152155fe1e6b5e274794cada1c13910d",
+      "width": 2048,
+      "height": 1152
+    }
+  ]
+}

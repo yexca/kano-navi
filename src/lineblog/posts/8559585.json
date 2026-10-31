@@ -1,0 +1,508 @@
+{
+  "post": {
+    "id": "8559585",
+    "published": "2016-07-21T09:00:53.000Z",
+    "title": "近況報告！",
+    "url": "https://lineblog.me/kano/archives/8559585.html",
+    "archive": "https://web.archive.org/web/20160723070425/http://lineblog.me/kano/archives/8559585.html",
+    "blocks": [
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "お久しぶりです、鹿乃です。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "好久不见，我是鹿乃。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "It's been a while, I'm Kano."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "image",
+            "alt": "image",
+            "media": "70d399e1d974.jpg",
+            "source": "http://line.blogimg.jp/kano/imgs/2/0/20442a3a.jpg"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "現在進行形で9/7発売の3rdシングル「nameless」のマスタリング現場にきています。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "现在我正待在9月7日发售的第三张单曲《nameless》的母带制作现场。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Right now I'm at the mastering session for my 3rd single \"nameless\", which comes out on 9/7."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "youtube",
+        "videoId": "XgyuRnAZll0",
+        "watch": "https://www.youtube.com/watch?v=XgyuRnAZll0",
+        "video": "bd5e4e693c64.mp4",
+        "cover": "f41eaafff34b.jpg",
+        "archive": "https://web.archive.org/web/20160723070425/https://www.youtube.com/watch?v=XgyuRnAZll0",
+        "coverSource": "https://i.ytimg.com/vi/XgyuRnAZll0/hqdefault.jpg"
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "image",
+            "alt": "nameless",
+            "source": "http://ecx.images-amazon.com/images/I/51LtNSpoYsL._SL160_.jpg",
+            "media": "9fe21ccbaaaf.jpg"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "link",
+            "href": "http://www.amazon.co.jp/dp/B01GU2OOP8",
+            "content": [
+              {
+                "type": "text",
+                "text": "nameless [CD]"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "鹿乃"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "2016-09-07"
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "視聴動画投稿 & 予約はじまっているのでまだの方は要チェックしてください。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "试听视频已经上传、预约也已经开始了，还没看过的朋友请务必去check一下。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "The preview video has been posted and pre-orders have started, so please check it out if you haven't yet."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "またこちらの楽曲がED主題歌になっているTVアニメ「ねじ巻き精霊戦記 天鏡のアルデラミン」も放送中です。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "另外，这首歌担任片尾曲的TV动画《发条精灵战记 天镜的极北之星》也正在播出中。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Also, the TV anime \"Alderamin on the Sky\", which uses this song as its ending theme, is currently airing."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "link",
+            "href": "http://alderamin.net/",
+            "content": [
+              {
+                "type": "text",
+                "text": "http://alderamin.net"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "アニメのED主題歌の映像とても素敵なので、ぜひアニメ本編ともども観てください。観よう？！？！"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "动画片尾曲的影像画面非常棒，请务必连同动画正片一起观看。一起看吧？！？！"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "The ending theme video for the anime is really lovely, so please watch it along with the main episodes. Let's watch it?!?!"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "ハッシュタグは「 #alderamin 」ですっ"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "话题标签就是“#alderamin”哦！"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "The hashtag is \" #alderamin \"!"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "7月はライブからはじまり、アニメ放送開始、3rdシングルのレコーディングや色々でふと気がつくともう8月の背中が見えてきました。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "7月从live开始，接着是动画开播、第三张单曲的录音，忙忙碌碌做了好多事，等回过神来，已经能看到8月的背影了。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "July started with a live show, then the anime began airing, I recorded the 3rd single, and with one thing and another, I suddenly realized August is already right around the corner."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "8月は少し落ち着けそうな予感がしているので、個人的にしたかったあれやこれやをしようかなと思っています。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "感觉8月应该能稍微安定一些，所以我打算去做一些自己一直想做的杂七杂八的事。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "I have a feeling August will be a bit calmer, so I'm thinking of doing all sorts of things I personally wanted to do."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "ライブが終わったあとに書いたもののいつまで経っても投稿されずじまいだったブログを改めて…とか🙇🙇🙇"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "比如把live结束后写好、却一直没能发出去的博客，重新整理一下再发……之类的事🙇🙇🙇"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Like finally posting that blog I wrote after the live show and then never ended up posting… 🙇🙇🙇"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "ちなみにそんなライブの音源が今回のシングルのアーティスト盤についてきます。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "顺便一提，那次live的现场音源会收录在本次单曲的歌手盘里。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "By the way, the recording of that very live show comes with the artist edition of this single."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "Stella-riumのときのみんなのテンションMAXな感じ半端ないっす。嬉しかったな〜〜どんな感じなのかわくわくしていてください( ˊᵕˋ )"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "唱《Stella-rium》时大家情绪MAX的样子真是不得了。我好开心呀〜〜会是什么感觉呢，请大家满心期待吧( ˊᵕˋ )"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "The everyone-at-max-energy vibe during Stella-rium is just unreal. I was so happy~~ Look forward to hearing how it sounds( ˊᵕˋ )"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "アニメ盤には、ヒゲドライバーさんがremixしてくださった「nameless」がついてきます。雰囲気がガラッと変わったremix ver.もぜひ聴いて欲しいです。後半が特にお気に入りですっ"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "动画盘里收录了ヒゲドライバーさんremix的《nameless》。氛围焕然一新的remix版也请务必听听看。我尤其喜欢后半段！"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "The anime edition comes with a remix of \"nameless\" by Higedriver. It completely changes the atmosphere, and I'd love for you to listen to the remix version too. The second half is my favorite part!"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "アーティスト盤と通常盤についてくるカップリングのREREは、自分で何回も聴いてしまうくらいには楽曲自体がとても気にいっていて今から聴いて感想いただけるのを心待ちにしています。"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "收录在歌手盘和通常盘里的c/w曲《RERE》，曲子本身好听得让我自己都忍不住循环了好多遍，从现在就盼着大家听完后发来感想。"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "The B-side \"RERE\" that comes with the artist edition and the regular edition is a song I like so much that I listen to it over and over myself, and I'm already looking forward to hearing what you think of it."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "そんなこんなで鹿乃でした。またすぐ近いうちにブログでお会いしましょ〜〜〜〜( ˊᵕˋ )"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "就这样，本次是鹿乃。过不了多久，我们就在博客里再会吧〜〜〜〜( ˊᵕˋ )"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Anyway, that was Kano. Let's meet again on the blog very soon~~~~( ˊᵕˋ )"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "あ、近況報告らしい近況報告ができてな…笑"
+          }
+        ],
+        "zh": [
+          [
+            {
+              "type": "text",
+              "text": "啊，好像没能做出像样的“近况报告”呢……笑"
+            }
+          ]
+        ],
+        "en": [
+          [
+            {
+              "type": "text",
+              "text": "Ah, I didn't really manage to give an update that deserves the name… lol"
+            }
+          ]
+        ]
+      },
+      {
+        "type": "p",
+        "content": [
+          {
+            "type": "text",
+            "text": "鹿乃"
+          }
+        ]
+      }
+    ],
+    "titleZh": "近况报告！",
+    "titleEn": "Update!"
+  },
+  "media": [
+    {
+      "name": "70d399e1d974.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 79526,
+      "sha256": "70d399e1d974d4e7d5274b135cae8252fb4f36f7beae647b25b96ed930074258",
+      "width": 660,
+      "height": 445
+    },
+    {
+      "name": "9fe21ccbaaaf.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 8116,
+      "sha256": "9fe21ccbaaafc0b274cc3def20967d58083b69c4e0609293ae7a3d0cd813635d",
+      "width": 160,
+      "height": 113
+    },
+    {
+      "name": "bd5e4e693c64.mp4",
+      "mimeType": "video/mp4",
+      "byteSize": 4198042,
+      "sha256": "ad62b68a814fdf7258e0448b2c03289b3ca000238efb81641571050ff59af799"
+    },
+    {
+      "name": "f41eaafff34b.jpg",
+      "mimeType": "image/jpeg",
+      "byteSize": 22168,
+      "sha256": "f41eaafff34b8f53c9a6cac36ed4c71772dd1d228c198533ddc719220393e878",
+      "width": 480,
+      "height": 360
+    }
+  ]
+}

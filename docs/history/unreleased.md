@@ -108,11 +108,37 @@
 </details>
 
 <details>
+<summary><strong>Public pages</strong></summary>
+
+- A new LINE BLOG page brings back Kano's 2015–2019 archive with 99 Japanese
+  articles, their photos, pictographs and archived YouTube videos, the
+  original-era layouts, monthly archive and article links. English and
+  Simplified Chinese readers can show paragraph translations, and the About
+  page credits the fan recovery project.
+- Today's weekly schedule row uses a berry date disc and accent rule on
+  phones and tablets, while the site header shows the name with an
+  `Unofficial` mark on wide screens.
+- Past posts can be read row by row in a single-column view, with the device
+  remembering the choice; the month dialogs are larger on wide screens.
+
+</details>
+
+<details>
 <summary><strong>Runtime and development</strong></summary>
 
 - Release images are published for `linux/arm64` as well as `linux/amd64`
   under the same tags, so ARM hosts such as a Raspberry Pi 4/5 or an Apple
   silicon Mac pull a native image. The Dockerfiles cross-compile the Go
   backend for the target platform.
+- `npm run lineblog:package -- --from <archive>` writes the article index and
+  media catalog into `src/lineblog/` and media into `data/lineblog/`, with
+  validation before writing. The page loads only the articles it shows.
+- LINE BLOG and fixed history images get on-demand smaller copies through
+  `srcset`; hash-addressed originals and variants are cached as immutable
+  after byte verification. The build emits Brotli and gzip copies of static
+  files, and the server serves the best accepted encoding.
+- The board is its own lazy-loaded chunk, while `/` preloads it alongside the
+  entry; direct visits to `/history`, `/lineblog` and `/about` avoid loading
+  board code.
 
 </details>

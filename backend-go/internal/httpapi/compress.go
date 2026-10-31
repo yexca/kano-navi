@@ -42,21 +42,31 @@ func Compress(next http.Handler) http.Handler {
 	})
 }
 
-func acceptsGzip(header string) bool {
+func acceptsGzip(header string) bool { return acceptsCoding(header, "gzip") }
+
+// acceptsCoding reports whether an Accept-Encoding header admits coding. An
+// entry naming the coding decides; otherwise a "*" entry does. q=0 refuses.
+func acceptsCoding(header, coding string) bool {
+	wildcard := false
 	for _, part := range strings.Split(header, ",") {
-		coding, parameters, _ := strings.Cut(strings.TrimSpace(part), ";")
-		if !strings.EqualFold(strings.TrimSpace(coding), "gzip") && strings.TrimSpace(coding) != "*" {
+		name, parameters, _ := strings.Cut(strings.TrimSpace(part), ";")
+		name = strings.TrimSpace(name)
+		if !strings.EqualFold(name, coding) && name != "*" {
 			continue
 		}
+		accepted := true
 		quality := strings.TrimSpace(parameters)
 		if strings.HasPrefix(quality, "q=") {
 			if value, err := strconv.ParseFloat(strings.TrimPrefix(quality, "q="), 64); err == nil && value == 0 {
-				return false
+				accepted = false
 			}
 		}
-		return true
+		if name != "*" {
+			return accepted
+		}
+		wildcard = accepted
 	}
-	return false
+	return wildcard
 }
 
 type compressWriter struct {

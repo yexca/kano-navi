@@ -1,6 +1,7 @@
 # Database and Maintenance
 
-SQLite and dynamic media live under the ignored data/ directory. Static history
+SQLite and dynamic media live under the ignored data/ directory, together with
+the packaged LINE BLOG archive media in data/lineblog/. Static history
 images ship in public/assets/history/ and are included in the image. A fresh
 installation starts with static profile, timeline, and resources, plus empty
 source snapshots and LLM provider/model routes.

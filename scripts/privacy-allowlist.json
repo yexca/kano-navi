@@ -264,6 +264,146 @@
     {
       "host": "www.w3.org",
       "reason": "Atom 1.0 XML namespace identifier written into the public feed; it names the format and is never fetched."
+    },
+    {
+      "host": "lineblog.me",
+      "reason": "Original LINE BLOG article and pictograph addresses recorded as provenance for the archived posts."
+    },
+    {
+      "host": "web.archive.org",
+      "reason": "Internet Archive captures that the LINE BLOG archive was recovered from, linked as provenance."
+    },
+    {
+      "host": "www.lisani.jp",
+      "reason": "Lis-Ani! article picture addresses recorded as the source of the LINE BLOG archive stand-in pictures (src/lineblog/recovered.ts, src/lineblog/posts/); the page never loads them."
+    },
+    {
+      "host": "line.blogimg.jp",
+      "reason": "Original LINE BLOG image addresses recorded as the source of archived post images."
+    },
+    {
+      "host": "line-scdn.net",
+      "reason": "Original LINE image CDN addresses recorded as the source of archived post images."
+    },
+    {
+      "host": "amazon.co.jp",
+      "reason": "Product link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it; affiliate and API query parts are removed when packaging."
+    },
+    {
+      "host": "images-amazon.com",
+      "reason": "Product thumbnail address in the archived LINE BLOG posts; the image was not archived and is never loaded."
+    },
+    {
+      "host": "ssl-images-amazon.com",
+      "reason": "Product thumbnail address in the archived LINE BLOG posts; the image was not archived and is never loaded."
+    },
+    {
+      "host": "click.affiliate.ameba.jp",
+      "reason": "Ameba product link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "ameblo.jp",
+      "reason": "Ameba Blog image page link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "twitter.com",
+      "reason": "Tweet and account link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "t.co",
+      "reason": "Short link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "nico.ms",
+      "reason": "niconico short link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "nimg.jp",
+      "reason": "niconico live thumbnail link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "smilevideo.jp",
+      "reason": "niconico video thumbnail link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "ggpht.com",
+      "reason": "YouTube channel image link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "alderamin.net",
+      "reason": "Event link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "danmachi.com",
+      "reason": "Anime official site link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "danmemo.com",
+      "reason": "Game official site link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "heavyobject.net",
+      "reason": "Anime official site link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "eplus.jp",
+      "reason": "Ticket link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "l-tike.com",
+      "reason": "Ticket link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "pia.jp",
+      "reason": "Ticket link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "ticket.yahoo.co.jp",
+      "reason": "Ticket link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "cnplayguide.com",
+      "reason": "Ticket link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "ketto.com",
+      "reason": "Concert venue link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "kyodotokyo.com",
+      "reason": "Concert promoter link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "tsite.jp",
+      "reason": "Record store event link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "tower.jp",
+      "reason": "Record store link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "toranoana.jp",
+      "reason": "Store link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "animate.co.jp",
+      "reason": "Store event link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "vvstore.jp",
+      "reason": "Store link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "joysound.com",
+      "reason": "Karaoke link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "mouse-jp.co.jp",
+      "reason": "Collaboration link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
+    },
+    {
+      "host": "onsen.ag",
+      "reason": "Internet radio link kept in the archived LINE BLOG posts (src/lineblog/posts/); visitors open it only by following it."
     }
   ]
 }

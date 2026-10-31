@@ -35,6 +35,7 @@ import {
 } from "./media"
 import {
   GalleryTile,
+  HISTORY_IMAGE_SIZES,
   HistoryImage,
   ImageDetails,
   MilestoneMedia,
@@ -480,7 +481,13 @@ export function HistoryApp() {
                   title: localized(portrait.title, locale),
                 })}
               >
-                <HistoryImage item={portrait} locale={locale} t={t} eager />
+                <HistoryImage
+                  item={portrait}
+                  locale={locale}
+                  t={t}
+                  eager
+                  sizes={HISTORY_IMAGE_SIZES.portrait}
+                />
               </button>
               <figcaption>
                 <span>
@@ -550,6 +557,7 @@ export function HistoryApp() {
                         locale={locale}
                         t={t}
                         decorative
+                        sizes={HISTORY_IMAGE_SIZES.identity}
                       />
                     ) : null}
                   </span>

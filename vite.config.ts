@@ -2,6 +2,8 @@ import path from "node:path"
 import { defineConfig, loadEnv } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
+import { precompress } from "./scripts/vite-precompress.ts"
+import { pagePreload } from "./scripts/vite-page-preload.ts"
 
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), "")
@@ -32,7 +34,20 @@ export default defineConfig(({ mode }) => {
       : undefined
   return {
     build: { manifest: true },
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      // The modules src/main.tsx imports for the board.
+      pagePreload({
+        "/": [
+          "src/dashboard/dashboard-app.tsx",
+          "src/dashboard/dashboard-i18n.ts",
+        ],
+      }),
+      // Runs after the bundle is written, so index.html already holds the
+      // preload script.
+      precompress(),
+    ],
     server: { port, strictPort: true, proxy, watch },
     preview: { port, strictPort: true, proxy },
     resolve: {
