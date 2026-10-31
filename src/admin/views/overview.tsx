@@ -34,7 +34,7 @@ function SourceRow({
   id,
   health,
 }: {
-  id: "x" | "youtube"
+  id: "x" | "youtube" | "bilibili"
   health: SourceHealth
 }) {
   const { t, locale } = useAppSettings()
@@ -100,17 +100,13 @@ function VisitorRegionPanel({ settings }: { settings: VisitorRegionSettings }) {
     setBusy(false)
   }
   return (
-    <Panel
-      title={t("admin.overview.visitorRegion")}
-      description={t("admin.overview.visitorRegionHint")}
-    >
+    <Panel title={t("admin.overview.visitorRegion")}>
       <div className="adm-form">
         <Switch
           checked={draft.enabled}
           disabled={busy}
           onChange={(enabled) => set({ enabled })}
           label={t("admin.overview.visitorRegionToggle")}
-          description={t("admin.overview.visitorRegionToggleHint")}
         />
         <div className="adm-form-row">
           <Field label={t("admin.overview.visitorRegionProvider")}>
@@ -130,10 +126,7 @@ function VisitorRegionPanel({ settings }: { settings: VisitorRegionSettings }) {
             />
           </Field>
         </div>
-        <Field
-          label={t("admin.overview.visitorRegionMirrorUrl")}
-          hint={t("admin.overview.visitorRegionMirrorHint")}
-        >
+        <Field label={t("admin.overview.visitorRegionMirrorUrl")}>
           <input
             type="url"
             value={draft.mirrorUrl}
@@ -188,7 +181,6 @@ export function OverviewView({ navigate }: ViewProps) {
     <div className="adm-view">
       <PageHeader
         title={t("admin.overview.title")}
-        description={t("admin.overview.description")}
         actions={
           <>
             <Button
@@ -210,10 +202,7 @@ export function OverviewView({ navigate }: ViewProps) {
         }
       />
 
-      <Panel
-        title={t("admin.overview.attention")}
-        description={t("admin.overview.attentionHint")}
-      >
+      <Panel title={t("admin.overview.attention")}>
         {attention.length ? (
           <div className="adm-attention">
             {attention.map((item) => {
@@ -328,6 +317,7 @@ export function OverviewView({ navigate }: ViewProps) {
           <ul className="adm-source-list">
             <SourceRow id="x" health={overview.sources.x} />
             <SourceRow id="youtube" health={overview.sources.youtube} />
+            <SourceRow id="bilibili" health={overview.sources.bilibili} />
           </ul>
         </Panel>
       </div>

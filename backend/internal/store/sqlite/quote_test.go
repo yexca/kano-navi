@@ -396,3 +396,44 @@ func TestDashboardQuoteSharesTheQuotedPostTranslations(t *testing.T) {
 		}
 	}
 }
+
+// A hidden post outlives a sync rewrite and stays off the public dashboard
+// and archive; the console still lists it with the decision.
+func TestHiddenPostSurvivesRewritesAndStaysOffPublicPages(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	s, err := OpenWorkflowCore(p, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	hiddenID, shownID := "1900000000000000200", "1900000000000000201"
+	post := func(id, text, at string) xsource.Post {
+		return xsource.Post{ID: id, AccountHandle: "kano", Type: "daily", Text: text, PublishedAt: at, URL: "https://x.com/kano/status/" + id, Raw: map[string]any{}}
+	}
+	write := func(posts ...xsource.Post) {
+		t.Helper()
+		if err := s.WriteXRecent(ctx, "kano", xsource.Result{Account: "kano", Posts: posts}, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(post(hiddenID, "hide me", "2026-10-11T00:00:00Z"), post(shownID, "keep me", "2026-10-10T00:00:00Z"))
+	if _, err = s.DB().Exec(`UPDATE posts SET hidden_at='2026-10-12T00:00:00.000Z' WHERE id=?`, hiddenID); err != nil {
+		t.Fatal(err)
+	}
+	write(post(hiddenID, "hide me again", "2026-10-11T00:00:00Z"))
+
+	now := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
+	dashboard, err := s.GetDashboard(ctx, 30, now)
+	if err != nil || len(dashboard.Posts) != 1 || dashboard.Posts[0].ID != shownID || dashboard.Summary.LatestPost == nil || dashboard.Summary.LatestPost.ID != shownID {
+		t.Fatalf("dashboard=%+v err=%v", dashboard, err)
+	}
+	archive, err := s.GetPostArchive(ctx, "2026-10-01", "2026-10-31", "", 1, 20)
+	if err != nil || archive.Total != 1 || len(archive.Items) != 1 || archive.Items[0].ID != shownID {
+		t.Fatalf("archive=%+v err=%v", archive, err)
+	}
+	admin, err := s.ListAdminPosts(ctx, AdminPostFilter{})
+	if err != nil || len(admin.Items) != 2 || admin.Items[0].ID != hiddenID || stringValue(admin.Items[0].HiddenAt) != "2026-10-12T00:00:00.000Z" || admin.Items[0].Text != "hide me again" {
+		t.Fatalf("admin=%+v err=%v", admin, err)
+	}
+}

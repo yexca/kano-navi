@@ -56,7 +56,8 @@ external work:
   "timers": {"scheduled", "nextRunAt"},
   "sources": {
     "x":       {"skipped", "lastSuccessAt", "lastStep"},
-    "youtube": {"skipped", "lastSuccessAt", "lastStep", "push": {"enabled", "verified"}}
+    "youtube": {"skipped", "lastSuccessAt", "lastStep", "push": {"enabled", "verified"}},
+    "bilibili": {"skipped", "lastSuccessAt", "lastStep"}
   },
   "review": {
     "pendingImages",          // unlabelled images with a URL the model has not settled (pending, uncertain, failed)
@@ -331,15 +332,15 @@ alias); `none` never needs review and keeps `previewUrl` null.
 
 ## Posts
 
-| Method and path                | Body / query                                                                                         | Result        |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------- |
-| `GET /posts`                   | `page`, `pageSize` (≤ 200), `source`, `account`, `from`, `to`, `search`, `media`, `llm`, `reprocess` | list of posts |
-| `POST /posts/{id}/reprocess`   | `{route?}`                                                                                           | `{state}`     |
-| `PUT /posts/{id}/quote/hidden` | `{hidden}`                                                                                           | `{state}`     |
-| `POST /posts/{id}/refresh`     | none                                                                                                 | `{state}`     |
+| Method and path                | Body / query                                                                                               | Result        |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------- |
+| `GET /posts`                   | `page`, `pageSize` (≤ 200), `source`, `account`, `from`, `to`, `search`, `llm`, `reprocess`, `translation` | list of posts |
+| `PUT /posts/{id}/hidden`       | `{hidden}`                                                                                                 | `{state}`     |
+| `POST /posts/{id}/reprocess`   | `{route?}`                                                                                                 | `{state}`     |
+| `PUT /posts/{id}/quote/hidden` | `{hidden}`                                                                                                 | `{state}`     |
+| `POST /posts/{id}/refresh`     | none                                                                                                       | `{state}`     |
 
-`account` is an X handle, matched without case or a leading `@`; `media` is
-`present` or `missing`; `llm` is `never`, `pending`, `processed`, `failed`,
+`account` is an X handle, matched without case or a leading `@`; `llm` is `never`, `pending`, `processed`, `failed`,
 `skipped` or `uncertain`; `reprocess=1` keeps only queued posts;
 `translation` is `incomplete`, `complete` or `requested`.
 
@@ -370,9 +371,14 @@ Each post also carries `quote`, the stored quoted status read-only (see
 `{id, authorHandle, authorName, text, publishedAt, url, unavailable, media}`.
 Its `media` has the `{url, status, alt}` shape but lists only ready cached
 quote images, never the post's own. `quoteHiddenAt` is when an operator hid
-the quote from the public pages, and `refreshRequestedAt` is a queued
-refresh from the source; both are `null` otherwise. The console never edits
+the quote from the public pages, `hiddenAt` when an operator hid the whole
+post, and `refreshRequestedAt` is a queued refresh from the source; each is
+`null` otherwise. The console never edits
 the quoted wording, author or images.
+
+`PUT /posts/{id}/hidden` with `{"hidden": true}` hides the whole post from the
+dashboard, the post archive and MCP; `false` shows it again. It follows the
+quote rules below, except that any stored post can be hidden.
 
 `PUT /posts/{id}/quote/hidden` with `{"hidden": true}` hides the post's
 quote from the dashboard, the post archive and MCP; `false` shows it again.
@@ -386,9 +392,9 @@ the next X synchronization and removes its pending failure backoff; it
 contacts no source itself. A repeated request keeps the first request's
 place. Posts that are not X statuses with a known account answer
 `400 invalid_input`. See
-[Refresh from the source](sources.md#refresh-from-the-source). Both routes
-answer `{state: {postId, quoteHiddenAt, refreshRequestedAt}}`; MCP control
-has neither.
+[Refresh from the source](sources.md#refresh-from-the-source). The three
+routes answer `{state: {postId, hiddenAt, quoteHiddenAt, refreshRequestedAt}}`;
+MCP control has none of them.
 
 ## Videos
 

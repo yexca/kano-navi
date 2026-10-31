@@ -47,7 +47,6 @@ func (a *api) listPosts(w http.ResponseWriter, r *http.Request) {
 		From:        query(r, "from"),
 		To:          query(r, "to"),
 		Search:      query(r, "search"),
-		Media:       query(r, "media"),
 		LLM:         query(r, "llm"),
 		Reprocess:   queryFlag(r, "reprocess"),
 		Translation: query(r, "translation"),

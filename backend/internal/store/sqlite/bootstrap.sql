@@ -208,7 +208,8 @@ CREATE TABLE posts (
     raw_json TEXT,
     quote_json TEXT,
     quote_hidden_at TEXT,
-    refresh_requested_at TEXT
+    refresh_requested_at TEXT,
+    hidden_at TEXT
   );
 
 CREATE TABLE profile_media (

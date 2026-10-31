@@ -234,15 +234,32 @@ account and single-video form there. On a narrower screen the side column
 follows the main one, and on a phone the tabs share the width and show only
 the source names.
 
-The console's post list (`src/admin/views/posts.tsx`) shows a post's quote
-read-only in its own cell under the wording, indented on the sunken surface
-so its thumbnails never read as the post's own images: author, time, the
-wording clamped to three lines, ready quote thumbnails that open the image
-viewer, or the unavailable state. Badges mark a quote hidden from the board
-and a queued refresh. Its actions hide the quote from the board or show it
-again, queue a refresh from the source (disabled while one is queued), and
-open the quoted post; nothing edits the quote itself. On narrow containers
-the quote cell spans the row.
+The console's post list (`src/admin/views/posts.tsx`) is a feed of posts
+separated by rules, one row of columns per post: the account over the Japan
+time, the wording (three lines) and its quote, the post's own cached images
+(up to three, "+N" counts the rest), the translation status, the extraction
+state with a Hidden badge for a post hidden from the public pages, and the
+edit, "process again with the LLM" and open actions. The columns after the
+wording have fixed widths, so they line up from post to post. A text-only
+post shows no image cell; a post whose images are not cached yet shows one
+placeholder with the reason. A feed under 1000px puts the account, time,
+state and actions on one line above the wording, images and translations,
+and under 560px the state gets a line of its own. A hidden post's wording is
+dimmed.
+
+Edit opens the post in a dialog: the whole wording, every cached image, the
+translations, the quote and a switch that hides the post from the public
+pages or shows it again, with the LLM and open actions in its footer.
+
+The quote is a read-only card on the sunken surface under the wording, so
+its thumbnails never read as the post's own images. Its header holds the
+author, handle and time, badges for a quote hidden from the board and a
+queued refresh, and icon actions that hide the quote from the board or show
+it again, queue a refresh from the source (disabled while one is queued) and
+open the quoted post. Below come the wording, folded to three lines with a
+"Show full quote" toggle that appears only when the clamp cuts it, the ready
+quote thumbnails that open the image viewer, or the unavailable state. The
+edit dialog shows the quote's whole wording. Nothing edits the quote itself.
 
 Post text and video titles come with server-resolved `translations` (see
 [Translations](data-model.md#translations)). `src/components/translated-text.tsx`
@@ -413,7 +430,11 @@ queue and tests them one at a time.
 
 List filters in the console are one row of pills, one per filter, with a
 date range pill and a clear button that appears while a filter narrows the
-list. The Runs page puts the run history beside the open run on a wide
+list. A choice filter opens its own list under the pill, which follows the
+listbox keyboard pattern. Paged lists show the total, the first and last
+page numbers with two either side of the current page, and a jump field
+that goes to the nearest existing page. The Runs page puts the run history
+beside the open run on a wide
 screen (the newest run is open until another is chosen) and opens a run in
 place on a narrower one. The open run is in the address (`#runs/<id>`): the
 overview's recent runs link there, and a linked run scrolls into view, read

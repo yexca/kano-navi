@@ -105,7 +105,7 @@ func (s *Store) GetPostArchive(ctx context.Context, from, to, account string, pa
 		return nil, ErrInvalidAccount
 	}
 	const instant = `julianday(published_at)`
-	inRange := ` WHERE ` + instant + ` >= julianday(?) AND ` + instant + ` < julianday(?)`
+	inRange := ` WHERE hidden_at IS NULL AND ` + instant + ` >= julianday(?) AND ` + instant + ` < julianday(?)`
 	filter, filterArgs := "", []any{}
 	if account != "" {
 		filter, filterArgs = ` AND lower(account_handle)=lower(?)`, []any{account}

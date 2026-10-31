@@ -821,6 +821,112 @@
   color: color-mix(in oklab, var(--adm-accent) 80%, var(--adm-text));
 }
 
+/* A filter that opens its own list of choices. The pill is the button; the
+   list hangs under it on the raised surface. */
+.adm-filter-pill.adm-select {
+  padding: 0;
+}
+
+.adm-select > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.adm-select > button:focus-visible {
+  outline: none;
+}
+
+.adm-select-value {
+  max-width: 220px;
+  overflow: hidden;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.adm-select > button > svg {
+  width: 14px;
+  height: 14px;
+  color: var(--adm-muted);
+  transition: transform 140ms ease;
+}
+
+.adm-select.is-open > button > svg {
+  transform: rotate(180deg);
+}
+
+.adm-select.is-active > button > svg {
+  color: color-mix(in oklab, var(--adm-accent) 80%, var(--adm-text));
+}
+
+.adm-select-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  display: grid;
+  gap: 1px;
+  min-width: max(100%, 180px);
+  max-height: 300px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface);
+  box-shadow: var(--shadow-lg);
+  list-style: none;
+  outline: none;
+  animation: adm-select-in 120ms ease-out;
+}
+
+.adm-select-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: calc(var(--adm-radius-sm) - 2px);
+  color: var(--adm-text);
+  cursor: pointer;
+}
+
+.adm-select-list li.is-cursor {
+  background: var(--adm-sunken);
+}
+
+.adm-select-list li[aria-selected="true"] {
+  color: color-mix(in oklab, var(--adm-accent) 80%, var(--adm-text));
+  font-weight: 650;
+}
+
+.adm-select-list li > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes adm-select-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-select-list {
+    animation: none;
+  }
+}
+
 .adm-filter-pill.is-toggle {
   font-weight: 600;
 }
@@ -1248,7 +1354,7 @@
 
 .adm-main {
   width: 100%;
-  max-width: 1240px;
+  max-width: 1600px;
   margin: 0 auto;
   padding: 28px 32px 64px;
 }
@@ -2002,16 +2108,90 @@
   padding-top: 4px;
 }
 
+/* The pager: the total, page numbers around the current page with the first
+   and last, and a jump to any page. It wraps on narrow screens. */
 .adm-pager,
 .adm-pager-total {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
-  margin: 12px 0 0;
+  gap: 8px 16px;
+  margin: 16px 0 0;
   color: var(--adm-muted);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+
+.adm-pager-count {
+  margin-right: auto;
+}
+
+.adm-pager-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.adm-pager-page {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--adm-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.adm-pager-page:hover {
+  background: var(--adm-sunken);
+}
+
+.adm-pager-page[aria-current="page"] {
+  border-color: color-mix(in oklab, var(--adm-accent) 45%, transparent);
+  background: var(--adm-accent-soft);
+  color: color-mix(in oklab, var(--adm-accent) 80%, var(--adm-text));
+  cursor: default;
+}
+
+.adm-pager-gap {
+  min-width: 20px;
+  text-align: center;
+}
+
+.adm-pager-jump {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-pager-jump label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-shell .adm-pager-jump input {
+  width: 64px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 999px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.adm-pager-jump input::-webkit-inner-spin-button,
+.adm-pager-jump input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
 }
 
 /* --------------------------------------------------------------- overview */
@@ -2983,40 +3163,43 @@ blockquote.adm-verdict-reason {
 }
 
 /*
- * The posts table: account, text, image, extraction state, route and actions
- * per row. It follows its own width, which the sidebar and viewport both
- * change: a medium table moves the account above the text, a narrow one
- * stacks the row.
+ * The posts feed: one row of columns per post, separated by rules: who and
+ * when, the wording and quote, the post's own images, its translations, its
+ * extraction state and its actions. The fixed columns keep the right edge,
+ * so they line up from post to post while the wording takes the rest. A
+ * feed under 1000px puts who and when, the state and the actions on one line
+ * above the wording, images and translations; under 560px the state gets a
+ * line of its own.
  */
-.adm-table {
+.adm-post-feed {
   display: grid;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+  container: post-feed / inline-size;
 }
 
-.adm-post-table {
-  container-type: inline-size;
-}
-
-.adm-post-table-row {
+.adm-post {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) 56px 130px 150px 72px;
-  grid-template-areas: "origin body image state route actions";
-  align-items: center;
+  grid-template-columns: 112px minmax(0, 1fr) auto 168px 136px auto;
+  grid-template-areas: "origin body media translation state controls";
+  align-items: start;
   gap: 16px;
-  padding: 12px 4px;
+  min-width: 0;
+  padding: 12px 8px;
+  border-radius: var(--adm-radius-sm);
+  transition: background 140ms ease;
 }
 
-.adm-post-table-row + .adm-post-table-row {
+.adm-post + .adm-post {
   border-top: 1px solid var(--adm-line);
 }
 
-.adm-table-head {
-  padding-block: 0 10px;
-  color: var(--adm-muted);
-  font-size: 12px;
-  font-weight: 600;
+.adm-post:hover {
+  background: color-mix(in oklab, var(--adm-sunken) 55%, transparent);
 }
 
-.adm-post-table .adm-post-origin {
+.adm-post-origin {
   display: grid;
   grid-area: origin;
   gap: 2px;
@@ -3038,33 +3221,105 @@ blockquote.adm-verdict-reason {
   display: grid;
   grid-area: body;
   justify-items: start;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
+}
+
+.adm-post.is-hidden .adm-post-body {
+  opacity: 0.6;
 }
 
 .adm-post-body .adm-post-text {
   -webkit-line-clamp: 3;
   font-size: 14px;
+  line-height: 1.6;
 }
 
-.adm-post-image {
-  grid-area: image;
+.adm-post-media {
+  display: flex;
+  gap: 6px;
+}
+
+.adm-post > .adm-post-media {
+  grid-area: media;
+}
+
+.adm-post-translation {
+  grid-area: translation;
+  min-width: 0;
+}
+
+.adm-post-state {
+  grid-area: state;
+  gap: 4px;
+}
+
+.adm-post-controls {
+  display: flex;
+  grid-area: controls;
+  align-items: center;
+  gap: 2px;
+  margin-top: -4px;
+}
+
+@container post-feed (max-width: 1000px) {
+  .adm-post {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "origin state controls"
+      "body body body";
+    gap: 8px 12px;
+  }
+
+  /* Placed in order under the wording, so a post without images leaves no
+     empty row. */
+  .adm-post > .adm-post-media,
+  .adm-post-translation {
+    grid-area: auto;
+    grid-column: 1 / -1;
+  }
+
+  .adm-post-origin {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 8px;
+    align-self: center;
+  }
+
+  .adm-post-state {
+    align-self: center;
+  }
+
+  .adm-post-controls {
+    margin-top: 0;
+  }
+}
+
+@container post-feed (max-width: 560px) {
+  .adm-post {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "origin controls"
+      "state state"
+      "body body";
+  }
 }
 
 /*
- * A quoted post nests under the post's wording, indented on the sunken
- * surface so its images never read as the post's own. A hidden quote dims
- * its content and keeps a dashed edge.
+ * A quoted post is an embedded card under the post's wording, on the sunken
+ * surface so its images never read as the post's own: the author line with
+ * the quote's icon actions at its end, the wording folded to three lines
+ * behind a toggle, then its thumbnails. A hidden quote keeps a dashed edge
+ * and dims its content.
  */
 .adm-post-quote {
   display: grid;
   justify-self: stretch;
   gap: 6px;
   min-width: 0;
-  margin-left: 8px;
-  padding: 8px 10px;
+  padding: 6px 6px 10px 12px;
   border: 1px solid var(--adm-line);
-  border-left: 3px solid var(--adm-line-strong);
   border-radius: var(--adm-radius-sm);
   background: var(--adm-sunken);
   font-size: 13px;
@@ -3072,10 +3327,10 @@ blockquote.adm-verdict-reason {
 
 .adm-post-quote.is-hidden {
   border-style: dashed;
-  border-left-style: solid;
 }
 
-.adm-post-quote.is-hidden :is(.adm-post-quote-text, .adm-post-quote-media) {
+.adm-post-quote.is-hidden
+  :is(.adm-post-quote-author, .adm-post-quote-text, .adm-post-quote-media) {
   opacity: 0.6;
 }
 
@@ -3083,7 +3338,7 @@ blockquote.adm-verdict-reason {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 6px;
+  gap: 4px 8px;
   min-width: 0;
   color: var(--adm-muted);
   font-size: 12px;
@@ -3093,10 +3348,6 @@ blockquote.adm-verdict-reason {
   width: 14px;
   height: 14px;
   flex: none;
-}
-
-.adm-post-quote-kicker {
-  font-weight: 600;
 }
 
 .adm-post-quote-author {
@@ -3109,17 +3360,69 @@ blockquote.adm-verdict-reason {
 
 .adm-post-quote-author strong {
   color: var(--adm-text);
+  font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.adm-post-quote-author time {
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-post-quote-actions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.adm-post-quote-actions .adm-icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+.adm-post-quote-actions .adm-icon-button svg {
+  width: 15px;
+  height: 15px;
 }
 
 .adm-post-quote-text {
   display: -webkit-box;
   margin: 0;
+  padding-right: 6px;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.adm-post-quote-text.is-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+.adm-post-quote-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: color-mix(in oklab, var(--adm-accent) 80%, var(--adm-text));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.adm-post-quote-toggle:hover {
+  text-decoration: underline;
+}
+
+.adm-post-quote-toggle svg {
+  width: 14px;
+  height: 14px;
 }
 
 .adm-post-quote-missing {
@@ -3135,25 +3438,18 @@ blockquote.adm-verdict-reason {
 }
 
 .adm-post-quote-media .adm-post-thumb {
-  width: 44px;
-  height: 44px;
+  width: 56px;
+  height: 56px;
 }
 
-.adm-post-quote-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-}
-
-/* A square crop of the first cached image; the count marks more images. */
+/* A square crop of a cached image; the count marks images left out. */
 .adm-post-thumb {
   position: relative;
   display: grid;
   place-items: center;
   overflow: hidden;
-  width: 56px;
-  height: 56px;
+  width: 72px;
+  height: 72px;
   padding: 0;
   border: 1px solid var(--adm-line);
   border-radius: var(--adm-radius-sm);
@@ -3183,7 +3479,7 @@ blockquote.adm-verdict-reason {
   position: absolute;
   right: 3px;
   bottom: 3px;
-  padding: 0 4px;
+  padding: 0 5px;
   border-radius: 999px;
   background: var(--adm-surface);
   color: var(--adm-text);
@@ -3192,11 +3488,43 @@ blockquote.adm-verdict-reason {
   line-height: 16px;
 }
 
-.adm-post-no-image {
+/* The post dialog shows the post in full, with larger images. */
+.adm-post-editor .adm-modal-content {
   display: grid;
-  place-items: center;
-  width: 56px;
+  gap: 14px;
+}
+
+.adm-post-editor-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.adm-post-editor .adm-post-media {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.adm-post-editor .adm-post-media .adm-post-thumb {
+  width: 120px;
+  height: 120px;
+}
+
+.adm-post-editor-section {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-post-editor-section h3 {
+  margin: 0;
   color: var(--adm-muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* The in-page post image viewer: one image at a time, fitted to the screen. */
@@ -3242,129 +3570,6 @@ blockquote.adm-verdict-reason {
   color: var(--adm-muted);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-}
-
-.adm-post-state {
-  grid-area: state;
-}
-
-.adm-post-route {
-  grid-area: route;
-}
-
-.adm-post-table .adm-post-route select {
-  height: 32px;
-  font-size: 13px;
-}
-
-.adm-post-controls {
-  display: flex;
-  grid-area: actions;
-  align-items: center;
-  gap: 4px;
-}
-
-@container (max-width: 900px) {
-  .adm-post-table-row {
-    grid-template-columns: minmax(0, 1fr) 56px 130px 150px 72px;
-    grid-template-rows: auto 1fr;
-    grid-template-areas:
-      "origin image state route actions"
-      "body image state route actions";
-    row-gap: 4px;
-  }
-
-  .adm-table-head > :first-child {
-    display: none;
-  }
-
-  .adm-post-table .adm-post-origin {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 2px 10px;
-  }
-
-  .adm-post-body {
-    align-self: start;
-  }
-}
-
-@container (max-width: 640px) {
-  .adm-post-table-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: none;
-    grid-template-areas:
-      "origin state"
-      "body image"
-      "route actions";
-    gap: 8px 12px;
-  }
-
-  .adm-post-table-row.adm-table-head {
-    display: none;
-  }
-
-  .adm-post-table-row:nth-child(2) {
-    border-top: 0;
-  }
-
-  .adm-post-state,
-  .adm-post-controls {
-    justify-content: flex-end;
-  }
-
-  .adm-post-image {
-    align-self: start;
-    justify-self: end;
-  }
-
-  .adm-post-table .adm-post-route select {
-    max-width: 220px;
-  }
-}
-
-/*
- * A row with a quoted post gives the quote its own cell under the wording,
- * which spans the row once the image moves beside the wording.
- */
-.adm-post-quote-cell {
-  grid-area: quote;
-  min-width: 0;
-}
-
-.adm-post-table-row:has(> .adm-post-quote-cell) {
-  grid-template-areas:
-    "origin body image state route actions"
-    "origin quote image state route actions";
-  row-gap: 8px;
-}
-
-@container (max-width: 900px) {
-  .adm-post-table-row:has(> .adm-post-quote-cell) {
-    grid-template-rows: auto auto 1fr;
-    grid-template-areas:
-      "origin image state route actions"
-      "body image state route actions"
-      "quote image state route actions";
-    row-gap: 4px;
-  }
-}
-
-@container (max-width: 640px) {
-  .adm-post-table-row:has(> .adm-post-quote-cell) {
-    grid-template-rows: none;
-    grid-template-areas:
-      "origin state"
-      "body image"
-      "quote quote"
-      "route actions";
-    gap: 8px 12px;
-  }
-
-  .adm-post-quote {
-    margin-left: 0;
-  }
 }
 
 /* --------------------------------------------------------------- schedule */

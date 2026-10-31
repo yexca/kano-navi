@@ -141,7 +141,7 @@ export interface Overview {
   scheduler: { enabled: boolean; running: boolean; tickSeconds: number | null }
   /** The enabled source schedules this process runs. */
   timers: { scheduled: number; nextRunAt: string | null }
-  sources: { x: SourceHealth; youtube: SourceHealth }
+  sources: { x: SourceHealth; youtube: SourceHealth; bilibili: SourceHealth }
   review: {
     pendingImages: number
     suspectedCancellations: number
@@ -426,6 +426,8 @@ export interface AdminPost {
   quoteHiddenAt: string | null
   /** A refresh from the source waiting for the next X synchronization. */
   refreshRequestedAt: string | null
+  /** When an operator hid the whole post from the public pages. */
+  hiddenAt: string | null
 }
 
 /**

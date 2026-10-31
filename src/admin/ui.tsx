@@ -365,27 +365,101 @@ export function Pager({
   onPage: (page: number) => void
 }) {
   const { t } = useAppSettings()
+  const [draft, setDraft] = useState("")
   if (totalPages <= 1)
     return (
       <p className="adm-pager-total">{t("admin.pager.total", { total })}</p>
     )
+  const jump = () => {
+    const target = Math.round(Number(draft))
+    setDraft("")
+    if (Number.isFinite(target) && target >= 1)
+      onPage(Math.min(target, totalPages))
+  }
   return (
     <nav className="adm-pager" aria-label={t("admin.pager.label")}>
-      <span>{t("admin.pager.status", { page, totalPages, total })}</span>
-      <IconButton
-        icon={ChevronLeft}
-        label={t("admin.pager.previous")}
-        disabled={page <= 1}
-        onClick={() => onPage(page - 1)}
-      />
-      <IconButton
-        icon={ChevronRight}
-        label={t("admin.pager.next")}
-        disabled={page >= totalPages}
-        onClick={() => onPage(page + 1)}
-      />
+      <span className="adm-pager-count">
+        {t("admin.pager.total", { total })}
+      </span>
+      <span className="adm-pager-pages">
+        <IconButton
+          icon={ChevronLeft}
+          label={t("admin.pager.previous")}
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+        />
+        {pageWindow(page, totalPages).map((number, index) =>
+          number === null ? (
+            <span key={`gap-${index}`} className="adm-pager-gap" aria-hidden>
+              …
+            </span>
+          ) : (
+            <button
+              key={number}
+              type="button"
+              className="adm-pager-page"
+              aria-current={number === page ? "page" : undefined}
+              aria-label={t("admin.pager.page", { page: number })}
+              onClick={() => onPage(number)}
+            >
+              {number}
+            </button>
+          ),
+        )}
+        <IconButton
+          icon={ChevronRight}
+          label={t("admin.pager.next")}
+          disabled={page >= totalPages}
+          onClick={() => onPage(page + 1)}
+        />
+      </span>
+      <form
+        className="adm-pager-jump"
+        // A number past either end goes to that end instead of failing.
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault()
+          jump()
+        }}
+      >
+        <label>
+          <span>{t("admin.pager.jump")}</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={totalPages}
+            value={draft}
+            placeholder={String(page)}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </label>
+        <Button size="sm" type="submit" disabled={!draft}>
+          {t("admin.pager.go")}
+        </Button>
+      </form>
     </nav>
   )
+}
+
+/**
+ * The page numbers a pager shows: the first and last pages and two either
+ * side of the current one. A gap of one page shows that page; a longer gap
+ * is null and reads as an ellipsis.
+ */
+export function pageWindow(page: number, totalPages: number) {
+  const pages = [1, totalPages]
+  for (let number = page - 2; number <= page + 2; number++)
+    if (number > 1 && number < totalPages) pages.push(number)
+  const sorted = [...new Set(pages)].sort((a, b) => a - b)
+  const shown: (number | null)[] = []
+  sorted.forEach((number, index) => {
+    const gap = index ? number - sorted[index - 1] : 1
+    if (gap === 2) shown.push(number - 1)
+    else if (gap > 2) shown.push(null)
+    shown.push(number)
+  })
+  return shown
 }
 
 /** A native modal dialog: Escape closes it and focus returns to the opener. */
@@ -525,35 +599,132 @@ export function Callout({
 // A list's filters read as one row of pills: each names what it filters, and
 // one that narrows the list is highlighted so the active filters stand out.
 
-/** A native select drawn as a labelled pill. */
+export type FilterOption = { value: string; label: string }
+
+/**
+ * A labelled pill that opens the list of its choices. The list follows the
+ * listbox pattern: the arrows, Home and End move, Enter or Space picks, and
+ * Escape, Tab or a click elsewhere closes it.
+ */
 export function FilterSelect({
   label,
   value,
   onChange,
+  options,
   active = value !== "",
-  children,
 }: {
   label: string
   value: string
   onChange: (value: string) => void
+  options: FilterOption[]
   /** Whether the value narrows the list; by default any non-empty value. */
   active?: boolean
-  children: ReactNode
 }) {
+  const id = useId()
+  const root = useRef<HTMLDivElement>(null)
+  const button = useRef<HTMLButtonElement>(null)
+  const list = useRef<HTMLUListElement>(null)
+  const [open, setOpen] = useState(false)
+  const [cursor, setCursor] = useState(0)
+  const selected = Math.max(
+    0,
+    options.findIndex((option) => option.value === value),
+  )
+  useEffect(() => {
+    if (!open) return undefined
+    list.current?.focus()
+    const onPointer = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener("pointerdown", onPointer)
+    return () => document.removeEventListener("pointerdown", onPointer)
+  }, [open])
+  useEffect(() => {
+    if (open)
+      list.current?.children[cursor]?.scrollIntoView({ block: "nearest" })
+  }, [open, cursor])
+  const show = () => {
+    setCursor(selected)
+    setOpen(true)
+  }
+  const close = () => {
+    setOpen(false)
+    button.current?.focus()
+  }
+  const pick = (index: number) => {
+    close()
+    if (options[index] && options[index].value !== value)
+      onChange(options[index].value)
+  }
+  const last = options.length - 1
   return (
-    <label className={cn("adm-filter-pill", active && "is-active")}>
-      <span className="adm-filter-pill-label" aria-hidden>
-        {label}
-      </span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-label={label}
+    <div
+      ref={root}
+      className={cn(
+        "adm-filter-pill adm-select",
+        active && "is-active",
+        open && "is-open",
+      )}
+    >
+      <button
+        ref={button}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? `${id}-list` : undefined}
+        onClick={() => (open ? setOpen(false) : show())}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault()
+            show()
+          }
+        }}
       >
-        {children}
-      </select>
-      <ChevronDown aria-hidden />
-    </label>
+        <span className="adm-filter-pill-label">{label}</span>
+        <span className="adm-select-value">{options[selected]?.label}</span>
+        <ChevronDown aria-hidden />
+      </button>
+      {open ? (
+        <ul
+          ref={list}
+          id={`${id}-list`}
+          role="listbox"
+          tabIndex={-1}
+          aria-label={label}
+          aria-activedescendant={`${id}-${cursor}`}
+          className="adm-select-list"
+          onKeyDown={(event) => {
+            const moves: Record<string, number> = {
+              ArrowDown: Math.min(cursor + 1, last),
+              ArrowUp: Math.max(cursor - 1, 0),
+              Home: 0,
+              End: last,
+            }
+            if (event.key in moves) setCursor(moves[event.key])
+            else if (event.key === "Enter" || event.key === " ") pick(cursor)
+            else if (event.key === "Escape") close()
+            else if (event.key === "Tab") return setOpen(false)
+            else return undefined
+            event.preventDefault()
+          }}
+        >
+          {options.map((option, index) => (
+            <li
+              key={option.value}
+              id={`${id}-${index}`}
+              role="option"
+              aria-selected={index === selected}
+              className={cn(index === cursor && "is-cursor")}
+              onPointerMove={() => setCursor(index)}
+              onClick={() => pick(index)}
+            >
+              <span>{option.label}</span>
+              {index === selected ? <Check aria-hidden /> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   )
 }
 

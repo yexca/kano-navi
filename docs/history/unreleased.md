@@ -4,8 +4,9 @@
 > **Upgrade notes.** `YTDLP_BINARY` is optional. Set it to a fixed yt-dlp
 > executable path to enable the method; leaving it empty preserves the
 > existing chain behavior.
-> Startup adds the `source_schedules.chain_json` and
-> `workflow_runs.source_chain_json` columns; nothing is migrated.
+> Startup adds the `source_schedules.chain_json`,
+> `workflow_runs.source_chain_json` and `posts.hidden_at` columns; nothing is
+> migrated.
 >
 > - Each X and YouTube timer reads through a method chain. Until one is saved
 >   on the Sources page, X tries the FxTwitter timeline, then the profile page,
@@ -66,6 +67,18 @@
   `/api/admin/sync-settings`) and the translation limits. Saved values apply
   from the next run.
 - The LLM page and its panels drop their explanatory paragraphs.
+- The console is wider (up to 1600px). The Overview lists Bilibili beside X
+  and YouTube under Sources and drops its explanatory paragraphs.
+- The Posts page is a feed with one row of columns per post: account and
+  time, wording and quote, cached images, translations, extraction state and
+  actions. The media filter and the route choice are removed, the reprocess
+  action reads "Process again with the LLM", and `GET /api/admin/posts` ignores `media`;
+  `GET /api/admin/overview` adds `sources.bilibili`.
+- A post's edit dialog shows it in full and can hide it from the public
+  pages (`PUT /api/admin/posts/{id}/hidden`, `hiddenAt` on each listed
+  post).
+- Console filters open a styled list of choices, and paged lists show page
+  numbers and a jump to any page.
 - The Posts page shows times as Japan-time `YYYY-MM-DD HH:mm` in every
   language: a post's and its quote's publication and a queued refresh.
 

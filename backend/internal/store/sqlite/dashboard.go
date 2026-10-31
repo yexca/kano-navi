@@ -590,8 +590,8 @@ const dashboardAccountPosts = 8
 func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error) {
 	instant := "julianday(published_at)"
 	rows, err := s.db.QueryContext(ctx, `SELECT id, source, account_handle, type, label, text, published_at, url, likes, reposts, replies, media_url, media_alt, CASE WHEN quote_hidden_at IS NULL THEN quote_json END FROM posts WHERE id IN (
-		SELECT id FROM (SELECT id FROM posts WHERE `+instant+` >= julianday(?) ORDER BY `+instant+` DESC, id ASC LIMIT 100)
-		UNION SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY lower(COALESCE(account_handle, '')) ORDER BY `+instant+` DESC, id ASC) AS n FROM posts) WHERE n <= ?
+		SELECT id FROM (SELECT id FROM posts WHERE hidden_at IS NULL AND `+instant+` >= julianday(?) ORDER BY `+instant+` DESC, id ASC LIMIT 100)
+		UNION SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY lower(COALESCE(account_handle, '')) ORDER BY `+instant+` DESC, id ASC) AS n FROM posts WHERE hidden_at IS NULL) WHERE n <= ?
 	) ORDER BY `+instant+` DESC, id ASC`, since, dashboardAccountPosts)
 	if err != nil {
 		return nil, dbErr(err)
@@ -618,7 +618,7 @@ func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error)
 func (s *Store) queryLatestPost(ctx context.Context) (*postRow, error) {
 	var r postRow
 	var account, label, mu, ma sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,CASE WHEN quote_hidden_at IS NULL THEN quote_json END FROM posts ORDER BY julianday(published_at) DESC,id ASC LIMIT 1`).Scan(&r.id, &r.source, &account, &r.typ, &label, &r.text, &r.publishedAt, &r.url, &r.likes, &r.reposts, &r.replies, &mu, &ma, &r.quoteJSON)
+	err := s.db.QueryRowContext(ctx, `SELECT id,source,account_handle,type,label,text,published_at,url,likes,reposts,replies,media_url,media_alt,CASE WHEN quote_hidden_at IS NULL THEN quote_json END FROM posts WHERE hidden_at IS NULL ORDER BY julianday(published_at) DESC,id ASC LIMIT 1`).Scan(&r.id, &r.source, &account, &r.typ, &label, &r.text, &r.publishedAt, &r.url, &r.likes, &r.reposts, &r.replies, &mu, &ma, &r.quoteJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -633,7 +633,7 @@ func (s *Store) queryLatestPost(ctx context.Context) (*postRow, error) {
 }
 func (s *Store) queryPostCount(ctx context.Context, since string) (int64, error) {
 	var count int64
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM posts WHERE julianday(published_at) >= julianday(?)`, since).Scan(&count); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM posts WHERE hidden_at IS NULL AND julianday(published_at) >= julianday(?)`, since).Scan(&count); err != nil {
 		return 0, dbErr(err)
 	}
 	return count, nil

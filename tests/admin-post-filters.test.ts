@@ -32,7 +32,11 @@ test("post date filters reach server queries, survive pagination and clear indep
     Object.assign(globalThis, {
       IS_REACT_ACT_ENVIRONMENT: true,
       window: { localStorage: { getItem: () => null, setItem: () => {} } },
-      document: { documentElement: { classList: { toggle: () => {} } } },
+      document: {
+        documentElement: { classList: { toggle: () => {} } },
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      },
     })
     const post: AdminPost = {
       id: "synthetic-post",
@@ -56,6 +60,7 @@ test("post date filters reach server queries, survive pagination and clear indep
       quote: null,
       quoteHiddenAt: null,
       refreshRequestedAt: null,
+      hiddenAt: null,
     }
     const queries: Record<string, string | number>[] = []
     const context = {
@@ -101,6 +106,42 @@ test("post date filters reach server queries, survive pagination and clear indep
     assert.equal(latest().page, 2)
     assert.equal(latest().from, "2026-01-02")
     assert.equal(latest().to, "2026-01-03")
+    // A page number and the jump field page the same query; a page past the
+    // end goes to the last one.
+    const pageButton = (number: number) =>
+      root!.root
+        .findAllByProps({ className: "adm-pager-page" })
+        .find((button) => button.props.children === number)!
+    await act(async () => pageButton(3).props.onClick())
+    assert.equal(latest().page, 3)
+    await act(async () =>
+      root!.root
+        .findByProps({ inputMode: "numeric" })
+        .props.onChange({ target: { value: "99" } }),
+    )
+    await act(async () =>
+      root!.root
+        .findByProps({ className: "adm-pager-jump" })
+        .props.onSubmit({ preventDefault: () => {} }),
+    )
+    assert.equal(latest().page, 3)
+    assert.equal(latest().from, "2026-01-02")
+    // Picking a choice from a filter list narrows the query from page 1.
+    await act(async () =>
+      root!.root
+        .findAllByProps({ "aria-haspopup": "listbox" })[1]
+        .props.onClick(),
+    )
+    await act(async () =>
+      root!.root
+        .findAllByProps({ role: "option" })
+        .find((option) => option.props.id.endsWith("-5"))!
+        .props.onClick(),
+    )
+    assert.equal(latest().llm, "failed")
+    assert.equal(latest().page, 1)
+    await act(async () => input("admin.pager.next").props.onClick())
+    assert.equal(latest().page, 2)
     await change("admin.posts.search", "needle")
     await act(async () =>
       root!.root

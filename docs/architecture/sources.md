@@ -905,7 +905,8 @@ An operator can hide a post's quote from the public pages
 (`posts.quote_hidden_at`); synchronization, the X API fetch method and the
 startup quote backfill (which fills a missing `quote_json` from the post's
 stored `raw_json`) keep updating the stored quote underneath and never write
-that decision.
+that decision. Hiding the whole post (`posts.hidden_at`) works the same way:
+synchronization keeps rewriting the stored post and never clears it.
 
 #### Refresh from the Source
 

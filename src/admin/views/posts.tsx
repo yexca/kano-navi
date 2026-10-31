@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Download,
   ExternalLink,
   Eye,
   EyeOff,
   FileText,
   ImageOff,
+  PencilLine,
   Quote,
   RefreshCw,
   Search,
@@ -30,9 +33,10 @@ import {
   PageHeader,
   Pager,
   Panel,
+  Switch,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
-import { PostActions, PostStatus, RouteSelect } from "@/admin/views/review"
+import { PostActions, PostStatus } from "@/admin/views/review"
 import {
   TranslationBacklog,
   TranslationCell,
@@ -134,64 +138,106 @@ function PostImageViewer({
   )
 }
 
+/** How many cached images a feed item shows before the rest fold into a count. */
+const shownImages = 3
+
 /**
- * The post's first cached image, or why there is none to show yet. Clicking
- * it enlarges the images in the page.
+ * The post's cached images, or why there are none to show yet; a text-only
+ * post shows nothing. Clicking an image enlarges the images in the page.
  */
-function PostImage({ post }: { post: AdminPost }) {
+function PostImages({
+  post,
+  limit = shownImages,
+}: {
+  post: AdminPost
+  limit?: number
+}) {
   const { t } = useAppSettings()
-  const [viewing, setViewing] = useState(false)
-  if (!post.media.length) return <span className="adm-post-no-image">—</span>
-  const first = post.media.findIndex((image) => localUrl(image.url))
-  const preview = first < 0 ? null : localUrl(post.media[first].url)
-  const count =
-    post.media.length > 1 ? (
-      <span className="adm-post-thumb-count">×{post.media.length}</span>
-    ) : null
-  if (!preview) {
+  const [viewing, setViewing] = useState<number | null>(null)
+  if (!post.media.length) return null
+  const cached = post.media.flatMap((image, index) => {
+    const url = localUrl(image.url)
+    return url ? [{ url, index }] : []
+  })
+  if (!cached.length) {
     const label = t(missingKey(post.mediaStatus))
     return (
-      <span className="adm-post-thumb is-empty" title={label}>
-        <ImageOff aria-label={label} />
-        {count}
-      </span>
+      <div className="adm-post-media">
+        <span className="adm-post-thumb is-empty" title={label}>
+          <ImageOff aria-label={label} />
+          {post.media.length > 1 ? (
+            <span className="adm-post-thumb-count">×{post.media.length}</span>
+          ) : null}
+        </span>
+      </div>
     )
   }
+  const shown = cached.slice(0, limit)
+  const more = post.media.length - shown.length
   return (
-    <>
-      <button
-        type="button"
-        className="adm-post-thumb"
-        onClick={() => setViewing(true)}
-        aria-label={t("admin.posts.imageView")}
-        title={t("admin.posts.imageView")}
-      >
-        <img src={preview} alt="" loading="lazy" />
-        {count}
-      </button>
-      {viewing ? (
+    <div className="adm-post-media">
+      {shown.map(({ url, index }, position) => (
+        <button
+          type="button"
+          key={url}
+          className="adm-post-thumb"
+          onClick={() => setViewing(index)}
+          aria-label={`${t("admin.posts.imageView")} ${index + 1}`}
+          title={t("admin.posts.imageView")}
+        >
+          <img src={url} alt="" loading="lazy" />
+          {more > 0 && position === shown.length - 1 ? (
+            <span className="adm-post-thumb-count">+{more}</span>
+          ) : null}
+        </button>
+      ))}
+      {viewing !== null ? (
         <PostImageViewer
           post={post}
-          start={first}
-          onClose={() => setViewing(false)}
+          start={viewing}
+          onClose={() => setViewing(null)}
         />
       ) : null}
-    </>
+    </div>
   )
 }
 
 /**
- * The status a post quotes, read-only and apart from the post's own images:
- * author, time, wording and its cached thumbnails. An operator can hide it
- * from the public pages, show it again, or queue a refresh from the source
- * for the next X synchronization.
+ * The status a post quotes, read-only and apart from the post's own images,
+ * drawn as an embedded card: the author and time with the quote's actions
+ * (hide from the public pages or show again, queue a refresh from the source
+ * for the next X synchronization, open it), then its wording and its cached
+ * thumbnails. Wording past three lines folds behind a toggle; `full` shows it
+ * all.
  */
-function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
+function PostQuote({
+  post,
+  onDone,
+  full = false,
+}: {
+  post: AdminPost
+  onDone: () => void
+  full?: boolean
+}) {
   const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const [busy, setBusy] = useState<"" | "visibility" | "refresh">("")
   const [viewing, setViewing] = useState<number | null>(null)
+  const [expanded, setExpanded] = useState(full)
+  const [clamped, setClamped] = useState(false)
+  const textRef = useRef<HTMLParagraphElement>(null)
   const quote = post.quote
+  useLayoutEffect(() => {
+    const element = textRef.current
+    if (!element || expanded) return undefined
+    const measure = () =>
+      setClamped(element.scrollHeight > element.clientHeight + 1)
+    measure()
+    if (typeof ResizeObserver === "undefined") return undefined
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [expanded, quote?.text])
   const queued = post.refreshRequestedAt
   if (!quote && !queued) return null
   const hidden = Boolean(post.quoteHiddenAt)
@@ -206,8 +252,7 @@ function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
     setBusy("")
     if (result) onDone()
   }
-  const name =
-    quote?.authorName || (quote?.authorHandle ? `@${quote.authorHandle}` : "")
+  const available = quote && !quote.unavailable
   return (
     <section
       className={`adm-post-quote${hidden ? " is-hidden" : ""}`}
@@ -215,12 +260,12 @@ function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
     >
       <header className="adm-post-quote-head">
         <Quote aria-hidden />
-        <span className="adm-post-quote-kicker">
-          {t("admin.posts.quote.label")}
-        </span>
-        {quote && !quote.unavailable ? (
+        {available ? (
           <span className="adm-post-quote-author">
-            <strong>{name}</strong>
+            <strong>
+              {quote.authorName ||
+                (quote.authorHandle ? `@${quote.authorHandle}` : "")}
+            </strong>
             {quote.authorName && quote.authorHandle ? (
               <span>@{quote.authorHandle}</span>
             ) : null}
@@ -230,30 +275,99 @@ function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
               </time>
             ) : null}
           </span>
+        ) : (
+          <span className="adm-post-quote-author">
+            {t("admin.posts.quote.label")}
+          </span>
+        )}
+        {hidden ? (
+          <Badge tone="warning" icon={EyeOff}>
+            {t("admin.posts.quote.hidden")}
+          </Badge>
         ) : null}
+        {queued ? (
+          <Badge tone="running" icon={RefreshCw}>
+            {t("admin.posts.refreshQueued", { time: japanStamp(queued) })}
+          </Badge>
+        ) : null}
+        <span className="adm-post-quote-actions">
+          {quote ? (
+            <IconButton
+              icon={hidden ? Eye : EyeOff}
+              label={t(
+                hidden ? "admin.posts.quote.show" : "admin.posts.quote.hide",
+              )}
+              busy={busy === "visibility"}
+              onClick={() =>
+                run(
+                  "visibility",
+                  () => api.setQuoteHidden(post.id, !hidden),
+                  hidden
+                    ? "admin.notice.quoteShown"
+                    : "admin.notice.quoteHidden",
+                )
+              }
+            />
+          ) : null}
+          {post.source === "x" ? (
+            <IconButton
+              icon={RefreshCw}
+              label={t("admin.posts.refresh")}
+              busy={busy === "refresh"}
+              disabled={Boolean(queued)}
+              onClick={() =>
+                run(
+                  "refresh",
+                  () => api.refreshPost(post.id),
+                  "admin.notice.refreshQueued",
+                )
+              }
+            />
+          ) : null}
+          {quote ? (
+            <a
+              className="adm-icon-button"
+              href={quote.url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={t("admin.posts.quote.open")}
+              title={t("admin.posts.quote.open")}
+            >
+              <ExternalLink aria-hidden />
+            </a>
+          ) : null}
+        </span>
       </header>
-      {hidden || queued ? (
-        <div className="adm-chip-row">
-          {hidden ? (
-            <Badge tone="warning" icon={EyeOff}>
-              {t("admin.posts.quote.hidden")}
-            </Badge>
-          ) : null}
-          {queued ? (
-            <Badge tone="running" icon={RefreshCw}>
-              {t("admin.posts.refreshQueued", {
-                time: japanStamp(queued),
-              })}
-            </Badge>
-          ) : null}
-        </div>
-      ) : null}
       {quote?.unavailable ? (
         <p className="adm-post-quote-missing">
           {t("admin.posts.quote.unavailable")}
         </p>
       ) : quote?.text ? (
-        <p className="adm-post-quote-text">{quote.text}</p>
+        <>
+          <p
+            ref={textRef}
+            className={`adm-post-quote-text${expanded ? " is-expanded" : ""}`}
+          >
+            {quote.text}
+          </p>
+          {!full && (clamped || expanded) ? (
+            <button
+              type="button"
+              className="adm-post-quote-toggle"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((current) => !current)}
+            >
+              {t(
+                expanded ? "admin.posts.quote.less" : "admin.posts.quote.more",
+              )}
+              {expanded ? (
+                <ChevronUp aria-hidden />
+              ) : (
+                <ChevronDown aria-hidden />
+              )}
+            </button>
+          ) : null}
+        </>
       ) : null}
       {images.length ? (
         <div className="adm-post-quote-media">
@@ -275,54 +389,6 @@ function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
           ))}
         </div>
       ) : null}
-      <div className="adm-post-quote-actions">
-        {quote ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={hidden ? Eye : EyeOff}
-            busy={busy === "visibility"}
-            onClick={() =>
-              run(
-                "visibility",
-                () => api.setQuoteHidden(post.id, !hidden),
-                hidden ? "admin.notice.quoteShown" : "admin.notice.quoteHidden",
-              )
-            }
-          >
-            {t(hidden ? "admin.posts.quote.show" : "admin.posts.quote.hide")}
-          </Button>
-        ) : null}
-        {post.source === "x" ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={RefreshCw}
-            busy={busy === "refresh"}
-            disabled={Boolean(queued)}
-            onClick={() =>
-              run(
-                "refresh",
-                () => api.refreshPost(post.id),
-                "admin.notice.refreshQueued",
-              )
-            }
-          >
-            {t("admin.posts.refresh")}
-          </Button>
-        ) : null}
-        {quote ? (
-          <a
-            className="adm-link"
-            href={quote.url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("admin.posts.quote.open")}
-            <ExternalLink aria-hidden />
-          </a>
-        ) : null}
-      </div>
       {viewing !== null ? (
         <PostImageViewer
           post={post}
@@ -335,24 +401,101 @@ function PostQuote({ post, onDone }: { post: AdminPost; onDone: () => void }) {
   )
 }
 
-function PostTableRow({
+/**
+ * The post in full: its wording, images, translations and quote, its
+ * extraction state and the operator's decisions. Hiding the post keeps it
+ * stored and processed but leaves it off the public pages.
+ */
+function PostEditor({
   post,
+  onClose,
   onDone,
 }: {
   post: AdminPost
+  onClose: () => void
   onDone: () => void
 }) {
-  const [route, setRoute] = useState("")
+  const { t } = useAppSettings()
+  const { api, act } = useAdmin()
+  const [hidden, setHidden] = useState(Boolean(post.hiddenAt))
+  const [busy, setBusy] = useState(false)
+  useEffect(() => setHidden(Boolean(post.hiddenAt)), [post.hiddenAt])
+  const toggle = async (next: boolean) => {
+    setBusy(true)
+    const result = await act(
+      () => api.setPostHidden(post.id, next),
+      next ? "admin.notice.postHidden" : "admin.notice.postShown",
+    )
+    setBusy(false)
+    if (!result) return
+    setHidden(next)
+    onDone()
+  }
   return (
-    <div role="row" className="adm-post-table-row">
-      <div role="cell" className="adm-post-origin">
+    <Modal
+      open
+      wide
+      className="adm-post-editor"
+      title={
+        <>
+          <PostAccount post={post} /> · {japanStamp(post.publishedAt)}
+        </>
+      }
+      onClose={onClose}
+      footer={<PostActions post={post} onDone={onDone} />}
+    >
+      <div className="adm-chip-row">
+        <PostStatus post={post} />
+      </div>
+      <p className="adm-post-editor-text">{post.text}</p>
+      <PostImages post={post} limit={post.media.length} />
+      {post.translation ? (
+        <section className="adm-post-editor-section">
+          <h3>{t("admin.posts.translations")}</h3>
+          <TranslationCell
+            owner="post"
+            id={post.id}
+            original={post.text}
+            translation={post.translation}
+            onChanged={onDone}
+          />
+        </section>
+      ) : null}
+      <PostQuote post={post} onDone={onDone} full />
+      <div className="adm-post-editor-section">
+        <Switch
+          checked={hidden}
+          disabled={busy}
+          onChange={(next) => void toggle(next)}
+          label={t("admin.posts.hide")}
+        />
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * One post in the feed, one row of columns: who and when, the wording and
+ * quote, the post's own images, its translations, its extraction state and
+ * its actions. A narrower feed stacks them (see the stylesheet).
+ */
+function PostItem({ post, onDone }: { post: AdminPost; onDone: () => void }) {
+  const { t } = useAppSettings()
+  const [editing, setEditing] = useState(false)
+  return (
+    <li className={`adm-post${post.hiddenAt ? " is-hidden" : ""}`}>
+      <span className="adm-post-origin">
         <strong>
           <PostAccount post={post} />
         </strong>
         <time dateTime={post.publishedAt}>{japanStamp(post.publishedAt)}</time>
-      </div>
-      <div role="cell" className="adm-post-body">
+      </span>
+      <div className="adm-post-body">
         <p className="adm-post-text">{post.text}</p>
+        <PostQuote post={post} onDone={onDone} />
+      </div>
+      <PostImages post={post} />
+      <div className="adm-post-translation">
         <TranslationCell
           owner="post"
           id={post.id}
@@ -361,24 +504,30 @@ function PostTableRow({
           onChanged={onDone}
         />
       </div>
-      {post.quote || post.refreshRequestedAt ? (
-        <div role="cell" className="adm-post-quote-cell">
-          <PostQuote post={post} onDone={onDone} />
-        </div>
-      ) : null}
-      <div role="cell" className="adm-post-image">
-        <PostImage post={post} />
-      </div>
-      <div role="cell" className="adm-chip-row adm-post-state">
+      <span className="adm-chip-row adm-post-state">
+        {post.hiddenAt ? (
+          <Badge tone="warning" icon={EyeOff}>
+            {t("admin.posts.hidden")}
+          </Badge>
+        ) : null}
         <PostStatus post={post} />
-      </div>
-      <div role="cell" className="adm-post-route">
-        <RouteSelect value={route} onChange={setRoute} />
-      </div>
-      <div role="cell" className="adm-post-controls">
-        <PostActions post={post} route={route} onDone={onDone} compact />
-      </div>
-    </div>
+      </span>
+      <span className="adm-post-controls">
+        <IconButton
+          icon={PencilLine}
+          label={t("admin.posts.edit")}
+          onClick={() => setEditing(true)}
+        />
+        <PostActions post={post} onDone={onDone} compact />
+      </span>
+      {editing ? (
+        <PostEditor
+          post={post}
+          onClose={() => setEditing(false)}
+          onDone={onDone}
+        />
+      ) : null}
+    </li>
   )
 }
 
@@ -386,11 +535,20 @@ const blankFilters = {
   search: "",
   account: "",
   llm: "",
-  media: "",
   translation: "",
   from: "",
   to: "",
 }
+
+const llmStatuses = [
+  "never",
+  "pending",
+  "processed",
+  "uncertain",
+  "failed",
+  "skipped",
+]
+const translationStatuses = ["incomplete", "complete", "requested"]
 
 function PostList({ sources }: { sources: Sources | undefined }) {
   const { t } = useAppSettings()
@@ -409,6 +567,7 @@ function PostList({ sources }: { sources: Sources | undefined }) {
   const active = (
     Object.keys(blankFilters) as (keyof typeof blankFilters)[]
   ).filter((key) => filters[key] !== blankFilters[key]).length
+  const any = { value: "", label: t("admin.filter.any") }
   return (
     <>
       <form
@@ -433,54 +592,38 @@ function PostList({ sources }: { sources: Sources | undefined }) {
           label={t("admin.posts.account")}
           value={filters.account}
           onChange={(account) => update({ account })}
-        >
-          <option value="">{t("admin.filter.any")}</option>
-          {sources?.x.accounts.map(({ account }) => (
-            <option key={account} value={account}>
-              @{account}
-            </option>
-          ))}
-        </FilterSelect>
+          options={[
+            any,
+            ...(sources?.x.accounts || []).map(({ account }) => ({
+              value: account,
+              label: `@${account}`,
+            })),
+          ]}
+        />
         <FilterSelect
           label={t("admin.posts.llm")}
           value={filters.llm}
           onChange={(llm) => update({ llm })}
-        >
-          <option value="">{t("admin.filter.any")}</option>
-          {[
-            "never",
-            "pending",
-            "processed",
-            "uncertain",
-            "failed",
-            "skipped",
-          ].map((status) => (
-            <option key={status} value={status}>
-              {t(`admin.status.${status}`)}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect
-          label={t("admin.posts.media")}
-          value={filters.media}
-          onChange={(media) => update({ media })}
-        >
-          <option value="">{t("admin.filter.any")}</option>
-          <option value="present">{t("admin.posts.withMedia")}</option>
-          <option value="missing">{t("admin.posts.withoutMedia")}</option>
-        </FilterSelect>
+          options={[
+            any,
+            ...llmStatuses.map((status) => ({
+              value: status,
+              label: t(`admin.status.${status}`),
+            })),
+          ]}
+        />
         <FilterSelect
           label={t("admin.translation.filter")}
           value={filters.translation}
           onChange={(translation) => update({ translation })}
-        >
-          <option value="">{t("admin.filter.any")}</option>
-          {["incomplete", "complete", "requested"].map((status) => (
-            <option key={status} value={status}>
-              {t(`admin.translation.filter.${status}`)}
-            </option>
-          ))}
-        </FilterSelect>
+          options={[
+            any,
+            ...translationStatuses.map((status) => ({
+              value: status,
+              label: t(`admin.translation.filter.${status}`),
+            })),
+          ]}
+        />
         <DateRange
           from={filters.from}
           to={filters.to}
@@ -506,27 +649,15 @@ function PostList({ sources }: { sources: Sources | undefined }) {
         <Loading />
       ) : posts.data.items.length ? (
         <>
-          <div
-            className="adm-table adm-post-table"
-            role="table"
-            aria-label={t("admin.posts.title")}
-          >
-            <div role="row" className="adm-post-table-row adm-table-head">
-              <span role="columnheader">{t("admin.posts.account")}</span>
-              <span role="columnheader">{t("admin.posts.column.text")}</span>
-              <span role="columnheader">{t("admin.posts.column.image")}</span>
-              <span role="columnheader">{t("admin.posts.llm")}</span>
-              <span role="columnheader">{t("admin.posts.route")}</span>
-              <span role="columnheader">{t("admin.posts.column.actions")}</span>
-            </div>
+          <ul className="adm-post-feed" aria-label={t("admin.posts.title")}>
             {posts.data.items.map((post) => (
-              <PostTableRow
+              <PostItem
                 key={post.id}
                 post={post}
                 onDone={() => void posts.reload()}
               />
             ))}
-          </div>
+          </ul>
           <Pager
             page={posts.data.page}
             totalPages={posts.data.totalPages}
@@ -550,7 +681,6 @@ export function PostsView({ navigate }: ViewProps) {
     <div className="adm-view">
       <PageHeader
         title={t("admin.posts.title")}
-        description={t("admin.posts.description")}
         actions={
           <Button
             size="sm"

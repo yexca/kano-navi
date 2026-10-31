@@ -497,7 +497,7 @@ func (a *api) overview(w http.ResponseWriter, r *http.Request) {
 		"recentRuns":           recent[:min(len(recent), 6)],
 		"scheduler":            scheduler,
 		"timers":               timers,
-		"sources":              map[string]any{"x": source("x"), "youtube": youtube},
+		"sources":              map[string]any{"x": source("x"), "youtube": youtube, "bilibili": source("bilibili")},
 		"review": map[string]int{
 			"pendingImages":          counts.PendingImages,
 			"suspectedCancellations": counts.SuspectedCancellations,

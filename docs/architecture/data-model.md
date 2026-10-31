@@ -279,9 +279,13 @@ quote off the public pages: the dashboard, the post archive and MCP then
 omit `quote` entirely, while the console still shows it. No synchronization
 path, refresh or backfill writes this column, so the decision survives every
 rewrite of `quote_json` and the `quote-image` links, like a manual lock.
-`posts.refresh_requested_at` is a queued refresh from the source, cleared
-once the X synchronization made its detail request (see
-[Refresh from the source](sources.md#refresh-from-the-source)). Both are
+`posts.hidden_at` is the same decision for the whole post: the dashboard
+(its post wall, latest post and post count), the post archive and MCP leave
+the post out, while the console lists it, extraction still reads it and no
+synchronization path writes the column. `posts.refresh_requested_at` is a
+queued refresh from the source, cleared once the X synchronization made its
+detail request (see
+[Refresh from the source](sources.md#refresh-from-the-source)). All three are
 additive columns, `NULL` by default.
 
 Startup adds `quote_json` additively. It then fills it for every X post

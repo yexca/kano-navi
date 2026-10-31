@@ -73,3 +73,29 @@ func TestPostRefreshRequestQueuesWorkOnly(t *testing.T) {
 		t.Fatalf("a refresh request reached the network: %v", f.network.visited)
 	}
 }
+
+func TestPostHiddenDecision(t *testing.T) {
+	f := newFixture(t, true)
+	f.exec(`INSERT INTO posts(id,source,account_handle,text,published_at,url) VALUES('1900000000000000101','x','synthetic','plain','2026-10-01T00:00:00.000Z','https://x.com/synthetic/status/1900000000000000101')`)
+	f.module.now = func() time.Time { return time.Date(2026, 10, 13, 1, 2, 3, 0, time.UTC) }
+	before := f.revision()
+
+	hidden := f.put("/posts/1900000000000000101/hidden", map[string]any{"hidden": true})
+	hidden.expect(t, http.StatusOK, "")
+	if state := object(t, hidden.json["state"]); state["hiddenAt"] != "2026-10-13T01:02:03.000Z" || state["quoteHiddenAt"] != nil {
+		t.Fatalf("hidden state: %#v", state)
+	}
+	if f.revision() == before {
+		t.Fatal("hiding a post must change the public snapshot revision")
+	}
+	f.module.now = func() time.Time { return time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC) }
+	again := f.revision()
+	if object(t, f.put("/posts/1900000000000000101/hidden", map[string]any{"hidden": true}).json["state"])["hiddenAt"] != "2026-10-13T01:02:03.000Z" || f.revision() != again {
+		t.Fatal("a repeated hide replaced the decision")
+	}
+	if object(t, f.put("/posts/1900000000000000101/hidden", map[string]any{"hidden": false}).json["state"])["hiddenAt"] != nil || f.revision() == again {
+		t.Fatal("restore failed")
+	}
+	f.put("/posts/1900000000000000101/hidden", map[string]any{"hidden": 1}).expectInvalid(t, "hidden must be true or false")
+	f.put("/posts/unknown/hidden", map[string]any{"hidden": true}).expect(t, http.StatusNotFound, "post_not_found")
+}

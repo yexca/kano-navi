@@ -353,6 +353,9 @@ func TestRunsAreSingleFlightAndSurviveOneFailedSource(t *testing.T) {
 	if x := sources["x"].(map[string]any); x["lastStep"].(map[string]any)["status"] != "failed" || x["skipped"] != false {
 		t.Fatalf("x source=%v", x)
 	}
+	if bilibili, ok := sources["bilibili"].(map[string]any); !ok || bilibili["skipped"] != false {
+		t.Fatalf("bilibili source=%v", sources["bilibili"])
+	}
 	if payload["activeRun"] != nil || len(payload["recentRuns"].([]any)) != 1 {
 		t.Fatalf("overview runs=%v", payload)
 	}

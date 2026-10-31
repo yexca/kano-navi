@@ -199,12 +199,10 @@ function createClient(run: Runner, slow: Runner) {
 
     posts: (filters: Record<string, any>) =>
       get<Page<AdminPost>>(`/posts${query(filters)}`),
-    reprocessPost: (id: string, route?: string) =>
-      send<{ state: unknown }>(
-        "POST",
-        `/posts/${enc(id)}/reprocess`,
-        route ? { route } : {},
-      ),
+    reprocessPost: (id: string) =>
+      send<{ state: unknown }>("POST", `/posts/${enc(id)}/reprocess`, {}),
+    setPostHidden: (id: string, hidden: boolean) =>
+      send<{ state: unknown }>("PUT", `/posts/${enc(id)}/hidden`, { hidden }),
     setQuoteHidden: (id: string, hidden: boolean) =>
       send<{ state: unknown }>("PUT", `/posts/${enc(id)}/quote/hidden`, {
         hidden,

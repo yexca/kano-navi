@@ -12,11 +12,12 @@ import (
 	"github.com/yexca/kano-navi/backend/internal/store/sqlite"
 )
 
-// postQuoteState is the operator's standing decisions for one post's quote:
-// when it was hidden from the public pages, and a refresh from the source
-// that waits for the next X synchronization.
+// postQuoteState is the operator's standing decisions for one post: when the
+// post or its quote was hidden from the public pages, and a refresh from the
+// source that waits for the next X synchronization.
 type postQuoteState struct {
 	PostID             string  `json:"postId"`
+	HiddenAt           *string `json:"hiddenAt"`
 	QuoteHiddenAt      *string `json:"quoteHiddenAt"`
 	RefreshRequestedAt *string `json:"refreshRequestedAt"`
 }
@@ -30,11 +31,11 @@ var (
 
 func readQuoteState(ctx context.Context, q queryer, postID string) (*postQuoteState, error) {
 	state := postQuoteState{PostID: postID}
-	var hidden, refresh sql.NullString
-	if err := q.QueryRowContext(ctx, `SELECT quote_hidden_at, refresh_requested_at FROM posts WHERE id = ?`, postID).Scan(&hidden, &refresh); err != nil {
+	var postHidden, hidden, refresh sql.NullString
+	if err := q.QueryRowContext(ctx, `SELECT hidden_at, quote_hidden_at, refresh_requested_at FROM posts WHERE id = ?`, postID).Scan(&postHidden, &hidden, &refresh); err != nil {
 		return nil, err
 	}
-	state.QuoteHiddenAt, state.RefreshRequestedAt = textPointer(hidden), textPointer(refresh)
+	state.HiddenAt, state.QuoteHiddenAt, state.RefreshRequestedAt = textPointer(postHidden), textPointer(hidden), textPointer(refresh)
 	return &state, nil
 }
 
@@ -62,6 +63,39 @@ func (m *Module) setQuoteHidden(ctx context.Context, postID string, hidden bool)
 				value = now
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE posts SET quote_hidden_at = ? WHERE id = ?`, value, postID); err != nil {
+				return err
+			}
+			if err := sqlite.BumpRevisionTx(ctx, tx, now); err != nil {
+				return err
+			}
+		}
+		var err error
+		state, err = readQuoteState(ctx, tx, postID)
+		return err
+	})
+	return state, err
+}
+
+// setPostHidden records or withdraws the operator's decision to keep a whole
+// post off the public pages. Synchronization never writes this column, so a
+// later read of the same post does not show it again.
+func (m *Module) setPostHidden(ctx context.Context, postID string, hidden bool) (*postQuoteState, error) {
+	var state *postQuoteState
+	now := m.timestamp()
+	err := m.inTx(ctx, func(tx *sql.Tx) error {
+		var was sql.NullString
+		if err := tx.QueryRowContext(ctx, `SELECT hidden_at FROM posts WHERE id = ?`, postID).Scan(&was); errors.Is(err, sql.ErrNoRows) {
+			return errPostNotFound
+		} else if err != nil {
+			return err
+		}
+		// Hiding again keeps the first decision's time.
+		if hidden != was.Valid {
+			value := any(nil)
+			if hidden {
+				value = now
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE posts SET hidden_at = ? WHERE id = ?`, value, postID); err != nil {
 				return err
 			}
 			if err := sqlite.BumpRevisionTx(ctx, tx, now); err != nil {
@@ -122,21 +156,37 @@ func (m *Module) writeQuoteState(w http.ResponseWriter, state *postQuoteState, e
 	}
 }
 
-func (m *Module) quoteHiddenRoute(w http.ResponseWriter, r *http.Request, postID string) {
+// hiddenField reads the required boolean `hidden` of a visibility request.
+func hiddenField(w http.ResponseWriter, r *http.Request) (hidden, ok bool) {
 	body, err := httpx.Body(w, r)
 	if err != nil {
 		httpx.WriteError(w, err)
-		return
+		return false, false
 	}
-	var hidden bool
 	switch raw := string(bytes.TrimSpace(body["hidden"])); raw {
 	case "true", "false":
-		hidden = raw == "true"
+		return raw == "true", true
 	default:
 		httpx.WriteError(w, httpx.Invalid("hidden must be true or false"))
+		return false, false
+	}
+}
+
+func (m *Module) quoteHiddenRoute(w http.ResponseWriter, r *http.Request, postID string) {
+	hidden, ok := hiddenField(w, r)
+	if !ok {
 		return
 	}
 	state, err := m.setQuoteHidden(r.Context(), postID, hidden)
+	m.writeQuoteState(w, state, err)
+}
+
+func (m *Module) postHiddenRoute(w http.ResponseWriter, r *http.Request, postID string) {
+	hidden, ok := hiddenField(w, r)
+	if !ok {
+		return
+	}
+	state, err := m.setPostHidden(r.Context(), postID, hidden)
 	m.writeQuoteState(w, state, err)
 }
 

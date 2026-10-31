@@ -43,6 +43,8 @@ type AdminPost struct {
 	Quote              *AdminQuote `json:"quote"`
 	QuoteHiddenAt      *string     `json:"quoteHiddenAt"`
 	RefreshRequestedAt *string     `json:"refreshRequestedAt"`
+	// HiddenAt is when an operator hid the whole post from the public pages.
+	HiddenAt *string `json:"hiddenAt"`
 }
 
 // AdminQuote is a post's stored quote, read-only in the console. Media
@@ -283,12 +285,12 @@ type AdminRunsPage struct {
 	HasNext     bool       `json:"hasNext"`
 }
 
-// AdminPostFilter narrows the post list. Media is "present" or "missing";
+// AdminPostFilter narrows the post list.
 // LLM is a post_llm_states status or "never".
 type AdminPostFilter struct {
-	Page, PageSize                                int
-	Source, Account, From, To, Search, Media, LLM string
-	Reprocess                                     bool
+	Page, PageSize                         int
+	Source, Account, From, To, Search, LLM string
+	Reprocess                              bool
 	// Translation is "incomplete", "complete" or "requested".
 	Translation string
 }
@@ -421,12 +423,6 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 		clauses = append(clauses, "(p.text LIKE ? ESCAPE '\\' OR p.url LIKE ? ESCAPE '\\' OR p.media_alt LIKE ? ESCAPE '\\' OR p.id LIKE ? ESCAPE '\\')")
 		args = append(args, pattern, pattern, pattern, pattern)
 	}
-	switch f.Media {
-	case "present":
-		clauses = append(clauses, "p.media_url IS NOT NULL AND trim(p.media_url) <> ''")
-	case "missing":
-		clauses = append(clauses, "(p.media_url IS NULL OR trim(p.media_url) = '')")
-	}
 	switch f.LLM {
 	case "never", "pending", "processed", "failed", "skipped", "uncertain":
 		clauses = append(clauses, "COALESCE(s.status, 'never') = ?")
@@ -451,7 +447,7 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	totalPages := pageCount(total, pageSize)
 	page = safePage(page, totalPages)
 	offset := (page - 1) * pageSize
-	query := `SELECT p.id,p.source,p.account_handle,p.text,p.published_at,p.url,p.media_url,p.media_alt,COALESCE(s.status,'never'),s.route,s.last_attempt_at,s.last_processed_at,s.last_error,s.last_extraction_id,COALESCE(s.reprocess_requested,0),COALESCE(s.failure_count,0),s.next_attempt_at,p.quote_json,p.quote_hidden_at,p.refresh_requested_at FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE ` + where + ` ORDER BY julianday(p.published_at) DESC,p.id ASC LIMIT ? OFFSET ?`
+	query := `SELECT p.id,p.source,p.account_handle,p.text,p.published_at,p.url,p.media_url,p.media_alt,COALESCE(s.status,'never'),s.route,s.last_attempt_at,s.last_processed_at,s.last_error,s.last_extraction_id,COALESCE(s.reprocess_requested,0),COALESCE(s.failure_count,0),s.next_attempt_at,p.quote_json,p.quote_hidden_at,p.refresh_requested_at,p.hidden_at FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE ` + where + ` ORDER BY julianday(p.published_at) DESC,p.id ASC LIMIT ? OFFSET ?`
 	rows, err := s.db.QueryContext(ctx, query, append(args, pageSize, offset)...)
 	if err != nil {
 		return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
@@ -461,11 +457,11 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	quotes := map[string]sql.NullString{}
 	for rows.Next() {
 		var p AdminPost
-		var quote, quoteHidden, refreshRequested sql.NullString
+		var quote, quoteHidden, refreshRequested, hidden sql.NullString
 		var account, mediaURL, mediaAlt, route, lastAttempt, lastProcessed, lastError, retryAt sql.NullString
 		var extraction sql.NullInt64
 		var requested, failures int
-		if err := rows.Scan(&p.ID, &p.Source, &account, &p.Text, &p.PublishedAt, &p.URL, &mediaURL, &mediaAlt, &p.LLMStatus, &route, &lastAttempt, &lastProcessed, &lastError, &extraction, &requested, &failures, &retryAt, &quote, &quoteHidden, &refreshRequested); err != nil {
+		if err := rows.Scan(&p.ID, &p.Source, &account, &p.Text, &p.PublishedAt, &p.URL, &mediaURL, &mediaAlt, &p.LLMStatus, &route, &lastAttempt, &lastProcessed, &lastError, &extraction, &requested, &failures, &retryAt, &quote, &quoteHidden, &refreshRequested, &hidden); err != nil {
 			return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
 		}
 		p.AccountHandle = nullString(account)
@@ -479,6 +475,7 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 		p.LLMReprocessRequested = requested != 0
 		p.QuoteHiddenAt = nullString(quoteHidden)
 		p.RefreshRequestedAt = nullString(refreshRequested)
+		p.HiddenAt = nullString(hidden)
 		quotes[p.ID] = quote
 		// A queued request runs regardless of the backoff.
 		if failures > 0 && !p.LLMReprocessRequested {
@@ -956,8 +953,8 @@ func (s *Store) AdminCounts(ctx context.Context, today string) (AdminCounts, err
 // SourceLastSuccess reports the newest successful incremental read of each
 // source across its accounts, or nil when it never succeeded.
 func (s *Store) SourceLastSuccess(ctx context.Context) (map[string]*string, error) {
-	out := map[string]*string{"x": nil, "youtube": nil}
-	rows, err := s.db.QueryContext(ctx, `SELECT source, MAX(last_success_at) FROM sync_state WHERE source IN ('x','youtube') GROUP BY source`)
+	out := map[string]*string{"x": nil, "youtube": nil, "bilibili": nil}
+	rows, err := s.db.QueryContext(ctx, `SELECT source, MAX(last_success_at) FROM sync_state WHERE source IN ('x','youtube','bilibili') GROUP BY source`)
 	if err != nil {
 		return nil, fmt.Errorf("%w: sync state unavailable", ErrUnavailable)
 	}
