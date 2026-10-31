@@ -502,7 +502,6 @@ export function PostWall({
           </>
         }
         title={t("feed.title")}
-        note={t("feed.subtitle")}
       >
         {accounts.length > 1 ? (
           <div className="segmented" role="group" aria-label={t("feed.filter")}>

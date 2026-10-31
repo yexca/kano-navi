@@ -406,8 +406,11 @@ snapshot. Post archives follow stored revisions. These refreshes
 share the board's visibility pause and snapshot backoff rather than starting a
 separate archive timer. Changing the month or the post
 account, or closing the dialog, cancels the read and discards late pages.
-Picking a day in the month grid lists its entries beside the grid (below it on
-phones) and can show that week on the board. The post archive lays out full
+A click anywhere in a month-grid day (outside an entry link) picks it, listing
+its entries beside the grid (below it on phones) until the hide button clears
+the selection and the grid takes the full width; the panel can show that week
+on the board. On phones entries are dots that ignore taps, so a tap always
+picks the day. The post archive lays out full
 posts either as a masonry wall or as a single column, a choice kept in
 `localStorage` (`kano-post-archive-layout`). The masonry measures each post
 and places it, in order, under the column that ends highest

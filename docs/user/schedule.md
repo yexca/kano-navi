@@ -16,9 +16,12 @@ with a link to the original post.
 
 ## Month View
 
-**Month view** (a calendar icon on phones) opens a month grid with compact
-entries (dots on phones). Move between months, pick a date to list its
-entries, and show that date's week on the board.
+**Month view** opens a month grid with compact entries (dots on phones). Move
+between months, click or tap a day to list its entries beside the grid (below
+it on phones), and show that date's week on the board. On wide screens an
+entry in the grid opens its link; on phones a tap always shows the day's
+entries. The hide button folds the day's entries away until you pick another
+day.
 
 ## Calendar Subscription
 

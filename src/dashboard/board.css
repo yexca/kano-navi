@@ -1405,6 +1405,7 @@
   padding: 6px;
   border-right: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
+  cursor: pointer;
 }
 
 .month-day:nth-child(7n) {
@@ -1558,6 +1559,10 @@ a.month-event:hover {
   gap: 20px;
 }
 
+.month-layout.is-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .month-detail {
   position: sticky;
   top: 0;
@@ -1571,12 +1576,13 @@ a.month-event:hover {
 
 .month-detail-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
 }
 
 .month-detail-head h3 {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   font-family: var(--font-display);
   font-size: 16px;
@@ -1607,6 +1613,11 @@ a.month-event:hover {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* The hide button points where the details sit: beside or below the grid. */
+.month-detail-narrow {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .month-layout {
     grid-template-columns: 1fr;
@@ -1614,6 +1625,14 @@ a.month-event:hover {
 
   .month-detail {
     position: static;
+  }
+
+  .month-detail-wide {
+    display: none;
+  }
+
+  .month-detail-narrow {
+    display: block;
   }
 }
 
@@ -1635,7 +1654,14 @@ a.month-event:hover {
     height: 30px;
   }
 
-  /* Phones: entries collapse to tone dots; the date opens the week. */
+  /*
+   * Phones: entries collapse to tone dots, too small to aim at, so a tap
+   * anywhere in the day opens its details instead of an entry's link.
+   */
+  .month-event {
+    pointer-events: none;
+  }
+
   .month-events {
     display: flex;
     flex-wrap: wrap;
@@ -3165,25 +3191,12 @@ a.month-event:hover {
   min-width: 0;
 }
 
-/* The note follows the title on its line and wraps below it when cramped. */
 .archive-dialog-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 12px;
-  margin-top: 4px;
-}
-
-.archive-dialog-title h2 {
-  margin: 0;
+  margin: 4px 0 0;
   font-family: var(--font-display);
   font-size: clamp(20px, 2.2vw, 26px);
   font-weight: 800;
   line-height: 1.15;
-}
-
-.archive-dialog-title .section-title-note {
-  margin: 0;
 }
 
 .archive-dialog-bar {

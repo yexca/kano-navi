@@ -25,8 +25,8 @@ wording.
 
 ## Past Videos
 
-**Past videos** (a clock icon on phones) browses every stored video month by
-month.
+**Past videos** (a clock icon on phones) browses every stored YouTube and
+bilibili video month by month.
 
 ## Related Docs
 

@@ -202,13 +202,11 @@ export function SectionTitle({
   id,
   kicker,
   title,
-  note,
   children,
 }: {
   id: string
   kicker?: ReactNode
   title: ReactNode
-  note?: ReactNode
   children?: ReactNode
 }) {
   return (
@@ -216,7 +214,6 @@ export function SectionTitle({
       <div className="section-title-copy">
         {kicker ? <p className="kicker">{kicker}</p> : null}
         <h2 id={id}>{title}</h2>
-        {note ? <p className="section-title-note">{note}</p> : null}
       </div>
       {children ? (
         <div className="section-title-actions">{children}</div>

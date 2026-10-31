@@ -426,12 +426,6 @@
   line-height: 1.15;
 }
 
-.section-title-note {
-  margin: 6px 0 0;
-  color: var(--soft);
-  font-size: 13px;
-}
-
 .section-title-actions {
   display: flex;
   flex-wrap: wrap;
