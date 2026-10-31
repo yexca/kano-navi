@@ -274,11 +274,24 @@ func (s *Store) resolveTranslations(ctx context.Context, ownerType string, ids [
 	return out, nil
 }
 
+// attachPostTranslations resolves the posts' translations and their quotes'.
+// A quote shares the status ID of the stored post it quotes, if any.
 func (s *Store) attachPostTranslations(ctx context.Context, posts ...*Post) error {
 	ids := []string{}
+	seen := map[string]bool{}
+	add := func(id string) {
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
 	for _, post := range posts {
-		if post != nil {
-			ids = append(ids, post.ID)
+		if post == nil {
+			continue
+		}
+		add(post.ID)
+		if post.Quote != nil && !post.Quote.Unavailable {
+			add(post.Quote.ID)
 		}
 	}
 	sets, err := s.resolveTranslations(ctx, TranslationOwnerPost, ids)
@@ -286,8 +299,12 @@ func (s *Store) attachPostTranslations(ctx context.Context, posts ...*Post) erro
 		return err
 	}
 	for _, post := range posts {
-		if post != nil {
-			post.Translations = sets[post.ID]
+		if post == nil {
+			continue
+		}
+		post.Translations = sets[post.ID]
+		if post.Quote != nil && !post.Quote.Unavailable {
+			post.Quote.Translations = sets[post.Quote.ID]
 		}
 	}
 	return nil

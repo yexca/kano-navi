@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { useEffect } from "react"
-import { ArrowRight, ArrowUpRight, CodeXml, Scale } from "lucide-react"
+import { ArrowUpRight, CodeXml, Scale } from "lucide-react"
 
 import { version } from "../../package.json"
 import { useAppSettings } from "@/app-settings"
@@ -13,7 +13,7 @@ const REPOSITORY_URL = "https://github.com/yexca/kano-navi"
 const LICENSE_URL = `${REPOSITORY_URL}/blob/main/LICENSE`
 const LINEBLOG_RECOVERY_URL =
   "https://github.com/ZhFuwe/Kano_LINE_Blog_Recovery"
-const developmentModels = ["GPT-5.6-Sol", "Claude Opus 5.5", "GPT-6.1-Sol"]
+const developmentModels = ["Claude Opus 5.5", "GPT-6.1-Sol", "GPT-5.6-Sol"]
 const technologyGroups = [
   {
     key: "frontend",
@@ -70,12 +70,11 @@ export function AboutApp() {
 
       <main className="site-main" id="about-content">
         <section className="about-hero" aria-labelledby="about-title">
-          <p className="kicker">{t("about.label")}</p>
+          <p className="kicker">{t("about.kicker")}</p>
           <h1 id="about-title">
             {t("site.name")}
             <span aria-hidden="true">🍓🦌</span>
           </h1>
-          <p className="about-intro">{t("about.intro")}</p>
           <p className="about-edition">
             <span className="tag">Kano Navi v{version}</span>
             <span className="tag">{t("about.tagline")}</span>
@@ -102,11 +101,6 @@ export function AboutApp() {
           <Chapter number={1} title={t("about.overview")}>
             <p>{t("about.overviewOne")}</p>
             <p>{t("about.overviewTwo")}</p>
-            <p>{t("about.overviewLineblog")}</p>
-            <a className="text-link" href="/history">
-              {t("archive.fullHistory")}
-              <ArrowRight aria-hidden="true" />
-            </a>
           </Chapter>
           <Chapter number={2} title={t("about.builtWithAi")}>
             <p>{t("about.aiCredit", { author: AUTHOR })}</p>

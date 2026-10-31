@@ -1,4 +1,4 @@
-import { useMemo, useState, type SubmitEvent } from "react"
+import { useId, useMemo, useState, type SubmitEvent } from "react"
 import {
   CalendarCheck,
   CalendarRange,
@@ -8,6 +8,7 @@ import {
   ExternalLink,
   ImageOff,
   RotateCcw,
+  Sparkles,
   TriangleAlert,
   X,
 } from "lucide-react"
@@ -29,6 +30,7 @@ import {
   Panel,
   Segmented,
   StatusBadge,
+  type Tone,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { eventToInput, EventWhen } from "@/admin/views/event-parts"
@@ -120,6 +122,26 @@ function PeriodDialog({
   )
 }
 
+/** Where an image stands, as the colour of its card's edge. */
+function imageTone(image: ScheduleImage): Tone {
+  if (needsReview(image)) return "honey"
+  if (image.approved) return "leaf"
+  return image.manualStatus === "not_schedule" ? "neutral" : "sky"
+}
+
+/** A model's confidence as a short bar beside the percentage. */
+function ConfidenceMeter({ value, tone }: { value: number; tone: Tone }) {
+  const percent = Math.round(value * 100)
+  return (
+    <span className={`adm-confidence adm-tone-${tone}`}>
+      <span className="adm-confidence-bar" aria-hidden>
+        <i style={{ width: `${percent}%` }} />
+      </span>
+      <strong>{percent}%</strong>
+    </span>
+  )
+}
+
 function ImageCard({
   image,
   onChanged,
@@ -132,6 +154,7 @@ function ImageCard({
   const [reason, setReason] = useState("")
   const [busy, setBusy] = useState("")
   const [editing, setEditing] = useState(false)
+  const reasonId = useId()
   const noImage = image.mediaStatus === "none"
   const review = async (status: string) => {
     setBusy(status)
@@ -150,10 +173,11 @@ function ImageCard({
       onChanged(result.image)
     }
   }
+  const tone = imageTone(image)
   return (
-    <article className="adm-image-card">
+    <article className={`adm-decision adm-tone-${tone}`}>
       <a
-        className="adm-image-preview"
+        className="adm-decision-media"
         href={image.previewUrl || undefined}
         target="_blank"
         rel="noreferrer"
@@ -167,109 +191,24 @@ function ImageCard({
           </span>
         )}
       </a>
-      <div className="adm-image-body">
-        <div className="adm-chip-row">
-          <StatusBadge status={image.effectiveStatus} />
-          {image.approved ? (
-            <Badge tone="leaf" icon={Check}>
-              {t("admin.review.approved")}
-            </Badge>
-          ) : null}
-          {image.manualStatus !== "unreviewed" ? (
-            <Badge tone="sky">{t("admin.review.manualLabel")}</Badge>
-          ) : null}
-          {!image.sourceMatchesBoard ? (
-            <Badge tone="honey" icon={TriangleAlert}>
-              {t("admin.review.textMismatch")}
-            </Badge>
-          ) : null}
-        </div>
-        <Facts
-          items={[
-            [
-              t("admin.review.period"),
-              image.periodStart
-                ? `${formatDay(image.periodStart, locale)} – ${formatDay(image.periodEnd, locale)}${
-                    image.periodBasis === "manual"
-                      ? ` · ${t("admin.review.periodManual")}`
-                      : ""
-                  }`
-                : null,
-            ],
-            [
-              t("admin.review.model"),
-              noImage
-                ? t("admin.review.media.none")
-                : image.llmCheckedAt
-                  ? `${t(`admin.status.${image.llmStatus}`)}${
-                      image.llmConfidence != null
-                        ? ` · ${Math.round(image.llmConfidence * 100)}%`
-                        : ""
-                    }`
-                  : t("admin.review.notChecked"),
-            ],
-            [t("admin.review.account"), image.sourceAccount],
-            [
-              t("admin.review.checked"),
-              formatDateTime(image.llmCheckedAt, locale) || null,
-            ],
-          ]}
-        />
-        {noImage ? (
-          image.manualStatus === "unreviewed" ? (
-            <p className="adm-note">{t("admin.review.noImageHint")}</p>
-          ) : null
-        ) : image.llmReason ? (
-          <p className="adm-quote">{image.llmReason}</p>
-        ) : null}
-        {image.manualReason ? (
-          <p className="adm-quote is-manual">{image.manualReason}</p>
-        ) : null}
-        <Field label={t("admin.review.reason")}>
-          <input
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder={t("admin.review.reasonPlaceholder")}
-            maxLength={500}
-          />
-        </Field>
-        <div className="adm-actions">
-          <Button
-            size="sm"
-            variant="primary"
-            icon={CalendarCheck}
-            busy={busy === "schedule"}
-            onClick={() => review("schedule")}
-          >
-            {t("admin.review.isSchedule")}
-          </Button>
-          <Button
-            size="sm"
-            icon={X}
-            busy={busy === "not_schedule"}
-            onClick={() => review("not_schedule")}
-          >
-            {t("admin.review.notSchedule")}
-          </Button>
-          {image.manualStatus !== "unreviewed" ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={RotateCcw}
-              busy={busy === "unreviewed"}
-              onClick={() => review("unreviewed")}
-            >
-              {t("admin.review.clearLabel")}
-            </Button>
-          ) : null}
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={CalendarRange}
-            onClick={() => setEditing(true)}
-          >
-            {t("admin.review.fixPeriod")}
-          </Button>
+      <div className="adm-decision-body">
+        <header className="adm-decision-head">
+          <div className="adm-chip-row">
+            <StatusBadge status={image.effectiveStatus} />
+            {image.approved ? (
+              <Badge tone="leaf" icon={Check}>
+                {t("admin.review.approved")}
+              </Badge>
+            ) : null}
+            {image.manualStatus !== "unreviewed" ? (
+              <Badge tone="sky">{t("admin.review.manualLabel")}</Badge>
+            ) : null}
+            {!image.sourceMatchesBoard ? (
+              <Badge tone="honey" icon={TriangleAlert}>
+                {t("admin.review.textMismatch")}
+              </Badge>
+            ) : null}
+          </div>
           {image.sourceUrl ? (
             <a
               className="adm-link"
@@ -277,11 +216,112 @@ function ImageCard({
               target="_blank"
               rel="noreferrer"
             >
-              {t("admin.review.sourcePost")}
+              {image.sourceAccount
+                ? `@${image.sourceAccount}`
+                : t("admin.review.sourcePost")}
               <ExternalLink aria-hidden />
             </a>
+          ) : image.sourceAccount ? (
+            <span className="adm-muted">@{image.sourceAccount}</span>
           ) : null}
-        </div>
+        </header>
+        <section className="adm-verdict">
+          <div className="adm-verdict-head">
+            <span className="adm-verdict-label">
+              <Sparkles aria-hidden />
+              {t("admin.review.model")}
+            </span>
+            <strong>
+              {noImage
+                ? t("admin.review.media.none")
+                : image.llmCheckedAt
+                  ? t(`admin.status.${image.llmStatus}`)
+                  : t("admin.review.notChecked")}
+            </strong>
+            {!noImage && image.llmConfidence != null ? (
+              <ConfidenceMeter value={image.llmConfidence} tone={tone} />
+            ) : null}
+          </div>
+          {noImage ? (
+            image.manualStatus === "unreviewed" ? (
+              <p className="adm-muted">{t("admin.review.noImageHint")}</p>
+            ) : null
+          ) : image.llmReason ? (
+            <p className="adm-verdict-reason">{image.llmReason}</p>
+          ) : null}
+          {image.manualReason ? (
+            <p className="adm-quote is-manual">{image.manualReason}</p>
+          ) : null}
+        </section>
+        <Facts
+          items={[
+            [
+              t("admin.review.period"),
+              image.periodStart ? (
+                <>
+                  {`${formatDay(image.periodStart, locale)} – ${formatDay(image.periodEnd, locale)}`}
+                  {image.periodBasis === "manual" ? (
+                    <Badge tone="sky">{t("admin.review.periodManual")}</Badge>
+                  ) : null}
+                </>
+              ) : null,
+            ],
+            [
+              t("admin.review.checked"),
+              formatDateTime(image.llmCheckedAt, locale) || null,
+            ],
+          ]}
+        />
+        <footer className="adm-decision-bar">
+          <label className="adm-visually-hidden" htmlFor={reasonId}>
+            {t("admin.review.reason")}
+          </label>
+          <input
+            id={reasonId}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder={t("admin.review.reasonPlaceholder")}
+            maxLength={500}
+          />
+          <div className="adm-actions">
+            <Button
+              size="sm"
+              variant="primary"
+              icon={CalendarCheck}
+              busy={busy === "schedule"}
+              onClick={() => review("schedule")}
+            >
+              {t("admin.review.isSchedule")}
+            </Button>
+            <Button
+              size="sm"
+              icon={X}
+              busy={busy === "not_schedule"}
+              onClick={() => review("not_schedule")}
+            >
+              {t("admin.review.notSchedule")}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={CalendarRange}
+              onClick={() => setEditing(true)}
+            >
+              {t("admin.review.fixPeriod")}
+            </Button>
+            {image.manualStatus !== "unreviewed" ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={RotateCcw}
+                busy={busy === "unreviewed"}
+                onClick={() => review("unreviewed")}
+              >
+                {t("admin.review.clearLabel")}
+              </Button>
+            ) : null}
+          </div>
+        </footer>
       </div>
       {editing ? (
         <PeriodDialog
@@ -337,7 +377,7 @@ function ImagesTab() {
         />
       </div>
       {visible.length ? (
-        <div className="adm-image-grid">
+        <div className="adm-decision-list">
           {visible.map((image) => (
             <ImageCard
               key={image.id}
@@ -370,6 +410,7 @@ function CancellationCard({
   const { api, act } = useAdmin()
   const [reason, setReason] = useState(event.cancellationReason || "")
   const [busy, setBusy] = useState("")
+  const reasonId = useId()
   const decide = async (status: "manual_confirmed" | "none") => {
     setBusy(status)
     const result = await act(
@@ -387,65 +428,81 @@ function CancellationCard({
     if (result) onDone()
   }
   return (
-    <article className="adm-review-card">
-      <header>
+    <article className="adm-decision is-event adm-tone-honey">
+      <div className="adm-decision-when">
         <EventWhen event={event} />
-        <div>
-          <h3>{event.title}</h3>
-          {event.detail ? (
-            <p className="adm-muted">{eventDetailText(event.detail, t)}</p>
+      </div>
+      <div className="adm-decision-body">
+        <header className="adm-decision-head">
+          <div className="adm-decision-title">
+            <h3>{event.title}</h3>
+            {event.detail ? (
+              <p className="adm-muted">{eventDetailText(event.detail, t)}</p>
+            ) : null}
+          </div>
+          {event.url ? (
+            <a
+              className="adm-link"
+              href={event.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("admin.review.eventLink")}
+              <ExternalLink aria-hidden />
+            </a>
           ) : null}
-        </div>
-        {event.cancellationConfidence != null ? (
-          <Badge tone="honey">
-            {t("admin.review.confidence", {
-              value: Math.round(event.cancellationConfidence * 100),
-            })}
-          </Badge>
-        ) : null}
-      </header>
-      {event.cancellationEvidence ? (
-        <blockquote className="adm-quote">
-          {event.cancellationEvidence}
-        </blockquote>
-      ) : null}
-      <Field label={t("admin.review.cancelReason")}>
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          maxLength={500}
-        />
-      </Field>
-      <div className="adm-actions">
-        <Button
-          size="sm"
-          variant="danger"
-          icon={CalendarX}
-          disabled={!reason.trim()}
-          busy={busy === "manual_confirmed"}
-          onClick={() => decide("manual_confirmed")}
-        >
-          {t("admin.review.confirmCancelled")}
-        </Button>
-        <Button
-          size="sm"
-          icon={CalendarCheck}
-          busy={busy === "none"}
-          onClick={() => decide("none")}
-        >
-          {t("admin.review.notCancelled")}
-        </Button>
-        {event.url ? (
-          <a
-            className="adm-link"
-            href={event.url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("admin.review.eventLink")}
-            <ExternalLink aria-hidden />
-          </a>
-        ) : null}
+        </header>
+        <section className="adm-verdict">
+          <div className="adm-verdict-head">
+            <span className="adm-verdict-label">
+              <Sparkles aria-hidden />
+              {t("admin.review.cancelSuspected")}
+            </span>
+            {event.cancellationConfidence != null ? (
+              <ConfidenceMeter
+                value={event.cancellationConfidence}
+                tone="honey"
+              />
+            ) : null}
+          </div>
+          {event.cancellationEvidence ? (
+            <blockquote className="adm-verdict-reason">
+              {event.cancellationEvidence}
+            </blockquote>
+          ) : null}
+        </section>
+        <footer className="adm-decision-bar">
+          <label className="adm-visually-hidden" htmlFor={reasonId}>
+            {t("admin.review.cancelReason")}
+          </label>
+          <input
+            id={reasonId}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={t("admin.review.cancelReasonPlaceholder")}
+            maxLength={500}
+          />
+          <div className="adm-actions">
+            <Button
+              size="sm"
+              variant="danger"
+              icon={CalendarX}
+              disabled={!reason.trim()}
+              busy={busy === "manual_confirmed"}
+              onClick={() => decide("manual_confirmed")}
+            >
+              {t("admin.review.confirmCancelled")}
+            </Button>
+            <Button
+              size="sm"
+              icon={CalendarCheck}
+              busy={busy === "none"}
+              onClick={() => decide("none")}
+            >
+              {t("admin.review.notCancelled")}
+            </Button>
+          </div>
+        </footer>
       </div>
     </article>
   )
@@ -461,7 +518,7 @@ function CancellationsTab() {
   )
   if (!events.data) return <Loading />
   return events.data.items.length ? (
-    <div className="adm-review-list">
+    <div className="adm-decision-list">
       <p className="adm-note">{t("admin.review.cancellationHint")}</p>
       {events.data.items.map((event) => (
         <CancellationCard

@@ -2244,71 +2244,182 @@ button.adm-run-line:hover {
 
 /* ----------------------------------------------------------------- review */
 
-.adm-image-grid {
+/*
+ * A decision card: what is being judged on the left, the model's verdict and
+ * the facts beside it, and the operator's decision along the bottom. The left
+ * edge carries the item's state colour.
+ */
+.adm-decision-list,
+.adm-post-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
-.adm-image-card {
+.adm-decision {
   display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--adm-line);
+  border-left: 4px solid var(--tone, var(--adm-line));
   border-radius: var(--adm-radius);
   background: var(--adm-surface);
 }
 
-.adm-image-preview {
+.adm-decision.is-event {
+  grid-template-columns: 132px minmax(0, 1fr);
+}
+
+.adm-decision-media {
   display: grid;
   place-items: center;
-  aspect-ratio: 16 / 10;
+  min-height: 200px;
   background: var(--adm-sunken);
   color: var(--adm-muted);
 }
 
-.adm-image-preview img {
+.adm-decision-media img {
   width: 100%;
   height: 100%;
+  max-height: 360px;
   object-fit: contain;
 }
 
-.adm-image-preview span {
+.adm-decision-media span {
   display: grid;
   justify-items: center;
   gap: 6px;
   font-size: 13px;
 }
 
-.adm-image-body {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
+.adm-decision-when {
+  padding: 16px 0 16px 16px;
 }
 
-.adm-review-list,
-.adm-post-list {
+.adm-decision-body {
   display: grid;
-  gap: 12px;
-}
-
-.adm-review-card {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--adm-line);
-  border-radius: var(--adm-radius-sm);
-}
-
-.adm-review-card header {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) auto;
-  align-items: start;
+  align-content: start;
   gap: 14px;
+  min-width: 0;
+  padding: 16px 16px 0;
 }
 
-.adm-review-card h3 {
+.adm-decision-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.adm-decision-head > .adm-link {
+  flex: none;
+  font-size: 13px;
+}
+
+.adm-decision-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.adm-decision-title h3 {
   margin: 0;
   font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+/* The model's answer: a label, its verdict and confidence, then its words. */
+.adm-verdict {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-sunken);
+}
+
+.adm-verdict-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.adm-verdict-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--adm-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.adm-shell .adm-verdict-label svg {
+  width: 14px;
+  height: 14px;
+  color: var(--lavender);
+}
+
+.adm-verdict-head > strong {
+  font-size: 14px;
+}
+
+.adm-verdict-reason {
+  margin: 0;
+  color: var(--adm-text);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+blockquote.adm-verdict-reason {
+  padding-left: 12px;
+  border-left: 3px solid var(--tone-line, var(--adm-line-strong));
+}
+
+.adm-confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-confidence-bar {
+  position: relative;
+  width: 96px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--adm-muted) 22%, transparent);
+}
+
+.adm-confidence-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--tone);
+}
+
+/* The decision: the optional note grows, the buttons follow it. */
+.adm-decision-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-decision-bar > input {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.adm-decision-list > .adm-note {
+  margin-bottom: 2px;
 }
 
 .adm-when {
@@ -2323,6 +2434,32 @@ button.adm-run-line:hover {
 .adm-when small {
   color: var(--adm-muted);
   font-size: 12px;
+}
+
+@media (max-width: 860px) {
+  .adm-decision {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-decision-media {
+    min-height: 160px;
+  }
+
+  .adm-decision-media img {
+    max-height: 280px;
+  }
+
+  .adm-decision-when {
+    padding: 14px 16px 0;
+  }
+
+  .adm-decision.is-event {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-confidence {
+    margin-left: 0;
+  }
 }
 
 .adm-post-row {
@@ -3427,64 +3564,180 @@ button.adm-run-line:hover {
   object-fit: cover;
 }
 
-/* The correction dialog: the chosen thumbnail and the facts beside the
-   fields, then the thumbnail files, the merge and the history. */
-.adm-modal.adm-video-editor {
-  width: min(880px, calc(100vw - 32px));
+/*
+ * The correction dialog: a preview of the board's row as the draft leaves
+ * it, then the corrections beside the platform's record (the merge and what
+ * the platform replaced).
+ */
+.adm-modal.is-wide.adm-video-editor {
+  width: min(1080px, calc(100vw - 32px));
 }
 
-.adm-video-editor-top {
+.adm-video-editor-form {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  align-items: start;
   gap: 20px;
 }
 
-.adm-video-editor-preview {
+.adm-video-editor-id {
   display: grid;
-  gap: 14px;
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  padding: 14px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius);
+  background: var(--adm-sunken);
 }
 
-.adm-video-editor-preview .adm-video-thumb {
+.adm-video-editor-id > .adm-video-thumb {
   overflow: hidden;
   border-radius: var(--adm-radius-sm);
+  box-shadow: var(--shadow-sm);
 }
 
-.adm-video-editor-preview .adm-facts {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.adm-video-length {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.74);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.adm-video-editor-id-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.adm-video-editor-id-title {
+  font-size: 17px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.adm-video-editor-id-source {
+  color: var(--adm-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.adm-video-editor-id .adm-facts {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  margin-top: 2px;
+}
+
+.adm-video-editor-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  align-items: start;
+  gap: 28px;
 }
 
 .adm-video-editor-fields {
+  min-width: 0;
+}
+
+.adm-video-editor-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.adm-video-editor-heading svg {
+  width: 15px;
+  height: 15px;
+}
+
+.adm-video-editor-heading em {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--adm-sunken);
+  color: var(--adm-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+/* The platform's record: the merge and the history, one card each. */
+.adm-video-editor-side {
   display: grid;
   gap: 14px;
   min-width: 0;
 }
 
-.adm-video-editor-fields .adm-note {
-  margin: 0;
+.adm-video-editor-side > section {
+  padding: 14px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-sm);
+}
+
+/* A field's label, its corrected mark and the reset to the platform. */
+.adm-correction-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 0;
+}
+
+.adm-correction-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--adm-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.adm-correction-reset:hover {
+  color: var(--adm-accent);
+}
+
+.adm-correction-reset:focus-visible {
+  outline: none;
+  box-shadow: var(--adm-focus);
+}
+
+.adm-shell .adm-correction-reset svg {
+  width: 13px;
+  height: 13px;
 }
 
 .adm-modal-body > footer > .adm-spacer {
   flex: 1;
 }
 
-@media (max-width: 720px) {
-  .adm-video-editor-top {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .adm-video-editor-preview {
-    grid-template-columns: 160px minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .adm-video-editor-preview .adm-facts {
+@media (max-width: 860px) {
+  .adm-video-editor-columns {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@media (max-width: 480px) {
-  .adm-video-editor-preview {
+@media (max-width: 560px) {
+  .adm-video-editor-id {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .adm-video-editor-id > .adm-video-thumb {
+    width: min(100%, 200px);
+  }
+
+  .adm-video-editor-id .adm-facts {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -3728,21 +3981,12 @@ button.adm-run-line:hover {
 }
 
 .adm-video-history h3 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 8px;
-  font-size: 13px;
-}
-
-.adm-video-history h3 svg {
-  width: 15px;
-  height: 15px;
+  margin-bottom: 10px;
 }
 
 .adm-video-history ol {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -3750,8 +3994,8 @@ button.adm-run-line:hover {
 
 .adm-video-history li {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
 }
 
@@ -3776,6 +4020,11 @@ button.adm-run-line:hover {
   font-size: 12px;
 }
 
+.adm-video-history-body .adm-button {
+  justify-self: start;
+  margin: 2px 0 0 -8px;
+}
+
 /* The Bilibili panel's add form: the field grows, the button sits beside it. */
 .adm-bilibili-add {
   display: flex;
@@ -3787,17 +4036,6 @@ button.adm-run-line:hover {
 
 .adm-bilibili-add .adm-field {
   flex: 1 1 260px;
-}
-
-@media (max-width: 560px) {
-  .adm-video-history li {
-    grid-template-columns: 72px minmax(0, 1fr);
-  }
-
-  .adm-video-history li .adm-button {
-    grid-column: 2;
-    justify-self: start;
-  }
 }
 
 /* The pinned video above the list, or the automatic choice when none is. */
@@ -4919,14 +5157,6 @@ button.adm-run-line:hover {
 
   .adm-featured > .adm-actions {
     grid-column: 1 / -1;
-  }
-
-  .adm-review-card header {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .adm-image-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .adm-facts.is-compact {

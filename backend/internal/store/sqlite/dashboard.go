@@ -91,6 +91,9 @@ type PostQuote struct {
 	URL          string `json:"url"`
 	Unavailable  bool   `json:"unavailable"`
 	Media        []PostMedia
+	// Translations are the stored post's of the same status ID, so a quote
+	// of a tracked account's post carries that post's translations.
+	Translations TranslationSet `json:"-"`
 }
 
 type PostMedia struct {

@@ -14,6 +14,8 @@ Posts are laid out in whole rows; a long post shows its first lines and
   links to it on X.
 - A post translated into your content language ends with the same **AI**
   mark as video titles; select it to read the original post.
+- A quoted post from one of these accounts is translated too, with its own
+  **AI** mark at the end of the quoted card's top line.
 
 ## Past Posts
 

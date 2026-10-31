@@ -264,9 +264,10 @@ address, and a post's `post-image` links, `media_url` and
 reads it and why quoted images are never schedule candidates.
 
 The public dashboard, the post archive and MCP add `quote` to each post:
-`{id, authorHandle, authorName, text, publishedAt, url, unavailable, media}`,
-where empty fields are `null` and `media` has the shape of the post's own
-`media` but lists only ready, contained opaque-ID images. The read path
+`{id, authorHandle, authorName, text, publishedAt, url, unavailable, media,
+translations, sourceLanguage}`, where empty fields are `null` and `media` has
+the shape of the post's own `media` but lists only ready, contained opaque-ID
+images ([Translations](#translations) describes the last two). The read path
 drops a stored projection whose ID is not a status ID or whose URL is not
 that status's x.com address. An unavailable quote has only `id` and `url`.
 The console's post list keeps a post's own images apart from its quote.
@@ -386,6 +387,12 @@ whose URL names a YouTube video in the translate step's scope (by
 while its trimmed title equals the video's effective title; an event with
 an operator's or an extraction's own wording carries none. The projection is
 computed at read time, so a video translation's revision already covers it.
+
+Quoted statuses have no translation rows of their own either. A post's
+available `quote` carries the `translations` and `sourceLanguage` of the
+stored post with the same status ID, which a quote of a tracked account's
+post has; any other quote carries an empty `translations` and a `null`
+`sourceLanguage`. Like events, this is computed at read time.
 
 Startup creates both tables in existing snapshots; no post, video or event
 row is rewritten.

@@ -1,5 +1,19 @@
-import { useEffect, useState, type SubmitEvent } from "react"
-import { ExternalLink, History, ImageOff, RefreshCw } from "lucide-react"
+import {
+  useEffect,
+  useId,
+  useState,
+  type ReactNode,
+  type SubmitEvent,
+} from "react"
+import {
+  CornerDownLeft,
+  ExternalLink,
+  History,
+  ImageOff,
+  PencilLine,
+  RefreshCw,
+  RotateCcw,
+} from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import { formatDateTime } from "@/admin/format"
@@ -9,7 +23,7 @@ import type {
   VideoHistory,
   VideoThumbnail,
 } from "@/admin/types"
-import { Button, Facts, Field, Loading, Modal } from "@/admin/ui"
+import { Badge, Button, Facts, Loading, Modal } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { MergeSection } from "@/admin/views/merge-parts"
 
@@ -70,6 +84,60 @@ function ThumbnailChoice({
       </span>
       <small>{label}</small>
     </label>
+  )
+}
+
+/** A correction's state: marked and resettable while it is set. */
+function CorrectionMark({
+  corrected,
+  onReset,
+}: {
+  corrected: boolean
+  onReset: () => void
+}) {
+  const { t } = useAppSettings()
+  if (!corrected) return null
+  return (
+    <>
+      <Badge tone="honey">{t("admin.videos.corrected")}</Badge>
+      <button type="button" className="adm-correction-reset" onClick={onReset}>
+        <RotateCcw aria-hidden />
+        {t("admin.videos.resetField")}
+      </button>
+    </>
+  )
+}
+
+/**
+ * A corrected field. The reset sits beside its label rather than inside it,
+ * so the label names only the control.
+ */
+function CorrectionField({
+  id,
+  label,
+  hint,
+  corrected,
+  onReset,
+  children,
+}: {
+  id: string
+  label: string
+  hint?: string
+  corrected: boolean
+  onReset: () => void
+  children: ReactNode
+}) {
+  return (
+    <div className="adm-field">
+      <div className="adm-correction-head">
+        <label className="adm-field-label" htmlFor={id}>
+          {label}
+        </label>
+        <CorrectionMark corrected={corrected} onReset={onReset} />
+      </div>
+      {children}
+      {hint ? <span className="adm-field-hint">{hint}</span> : null}
+    </div>
   )
 }
 
@@ -168,6 +236,17 @@ export function VideoEditor({
     ? data?.thumbnails.find((item) => pinKey(item) === draft.thumbnail)?.url
     : (current?.url ?? data?.video.thumbnailUrl)
   const preview = chosen ?? null
+  const fieldId = useId()
+  // The header previews the board's row as the draft would leave it.
+  const boardKind = draft?.kind || video?.sourceKind || "—"
+  const boardShort = draft?.format
+    ? draft.format === "short"
+    : Boolean(video?.sourceIsShort)
+  const corrected = draft
+    ? [draft.title.trim(), draft.kind, draft.thumbnail, draft.format].filter(
+        Boolean,
+      ).length
+    : 0
   return (
     <Modal
       open
@@ -216,28 +295,59 @@ export function VideoEditor({
       {!data || !video || !draft ? (
         <Loading />
       ) : (
-        <form id="adm-video-form" className="adm-form" onSubmit={save}>
-          <div className="adm-video-editor-top">
-            <aside className="adm-video-editor-preview">
-              <span className="adm-video-thumb">
-                {preview ? (
-                  <img src={preview} alt="" />
-                ) : (
-                  <ImageOff aria-hidden />
-                )}
-              </span>
+        <form
+          id="adm-video-form"
+          className="adm-video-editor-form"
+          onSubmit={save}
+        >
+          <section
+            className="adm-video-editor-id"
+            aria-label={t("admin.videos.boardPreview")}
+          >
+            <span className="adm-video-thumb">
+              {preview ? (
+                <img src={preview} alt="" />
+              ) : (
+                <ImageOff aria-hidden />
+              )}
+              {formatLength(video.durationSeconds) ? (
+                <span className="adm-video-length">
+                  {formatLength(video.durationSeconds)}
+                </span>
+              ) : null}
+            </span>
+            <div className="adm-video-editor-id-body">
+              <div className="adm-chip-row">
+                <Badge tone={bilibili ? "sky" : "berry"}>
+                  {t(`admin.videos.source.${video.source}`)}
+                </Badge>
+                <Badge>{boardKind}</Badge>
+                {boardShort ? (
+                  <Badge tone="lavender">
+                    {t("admin.videos.format.short")}
+                  </Badge>
+                ) : null}
+                {corrected ? (
+                  <Badge tone="honey" icon={PencilLine}>
+                    {t("admin.videos.correctedCount", { count: corrected })}
+                  </Badge>
+                ) : null}
+              </div>
+              <strong className="adm-video-editor-id-title">
+                {draft.title.trim() || video.sourceTitle}
+              </strong>
+              {draft.title.trim() ? (
+                <small className="adm-video-editor-id-source">
+                  {t("admin.videos.platformTitle")} · {video.sourceTitle}
+                </small>
+              ) : null}
               <Facts
                 items={[
-                  [t("admin.videos.platformTitle"), video.sourceTitle],
                   [
                     t("admin.videos.lastChecked"),
                     video.checkedAt
                       ? formatDateTime(video.checkedAt, locale)
                       : t("admin.videos.neverChecked"),
-                  ],
-                  [
-                    t("admin.videos.duration"),
-                    formatLength(video.durationSeconds),
                   ],
                   [
                     t("admin.videos.refreshState"),
@@ -254,14 +364,24 @@ export function VideoEditor({
                   ],
                 ]}
               />
-            </aside>
-            <div className="adm-video-editor-fields">
-              <p className="adm-note">{t("admin.videos.correctionHint")}</p>
-              <Field
+            </div>
+          </section>
+          <div className="adm-video-editor-columns">
+            <section className="adm-video-editor-fields adm-form">
+              <h3 className="adm-video-editor-heading">
+                <PencilLine aria-hidden />
+                {t("admin.videos.corrections")}
+              </h3>
+              <p className="adm-muted">{t("admin.videos.correctionHint")}</p>
+              <CorrectionField
+                id={`${fieldId}-title`}
                 label={t("admin.videos.field.title")}
+                corrected={Boolean(draft.title.trim())}
+                onReset={() => setDraft({ ...draft, title: "" })}
                 hint={t("admin.videos.field.titleHint")}
               >
                 <input
+                  id={`${fieldId}-title`}
                   value={draft.title}
                   placeholder={video.sourceTitle}
                   maxLength={300}
@@ -269,10 +389,16 @@ export function VideoEditor({
                     setDraft({ ...draft, title: e.target.value })
                   }
                 />
-              </Field>
+              </CorrectionField>
               <div className="adm-form-row is-top">
-                <Field label={t("admin.videos.field.kind")}>
+                <CorrectionField
+                  id={`${fieldId}-kind`}
+                  label={t("admin.videos.field.kind")}
+                  corrected={Boolean(draft.kind)}
+                  onReset={() => setDraft({ ...draft, kind: "" })}
+                >
                   <select
+                    id={`${fieldId}-kind`}
                     value={draft.kind}
                     onChange={(e) =>
                       setDraft({ ...draft, kind: e.target.value })
@@ -289,13 +415,17 @@ export function VideoEditor({
                       </option>
                     ))}
                   </select>
-                </Field>
+                </CorrectionField>
                 {video.source === "youtube" ? (
-                  <Field
+                  <CorrectionField
+                    id={`${fieldId}-format`}
                     label={t("admin.videos.field.format")}
+                    corrected={Boolean(draft.format)}
+                    onReset={() => setDraft({ ...draft, format: "" })}
                     hint={t("admin.videos.format.hint")}
                   >
                     <select
+                      id={`${fieldId}-format`}
                       value={draft.format}
                       onChange={(e) =>
                         setDraft({ ...draft, format: e.target.value })
@@ -313,91 +443,105 @@ export function VideoEditor({
                         {t("admin.videos.format.regular")}
                       </option>
                     </select>
-                  </Field>
+                  </CorrectionField>
                 ) : null}
               </div>
-            </div>
-          </div>
-          <fieldset className="adm-field adm-thumb-picker">
-            <legend className="adm-field-label">
-              {t("admin.videos.field.thumbnail")}
-            </legend>
-            <div className="adm-thumb-choices">
-              <ThumbnailChoice
-                file=""
-                url={current?.url ?? null}
-                label={t("admin.videos.thumbnail.platform")}
-                checked={draft.thumbnail === ""}
-                onSelect={(thumbnail) => setDraft({ ...draft, thumbnail })}
+              <fieldset className="adm-field adm-thumb-picker">
+                <legend className="adm-correction-head">
+                  <span className="adm-field-label">
+                    {t("admin.videos.field.thumbnail")}
+                  </span>
+                  <CorrectionMark
+                    corrected={Boolean(draft.thumbnail)}
+                    onReset={() => setDraft({ ...draft, thumbnail: "" })}
+                  />
+                </legend>
+                <div className="adm-thumb-choices">
+                  <ThumbnailChoice
+                    file=""
+                    url={current?.url ?? null}
+                    label={t("admin.videos.thumbnail.platform")}
+                    checked={draft.thumbnail === ""}
+                    onSelect={(thumbnail) => setDraft({ ...draft, thumbnail })}
+                  />
+                  {data.thumbnails.map((item) => (
+                    <ThumbnailChoice
+                      key={pinKey(item)}
+                      file={pinKey(item)}
+                      url={item.url}
+                      label={thumbnailLabel(item)}
+                      checked={draft.thumbnail === pinKey(item)}
+                      onSelect={(thumbnail) =>
+                        setDraft({ ...draft, thumbnail })
+                      }
+                    />
+                  ))}
+                </div>
+                <span className="adm-field-hint">
+                  {t("admin.videos.thumbnail.hint")}
+                </span>
+              </fieldset>
+            </section>
+            <aside className="adm-video-editor-side">
+              <MergeSection
+                video={video}
+                onChanged={() => {
+                  void history.reload()
+                  onMerged?.()
+                }}
               />
-              {data.thumbnails.map((item) => (
-                <ThumbnailChoice
-                  key={pinKey(item)}
-                  file={pinKey(item)}
-                  url={item.url}
-                  label={thumbnailLabel(item)}
-                  checked={draft.thumbnail === pinKey(item)}
-                  onSelect={(thumbnail) => setDraft({ ...draft, thumbnail })}
-                />
-              ))}
-            </div>
-            <span className="adm-field-hint">
-              {t("admin.videos.thumbnail.hint")}
-            </span>
-          </fieldset>
-          <MergeSection
-            video={video}
-            onChanged={() => {
-              void history.reload()
-              onMerged?.()
-            }}
-          />
-          <section className="adm-video-history">
-            <h3>
-              <History aria-hidden />
-              {t("admin.videos.history")}
-            </h3>
-            {data.revisions.length ? (
-              <ol>
-                {data.revisions.map((revision) => (
-                  <li key={revision.id}>
-                    <span className="adm-video-thumb">
-                      {revision.thumbnailUrl ? (
-                        <img
-                          src={revision.thumbnailUrl}
-                          alt=""
-                          loading="lazy"
-                        />
-                      ) : (
-                        <ImageOff aria-hidden />
-                      )}
-                    </span>
-                    <span className="adm-video-history-body">
-                      <strong>{revision.title}</strong>
-                      <small>
-                        {t(`admin.videos.revision.${revision.origin}`, {
-                          time: formatDateTime(revision.replacedAt, locale),
-                        })}
-                      </small>
-                    </span>
-                    {revision.title !== video.sourceTitle ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          setDraft({ ...draft, title: revision.title })
-                        }
-                      >
-                        {t("admin.videos.useTitle")}
-                      </Button>
-                    ) : null}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="adm-muted">{t("admin.videos.historyEmpty")}</p>
-            )}
-          </section>
+              <section className="adm-video-history">
+                <h3 className="adm-video-editor-heading">
+                  <History aria-hidden />
+                  {t("admin.videos.history")}
+                  {data.revisions.length ? (
+                    <em>{data.revisions.length}</em>
+                  ) : null}
+                </h3>
+                {data.revisions.length ? (
+                  <ol>
+                    {data.revisions.map((revision) => (
+                      <li key={revision.id}>
+                        <span className="adm-video-thumb">
+                          {revision.thumbnailUrl ? (
+                            <img
+                              src={revision.thumbnailUrl}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : (
+                            <ImageOff aria-hidden />
+                          )}
+                        </span>
+                        <span className="adm-video-history-body">
+                          <strong>{revision.title}</strong>
+                          <small>
+                            {t(`admin.videos.revision.${revision.origin}`, {
+                              time: formatDateTime(revision.replacedAt, locale),
+                            })}
+                          </small>
+                          {revision.title !== video.sourceTitle ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              icon={CornerDownLeft}
+                              onClick={() =>
+                                setDraft({ ...draft, title: revision.title })
+                              }
+                            >
+                              {t("admin.videos.useTitle")}
+                            </Button>
+                          ) : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="adm-muted">{t("admin.videos.historyEmpty")}</p>
+                )}
+              </section>
+            </aside>
+          </div>
         </form>
       )}
     </Modal>

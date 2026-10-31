@@ -350,3 +350,49 @@ func TestRefreshRequestIsReadAndClearedByTheRun(t *testing.T) {
 		t.Fatalf("refresh ids after the run=%v err=%v", state.RefreshIDs, err)
 	}
 }
+
+// A quote of a stored post carries that post's translations; a quote of any
+// other status, or an unavailable one, carries none.
+func TestDashboardQuoteSharesTheQuotedPostTranslations(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	otherID := "1900000000000000002"
+	quote := func(id string, unavailable bool) string {
+		if unavailable {
+			return `{"id":"` + id + `","url":"https://x.com/i/status/` + id + `","unavailable":true}`
+		}
+		return `{"id":"` + id + `","authorHandle":"kano","text":"quoted wording","url":"https://x.com/kano/status/` + id + `"}`
+	}
+	for _, row := range []struct {
+		id, published string
+		quote         any
+	}{
+		{quotedID, "2026-10-10T00:00:00.000Z", nil},
+		{"quoting-own", "2026-10-11T00:00:00.000Z", quote(quotedID, false)},
+		{"quoting-other", "2026-10-11T01:00:00.000Z", quote(otherID, false)},
+		{"quoting-gone", "2026-10-11T02:00:00.000Z", quote(quotedID, true)},
+	} {
+		testutil.Exec(t, path, `INSERT INTO posts (id,source,account_handle,type,text,published_at,url,quote_json) VALUES (?,'x','kano','daily','quoted wording',?,?,?)`, row.id, row.published, "https://x.com/kano/status/"+row.id, row.quote)
+	}
+	testutil.Exec(t, path, `INSERT INTO translations (owner_type,owner_id,field,locale,origin,text,source_hash,created_at,updated_at) VALUES ('post',?,'text','en','manual','translated wording','','','')`, quotedID)
+	store, err := OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	dashboard, err := store.GetDashboard(context.Background(), 30, time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	quotes := map[string]*PostQuote{}
+	for _, post := range dashboard.Posts {
+		quotes[post.ID] = post.Quote
+	}
+	if q := quotes["quoting-own"]; q == nil || q.Translations.Locales["en"].Text != "translated wording" {
+		t.Fatalf("own quote=%+v", q)
+	}
+	for _, id := range []string{"quoting-other", "quoting-gone"} {
+		if q := quotes[id]; q == nil || len(q.Translations.Locales) != 0 {
+			t.Fatalf("%s quote=%+v", id, q)
+		}
+	}
+}

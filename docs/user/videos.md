@@ -27,7 +27,8 @@ wording and again to bring the translation back.
 ## Past Videos
 
 **Past videos** (a clock icon on phones) browses every stored YouTube and
-bilibili video month by month.
+bilibili video month by month as a grid of covers, newest first, each with
+its title, Japan date and time, and kind.
 
 ## Related Docs
 
