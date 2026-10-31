@@ -21,13 +21,15 @@ static; verified fixed images ship in `public/assets/history/` and `dist/`.
 archive without network requests.
 See [History archive maintenance](../development/history-archive.md). The
 `/lineblog` article index and per-article files are static JSON written by
-`scripts/package-lineblog.ts`; the page picks an article, a month or a page
-from its query (`?article=`, `?month=`, `?page=`) and moves between them in
-place, pushing an entry whose scroll the shared navigation restores. Each
-article file is its own build chunk: the page's code waits for the articles
-its address shows, a move keeps the current view on screen until the next
-view's articles have loaded (pointing at or focusing a link starts that
-load), and a failed load offers a reload. Its
+`scripts/package-lineblog.ts`, and each article's archived comments are
+static JSON written by `scripts/package-lineblog-comments.ts`; the page picks
+an article, a month or a page from its query (`?article=`, `?month=`,
+`?page=`) and moves between them in place, pushing an entry whose scroll the
+shared navigation restores. Each article file and comments file is its own
+build chunk: the page's code waits for the articles its address shows (and a
+single article's comments), a move keeps the current view on screen until
+the next view's files have loaded (pointing at or focusing a link starts
+that load), and a failed article load offers a reload. Its
 media load from `/media/lineblog/<name>`, including the header and profile
 art of the design of the newest article shown; see
 [LINE BLOG archive maintenance](../development/lineblog-archive.md). The four

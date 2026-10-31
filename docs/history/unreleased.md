@@ -113,7 +113,9 @@
 
 - A new LINE BLOG page brings back Kano's 2015–2019 archive with 99 Japanese
   articles, their photos, pictographs and archived YouTube videos, the
-  original-era layouts, monthly archive and article links. A menu-bar picker
+  original-era layouts, monthly archive, the blog's own 前の記事/次の記事
+  pager, and each article's archived comments with names, dates, text and
+  ratings but without the commenters' links. A menu-bar picker
   keeps one era's header art and profile photo in place of the automatic one.
   English and Simplified Chinese readers can show or hide the AI paragraph
   translations for every article or one article, and the About page credits
@@ -145,6 +147,10 @@
 - `npm run lineblog:package -- --from <archive>` writes the article index and
   media catalog into `src/lineblog/` and media into `data/lineblog/`, with
   validation before writing. The page loads only the articles it shows.
+- `npm run lineblog:comments -- --from <captures>` writes each article's
+  comments from local Wayback captures of its page into
+  `src/lineblog/comments/`, keeping the capture with the most comments and
+  dropping commenter links; an article view loads only its own comments.
 - LINE BLOG and fixed history images get on-demand smaller copies through
   `srcset`; hash-addressed originals and variants are cached as immutable
   after byte verification. The build emits Brotli and gzip copies of static

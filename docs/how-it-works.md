@@ -61,7 +61,7 @@ flowchart LR
    stream's start pass without a stored change.
 
 The profile, milestones, resource links, the Journey images, and the LINE BLOG
-archive's articles ship with the code; the archive's photos and videos are
+archive's articles and archived comments ship with the code; the archive's photos and videos are
 packaged into `data/lineblog/` from a local recovery archive. Source snapshots and LLM providers start empty on a fresh installation.
 See [Core boundaries](architecture/core-boundaries.md) for the full contract.
 

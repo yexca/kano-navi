@@ -666,58 +666,143 @@
   margin-left: 18px;
 }
 
-.lb-article-nav {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 16px;
-  margin-top: 56px;
-  padding-top: 20px;
+/* The blog's article pager: under a rule, a centred 266px strip holds two
+   bordered buttons with 70px of text, 前の記事 on the left and 次の記事 on
+   the right. Their chevrons are drawn in the shape of the platform's 5x9
+   paging arrows and follow the text colour. */
+.lb-article-pager {
+  margin-top: 30px;
   border-top: 1px solid var(--lb-rule);
-  font-size: 13px;
 }
 
-.lb .lb-article-nav a {
+.lb-article-pager ul {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+  width: 266px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 60px 0;
+  list-style: none;
+}
+
+.lb-article-pager .is-next {
+  margin-left: auto;
+}
+
+.lb .lb-article-pager a {
+  position: relative;
+  display: block;
+  box-sizing: content-box;
+  width: 70px;
+  padding: 14px 20px 14px 28px;
+  border: 1px solid var(--lb-rule);
   color: var(--lb-text);
-}
-
-.lb-article-nav a > span {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.lb-article-nav a > span > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-align: center;
+  text-decoration: none;
   white-space: nowrap;
 }
 
-.lb-article-nav small {
-  color: var(--lb-faint);
-  font-size: 11px;
+.lb .lb-article-pager .is-next a {
+  padding: 14px 28px 14px 20px;
 }
 
-.lb-article-nav .is-newer {
-  justify-content: flex-end;
-  text-align: right;
+.lb-article-pager a::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border: 0 solid currentColor;
 }
 
-.lb .lb-article-nav .lb-article-nav-list {
-  color: var(--lb-accent);
+.lb-article-pager .is-prev a::before {
+  left: 17px;
+  border-bottom-width: 1px;
+  border-left-width: 1px;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.lb-article-pager .is-next a::before {
+  right: 17px;
+  border-top-width: 1px;
+  border-right-width: 1px;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+/* ---- Comments ---------------------------------------------------------- */
+
+/* The blog's comment list: a bold 14px heading, then each comment above a
+   1px rule with its number and name in bold, the date in grey beside them,
+   the rating at the top right and the text 20px below. */
+.lb-comments-title {
+  margin: 0;
+  color: var(--lb-ink);
+  font-size: 14px;
   font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.lb-comments-note {
+  margin: 4px 0 0;
+  color: var(--lb-faint);
+  font-size: 12px;
+}
+
+.lb-comment-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lb-comment {
+  position: relative;
+  padding: 30px 0 24px;
+  border-bottom: 1px solid var(--lb-rule);
+  font-size: 12px;
+}
+
+.lb-comment-head {
+  margin: 0;
+}
+
+.lb-comment.has-rating .lb-comment-head {
+  padding-right: 84px;
+}
+
+.lb-comment-author {
+  padding-right: 8px;
+  color: var(--lb-ink);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.lb-comment-date {
+  padding: 0 8px;
+  color: var(--lb-faint);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.lb-article-nav svg {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  color: var(--lb-accent);
+.lb-comment-rating {
+  position: absolute;
+  top: 30px;
+  right: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.lb-comment-rating.is-star {
+  color: #e8a317;
+  letter-spacing: 1px;
+}
+
+.lb-comment-body {
+  margin: 20px 0 0;
+  color: var(--lb-text);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
 }
 
 /* ---- Sidebar ----------------------------------------------------------- */
@@ -906,15 +991,5 @@
   .lb-card-image .lb-missing {
     width: 76px;
     height: 76px;
-  }
-
-  .lb-article-nav {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .lb .lb-article-nav .lb-article-nav-list {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-self: center;
   }
 }

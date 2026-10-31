@@ -94,6 +94,24 @@ export interface LineblogPostFile {
   media: LineblogMedia[]
 }
 
+/**
+ * A reader's comment as an archived article page listed it, in
+ * comments/<id>.json (scripts/package-lineblog-comments.ts). The commenter's
+ * blog address is never kept.
+ */
+export interface LineblogComment {
+  /** The comment's number on its article; deleted comments leave gaps. */
+  number: number
+  /** The display name the commenter typed. */
+  author: string
+  /** ISO instant; the blog showed it in Japan time to the minute. */
+  posted: string
+  /** Plain text; line breaks are `\n`. */
+  body: string
+  /** The rating the old comment form attached: 1 to 5 stars or faces. */
+  rating?: { icon: "star" | "face"; value: number }
+}
+
 export interface LineblogMedia {
   /** The first 12 hex digits of `sha256` and the extension. */
   name: string

@@ -282,6 +282,10 @@
       "reason": "Original LINE BLOG image addresses recorded as the source of archived post images."
     },
     {
+      "host": "parts.blog.livedoor.jp",
+      "reason": "Comment rating and emoji picture addresses in the LINE BLOG page markup that scripts/package-lineblog-comments.ts reads, and in its synthetic test pages; comments keep only the rating value or an emoji, and nothing loads the pictures."
+    },
+    {
       "host": "line-scdn.net",
       "reason": "Original LINE image CDN addresses recorded as the source of archived post images."
     },

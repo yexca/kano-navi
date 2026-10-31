@@ -14,14 +14,23 @@ The choice is remembered on this device.
 ## Reading
 
 The front page lists the newest articles three at a time, with page numbers
-at the bottom. Open an article's title to read it on its own, with links to
-the older and newer articles. The sidebar shows the blog's profile, the ten
-most recent articles, and a monthly archive grouped by year. Dates and times
-are in Japan time, as the blog showed them.
+at the bottom. Open an article's title to read it on its own. Under it, the
+blog's own buttons lead to the older article (前の記事) and the newer one
+(次の記事); pointing at a button shows that article's title. The sidebar
+shows the blog's profile, the ten most recent articles, and a monthly archive
+grouped by year. Dates and times are in Japan time, as the blog showed them.
 
 Select a photo to view it in full; arrow keys move between the article's
 photos. Videos that were embedded from YouTube play from the archived copy,
 with a link to the original on YouTube.
+
+## Comments
+
+Under an article, its comment list shows what readers, and sometimes Kano,
+wrote: each comment's number, the name its writer gave, the date and time in
+Japan time, and its text, newest first, with the star or face rating that
+early comments carried. Comments stay in their original Japanese and are not
+translated. The links commenters left to their own blogs are not kept.
 
 ## Translation
 
@@ -36,14 +45,16 @@ translations of the Japanese posts.
 
 ## What Was Not Preserved
 
-Comments, share counts, and some images were not captured; two pictures of
-one 2017 article appear as a note with a link to the original address instead.
+Share counts and some images were not captured; two pictures of one 2017
+article appear as a note with a link to the original address instead.
 The store thumbnails beside product links were recovered from archived copies
 of their original addresses. Where an original picture was lost but the same
 official picture was published elsewhere, that copy stands in for it, with a
 note saying so. The pictures of embedded tweets appear under the tweet, also
-with a note. Links in the articles lead to their
-original pages, many of which no longer exist; each article also links to its
+with a note. Each article's comments are those of the most complete archived
+copy of its page, so comments written after that copy are missing, and an
+article whose archived pages hold no comments, or that has no archived page,
+shows none. Links in the articles lead to their original pages, many of which no longer exist; each article also links to its
 original address and the web archive capture it was restored from.
 
 The articles, photos, and videos belong to Kano and their respective rights

@@ -37,11 +37,19 @@ packaged, and what an instance needs to show it.
   the recent-post thumbnails, profile photo, article pictures, link-card
   pictures and video covers request them through `srcset` (a video poster
   takes one 960-pixel copy), while the image viewer loads the original.
+- `src/lineblog/comments/<article number>.json` holds the comments of one
+  article as an archived copy of its page listed them, newest first: each
+  comment's number, the writer's display name, the Japan-time minute as an
+  ISO instant, the text with `\n` line breaks, and the old comment form's
+  star or face rating when it had one. Articles without archived comments
+  have no file. See [Comments](#comments).
 - `src/lineblog/content.ts` derives the page views (pages of three articles,
   months in Japan time, single articles) from the index, and the media URLs.
-  `src/lineblog/post-files.ts` loads article files on demand: each one builds
-  into its own content-hashed chunk, so a view loads only the articles it
-  shows, and the server caches them as immutable build files.
+  `src/lineblog/post-files.ts` loads article files on demand, and a single
+  article's comments file with it: each one builds into its own
+  content-hashed chunk, so a view loads only the articles it shows, and the
+  server caches them as immutable build files. A comments file that fails to
+  load shows the article without comments.
 - The blog's own header art and profile photos, and the menu bar's Home icon,
   are archive media like the articles' pictures: nine JPEGs and one PNG in the
   recovery archive's `media/`, packaged into `data/lineblog/` and the media
@@ -124,7 +132,43 @@ parts. Packaging:
    the media catalog.
 
 Packaging performs no network requests and does not change the recovery
-archive. Review the written files and the page together when updating them.
+archive. It leaves `src/lineblog/comments/` alone. Review the written files
+and the page together when updating them.
+
+## Comments
+
+The recovery archive holds no comments; they come from Wayback Machine
+captures of the article pages, which listed every comment in the page's
+`コメント一覧`. To rebuild `src/lineblog/comments/` from a local directory of
+raw captures (`.html` files saved with the `id_` form of the capture
+address), run:
+
+```bash
+npm run lineblog:comments -- --from /path/to/captures
+```
+
+The script:
+
+1. Reads every `.html` file of the directory, in file-name order, and
+   recognises an article page by its canonical `lineblog.me/kano/archives/`
+   address, not by its file name. Other pages are skipped.
+2. Takes from each comment its number, the display name (the text of the
+   `a.comment-url` link, or the plain name), the `YYYY/MM/DD HH:mm` date read
+   as Japan time, the text with `<br>` as line breaks, and the rating picture
+   as an icon and value. The commenter's link is dropped and never written.
+   The two picture emoji the old comment form put in comment text become
+   Unicode emoji; any other markup in a comment stops the run.
+3. Keeps, for each article, the capture listing the most comments. A request
+   for one capture can return a later one, so file names do not decide.
+4. Writes a file for each article of `post-index.json` that has comments and
+   removes the files of articles that have none.
+
+The script performs no network requests. Review the comments of changed
+articles on the page before keeping the files.
+
+The page shows the comments under the article in the blog's comment-list
+style, in Japanese with `lang="ja"`; only the heading follows the interface
+language. Comment text is never machine translated.
 
 ## Deployments
 
@@ -153,12 +197,14 @@ without the design art the header and profile keep a plain background.
 Run `make ci-frontend`, `make go-test`, `make docs-check` and
 `make sensitive-check`. `tests/lineblog.test.ts` packages a synthetic archive
 (translation alignment, image sources, YouTube merging, split-video
-restoration, rejection of mismatched media, the index and article files) and
-checks the tracked index, article files and media catalog against each
-other, including every design's art;
+restoration, rejection of mismatched media, the index and article files),
+extracts comments from synthetic article pages (both name forms, ratings,
+dropped links, the capture with the most comments), and checks the tracked
+index, article files, comments files and media catalog against each other,
+including every design's art;
 `internal/httpapi/lineblog_test.go` covers the media
 route. Browser verification covers the article list, months, single
-articles with their neighbours, back and forward (including after a reload),
+articles with the 前の記事/次の記事 pager and their comments, back and forward (including after a reload),
 the image viewer, video
 playback, the menu bar's and each article's translation switch in Chinese and English, the design picker and each design's header and profile,
 three languages, themes, and desktop and mobile layouts.

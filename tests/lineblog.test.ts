@@ -15,6 +15,11 @@ import {
   withRecoveredImages,
 } from "../scripts/package-lineblog.ts"
 import {
+  packageLineblogComments,
+  parseCapture,
+  pickComments,
+} from "../scripts/package-lineblog-comments.ts"
+import {
   addPostFile,
   isEmoji,
   lineblogView,
@@ -36,6 +41,7 @@ import {
 import { recoveredImages, tweetPictures } from "../src/lineblog/recovered.ts"
 import catalogFile from "../src/lineblog/media-catalog.json" with { type: "json" }
 import type {
+  LineblogComment,
   LineblogMedia,
   LineblogPost,
   LineblogPostFile,
@@ -313,6 +319,8 @@ test("LINE BLOG packaging removes the files of posts it no longer holds", async 
   const contentDir = path.join(root, "content")
   await fs.mkdir(path.join(contentDir, "posts"), { recursive: true })
   await fs.writeFile(path.join(contentDir, "posts", "99.json"), "{}\n")
+  await fs.mkdir(path.join(contentDir, "comments"), { recursive: true })
+  await fs.writeFile(path.join(contentDir, "comments", "100.json"), "[]\n")
   await packageLineblog(archive, {
     contentDir,
     mediaDir: path.join(root, "data", "lineblog"),
@@ -321,6 +329,11 @@ test("LINE BLOG packaging removes the files of posts it no longer holds", async 
   assert.deepEqual(await fs.readdir(path.join(contentDir, "posts")), [
     "100.json",
   ])
+  // Comments come from page captures, which packaging leaves alone.
+  assert.equal(
+    await fs.readFile(path.join(contentDir, "comments", "100.json"), "utf8"),
+    "[]\n",
+  )
 })
 
 test("LINE BLOG packaging writes nothing when media do not match their names", async (t) => {
@@ -620,4 +633,204 @@ test("every recovered picture is packaged with its source", () => {
       !JSON.stringify(fullPosts).includes(`"remote":"${item.address}"`),
       item.address,
     )
+})
+
+// ---------------------------------------------------------------------------
+// Archived comments
+// ---------------------------------------------------------------------------
+
+/** A synthetic article page in the blog's markup, with the given comments. */
+function capturePage(article: string, comments: string[]) {
+  return [
+    "<!DOCTYPE html><html><head>",
+    `<link rel="canonical" href="https://lineblog.me/kano/archives/${article}.html" />`,
+    "</head><body>",
+    '<ul class="article-pager"><li class="prev"><a rel="prev" href="https://lineblog.me/kano/archives/1.html" title="x">前の記事</a></li></ul>',
+    '<div class="article-option" id="comments-list"><h3>コメント一覧</h3>',
+    '<ol id="ld_blog_article_comment_entries">',
+    ...comments,
+    "</ol>",
+    '<script type="text/html" id="ld_blog_article_comment_entries_tmpl">',
+    '<li class="comment-set <%==entry.odd_even%>"><ul class="comment-info">',
+    '<li class="comment-author"><%==entry.num%>.<a href="<%=entry.url%>" class="comment-url">x</a></li>',
+    "</ul></li></script></div></body></html>",
+  ].join("\n")
+}
+
+function commentSet(
+  parity: string,
+  author: string,
+  date: string,
+  body: string,
+) {
+  return [
+    `\t\t\t\t<li class="comment-set ${parity}">`,
+    '\t\t\t\t\t<ul class="comment-info">',
+    `\t\t\t\t\t\t<li class="comment-author">${author}</li>`,
+    `\t\t\t\t\t\t<li class="comment-date">${date}</li>`,
+    `\t\t\t\t\t\t<li class="comment-body">${body}                        </li>`,
+    "\t\t\t\t\t</ul>",
+    "\t\t\t\t</li>",
+  ].join("\r\n")
+}
+
+const syntheticComments = [
+  commentSet(
+    "odd",
+    '6.<a href="https://commenter.example.invalid/blog/" class="comment-url" rel="nofollow">A&amp;B</a>',
+    "2018/05/10 17:46",
+    "一行目<br>\r\n<br>\r\n&lt;三行目&gt;  です",
+  ),
+  commentSet(
+    "even",
+    "4.\r\n\t\t\t\t\t\t\tNo Name",
+    "2016/09/04 21:21",
+    '\t\t\t\t\t\t\t<img src="http://parts.blog.livedoor.jp/img/star/4.gif" width="70" height="13" alt="4" class="commentEvaluation" />\t\t\t\t\t\t\t<br>\r\nおつかれさま<img src="http://parts.blog.livedoor.jp/img/emoji/3/ic_sun.png" width="15" height="15" />',
+  ),
+  commentSet(
+    "odd",
+    "5.名前",
+    "2016/09/04 20:00",
+    '<img src="https://parts.lineblog.me/img/face/2.gif" width="15" height="15" alt="2" class="commentEvaluation" />',
+  ),
+]
+
+test("an archived article page yields its comments without commenter links", () => {
+  const capture = parseCapture(capturePage("100", syntheticComments))
+  assert.deepEqual(capture, {
+    article: "100",
+    comments: [
+      {
+        number: 6,
+        author: "A&B",
+        posted: "2018-05-10T08:46:00.000Z",
+        body: "一行目\n\n<三行目> です",
+      },
+      {
+        number: 5,
+        author: "名前",
+        posted: "2016-09-04T11:00:00.000Z",
+        body: "",
+        rating: { icon: "face", value: 2 },
+      },
+      {
+        number: 4,
+        author: "No Name",
+        posted: "2016-09-04T12:21:00.000Z",
+        body: "おつかれさま☀️",
+        rating: { icon: "star", value: 4 },
+      },
+    ],
+  })
+  assert.ok(!JSON.stringify(capture).includes("example"))
+  assert.equal(parseCapture("<html><body>月別アーカイブ</body></html>"), null)
+  // A page whose comment list was empty, or not printed, has no comments.
+  assert.deepEqual(parseCapture(capturePage("101", [])), {
+    article: "101",
+    comments: [],
+  })
+  assert.throws(
+    () =>
+      parseCapture(
+        capturePage("102", [
+          commentSet("odd", "1.x", "2018/05/10 17:46", "<b>bold</b>"),
+        ]),
+      ),
+    /unexpected markup/u,
+  )
+})
+
+test("each article keeps the capture listing the most comments", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "kano-lineblog-test-"))
+  t.after(async () => {
+    assert.equal(path.dirname(root), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(root).startsWith("kano-lineblog-test-"))
+    await fs.rm(root, { recursive: true, force: true })
+  })
+  const pages = path.join(root, "pages")
+  const contentDir = path.join(root, "content")
+  await fs.mkdir(pages)
+  await fs.mkdir(path.join(contentDir, "comments"), { recursive: true })
+  await fs.writeFile(
+    path.join(contentDir, "post-index.json"),
+    JSON.stringify([{ id: "100" }, { id: "200" }, { id: "300" }]),
+  )
+  await fs.writeFile(path.join(contentDir, "comments", "300.json"), "[]\n")
+  // A file's name can claim an earlier capture than its content.
+  await fs.writeFile(
+    path.join(pages, "post_100_20160101000000.html"),
+    capturePage("100", syntheticComments),
+  )
+  await fs.writeFile(
+    path.join(pages, "post_100_20180101000000.html"),
+    capturePage("100", syntheticComments.slice(0, 1)),
+  )
+  await fs.writeFile(
+    path.join(pages, "post_200_20160101000000.html"),
+    capturePage("200", []),
+  )
+  // Comments on an article the archive does not hold are not written.
+  await fs.writeFile(
+    path.join(pages, "post_999_20160101000000.html"),
+    capturePage("999", syntheticComments),
+  )
+  await fs.writeFile(path.join(pages, "index_20160101000000.html"), "<html>")
+
+  assert.deepEqual(await packageLineblogComments(pages, { contentDir }), {
+    posts: 1,
+    comments: 3,
+  })
+  assert.deepEqual(await fs.readdir(path.join(contentDir, "comments")), [
+    "100.json",
+  ])
+  const written = JSON.parse(
+    await fs.readFile(path.join(contentDir, "comments", "100.json"), "utf8"),
+  ) as LineblogComment[]
+  assert.deepEqual(
+    written.map((comment) => comment.number),
+    [6, 5, 4],
+  )
+  assert.deepEqual(
+    pickComments([
+      { article: "1", comments: written.slice(0, 1) },
+      { article: "1", comments: written },
+      { article: "2", comments: [] },
+    ]),
+    new Map([["1", written]]),
+  )
+})
+
+test("the archived comments belong to packaged posts and keep their shape", async () => {
+  const commentsDir = new URL("../src/lineblog/comments/", import.meta.url)
+  const ids = new Set(posts.map((post) => post.id))
+  const names = await fs.readdir(commentsDir)
+  assert.ok(names.length > 0)
+  for (const name of names) {
+    assert.match(name, /^\d+\.json$/u)
+    assert.ok(ids.has(name.slice(0, -5)), name)
+    const text = await fs.readFile(new URL(name, commentsDir), "utf8")
+    // Commenters' blog addresses are never kept.
+    assert.doesNotMatch(text, /https?:\/\/|lineblog\.me/u, name)
+    const comments = JSON.parse(text) as LineblogComment[]
+    assert.ok(comments.length > 0, name)
+    comments.forEach((comment, index) => {
+      assert.deepEqual(
+        Object.keys(comment).filter(
+          (key) =>
+            !["number", "author", "posted", "body", "rating"].includes(key),
+        ),
+        [],
+      )
+      assert.ok(Number.isInteger(comment.number) && comment.number > 0)
+      if (index) assert.ok(comment.number < comments[index - 1].number, name)
+      assert.ok(comment.author && comment.author === comment.author.trim())
+      assert.equal(new Date(comment.posted).toISOString(), comment.posted)
+      assert.match(comment.posted, /:00\.000Z$/u)
+      assert.doesNotMatch(comment.body, /^[ \n]|\s$/u)
+      if (comment.rating) {
+        assert.ok(["star", "face"].includes(comment.rating.icon))
+        assert.ok([1, 2, 3, 4, 5].includes(comment.rating.value))
+      }
+    })
+  }
 })

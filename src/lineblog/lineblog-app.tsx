@@ -6,15 +6,7 @@ import type {
 } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { flushSync } from "react-dom"
-import {
-  ArrowUp,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ImageOff,
-  Languages,
-  Play,
-} from "lucide-react"
+import { ArrowUp, ChevronDown, ImageOff, Languages, Play } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import {
@@ -60,9 +52,10 @@ import {
   type LineblogDesign,
   type LineblogDesignOption,
 } from "./designs"
-import { loadView, viewLoaded } from "./post-files"
+import { loadedComments, loadView, viewLoaded } from "./post-files"
 import type {
   LineblogBlock,
+  LineblogComment,
   LineblogImage,
   LineblogInline,
   LineblogPost,
@@ -262,11 +255,12 @@ function useLineblogLocation() {
 }
 
 /**
- * The view's posts, once loaded. Browsers keep a failed chunk load for the
- * document, so a failed view offers a reload rather than a second request.
+ * The view's posts, once they and an article's comments have loaded.
+ * Browsers keep a failed chunk load for the document, so a failed view offers
+ * a reload rather than a second request.
  */
 function useViewPosts(search: string, shown: LineblogSummary[]) {
-  const ready = shown.every((post) => loadedPost(post.id))
+  const ready = viewLoaded(search)
   const [, setLoaded] = useState(0)
   const [failed, setFailed] = useState<string | null>(null)
   useEffect(() => {
@@ -784,37 +778,105 @@ function Pager({ page, pageCount }: { page: number; pageCount: number }) {
   )
 }
 
-function ArticleNav({ post }: { post: LineblogSummary }) {
+/**
+ * The blog's article pager: 前の記事 for the older article and 次の記事 for
+ * the newer one, kept in Japanese like the menu bar, with the article's title
+ * as the link title.
+ */
+function ArticlePager({ post }: { post: LineblogSummary }) {
   const { t } = useAppSettings()
   const { newer, older } = neighbours(post.id)
   return (
-    <nav className="lb-article-nav" aria-label={t("lineblog.articleNav")}>
-      {older ? (
-        <a href={articleLink(older)} className="is-older">
-          <ChevronLeft aria-hidden="true" />
-          <span>
-            <small>{t("lineblog.older")}</small>
-            <span lang="ja">{older.title}</span>
-          </span>
-        </a>
-      ) : (
-        <span />
-      )}
-      <a href="/lineblog" className="lb-article-nav-list">
-        {t("lineblog.backToList")}
-      </a>
-      {newer ? (
-        <a href={articleLink(newer)} className="is-newer">
-          <span>
-            <small>{t("lineblog.newer")}</small>
-            <span lang="ja">{newer.title}</span>
-          </span>
-          <ChevronRight aria-hidden="true" />
-        </a>
-      ) : (
-        <span />
-      )}
+    <nav className="lb-article-pager" aria-label={t("lineblog.articleNav")}>
+      <ul>
+        {older ? (
+          <li className="is-prev">
+            <a
+              href={articleLink(older)}
+              rel="prev"
+              title={older.title}
+              aria-label={`${t("lineblog.older")}: ${older.title}`}
+              lang="ja"
+            >
+              前の記事
+            </a>
+          </li>
+        ) : null}
+        {newer ? (
+          <li className="is-next">
+            <a
+              href={articleLink(newer)}
+              rel="next"
+              title={newer.title}
+              aria-label={`${t("lineblog.newer")}: ${newer.title}`}
+              lang="ja"
+            >
+              次の記事
+            </a>
+          </li>
+        ) : null}
+      </ul>
     </nav>
+  )
+}
+
+/** The old comment form's face ratings, from 1 (worst) to 5 (best). */
+const RATING_FACES = ["😣", "😟", "😐", "🙂", "😊"]
+
+function CommentRating({
+  rating,
+}: {
+  rating: NonNullable<LineblogComment["rating"]>
+}) {
+  const { t } = useAppSettings()
+  return (
+    <span
+      className={cn("lb-comment-rating", `is-${rating.icon}`)}
+      role="img"
+      aria-label={t("lineblog.commentRating", { value: rating.value })}
+    >
+      {rating.icon === "star"
+        ? "★".repeat(rating.value) + "☆".repeat(5 - rating.value)
+        : RATING_FACES[rating.value - 1]}
+    </span>
+  )
+}
+
+/**
+ * The comment list an archived copy of the article page kept, newest first,
+ * in the commenters' own words; their blog links are not kept.
+ */
+function Comments({ comments }: { comments: LineblogComment[] }) {
+  const { t } = useAppSettings()
+  if (!comments.length) return null
+  return (
+    <section className="lb-comments" aria-labelledby="lb-comments-title">
+      <h2 className="lb-comments-title" id="lb-comments-title">
+        {t("lineblog.comments")}
+      </h2>
+      <p className="lb-comments-note">{t("lineblog.commentsNote")}</p>
+      <ol className="lb-comment-list" lang="ja">
+        {comments.map((comment) => (
+          <li
+            key={comment.number}
+            className={cn("lb-comment", comment.rating && "has-rating")}
+          >
+            <p className="lb-comment-head">
+              <span className="lb-comment-author">
+                {comment.number}.{comment.author}
+              </span>
+              <time className="lb-comment-date" dateTime={comment.posted}>
+                {postDate(comment.posted)}
+              </time>
+            </p>
+            {comment.rating ? <CommentRating rating={comment.rating} /> : null}
+            {comment.body ? (
+              <p className="lb-comment-body">{comment.body}</p>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </section>
   )
 }
 
@@ -1182,7 +1244,10 @@ export function LineblogApp() {
                 <Placeholder lines={6} />
               </div>
             )}
-            {view.article ? <ArticleNav post={view.article} /> : null}
+            {view.article ? <ArticlePager post={view.article} /> : null}
+            {view.article && loaded.posts ? (
+              <Comments comments={loadedComments(view.article.id) ?? []} />
+            ) : null}
             {!view.article && !view.month ? (
               <Pager page={view.page} pageCount={view.pageCount} />
             ) : null}
