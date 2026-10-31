@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -251,8 +250,10 @@ func (c *Client) api(ctx context.Context, resource string, query url.Values, key
 }
 
 type Options struct {
-	ChannelID                          string
-	BootstrapVideos, MaxDetailRequests int
+	ChannelID string
+	// MaxDetailRequests is the reservation pages inspected per run; a run
+	// sets it from the operator's sync settings.
+	MaxDetailRequests int
 	// APIKey is the optional YOUTUBE_API_KEY. When set, the recent step lists
 	// uploads and reads details through the Data API before the public pages.
 	APIKey string
@@ -266,12 +267,5 @@ func OptionsFromEnv() Options {
 	if channel == "" {
 		channel = "UCShXNLMXCfstmWKH_q86B8w"
 	}
-	bounded := func(key string, fallback, min, max int) int {
-		n, err := strconv.Atoi(os.Getenv(key))
-		if err != nil || n < min || n > max {
-			return fallback
-		}
-		return n
-	}
-	return Options{ChannelID: channel, BootstrapVideos: bounded("YOUTUBE_BOOTSTRAP_VIDEOS", 6, 1, 30), MaxDetailRequests: bounded("YOUTUBE_MAX_DETAIL_REQUESTS", 12, 1, 50), APIKey: strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY")), YTDLPBinary: strings.TrimSpace(os.Getenv("YTDLP_BINARY"))}
+	return Options{ChannelID: channel, MaxDetailRequests: 12, APIKey: strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY")), YTDLPBinary: strings.TrimSpace(os.Getenv("YTDLP_BINARY"))}
 }

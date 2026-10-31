@@ -18,40 +18,24 @@
 | `SCHEDULE_MESSAGE_ENABLED`      | `1`                                 | Enable single-message schedule detection                          |
 | `SCHEDULE_MESSAGE_ALL_POSTS`    | `0`                                 | Send every post through the message route, skipping the heuristic |
 | `SCHEDULE_KEYWORDS`             | `schedule,...`                      | Comma-separated schedule candidate keywords                       |
-| `TRANSLATION_SCAN_LIMIT`        | `20`                                | Posts and titles the translate step sends to a model per run      |
-| `TRANSLATION_LOOKBACK_DAYS`     | `30`                                | Days of posts and videos the translate step covers unrequested    |
 | `WORKFLOW_SCHEDULER_ENABLED`    | `1`                                 | Start the source timers in the server process                     |
 | `MCP_ENABLED`                   | `1`                                 | Expose the stateless `/mcp` endpoint                              |
 | `MCP_CONTROL_TOKEN`             | Empty                               | Bearer token for MCP mutation tools                               |
 | `X_HANDLES`                     | `kano_2525,_Kanotic`                | Comma-separated public X account names                            |
-| `X_HANDLE`                      | Empty                               | Single-account compatibility fallback                             |
 | `X_API_BEARER_TOKEN`            | Empty                               | Optional environment-only X API credential: fetches, chain method |
 | `YOUTUBE_API_KEY`               | Empty                               | Optional environment-only Data API key: YouTube sync and fetches  |
-| `SOURCE_HISTORY_MAX_PAGES`      | `4`                                 | Manual fetch pages per account or channel (1–20), within X budget |
-| `X_BOOTSTRAP_DAYS`              | `7`                                 | Age limit in days while an X account has no cursor yet            |
-| `X_DISCOVERY_LIMIT`             | `50`                                | Full-sync cap of unstored X statuses per account; pages of 20     |
-| `X_MAX_STATUS_REQUESTS`         | `12`                                | Maximum X detail requests per run; manual X fetch page budget     |
-| `X_REFRESH_KNOWN`               | `1`                                 | Known X posts refreshed per run                                   |
-| `X_SCHEDULE_REFRESH_LIMIT`      | `1`                                 | Missing schedule source posts prioritized per account             |
 | `YOUTUBE_CHANNEL_ID`            | Main channel                        | YouTube channel identifier                                        |
-| `YOUTUBE_BOOTSTRAP_VIDEOS`      | `6`                                 | First-run RSS entries stored                                      |
-| `YOUTUBE_MAX_DETAIL_REQUESTS`   | `12`                                | Reservation pages inspected per run                               |
 | `YTDLP_BINARY`                  | `/app/yt-dlp` in production Compose | yt-dlp executable path; empty disables the method                 |
 | `BILIBILI_UID`                  | Kano's account                      | Bilibili account (numeric mid) whose uploads are read             |
 | `BILIBILI_MIN_INTERVAL_MINUTES` | `180`                               | Minimum minutes between Bilibili reads and timer runs (60–1440)   |
 | `BILIBILI_SESSDATA`             | Empty                               | Optional environment-only Bilibili login cookie                   |
-| `SYNC_TIMEOUT_MS`               | `7000`                              | Timeout for a source network request                              |
-| `SYNC_REQUEST_DELAY_MS`         | `150`                               | Delay between source detail requests                              |
-| `MEDIA_DOWNLOAD_TIMEOUT_MS`     | `10000`                             | Timeout for an image request                                      |
-| `MEDIA_MAX_BYTES`               | `10485760`                          | Maximum bytes accepted for one image                              |
 | `SKIP_X`, `SKIP_YOUTUBE`        | `0`                                 | Set to `1` to skip that source's step and its timer               |
 | `SKIP_BILIBILI`                 | `0`                                 | Set to `1` to skip the Bilibili step, timer and console reads     |
 | `SKIP_MEDIA`, `SKIP_LLM`        | `0`                                 | Set a post-processing stage flag to `1` to skip it                |
 
-`SKIP_LLM=1` skips both model steps, `schedule` and `translate`. Neither
-translation variable configures a model: the translate step reads only the
-translation queue set in `/admin` → Models, so it does nothing until that
-queue holds a text model.
+`SKIP_LLM=1` skips both model steps, `schedule` and `translate`. The
+translate step reads only the translation queue set in `/admin` → Models, so
+it does nothing until that queue holds a text model.
 
 `PUBLIC_ORIGIN` is a bare `http` or `https` origin such as
 `https://kano.example.invalid` (a trailing `/` is accepted and the host is
@@ -90,12 +74,12 @@ or logs. `OPENAI_API_KEY` is accepted only by the one-time
 Configure local values in the ignored .env or deployment environment. Changes
 to environment-only credentials require a server restart. Provider hosts,
 models, encrypted keys, routes, source accounts, and each source schedule's
-sync setting are operator settings managed through /admin. How much a run
-reads and the timer interval are independent. A source schedule's
-incremental cap replaces `X_DISCOVERY_LIMIT` for every run that reads X with
-it (timer, Run now, YouTube push, one-off step run); full syncs
-(`kano-go sync`, the console's Sync everything, MCP) keep the variable for X
-and read 50 YouTube uploads at most. Each schedule's
+sync setting are operator settings managed through /admin, as are the
+[sync settings](#sync-settings). How much a run reads and the timer interval
+are independent. A source schedule's incremental cap replaces the full-sync
+post cap for every run that reads X with it (timer, Run now, YouTube push,
+one-off step run); full syncs (`kano-go sync`, the console's Sync
+everything, MCP) keep that setting for X and read 50 YouTube uploads at most. Each schedule's
 [method chain](../architecture/workflows.md#method-chains) decides whether
 its runs use `X_API_BEARER_TOKEN` and `YOUTUBE_API_KEY`: the X API only as a
 fallback behind its gate and daily cap, the YouTube Data API only while the
@@ -122,6 +106,36 @@ across restarts; changing it makes previously stored provider keys unreadable.
 For example, generate a value locally with
 `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`
 and save it only in the ignored environment file or deployment secret store.
+
+## Sync Settings
+
+The read limits of source steps, manual fetches and the translate step are
+operator settings in `app_settings`, edited on `/admin` → Sources (the X and
+YouTube read limits) and `/admin` → LLM (translation limits). Each run reads
+them when it starts, so a saved value applies from the next run.
+
+| Setting                      | Default | Range      | Purpose                                                                     |
+| ---------------------------- | ------- | ---------- | --------------------------------------------------------------------------- |
+| X status requests per run    | `12`    | 0–50       | X detail requests shared by all accounts; manual X fetch page budget        |
+| X known posts refreshed      | `1`     | 0–5        | Stored X posts read again per run                                           |
+| X first-run age limit (days) | `7`     | 1–30       | Age limit while an X account has no cursor yet                              |
+| X full-sync post cap         | `50`    | 1–200      | Full-sync cap of unstored X statuses per account; pages of 20               |
+| YouTube video pages per run  | `12`    | 1–50       | Watch pages inspected per run for reservations and details                  |
+| Manual fetch pages           | `4`     | 1–20       | Pages of one manual fetch per X account or for the channel, within X budget |
+| Request timeout (ms)         | `7000`  | 1000–60000 | Per request of manual fetches and the X API method                          |
+| Request spacing (ms)         | `0`     | 0–10000    | Wait between the pages of a manual fetch                                    |
+| Translation items per run    | `20`    | 1–200      | Posts and titles the translate step sends to a model                        |
+| Translation lookback (days)  | `30`    | 1–3650     | Age of posts and videos the translate step covers unrequested               |
+
+On startup, each setting without a stored value takes the integer value of
+its environment variable, if set: `X_MAX_STATUS_REQUESTS`, `X_REFRESH_KNOWN`,
+`X_BOOTSTRAP_DAYS`, `X_DISCOVERY_LIMIT`, `YOUTUBE_MAX_DETAIL_REQUESTS`,
+`SOURCE_HISTORY_MAX_PAGES`, `SYNC_TIMEOUT_MS`, `SYNC_REQUEST_DELAY_MS`,
+`TRANSLATION_SCAN_LIMIT` and `TRANSLATION_LOOKBACK_DAYS`, in table order.
+Manual fetch pages, the timeout, the spacing and the translation limits take
+an out-of-range value at the nearest bound; the others ignore it. A stored
+value is never replaced from the environment, so these variables have no
+effect once stored and need not be set.
 
 ## Source timers
 

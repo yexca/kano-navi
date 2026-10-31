@@ -129,6 +129,10 @@ func main() {
 
 	var queue *workflow.Queue
 	if enableSources {
+		if err = store.ImportSyncSettings(context.Background(), os.Getenv); err != nil {
+			fmt.Fprintln(os.Stderr, "kano-go: sync settings unavailable")
+			os.Exit(1)
+		}
 		if cfg.EnableXSync || cfg.EnableMediaDownloads {
 			if err = store.RepairLegacyXMedia(context.Background()); err != nil {
 				fmt.Fprintln(os.Stderr, "kano-go: workflow unavailable")

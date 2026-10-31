@@ -23,28 +23,14 @@ type Translator struct {
 }
 
 const (
-	defaultTranslationLimit    = 20
-	defaultTranslationLookback = 30
 	// maxTranslationInput bounds the wording sent to a model.
 	maxTranslationInput = 4000
 )
 
-// NewTranslator shares the extractor's options; TRANSLATION_SCAN_LIMIT and
-// TRANSLATION_LOOKBACK_DAYS come from Getenv.
+// NewTranslator shares the extractor's options. Its scan limit and lookback
+// are the operator's sync settings, read when each run starts.
 func NewTranslator(store *sqlite.Store, opts Options) *Translator {
 	return &Translator{e: New(store, opts)}
-}
-
-func (e *Extractor) envInteger(key string, fallback, low, high int) int {
-	value, ok := e.lookupEnv(key)
-	if !ok {
-		return fallback
-	}
-	n, err := strconv.Atoi(strings.TrimSpace(value))
-	if err != nil {
-		return fallback
-	}
-	return min(high, max(low, n))
 }
 
 var (
@@ -68,8 +54,8 @@ func hasTranslatableText(text string) bool {
 	return false
 }
 
-// Run translates up to TRANSLATION_SCAN_LIMIT candidates: operator requests
-// first, then owners published within TRANSLATION_LOOKBACK_DAYS that lack a
+// Run translates up to the scan limit of candidates: operator requests
+// first, then owners published within the lookback days that lack a
 // usable translation. Without a configured translation queue it records
 // nothing and keeps requests pending.
 func (t *Translator) Run(ctx context.Context) (Result, error) {
@@ -100,8 +86,11 @@ func (t *Translator) translatePending(ctx context.Context) (map[string]any, erro
 		counts["disabled"], counts["reason"] = true, reason
 		return counts, nil
 	}
-	limit := e.envInteger("TRANSLATION_SCAN_LIMIT", defaultTranslationLimit, 1, 200)
-	lookback := e.envInteger("TRANSLATION_LOOKBACK_DAYS", defaultTranslationLookback, 1, 3650)
+	settings, err := e.store.SyncSettings(ctx)
+	if err != nil {
+		return counts, err
+	}
+	limit, lookback := settings.TranslationScanLimit, settings.TranslationLookbackDays
 	since := e.now().Add(-time.Duration(lookback) * 24 * time.Hour)
 	// Local skips cost no model call, so a few extra candidates keep them
 	// from shrinking the budget.

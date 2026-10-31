@@ -158,6 +158,12 @@ export function japanClock(value: string | null | undefined) {
   return `${get("hour")}:${get("minute")}`
 }
 
+/** An ISO instant as its Japan date and time "YYYY-MM-DD HH:mm". */
+export function japanStamp(value: string | null | undefined) {
+  const day = japanDay(value)
+  return day ? `${day} ${japanClock(value)}` : ""
+}
+
 /** Combine a Japan date and wall-clock time into an ISO instant. */
 export function japanInstant(day: string, clock: string) {
   if (!day || !clock) return ""

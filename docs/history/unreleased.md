@@ -32,9 +32,24 @@
 >   uses a retired selection; start a new fetch".
 > - A manual fetch whose method fails fails the run, and the steps after it do
 >   not run.
+> - Read limits are console settings: `X_MAX_STATUS_REQUESTS`,
+>   `X_REFRESH_KNOWN`, `X_BOOTSTRAP_DAYS`, `X_DISCOVERY_LIMIT`,
+>   `YOUTUBE_MAX_DETAIL_REQUESTS`, `SOURCE_HISTORY_MAX_PAGES`,
+>   `SYNC_TIMEOUT_MS`, `SYNC_REQUEST_DELAY_MS`, `TRANSLATION_SCAN_LIMIT` and
+>   `TRANSLATION_LOOKBACK_DAYS` are stored once on the first start that sees
+>   them and then ignored, so remove them from `.env` after that start.
+>   `YOUTUBE_BOOTSTRAP_VIDEOS` had no effect and is no longer read.
+>   `GET`/`PUT /api/admin/sync-settings` read and change them.
 
 <details>
 <summary><strong>Operator console</strong></summary>
+
+- The Sources page has X and YouTube read limits (status requests, known-post
+  refreshes, first-run age, full-sync cap, video pages, manual fetch pages,
+  request timeout and spacing), and the LLM page has the translation limits.
+  Saved values apply from the next run.
+- The Posts page shows times as Japan-time `YYYY-MM-DD HH:mm` in every
+  language: a post's and its quote's publication and a queued refresh.
 
 - The manual fetch on the Sources page picks a method first, then what it
   reads, the count or dates, and the steps that follow: the FxTwitter timeline
@@ -178,8 +193,9 @@
   the models as Claude Opus 5.5, GPT-6.1-Sol and GPT-5.6-Sol.
 - Switching weeks in the weekly schedule keeps the current week dimmed until
   the next one is ready and then changes once, instead of passing through an
-  empty grid and a loading bar; the schedule-image slot keeps its size on wide
-  screens.
+  empty grid and a loading bar.
+- The weekly schedule shows its schedule-image strip only for a week that
+  has a schedule image, without a "No schedule image for this week" note.
 - The weekly schedule, Posts on X and the month dialogs drop their one-line
   notes under the title, and the video archive names bilibili beside YouTube.
 - Past videos shows the month as a grid of covers with the title below each,
@@ -198,6 +214,10 @@
 <details>
 <summary><strong>Runtime and development</strong></summary>
 
+- `.env.example` and the configuration reference drop `X_HANDLE`,
+  `X_SCHEDULE_REFRESH_LIMIT`, `MEDIA_DOWNLOAD_TIMEOUT_MS` and
+  `MEDIA_MAX_BYTES`, which the server does not read; existing `.env` entries
+  for them have no effect and can be deleted.
 - Release images are published for `linux/arm64` as well as `linux/amd64`
   under the same tags, so ARM hosts such as a Raspberry Pi 4/5 or an Apple
   silicon Mac pull a native image. The Dockerfiles cross-compile the Go

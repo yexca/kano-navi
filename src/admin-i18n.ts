@@ -723,6 +723,44 @@ export const adminMessages = {
     "admin.ytdlp.unavailable": "Not configured",
     "admin.ytdlp.version": "Version",
     "admin.ytdlp.update": "Update yt-dlp",
+    "admin.syncSettings.x.title": "X read limits",
+    "admin.syncSettings.youtube.title": "YouTube read limits",
+    "admin.syncSettings.translation.title": "Translation limits",
+    "admin.syncSettings.description":
+      "Bounds of each run. Saved values apply from the next run; a running one keeps its own.",
+    "admin.syncSettings.range": "{min}–{max}, default {default}.",
+    "admin.syncSettings.shared": "Shared by X and YouTube.",
+    "admin.syncSettings.field.xMaxStatusRequests": "Status requests per run",
+    "admin.syncSettings.hint.xMaxStatusRequests":
+      "Detail requests shared by all accounts, and the page budget of a manual X fetch.",
+    "admin.syncSettings.field.xRefreshKnown": "Known posts refreshed",
+    "admin.syncSettings.hint.xRefreshKnown":
+      "Stored posts read again each run for updated counts and media.",
+    "admin.syncSettings.field.xBootstrapDays": "First-run age limit (days)",
+    "admin.syncSettings.hint.xBootstrapDays":
+      "How far back an account's first run reads, before it has a cursor.",
+    "admin.syncSettings.field.xDiscoveryLimit": "Full-sync post cap",
+    "admin.syncSettings.hint.xDiscoveryLimit":
+      "Unstored posts per account in a full sync; a timer uses its own cap.",
+    "admin.syncSettings.field.youtubeMaxDetailRequests":
+      "Video pages inspected per run",
+    "admin.syncSettings.hint.youtubeMaxDetailRequests":
+      "Watch pages read for reservations and details.",
+    "admin.syncSettings.field.fetchMaxPages": "Manual fetch pages",
+    "admin.syncSettings.hint.fetchMaxPages":
+      "Pages of one manual fetch per account or for the channel.",
+    "admin.syncSettings.field.fetchTimeoutMs": "Request timeout (ms)",
+    "admin.syncSettings.hint.fetchTimeoutMs":
+      "Per request of manual fetches and the X API method.",
+    "admin.syncSettings.field.fetchRequestDelayMs": "Request spacing (ms)",
+    "admin.syncSettings.hint.fetchRequestDelayMs":
+      "Wait between the pages of a manual fetch.",
+    "admin.syncSettings.field.translationScanLimit": "Items per run",
+    "admin.syncSettings.hint.translationScanLimit":
+      "Posts and titles the translate step sends to a model.",
+    "admin.syncSettings.field.translationLookbackDays": "Lookback (days)",
+    "admin.syncSettings.hint.translationLookbackDays":
+      "Age of posts and videos translated without a request.",
     "admin.followUp.title": "Follow-up checks",
     "admin.followUp.description":
       "Every YouTube read rereads the watch page of up to 10 finished videos at these times after their end, start or publication, to pick up a new thumbnail or title. Videos older than 8 days are left alone.",
@@ -860,6 +898,7 @@ export const adminMessages = {
     "admin.notice.mediaSelected": "Profile image updated",
     "admin.notice.pushSaved": "Push settings saved",
     "admin.notice.liveProbeSaved": "Live probe settings saved",
+    "admin.notice.syncSettingsSaved": "Limits saved",
     "admin.notice.ytdlpUpdated": "yt-dlp updated",
     "admin.notice.scheduleSaved": "Timer saved",
     "admin.notice.visitorRegionSaved": "Mainland China site suggestion saved",

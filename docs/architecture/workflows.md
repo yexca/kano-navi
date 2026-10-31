@@ -111,8 +111,8 @@ redirects and controlled `x_*` error codes.
 ([X full-archive search](https://docs.x.com/x-api/posts/search/quickstart/full-archive-search),
 which needs full-archive access). The environment-only credential travels in
 the `Authorization: Bearer` header, never in URLs, SQLite or results. Each
-request has the `SYNC_TIMEOUT_MS` timeout (7 seconds by default, at most 60),
-pages wait `SYNC_REQUEST_DELAY_MS` apart, and redirects are rejected so the
+request has the request timeout and pages wait the request spacing apart (see
+[sync settings](../operations/configuration.md#sync-settings)), and redirects are rejected so the
 credential header never follows one. Each response has a fixed 4 MiB byte
 limit: the adapter checks `Content-Length` and counts streamed bytes,
 cancelling an oversized body before parsing or writing its page. Posts are
@@ -190,9 +190,9 @@ timed source cursor.
 
 ### Budgets and checkpoints
 
-`SOURCE_HISTORY_MAX_PAGES` bounds the pages of one fetch per X account or for
-the channel (4 by default, 1–20), for every paging method. X fetches share
-`X_MAX_STATUS_REQUESTS` across accounts as a page budget, including failed
+The manual fetch pages setting bounds the pages of one fetch per X account or
+for the channel (4 by default, 1–20), for every paging method. X fetches
+share the X status requests per run across accounts as a page budget, including failed
 requests: each account gets an even share of what is left, and the first
 account rotates across runs per mode (`sync_state` source `x-budget`, key
 `window-<mode>`), so a small budget still reaches every account. An account
@@ -264,7 +264,7 @@ settings too, frozen on the run: a YouTube push, Run now, a
 [one-off step run](#modular-steps-and-timers) and the operator's single-video refresh.
 A [manual fetch](#manual-fetches-and-historical-backfill) reads through its
 method instead. Full syncs (console, MCP, `kano-go sync`) carry no setting
-and run incrementally with `X_DISCOVERY_LIMIT` for X and 50 uploads for
+and run incrementally with the full-sync post cap for X and 50 uploads for
 YouTube.
 
 #### Method chains

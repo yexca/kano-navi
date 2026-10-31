@@ -12,7 +12,6 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  ImageIcon,
   PanelBottomClose,
   PanelRightClose,
   Radio,
@@ -750,59 +749,47 @@ export function WeekGuide({
             ) : null}
           </div>
 
-          {/* The thumbnail slot keeps its size with or without an image. */}
-          <div className="guide-image">
-            {scheduleImage ? (
-              <>
-                <button
-                  type="button"
-                  className="guide-image-thumb media-opener"
-                  onClick={() => onOpenImage(scheduleImage)}
-                  aria-label={t("schedule.imageView")}
-                >
-                  <img
-                    src={scheduleImage.url ?? undefined}
-                    srcSet={mediaSrcSet(scheduleImage.url)}
-                    sizes="240px"
-                    alt={scheduleImage.alt || t("schedule.imageAlt")}
-                    loading="lazy"
-                  />
-                </button>
-                <div className="guide-image-copy">
-                  <p className="kicker">{t("schedule.imageTitle")}</p>
-                  <p>{t("schedule.imageNote")}</p>
-                  <div className="guide-image-actions">
-                    <button
-                      type="button"
-                      className="pill-button"
-                      onClick={() => onOpenImage(scheduleImage)}
+          {/* A week without a schedule image shows no image strip. */}
+          {scheduleImage ? (
+            <div className="guide-image">
+              <button
+                type="button"
+                className="guide-image-thumb media-opener"
+                onClick={() => onOpenImage(scheduleImage)}
+                aria-label={t("schedule.imageView")}
+              >
+                <img
+                  src={scheduleImage.url ?? undefined}
+                  srcSet={mediaSrcSet(scheduleImage.url)}
+                  sizes="240px"
+                  alt={scheduleImage.alt || t("schedule.imageAlt")}
+                  loading="lazy"
+                />
+              </button>
+              <div className="guide-image-copy">
+                <p className="kicker">{t("schedule.imageTitle")}</p>
+                <p>{t("schedule.imageNote")}</p>
+                <div className="guide-image-actions">
+                  <button
+                    type="button"
+                    className="pill-button"
+                    onClick={() => onOpenImage(scheduleImage)}
+                  >
+                    {t("schedule.imageView")}
+                  </button>
+                  {scheduleImage.sourceUrl ? (
+                    <ExternalLink
+                      className="text-link"
+                      href={scheduleImage.sourceUrl}
                     >
-                      {t("schedule.imageView")}
-                    </button>
-                    {scheduleImage.sourceUrl ? (
-                      <ExternalLink
-                        className="text-link"
-                        href={scheduleImage.sourceUrl}
-                      >
-                        {t("schedule.imageOpen")}
-                        <ArrowUpRight aria-hidden="true" />
-                      </ExternalLink>
-                    ) : null}
-                  </div>
+                      {t("schedule.imageOpen")}
+                      <ArrowUpRight aria-hidden="true" />
+                    </ExternalLink>
+                  ) : null}
                 </div>
-              </>
-            ) : (
-              <>
-                <span className="guide-image-thumb is-empty" aria-hidden="true">
-                  <ImageIcon />
-                </span>
-                <div className="guide-image-copy">
-                  <p className="kicker">{t("schedule.imageTitle")}</p>
-                  <p>{t("schedule.imageEmpty")}</p>
-                </div>
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </section>

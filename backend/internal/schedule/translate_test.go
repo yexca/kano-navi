@@ -421,7 +421,11 @@ func TestTranslationRequestsBypassTheLookback(t *testing.T) {
 	f, translator := newTranslatorFixture(t)
 	f.addProvider("chat", protocolChat, "https://chat.example.test/v1", "synthetic-chat", `["text"]`)
 	f.queueTranslation("chat")
-	f.env["TRANSLATION_LOOKBACK_DAYS"] = "7"
+	settings := sqlite.DefaultSyncSettings()
+	settings.TranslationLookbackDays = 7
+	if err := f.store.SaveSyncSettings(context.Background(), settings); err != nil {
+		t.Fatal(err)
+	}
 	f.addPost("old", "", "昔のお知らせ", recent(24*30), "")
 	f.provider.respond = func(recordedRequest) (int, string) {
 		return http.StatusOK, translationReply("ja", "An old notice", "以前的通知")

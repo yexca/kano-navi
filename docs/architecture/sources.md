@@ -11,8 +11,9 @@ statuses newest first in pages of 20 with a continuation cursor. Discovery
 pages back until a page's oldest own status is already stored or is not newer
 than the account's stored cursor, so posts published between runs are found
 even when several arrive at once. Before an account has a cursor, statuses
-older than `X_BOOTSTRAP_DAYS` (seven by default) also end the first run.
-Reposts carry another author and are skipped. The cap, `X_DISCOVERY_LIMIT` or
+older than the first-run age limit (seven days by default; see
+[sync settings](../operations/configuration.md#sync-settings)) also end the first run. Reposts carry
+another author and are skipped. The cap, the full-sync post cap or
 the X schedule's incremental `max` (see
 [source schedules](workflows.md#source-schedules)), counts the
 statuses that are not stored yet and sets the pages of 20 (at most 10) per
@@ -53,9 +54,9 @@ serves, every gap keeps its floor and drops its FxTwitter continuation, so
 the timeline later reads it again from the newest page.
 
 Before an account has a cursor, the Snowflake timestamps of discovered IDs are
-decoded and IDs older than `X_BOOTSTRAP_DAYS` are skipped. Each account has
+decoded and IDs older than the first-run age limit are skipped. Each account has
 its own cursor in `sync_state`. Later runs prioritize unknown IDs and may
-refresh only a small `X_REFRESH_KNOWN` budget.
+refresh only a small budget of known posts.
 
 The timeline pages a run reads already carry each status, so a new or pending
 status that a page lists with usable content is stored from the page, through
@@ -63,9 +64,9 @@ the same mapping as an operator's manual fetch (below), without a detail
 request; posts the [X API](#x-api-in-the-chain) returns are stored the same
 way. An `api.vxtwitter.com` detail request remains the fallback for a
 status the timeline lists without content, for a pending status the pages no
-longer list, for the `X_REFRESH_KNOWN` refreshes, and for every status found
+longer list, for the known-post refreshes, and for every status found
 on the logged-out profile page, which lists IDs only.
-`X_MAX_STATUS_REQUESTS` is the total detail-request budget shared by all
+The status requests per run setting is the total detail-request budget shared by all
 configured accounts; posts read from the timeline do not use it, and the step
 result counts them as `timelinePosts`. A stored post that a page lists again
 keeps the text, media and schedule candidate it has, as in a manual fetch.
@@ -138,13 +139,6 @@ appear only when used.
 Each discovered image URL is registered and linked to its post. A bounded media
 stage later in the same command downloads pending image files from X's
 `*.twimg.com` media CDN subdomains.
-When a schedule asset already has a source status URL but no image URL, the
-synchronizer adds up to `X_SCHEDULE_REFRESH_LIMIT` recent source IDs per
-account to the detail-request queue. On a cursorless bootstrap with no asset
-source for an account, a bounded set of keyword-matching snapshot posts can
-serve the same purpose. These requests supplement discovery without
-bypassing the shared `X_MAX_STATUS_REQUESTS` budget and can recover a schedule
-post that has fallen out of the discovered status list.
 
 #### X API in the chain
 
@@ -154,11 +148,11 @@ official API (`api`, off by default), which needs `X_API_BEARER_TOKEN`
 `https://api.x.com/2/users/<id>/tweets` without reposts and replies, newest
 first, with the account's cursor as `since_id`, up to the run's cap of new
 posts in pages of 5 to 100 and at most 10 pages; before an account has a
-cursor it reads from `X_BOOTSTRAP_DAYS` ago instead. The numeric user ID
+cursor it reads from the first-run age limit ago instead. The numeric user ID
 comes from `/2/users/by/username/<handle>` once per process. Requests share
 the manual X API method's client (see
 [X API method](workflows.md#x-api-method)): the token only in the
-`Authorization` header, the `SYNC_TIMEOUT_MS` timeout, the 4 MiB limit,
+`Authorization` header, the request timeout setting, the 4 MiB limit,
 rejected redirects and `source_api_*` codes.
 
 A read that stops short of the end (its cap, the daily cap, the page bound
@@ -335,7 +329,7 @@ asks the YouTube Data API:
   (ISO 8601 `duration`), and for a
   broadcast the actual start (or the reservation), the actual end and
   `liveBroadcastContent` as `upcoming`/`live`/`ended`. The watch-page budget
-  (`YOUTUBE_MAX_DETAIL_REQUESTS`) then goes to the queued IDs the API left out.
+  (the video pages per run setting) then goes to the queued IDs the API left out.
   An answer for a listed upload outside the queue only refreshes its
   [localized titles](#localized-titles).
 - The API has no `isLiveContent`. An upcoming or live broadcast with a length
@@ -697,7 +691,7 @@ translation in the same transaction.
 ### Source Request Limits
 
 Every source client requests fixed destinations with a 10-second timeout
-(the X API, manual or in the chain, uses `SYNC_TIMEOUT_MS`; see
+(the X API, manual or in the chain, uses the request timeout setting; see
 [X API method](workflows.md#x-api-method))
 that stays active through body consumption, rejects redirects, and records
 only controlled error codes. Response bodies are limited to 4 MiB for X and
@@ -928,7 +922,7 @@ even while a failure backoff holds it. A usable answer rewrites the post,
 its quote and its `quote-image` links like any detail answer; the hide
 decision stays. The request is cleared once its detail request was made,
 whatever it answered; a failed request is then pending like any other. A
-refresh shares the `X_MAX_STATUS_REQUESTS` budget, so with a budget of 0 it
+refresh shares the X status-request budget, so with a budget of 0 it
 waits. The step result counts made refreshes as `refreshed`, only when
 there were any.
 
@@ -1011,8 +1005,9 @@ Candidates are posts and YouTube videos whose current wording lacks a usable
 translation of a needed locale: operator requests first (forced passes that
 replace machine rows, whatever their age), then never-attempted wording, then
 the least recently attempted, newest first. Unrequested candidates are
-limited to the last `TRANSLATION_LOOKBACK_DAYS` (30) by publication, and at
-most `TRANSLATION_SCAN_LIMIT` (20) are sent per run. A locale already covered
+limited to the translation lookback (30 days by default) by publication, and
+at most the translation items per run (20 by default) are sent per run (see
+[sync settings](../operations/configuration.md#sync-settings)). A locale already covered
 by a manual or platform row is not a reason to call a model.
 
 Wording with only links, hashtags, mentions or emoji is recorded as

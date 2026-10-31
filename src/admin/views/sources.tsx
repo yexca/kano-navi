@@ -74,6 +74,7 @@ import {
   stepResult,
   windowText,
 } from "@/admin/views/run-parts"
+import { SyncSettingsPanel } from "@/admin/views/sync-settings"
 import { cn } from "@/lib/utils"
 
 const intervals = [15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080]
@@ -1526,6 +1527,7 @@ export function SourcesView({ tab, navigate }: ViewProps) {
                   onChange={setSchedule}
                 />
               ) : null}
+              {selected === "x" ? <SyncSettingsPanel group="x" /> : null}
               {selected === "youtube" ? (
                 <>
                   <ConfirmationPanel
@@ -1538,6 +1540,7 @@ export function SourcesView({ tab, navigate }: ViewProps) {
                     status={ytdlp.data}
                     onChange={(next) => ytdlp.setData(next)}
                   />
+                  <SyncSettingsPanel group="youtube" />
                 </>
               ) : null}
             </section>
