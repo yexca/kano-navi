@@ -176,12 +176,11 @@ type Options struct {
 func DefaultOptions() Options {
 	return Options{BootstrapDays: 7, DiscoveryLimit: 50, MaxDetailRequests: 12, RefreshKnown: 1, ScheduleKeywords: []string{"schedule", "スケジュール", "配信予定", "週間予定", "今週の予定"}}
 }
+
+// OptionsFromEnv reads the accounts from X_HANDLES. The read bounds are the
+// defaults until a run applies the operator's sync settings.
 func OptionsFromEnv() Options {
 	o := DefaultOptions()
-	o.BootstrapDays = envInt("X_BOOTSTRAP_DAYS", o.BootstrapDays, 1, 30)
-	o.DiscoveryLimit = envInt("X_DISCOVERY_LIMIT", o.DiscoveryLimit, 1, 200)
-	o.MaxDetailRequests = envInt("X_MAX_STATUS_REQUESTS", o.MaxDetailRequests, 0, 50)
-	o.RefreshKnown = envInt("X_REFRESH_KNOWN", o.RefreshKnown, 0, 5)
 	raw := strings.FieldsFunc(getenv("X_HANDLES", "kano_2525,_Kanotic"), func(r rune) bool { return r == ',' || r == '，' || r == ' ' || r == '\n' || r == '\t' })
 	for _, h := range raw {
 		h = strings.TrimPrefix(h, "@")
@@ -202,14 +201,6 @@ func getenv(k, d string) string {
 }
 
 var getenvRaw = func(k string) string { return os.Getenv(k) }
-
-func envInt(k string, d, min, max int) int {
-	n, e := strconv.Atoi(getenvRaw(k))
-	if e != nil || n < min || n > max {
-		return d
-	}
-	return n
-}
 
 // SetEnvReader is useful for tests and avoids exposing process credentials to logs.
 func SetEnvReader(fn func(string) string) {

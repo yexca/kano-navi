@@ -42,9 +42,45 @@ type SourceSteps struct {
 	Skip map[string]bool
 }
 
+// applySettings gives the source readers the operator's current bounds (see
+// sqlite.SyncSettings) before a source step. Steps run one at a time on the
+// queue, so a step reads with one set of values from start to end.
+func (s *SourceSteps) applySettings(ctx context.Context) error {
+	if s.Store == nil {
+		return nil
+	}
+	settings, err := s.Store.SyncSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if s.X != nil {
+		s.X.Options.BootstrapDays = settings.XBootstrapDays
+		s.X.Options.DiscoveryLimit = settings.XDiscoveryLimit
+		s.X.Options.MaxDetailRequests = settings.XMaxStatusRequests
+		s.X.Options.RefreshKnown = settings.XRefreshKnown
+	}
+	if s.Youtube != nil {
+		s.Youtube.Options.MaxDetailRequests = settings.YoutubeMaxDetailRequests
+	}
+	if s.History != nil {
+		s.History.RequestLimit = max(1, settings.XMaxStatusRequests)
+		if s.History.Fetcher != nil {
+			s.History.Fetcher.SetLimits(settings.FetchMaxPages,
+				time.Duration(settings.FetchTimeoutMS)*time.Millisecond,
+				time.Duration(settings.FetchRequestDelayMS)*time.Millisecond)
+		}
+	}
+	return nil
+}
+
 func (s *SourceSteps) Execute(ctx context.Context, in StepInput) (AttemptResult, error) {
 	if s.Skip[in.StepID] {
 		return AttemptResult{Status: "succeeded", Result: map[string]any{"skipped": true, "reason": "environment"}}, nil
+	}
+	if in.StepID == "x" || in.StepID == "youtube" || in.StepID == "live" {
+		if err := s.applySettings(ctx); err != nil {
+			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+		}
 	}
 	// Source chains, step runs, full syncs and scans carry no window and read each
 	// source by its sync setting (ADR-0002), whatever credentials are set; a

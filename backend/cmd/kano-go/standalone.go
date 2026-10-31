@@ -61,6 +61,11 @@ func runStandalone(cfg config.Config) int {
 		return fail("database unavailable", 1)
 	}
 	defer store.Close()
+	// Read bounds once set in the environment become stored sync settings on
+	// the first start that sees them; /admin owns them from then on.
+	if err = store.ImportSyncSettings(context.Background(), os.Getenv); err != nil {
+		return fail("sync settings unavailable", 1)
+	}
 
 	run := newPipeline(store, secretsKey)
 	modules := standaloneModules(store, adminConfig.Mode, secretsKey)
@@ -211,7 +216,7 @@ func newPipeline(store *sqlite.Store, key string) pipeline {
 	youtubeAdapter := ytsource.NewAdapter(nil, youtubeOptions)
 	// Manual fetches list through the source adapters' clients, apart from
 	// X full-archive search.
-	fetcher := history.NewFetcher(store, history.OptionsFromEnv(os.Getenv), nil)
+	fetcher := history.NewFetcher(store, history.DefaultOptions(), nil)
 	fetcher.Timeline, fetcher.Uploads = xAdapter, youtubeAdapter
 	// The timed X chain's API method reads through the same client as the
 	// manual one; without the credential the chain skips it.

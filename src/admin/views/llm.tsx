@@ -58,6 +58,7 @@ import {
   type Tone,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
+import { SyncSettingsPanel } from "@/admin/views/sync-settings"
 import { cn } from "@/lib/utils"
 
 export function ProviderMark({ provider }: { provider: Partial<Provider> }) {
@@ -1262,6 +1263,7 @@ export function LlmView({ tab, navigate }: ViewProps) {
           </div>
         )}
       </Panel>
+      <SyncSettingsPanel group="translation" level={2} />
       <Panel
         icon={Bot}
         title={t("admin.models.providers")}

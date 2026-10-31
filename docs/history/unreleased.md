@@ -32,9 +32,22 @@
 >   uses a retired selection; start a new fetch".
 > - A manual fetch whose method fails fails the run, and the steps after it do
 >   not run.
+> - Read limits are console settings: `X_MAX_STATUS_REQUESTS`,
+>   `X_REFRESH_KNOWN`, `X_BOOTSTRAP_DAYS`, `X_DISCOVERY_LIMIT`,
+>   `YOUTUBE_MAX_DETAIL_REQUESTS`, `SOURCE_HISTORY_MAX_PAGES`,
+>   `SYNC_TIMEOUT_MS`, `SYNC_REQUEST_DELAY_MS`, `TRANSLATION_SCAN_LIMIT` and
+>   `TRANSLATION_LOOKBACK_DAYS` are stored once on the first start that sees
+>   them and then ignored, so remove them from `.env` after that start.
+>   `YOUTUBE_BOOTSTRAP_VIDEOS` had no effect and is no longer read.
+>   `GET`/`PUT /api/admin/sync-settings` read and change them.
 
 <details>
 <summary><strong>Operator console</strong></summary>
+
+- The Sources page has X and YouTube read limits (status requests, known-post
+  refreshes, first-run age, full-sync cap, video pages, manual fetch pages,
+  request timeout and spacing), and the LLM page has the translation limits.
+  Saved values apply from the next run.
 
 - The manual fetch on the Sources page picks a method first, then what it
   reads, the count or dates, and the steps that follow: the FxTwitter timeline

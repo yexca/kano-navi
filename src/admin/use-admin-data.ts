@@ -55,6 +55,8 @@ import type {
   VideoCorrection,
   VideoHistory,
   VideoMergeSuggestion,
+  SyncSettingField,
+  SyncSettings,
   YTDLPStatus,
 } from "@/admin/types"
 
@@ -153,6 +155,9 @@ function createClient(run: Runner, slow: Runner) {
     ytdlp: () => get<YTDLPStatus>("/sources/youtube/ytdlp"),
     updateYTDLP: () =>
       send<YTDLPStatus>("POST", "/sources/youtube/ytdlp/update"),
+    syncSettings: () => get<SyncSettings>("/sync-settings"),
+    updateSyncSettings: (body: Partial<Record<SyncSettingField, number>>) =>
+      send<SyncSettings>("PUT", "/sync-settings", body),
 
     events: (filters: Record<string, any>) =>
       get<Page<AdminEvent>>(`/events${query(filters)}`),

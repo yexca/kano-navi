@@ -173,6 +173,8 @@ again fails its fetch step.
 | `PUT /sources/youtube/live-probe`          | `{enabled, intervalMinutes}`              | live probe status              |
 | `GET /sources/youtube/ytdlp`               |                                           | `{available, version}`         |
 | `POST /sources/youtube/ytdlp/update`       |                                           | updated `{available, version}` |
+| `GET /sync-settings`                       |                                           | `{settings, fields}`           |
+| `PUT /sync-settings`                       | any subset of the setting fields          | `{settings, fields}`           |
 
 ```json
 {
@@ -247,6 +249,15 @@ the next run is planned (the earliest due video, at least two minutes after
 probe is off or unavailable. `PUT` accepts either field, keeps an omitted
 one, and rejects other fields and intervals outside 5–360 minutes with
 `400`.
+
+`/sync-settings` holds the [sync settings](../operations/configuration.md#sync-settings).
+`settings` maps each field (`xMaxStatusRequests`, `xRefreshKnown`,
+`xBootstrapDays`, `xDiscoveryLimit`, `youtubeMaxDetailRequests`,
+`fetchMaxPages`, `fetchTimeoutMs`, `fetchRequestDelayMs`,
+`translationScanLimit`, `translationLookbackDays`) to its integer value, and
+`fields` lists `{field, default, min, max}` for each. `PUT` keeps omitted
+fields and answers `400 invalid_input` for an unknown field or a value that is
+not an integer within its range; the next run reads the saved values.
 
 ## Events
 

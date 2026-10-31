@@ -115,23 +115,12 @@ type Options struct {
 	ScheduleKeywords []string
 }
 
-// OptionsFromEnv reads the same bounds the recent synchronization uses.
-func OptionsFromEnv(getenv func(string) string) Options {
-	bounded := func(key string, fallback, maximum int) int {
-		value, err := strconv.Atoi(strings.TrimSpace(getenv(key)))
-		if err != nil || value < 1 {
-			return fallback
-		}
-		return min(value, maximum)
-	}
-	delay, err := strconv.Atoi(strings.TrimSpace(getenv("SYNC_REQUEST_DELAY_MS")))
-	if err != nil || delay < 0 {
-		delay = 0
-	}
+// DefaultOptions are the bounds before the operator's sync settings apply
+// (see SetLimits).
+func DefaultOptions() Options {
 	return Options{
-		Timeout:          time.Duration(bounded("SYNC_TIMEOUT_MS", 7000, 60_000)) * time.Millisecond,
-		RequestDelay:     time.Duration(min(delay, 10_000)) * time.Millisecond,
-		MaxPages:         bounded("SOURCE_HISTORY_MAX_PAGES", 4, 20),
+		Timeout:          7 * time.Second,
+		MaxPages:         4,
 		ScheduleKeywords: xsource.DefaultOptions().ScheduleKeywords,
 	}
 }
@@ -164,6 +153,24 @@ func NewFetcher(store Store, options Options, transport http.RoundTripper) *Fetc
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	return &Fetcher{HTTP: client, Store: store, Options: options, Now: time.Now}
+}
+
+// SetLimits applies the operator's page cap, request timeout and request
+// spacing. The workflow sets them before each source step, never while a
+// fetch is reading.
+func (f *Fetcher) SetLimits(maxPages int, timeout, delay time.Duration) {
+	if maxPages > 0 {
+		f.Options.MaxPages = maxPages
+	}
+	if timeout > 0 {
+		f.Options.Timeout = timeout
+		if f.HTTP != nil {
+			f.HTTP.Timeout = timeout
+		}
+	}
+	if delay >= 0 {
+		f.Options.RequestDelay = delay
+	}
 }
 
 func (f *Fetcher) now() time.Time {

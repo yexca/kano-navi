@@ -195,6 +195,29 @@ export interface YTDLPStatus {
   version?: string
 }
 
+/** The read bounds of source steps, manual fetches and translation. */
+export type SyncSettingField =
+  | "xBootstrapDays"
+  | "xDiscoveryLimit"
+  | "xMaxStatusRequests"
+  | "xRefreshKnown"
+  | "youtubeMaxDetailRequests"
+  | "fetchMaxPages"
+  | "fetchTimeoutMs"
+  | "fetchRequestDelayMs"
+  | "translationScanLimit"
+  | "translationLookbackDays"
+
+export interface SyncSettings {
+  settings: Record<SyncSettingField, number>
+  fields: {
+    field: SyncSettingField
+    default: number
+    min: number
+    max: number
+  }[]
+}
+
 export type ScheduleSource = "x" | "youtube" | "bilibili"
 
 /** One listing method of a source's fallback chain (ADR-0004). */
