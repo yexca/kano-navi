@@ -271,6 +271,9 @@ function createClient(run: Runner, slow: Runner) {
       }),
     unmergeVideo: (id: string) =>
       send<{ video: AdminVideo }>("POST", `/videos/${enc(id)}/unmerge`, {}),
+    /** Records that an unmerged upload has no YouTube copy. */
+    keepVideoSeparate: (id: string) =>
+      send<{ video: AdminVideo }>("POST", `/videos/${enc(id)}/separate`, {}),
 
     profileMedia: () => get<ProfileMediaState>("/profile-media"),
     addProfileMedia: (source: string, sourceUrl: string) =>

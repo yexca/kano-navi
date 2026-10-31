@@ -4483,35 +4483,13 @@ blockquote.adm-verdict-reason {
 }
 
 /* Rule suggestions above the list: each upload with its YouTube candidates. */
-.adm-merge-suggestions {
+/* The Review queue's merge decisions: each upload beside its candidates. */
+.adm-merge-queue {
   display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding: 12px;
-  border: 1px solid var(--adm-line);
-  border-radius: var(--adm-radius-sm);
-  background: var(--adm-sunken);
+  gap: 12px;
 }
 
-.adm-merge-suggestions h3 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 13px;
-}
-
-.adm-merge-suggestions h3 svg {
-  width: 15px;
-  height: 15px;
-}
-
-.adm-merge-suggestions p {
-  margin: 0;
-  font-size: 12px;
-}
-
-.adm-merge-suggestions > ol {
+.adm-merge-queue > ol {
   display: grid;
   gap: 10px;
   margin: 0;
@@ -4523,7 +4501,8 @@ blockquote.adm-verdict-reason {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   gap: 12px;
-  padding: 10px;
+  padding: 12px;
+  border: 1px solid var(--adm-line);
   border-radius: var(--adm-radius-sm);
   background: var(--adm-surface);
 }

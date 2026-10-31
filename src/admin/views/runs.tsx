@@ -879,7 +879,6 @@ function HistoryPanel({
     <Panel
       icon={Workflow}
       title={t("admin.runs.history")}
-      description={t("admin.runs.historyHint")}
       actions={
         latest?.finishedAt ? (
           <span className="adm-muted">

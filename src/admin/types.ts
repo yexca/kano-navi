@@ -147,6 +147,8 @@ export interface Overview {
     suspectedCancellations: number
     failedPosts: number
     reprocessRequested: number
+    /** Bilibili uploads the merge rule leaves to the operator. */
+    videoMerges: number
   }
   counts: {
     upcomingEvents: number

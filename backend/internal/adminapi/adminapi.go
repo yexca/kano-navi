@@ -145,6 +145,7 @@ func (a *api) routes() []httpx.Route {
 		{Method: http.MethodGet, Path: "/videos/{id}/merges", Handler: a.uploadMerges},
 		{Method: http.MethodPost, Path: "/videos/{id}/merge", Handler: a.mergeVideo},
 		{Method: http.MethodPost, Path: "/videos/{id}/unmerge", Handler: a.unmergeVideo},
+		{Method: http.MethodPost, Path: "/videos/{id}/separate", Handler: a.keepVideoSeparate},
 
 		{Method: http.MethodGet, Path: "/translations", Handler: a.translationSummary},
 		{Method: http.MethodPost, Path: "/translations/request", Handler: a.requestTranslations},

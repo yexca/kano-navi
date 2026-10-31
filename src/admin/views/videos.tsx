@@ -28,7 +28,7 @@ import {
   Segmented,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
-import { MergeLine, MergeSuggestions } from "@/admin/views/merge-parts"
+import { MergeLine } from "@/admin/views/merge-parts"
 import {
   TranslationBacklog,
   TranslationCell,
@@ -327,7 +327,7 @@ function VideoList() {
   const [query, setQuery] = useState("")
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<string | null>(null)
-  // A merge or undo changes two rows and the suggestions, so all reload.
+  // A merge or undo changes two rows, so the page reloads.
   const [merges, setMerges] = useState(0)
   const videos = useResource(
     () =>
@@ -385,7 +385,6 @@ function VideoList() {
           onEdit={(video) => setEditing(video.id)}
         />
       ) : null}
-      <MergeSuggestions reloadKey={merges} onMerged={merged} />
       <Panel>
         <div className="adm-list-tools">
           <Segmented
@@ -485,7 +484,6 @@ export function VideosView({ navigate }: ViewProps) {
     <div className="adm-view">
       <PageHeader
         title={t("admin.videos.title")}
-        description={t("admin.videos.description")}
         actions={
           <Button
             size="sm"

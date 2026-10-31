@@ -26,6 +26,8 @@ import (
 const (
 	videoMergeReasonRule   = "rule:time_duration_title"
 	videoMergeReasonManual = "manual"
+	// videoMergeReasonSeparate marks an upload an operator kept apart.
+	videoMergeReasonSeparate = "kept_separate"
 	videoMergeWindow       = 6 * time.Hour
 	// videoMergeTolerance is the largest length difference, in seconds.
 	videoMergeTolerance = 3
@@ -598,6 +600,57 @@ func (s *Store) UnmergeVideo(ctx context.Context, id string, now time.Time) (Adm
 	return s.AdminVideoByID(ctx, id)
 }
 
+// KeepVideoSeparate records an operator's decision that an unmerged Bilibili
+// upload has no YouTube copy. Like an undone merge it keeps merge_source =
+// manual without a target, so the reconciler never merges it and it leaves
+// the suggestions. A merged upload is undone with UnmergeVideo instead. The
+// board shows the upload on its own either way, so the revision stays.
+func (s *Store) KeepVideoSeparate(ctx context.Context, id string, now time.Time) (AdminVideo, error) {
+	if !s.Writable() {
+		return AdminVideo{}, ErrReadOnly
+	}
+	var source, current string
+	err := s.db.QueryRowContext(ctx, `SELECT source,COALESCE(merged_into,'') FROM videos WHERE id=?`, id).Scan(&source, &current)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AdminVideo{}, ErrVideoNotFound
+	}
+	if err != nil {
+		return AdminVideo{}, ErrUnavailable
+	}
+	if source != "bilibili" {
+		return AdminVideo{}, ErrVideoMergeInvalid
+	}
+	if current != "" {
+		return AdminVideo{}, ErrVideoMergeConflict
+	}
+	if _, err = s.db.ExecContext(ctx, `UPDATE videos SET merge_source=?,merge_reason=?,merged_at=? WHERE id=? AND merged_into IS NULL`,
+		MergeSourceManual, videoMergeReasonSeparate, workflowTime(now), id); err != nil {
+		return AdminVideo{}, ErrUnavailable
+	}
+	return s.AdminVideoByID(ctx, id)
+}
+
+// videoMergeDecisions counts the unmerged uploads the rule leaves to the
+// operator: the ambiguous and unverified suggestions, without their cap.
+func videoMergeDecisions(ctx context.Context, q videoQuerier) (int, error) {
+	bilibili, youtube, err := loadMergeVideos(ctx, q)
+	if err != nil {
+		return 0, err
+	}
+	desired, ambiguous := planVideoMerges(bilibili, youtube)
+	targets := mergeTargets(bilibili, youtube)
+	count := 0
+	for _, b := range bilibili {
+		if b.mergedInto != "" || !b.ruleOwned() || desired[b.id] != "" {
+			continue
+		}
+		if ambiguous[b.id] || len(videoMatches(b, targets)) > 0 {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // VideoMergeSuggestion is an unmerged Bilibili upload with the YouTube videos
 // that may be its copy.
 type VideoMergeSuggestion struct {
@@ -606,7 +659,7 @@ type VideoMergeSuggestion struct {
 	// candidate), ambiguous (several complete matches, or a match another
 	// upload claims too) or unverified (no complete match: a length is
 	// unknown or the titles differ). A single requested upload may also be
-	// merged, separate (an operator undid its merge) or none.
+	// merged, separate (an operator undid its merge or kept it apart) or none.
 	Status     string                `json:"status"`
 	Candidates []VideoMergeCandidate `json:"candidates"`
 }

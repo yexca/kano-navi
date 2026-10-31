@@ -121,7 +121,9 @@
   The filters are a search field and All, Not confirmed, Suspected and
   Deleted tabs. Clicking a title opens the entry, unconfirmed entries show a
   labelled Confirm button, and the entry dialog shows when the entry last
-  changed.
+  changed. An Images view beside List and Calendar holds the newest stored
+  schedule images under All, Approved and Needs review tabs, where any image
+  can be labelled again or its dates corrected.
 - The Videos page lists videos as compact rows with a search field and All,
   Upcoming, Bilibili and Missing translation tabs; uploads merged into
   another video appear on that video's row. Clicking a title opens the
@@ -129,10 +131,18 @@
   puts the corrections beside the merge and the platform's history, marks
   each corrected field with a reset to the platform value, and keeps Save in
   its footer.
-- The Review queue shows each schedule image and suspected cancellation as a
-  decision card: a state-coloured edge, the model's verdict with a confidence
-  bar and its reason or evidence, and the note and decision buttons along the
-  bottom.
+- The Review queue lists only what waits for a decision: schedule images
+  that need review, suspected cancellations, video merges and failed posts.
+  Each image and suspected cancellation is a decision card: a state-coloured
+  edge, the model's verdict with a confidence bar and its reason or evidence,
+  and the note and decision buttons along the bottom. The images tab links to
+  the Schedule page's Images view.
+- The Bilibili merge suggestions move from the Videos page to the Review
+  queue's Video merges tab, where each upload merges into a candidate or is
+  kept separate for good. The Overview and the Review queue badge count the
+  uploads the rule leaves to the operator.
+  `POST /api/admin/videos/{id}/separate` keeps an unmerged upload apart, and
+  the overview's `review` reports `videoMerges`.
 - `GET /api/admin/videos` accepts `search`, `merge` and `translation`, and
   `GET /api/admin/events` accepts `provenance=unconfirmed` and
   `deleted=only`.

@@ -178,6 +178,17 @@ func (a *api) unmergeVideo(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"video": video})
 }
 
+// keepVideoSeparate records that an unmerged Bilibili upload has no YouTube
+// copy. The decision is durable: the rules never merge that upload.
+func (a *api) keepVideoSeparate(w http.ResponseWriter, r *http.Request) {
+	video, err := a.Store.KeepVideoSeparate(r.Context(), r.PathValue("id"), a.Now())
+	if err != nil {
+		writeVideoError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"video": video})
+}
+
 // addBilibiliVideo accepts { input } with a BV ID or a bilibili.com video
 // link and stores that upload of the configured account.
 func (a *api) addBilibiliVideo(w http.ResponseWriter, r *http.Request) {

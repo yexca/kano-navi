@@ -111,6 +111,17 @@ func TestVideoMergeRoutes(t *testing.T) {
 		t.Fatalf("missing upload=%d", code)
 	}
 
+	code, payload = c.call(t, "POST", "/api/admin/videos/BV1other00000/separate", "")
+	video, _ = payload["video"].(map[string]any)
+	if code != 200 || video["mergedInto"] != nil || video["mergeSource"] != "manual" || video["mergeReason"] != "kept_separate" {
+		t.Fatalf("keep separate=%d %v", code, payload)
+	}
+	for path, want := range map[string]int{"BV1CmHw6eEGE": 409, "e6acfMolexU": 400, "missing": 404} {
+		if code, payload = c.call(t, "POST", "/api/admin/videos/"+path+"/separate", ""); code != want {
+			t.Fatalf("separate %s=%d %v", path, code, payload)
+		}
+	}
+
 	code, payload = c.call(t, "POST", "/api/admin/videos/BV1CmHw6eEGE/unmerge", "")
 	video, _ = payload["video"].(map[string]any)
 	if code != 200 || video["mergedInto"] != nil || video["mergeSource"] != "manual" || video["mergeReason"] != "unmerged_from:e6acfMolexU" {

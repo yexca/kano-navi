@@ -36,6 +36,7 @@ import {
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { EventMergeDialog, shiftDay } from "@/admin/views/event-parts"
 import { ScheduleCalendar, shiftMonth } from "@/admin/views/schedule-calendar"
+import { ScheduleImageList } from "@/admin/views/schedule-images"
 import { DayHeading, EventRow, groupByDay } from "@/admin/views/schedule-parts"
 
 const eventTypes = ["stream", "member", "appearance", "release", "event"]
@@ -480,11 +481,13 @@ function storedMode(): ScheduleMode {
   }
 }
 
-export function ScheduleView(_: ViewProps) {
+export function ScheduleView({ tab, navigate }: ViewProps) {
   const { t, locale } = useAppSettings()
   const { api } = useAdmin()
   const today = japanToday()
   const [mode, setMode] = useState(storedMode)
+  // The images tab has its own address, so the Review queue links to it.
+  const images = tab === "images"
   const [status, setStatus] = useState<Status>("all")
   const [search, setSearch] = useState("")
   const [query, setQuery] = useState("")
@@ -503,7 +506,7 @@ export function ScheduleView(_: ViewProps) {
   const scope = scopeOf(range.from, range.to, today)
   const events = useResource(
     () =>
-      mode === "list"
+      mode === "list" && !images
         ? api.events({
             ...filters,
             ...range,
@@ -514,9 +517,11 @@ export function ScheduleView(_: ViewProps) {
             order: range.from ? "asc" : "desc",
           })
         : Promise.resolve(null),
-    [mode, status, query, range, page, reloadKey],
+    [mode, images, status, query, range, page, reloadKey],
   )
-  const changeMode = (next: ScheduleMode) => {
+  const changeMode = (next: ScheduleMode | "images") => {
+    if (next === "images") return navigate("schedule", "images")
+    if (images) navigate("schedule")
     setMode(next)
     try {
       window.localStorage.setItem(modeKey, next)
@@ -554,14 +559,15 @@ export function ScheduleView(_: ViewProps) {
         <div className="adm-schedule-bar">
           <Segmented
             label={t("admin.schedule.view")}
-            value={mode}
+            value={images ? "images" : mode}
             options={[
               { value: "list", label: t("admin.schedule.view.list") },
               { value: "calendar", label: t("admin.schedule.view.calendar") },
+              { value: "images", label: t("admin.schedule.view.images") },
             ]}
             onChange={changeMode}
           />
-          {mode === "list" ? (
+          {images ? null : mode === "list" ? (
             <div className="adm-schedule-dates">
               <Segmented
                 label={t("admin.schedule.scope")}
@@ -606,41 +612,45 @@ export function ScheduleView(_: ViewProps) {
             </div>
           )}
         </div>
-        <div className="adm-list-tools">
-          <Segmented
-            label={t("admin.schedule.status")}
-            value={status}
-            options={(
-              ["all", "unconfirmed", "suspected", "deleted"] as const
-            ).map((value) => ({
-              value,
-              label: t(`admin.schedule.status.${value}`),
-            }))}
-            onChange={(value) => {
-              setStatus(value)
-              setPage(1)
-            }}
-          />
-          <form
-            className="adm-search"
-            role="search"
-            onSubmit={(event) => {
-              event.preventDefault()
-              submitSearch()
-            }}
-          >
-            <Search aria-hidden />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onBlur={submitSearch}
-              placeholder={t("admin.schedule.search")}
-              aria-label={t("admin.schedule.search")}
+        {images ? null : (
+          <div className="adm-list-tools">
+            <Segmented
+              label={t("admin.schedule.status")}
+              value={status}
+              options={(
+                ["all", "unconfirmed", "suspected", "deleted"] as const
+              ).map((value) => ({
+                value,
+                label: t(`admin.schedule.status.${value}`),
+              }))}
+              onChange={(value) => {
+                setStatus(value)
+                setPage(1)
+              }}
             />
-          </form>
-        </div>
-        {mode === "calendar" ? (
+            <form
+              className="adm-search"
+              role="search"
+              onSubmit={(event) => {
+                event.preventDefault()
+                submitSearch()
+              }}
+            >
+              <Search aria-hidden />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onBlur={submitSearch}
+                placeholder={t("admin.schedule.search")}
+                aria-label={t("admin.schedule.search")}
+              />
+            </form>
+          </div>
+        )}
+        {images ? (
+          <ScheduleImageList filters={["all", "approved", "review"]} />
+        ) : mode === "calendar" ? (
           <ScheduleCalendar
             month={month}
             // Merged duplicates stay off the grid; the list shows them.

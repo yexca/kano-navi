@@ -63,7 +63,8 @@ external work:
     "pendingImages",          // unlabelled images with a URL the model has not settled (pending, uncertain, failed)
     "suspectedCancellations", // events with an LLM cancellation overlay
     "failedPosts",            // posts whose last extraction failed
-    "reprocessRequested"      // posts queued for re-extraction
+    "reprocessRequested",     // posts queued for re-extraction
+    "videoMerges"             // unmerged Bilibili uploads the merge rule leaves to the operator
   },
   "counts": {"upcomingEvents", "events", "posts", "videos"}
 }
@@ -398,18 +399,19 @@ MCP control has none of them.
 
 ## Videos
 
-| Method and path             | Body / query                                                                                          | Result                                       |
-| --------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `GET /videos`               | `page`, `pageSize` (≤ 200), `status`, `kind`, `thumbnail`, `source`, `search`, `merge`, `translation` | list plus `featuredVideoId`, `featuredVideo` |
-| `PUT /videos/featured`      | `{videoId}` (`null` restores automatic selection)                                                     | `{featuredVideoId}`                          |
-| `GET /videos/{id}/history`  |                                                                                                       | `{video, revisions, thumbnails}`             |
-| `PUT /videos/{id}`          | `{title?, kind?, thumbnail?, isShort?}`                                                               | `{video}`                                    |
-| `POST /videos/{id}/refresh` |                                                                                                       | `202 {video, started, run}`                  |
-| `POST /videos/bilibili`     | `{input}` (BV ID or bilibili.com video link)                                                          | `{video, started, run}`                      |
-| `GET /videos/merges`        |                                                                                                       | `{items}` merge suggestions                  |
-| `GET /videos/{id}/merges`   |                                                                                                       | `{items}` for one Bilibili upload            |
-| `POST /videos/{id}/merge`   | `{into}` (YouTube video ID or watch link)                                                             | `{video}`                                    |
-| `POST /videos/{id}/unmerge` |                                                                                                       | `{video}`                                    |
+| Method and path              | Body / query                                                                                          | Result                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `GET /videos`                | `page`, `pageSize` (≤ 200), `status`, `kind`, `thumbnail`, `source`, `search`, `merge`, `translation` | list plus `featuredVideoId`, `featuredVideo` |
+| `PUT /videos/featured`       | `{videoId}` (`null` restores automatic selection)                                                     | `{featuredVideoId}`                          |
+| `GET /videos/{id}/history`   |                                                                                                       | `{video, revisions, thumbnails}`             |
+| `PUT /videos/{id}`           | `{title?, kind?, thumbnail?, isShort?}`                                                               | `{video}`                                    |
+| `POST /videos/{id}/refresh`  |                                                                                                       | `202 {video, started, run}`                  |
+| `POST /videos/bilibili`      | `{input}` (BV ID or bilibili.com video link)                                                          | `{video, started, run}`                      |
+| `GET /videos/merges`         |                                                                                                       | `{items}` merge suggestions                  |
+| `GET /videos/{id}/merges`    |                                                                                                       | `{items}` for one Bilibili upload            |
+| `POST /videos/{id}/merge`    | `{into}` (YouTube video ID or watch link)                                                             | `{video}`                                    |
+| `POST /videos/{id}/unmerge`  |                                                                                                       | `{video}`                                    |
+| `POST /videos/{id}/separate` |                                                                                                       | `{video}`                                    |
 
 Each video's `thumbnailUrl` is the local `/media/<id>?v=<sha256>` URL of its
 cached thumbnail, or `null` until that file is ready; the remote CDN address is
@@ -461,12 +463,18 @@ or an `into` that is not a stored YouTube video, answers `400`; an unknown
 manual, and keeps the upload separate (`mergeReason: "unmerged_from:<id>"`);
 an upload that is not merged answers `400`. Both advance the dashboard
 revision and write or remove the target's Bilibili translation in the same
-transaction.
+transaction. `POST /videos/{id}/separate` keeps an unmerged Bilibili upload
+apart (`mergeSource: "manual"`, `mergeReason: "kept_separate"`), so the rule
+never merges it; the board is unchanged, so the revision stays. A merged
+upload answers `409 {"error":"merge_conflict"}` (undo it instead), an
+`{id}` that is not a Bilibili upload `400` and an unknown one `404`.
 
 `GET /videos/merges` lists, newest first and at most 50, the unmerged
 Bilibili uploads the rule would merge (`status: "rule"`), or leaves to the
 operator (`ambiguous`, or `unverified` when no candidate satisfies every
-rule), without writing. Uploads an operator kept separate are left out.
+rule), without writing; the overview's `review.videoMerges` counts the
+`ambiguous` and `unverified` uploads without the limit. Uploads an operator
+kept separate are left out.
 Each item has `bilibili` (the upload as listed) and up to five `candidates`:
 `{youtube, complete, titleMatch, durationDelta, gapMinutes}`, where
 `durationDelta` is null when a length is unknown. `GET /videos/{id}/merges`

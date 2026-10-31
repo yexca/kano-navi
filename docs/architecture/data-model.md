@@ -543,7 +543,8 @@ owner as for [event merges](#duplicate-merging):
   basis no longer holds. `merge_reason` is `rule:time_duration_title`.
 - `manual`: an operator merge (`merge_reason` `manual`), which the rule never
   changes. `manual` with a null `merged_into` is an undone merge
-  (`unmerged_from:<id>`); the rule never merges that upload again.
+  (`unmerged_from:<id>`) or an upload an operator kept apart
+  (`kept_separate`); the rule never merges that upload again.
 
 An upload merges by rule into a YouTube video only when all of these hold:
 

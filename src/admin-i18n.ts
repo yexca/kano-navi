@@ -118,6 +118,8 @@ export const adminMessages = {
       count === 1 ? "schedule image to review" : "schedule images to review",
     "admin.overview.attention.cancellations": ({ count }: { count: number }) =>
       count === 1 ? "suspected cancellation" : "suspected cancellations",
+    "admin.overview.attention.merges": ({ count }: { count: number }) =>
+      count === 1 ? "upload to merge or keep" : "uploads to merge or keep",
     "admin.overview.attention.posts": ({ count }: { count: number }) =>
       count === 1 ? "post failed extraction" : "posts failed extraction",
     "admin.overview.allClear": "All clear",
@@ -160,12 +162,14 @@ export const adminMessages = {
       "Decide what automation could not. Every decision is a durable manual label that later syncs keep.",
     "admin.review.tab.images": "Schedule images",
     "admin.review.tab.cancellations": "Cancellations",
+    "admin.review.tab.merges": "Video merges",
     "admin.review.tab.posts": "Failed posts",
     "admin.review.filter": "Show",
     "admin.review.filter.review": "Needs review",
     "admin.review.filter.approved": "Approved",
     "admin.review.filter.all": "All",
     "admin.review.noImages": "No schedule images need a decision",
+    "admin.review.allImages": "All schedule images",
     "admin.review.approved": "Reaches the board",
     "admin.review.manualLabel": "Manual label",
     "admin.review.textMismatch": "Post text does not read as a board",
@@ -199,6 +203,7 @@ export const adminMessages = {
     "admin.review.cancellationHint":
       "The model suspects these entries were cancelled. Only a confirmed cancellation is shown as cancelled on the board.",
     "admin.review.noCancellations": "No suspected cancellations",
+    "admin.review.noMerges": "No uploads wait for a merge decision",
     "admin.review.cancelReason": "Cancellation reason",
     "admin.review.cancelReasonPlaceholder": "Reason, required to confirm",
     "admin.review.cancelSuspected": "Model suspects a cancellation",
@@ -286,6 +291,8 @@ export const adminMessages = {
     "admin.schedule.view": "View",
     "admin.schedule.view.list": "List",
     "admin.schedule.view.calendar": "Calendar",
+    "admin.schedule.view.images": "Images",
+    "admin.schedule.images.empty": "No schedule images match",
     "admin.schedule.status": "Show",
     "admin.schedule.status.all": "All",
     "admin.schedule.status.unconfirmed": "Not confirmed",
@@ -351,8 +358,6 @@ export const adminMessages = {
 
     "admin.posts.title": "Posts",
     "admin.videos.title": "Videos",
-    "admin.videos.description":
-      "Stored YouTube videos and the one featured on the board.",
     "admin.profile.title": "Profile images",
     "admin.profile.description":
       "The avatar and banner shown on the board and their candidates.",
@@ -424,6 +429,7 @@ export const adminMessages = {
     "admin.videos.merge.separateHint":
       "An operator undid this upload's merge, so the matching rule leaves it alone. It can still be merged by hand.",
     "admin.videos.merge.undo": "Undo merge",
+    "admin.videos.merge.keepSeparate": "Keep separate",
     "admin.videos.merge.open": "Merge…",
     "admin.videos.merge.action": "Merge",
     "admin.videos.merge.mergedInto": "Merged into",
@@ -438,8 +444,7 @@ export const adminMessages = {
     "admin.videos.merge.candidates": "Possible YouTube copies",
     "admin.videos.merge.noCandidates":
       "No YouTube video was published within six hours with a matching title or length.",
-    "admin.videos.merge.suggestions": "Bilibili matches · {count}",
-    "admin.videos.merge.suggestionsHint":
+    "admin.review.mergeHint":
       "Uploads the matching rule merges at its next run, and those it leaves to you because several videos match, a length is unknown or the titles differ.",
     "admin.videos.merge.status.rule": "Merges at the next run",
     "admin.videos.merge.status.ambiguous": "Several matches",
@@ -449,8 +454,6 @@ export const adminMessages = {
     "admin.videos.merge.lengthDelta": "length differs by {count} s",
     "admin.videos.merge.lengthUnknown": "length unknown",
     "admin.videos.merge.titleDiffers": "titles differ",
-    "admin.videos.merge.showAll": "Show all {count}",
-    "admin.videos.merge.showLess": "Show fewer",
     "admin.videos.search": "Search title or video ID",
     "admin.videos.view": "Show",
     "admin.videos.view.all": "All",
@@ -522,8 +525,6 @@ export const adminMessages = {
     "admin.runs.runOnce": "Run once",
     "admin.runs.skippedStep": "Disabled in this process",
     "admin.runs.history": "Run history",
-    "admin.runs.historyHint":
-      "Open a run to see each step's counts and what went wrong.",
     "admin.runs.created": "Queued",
     "admin.runs.started": "Started",
     "admin.runs.finished": "Finished",
@@ -885,6 +886,7 @@ export const adminMessages = {
     "admin.notice.bilibiliRead": "Read again from Bilibili",
     "admin.notice.videoMerged": "Upload merged into its YouTube video",
     "admin.notice.videoUnmerged": "Merge undone; the upload stays separate",
+    "admin.notice.videoSeparate": "Upload kept separate",
     "admin.notice.featured": "Featured video pinned",
     "admin.notice.unfeatured": "Featured video is automatic again",
     "admin.notice.mediaDiscovered": "Profile checked for candidates",
@@ -1529,7 +1531,6 @@ export const adminMessages = {
 
     "admin.posts.title": "贴文",
     "admin.videos.title": "视频",
-    "admin.videos.description": "已存的 YouTube 视频以及页面上的精选视频。",
     "admin.profile.title": "头像与横幅",
     "admin.profile.description": "页面上显示的头像、横幅及其候选图片。",
     "admin.videos.featured": "精选",
@@ -1602,8 +1603,7 @@ export const adminMessages = {
     "admin.videos.merge.candidates": "可能的 YouTube 版本",
     "admin.videos.merge.noCandidates":
       "六小时内没有标题或时长相符的 YouTube 视频。",
-    "admin.videos.merge.suggestions": "哔哩哔哩匹配 · {count}",
-    "admin.videos.merge.suggestionsHint":
+    "admin.review.mergeHint":
       "匹配规则将在下次运行时合并的投稿，以及因多个视频相符、时长未知或标题不同而留给你决定的投稿。",
     "admin.videos.merge.status.rule": "下次运行时合并",
     "admin.videos.merge.status.ambiguous": "多个候选",
@@ -1613,8 +1613,6 @@ export const adminMessages = {
     "admin.videos.merge.lengthDelta": "时长相差 {count} 秒",
     "admin.videos.merge.lengthUnknown": "时长未知",
     "admin.videos.merge.titleDiffers": "标题不同",
-    "admin.videos.merge.showAll": "显示全部 {count} 条",
-    "admin.videos.merge.showLess": "收起",
     "admin.bilibili.title": "哔哩哔哩",
     "admin.bilibili.description":
       "配置账号的投稿在最小间隔内最多读取一次，只显示在后台；与 YouTube 版本相符的投稿会合并到该视频。",
@@ -1659,7 +1657,6 @@ export const adminMessages = {
     "admin.runs.runOnce": "运行一次",
     "admin.runs.skippedStep": "本进程已停用",
     "admin.runs.history": "运行记录",
-    "admin.runs.historyHint": "展开一次运行，查看每个步骤的数量和出错原因。",
     "admin.runs.created": "排队",
     "admin.runs.started": "开始",
     "admin.runs.finished": "结束",

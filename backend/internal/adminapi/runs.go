@@ -503,6 +503,7 @@ func (a *api) overview(w http.ResponseWriter, r *http.Request) {
 			"suspectedCancellations": counts.SuspectedCancellations,
 			"failedPosts":            counts.FailedPosts,
 			"reprocessRequested":     counts.ReprocessRequested,
+			"videoMerges":            counts.VideoMerges,
 		},
 		"counts": map[string]int{
 			"upcomingEvents": counts.UpcomingEvents,

@@ -3,6 +3,7 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleSlash,
+  Combine,
   FileWarning,
   ImageOff,
   RefreshCw,
@@ -168,6 +169,12 @@ export function OverviewView({ navigate }: ViewProps) {
       count: review.suspectedCancellations,
       icon: CalendarClock,
       tone: "berry",
+    },
+    {
+      key: "merges",
+      count: review.videoMerges,
+      icon: Combine,
+      tone: "lavender",
     },
     {
       key: "posts",

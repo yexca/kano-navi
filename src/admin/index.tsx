@@ -70,7 +70,10 @@ const views: ViewEntry[] = [
     icon: ListChecks,
     component: ReviewView,
     badge: ({ review }) =>
-      review.pendingImages + review.suspectedCancellations + review.failedPosts,
+      review.pendingImages +
+      review.suspectedCancellations +
+      review.videoMerges +
+      review.failedPosts,
   },
   {
     id: "schedule",

@@ -195,6 +195,36 @@ func TestVideoMergeLeavesUnclearUploadsToTheOperator(t *testing.T) {
 	if claim := got["BV1claimA0000"]; claim.Status != "ambiguous" || len(claim.Candidates) != 1 || claim.Candidates[0].YouTube.ID != "DDDDDDDDDDD" {
 		t.Fatalf("claim = %+v", claim)
 	}
+
+	ctx := context.Background()
+	if counts, err := f.s.AdminCounts(ctx, "2026-10-25"); err != nil || counts.VideoMerges != 4 {
+		t.Fatalf("decisions = %d err=%v", counts.VideoMerges, err)
+	}
+	// Keeping one claimant apart leaves the video to the other.
+	video, err := f.s.KeepVideoSeparate(ctx, "BV1claimA0000", videoMergeNow)
+	if err != nil || video.MergedInto != nil || stringValue(video.MergeSource) != MergeSourceManual {
+		t.Fatalf("separate = %+v err=%v", video, err)
+	}
+	f.expect(map[string]string{"BV1claimA0000": "|manual|kept_separate"})
+	if items, err = f.s.VideoMergeSuggestions(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	statuses := map[string]string{}
+	for _, item := range items {
+		statuses[item.Bilibili.ID] = item.Status
+	}
+	if _, listed := statuses["BV1claimA0000"]; listed || statuses["BV1claimB0000"] != "rule" {
+		t.Fatalf("statuses after separate = %v", statuses)
+	}
+	if counts, err := f.s.AdminCounts(ctx, "2026-10-25"); err != nil || counts.VideoMerges != 2 {
+		t.Fatalf("decisions after separate = %d err=%v", counts.VideoMerges, err)
+	}
+	if _, err = f.s.KeepVideoSeparate(ctx, "AAAAAAAAAAA", videoMergeNow); !errors.Is(err, ErrVideoMergeInvalid) {
+		t.Fatalf("youtube separate err=%v", err)
+	}
+	if _, err = f.s.KeepVideoSeparate(ctx, "BV1missing000", videoMergeNow); !errors.Is(err, ErrVideoNotFound) {
+		t.Fatalf("missing separate err=%v", err)
+	}
 }
 
 func TestVideoMergeReleasesAMergeWhoseBasisChanged(t *testing.T) {
@@ -220,6 +250,10 @@ func TestVideoMergeOperatorDecisionsOutrankTheRule(t *testing.T) {
 	f.realPair()
 	f.reconcile()
 
+	// A merged upload is undone, not kept apart.
+	if _, err := f.s.KeepVideoSeparate(ctx, kanadeBilibili, videoMergeNow); !errors.Is(err, ErrVideoMergeConflict) {
+		t.Fatalf("separate a merged upload err=%v", err)
+	}
 	video, err := f.s.UnmergeVideo(ctx, kanadeBilibili, videoMergeNow)
 	if err != nil || video.MergedInto != nil || stringValue(video.MergeSource) != MergeSourceManual {
 		t.Fatalf("unmerge = %+v err=%v", video, err)

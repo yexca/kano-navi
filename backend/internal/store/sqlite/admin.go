@@ -331,6 +331,9 @@ type AdminCounts struct {
 	SuspectedCancellations int `json:"suspectedCancellations"`
 	FailedPosts            int `json:"failedPosts"`
 	ReprocessRequested     int `json:"reprocessRequested"`
+	// VideoMerges are the Bilibili uploads the merge rule leaves to the
+	// operator.
+	VideoMerges int `json:"videoMerges"`
 }
 
 var adminDateRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
@@ -945,6 +948,9 @@ func (s *Store) AdminCounts(ctx context.Context, today string) (AdminCounts, err
 	  (SELECT COUNT(*) FROM post_llm_states WHERE reprocess_requested=1)`, today).Scan(
 		&c.UpcomingEvents, &c.Events, &c.Posts, &c.Videos, &c.PendingImages, &c.SuspectedCancellations, &c.FailedPosts, &c.ReprocessRequested)
 	if err != nil {
+		return AdminCounts{}, fmt.Errorf("%w: admin counts unavailable", ErrUnavailable)
+	}
+	if c.VideoMerges, err = videoMergeDecisions(ctx, s.db); err != nil {
 		return AdminCounts{}, fmt.Errorf("%w: admin counts unavailable", ErrUnavailable)
 	}
 	return c, nil

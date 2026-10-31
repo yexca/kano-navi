@@ -161,10 +161,15 @@ wording as written.
 A quote an operator hid is absent from the snapshot, so the board shows the
 post without it.
 
-The console's schedule (`src/admin/views/schedule.tsx`) has a list and a
-calendar view; the browser remembers the last one in local storage. Both
-share a search field and status tabs for the review tasks: All, Not
-confirmed, Suspected (cancellation) and Deleted. The list groups entries
+The console's schedule (`src/admin/views/schedule.tsx`) has a list, a
+calendar and an images view. The browser remembers list or calendar in local
+storage; the images view has its own address (`#schedule/images`), which the
+Review queue links to. It lists the newest stored schedule images as the
+Review queue's decision cards (`schedule-images.tsx`) under All, Approved
+and Needs review tabs, so any image can be labelled again or its dates
+corrected. The list and the calendar share a search field and status tabs
+for the review tasks: All, Not confirmed, Suspected (cancellation) and
+Deleted. The list groups entries
 under one heading per Japan date, with the day's count and a button that
 opens a new entry on that date; Upcoming, Past and All dates tabs set the
 date range beside it. Each row (`schedule-parts.tsx`) shows the time in
@@ -182,8 +187,8 @@ open-ended, while presets and a custom end save `endsAt`. A preview line
 renders the entry as calendar subscribers will see it.
 
 The console's video list (`src/admin/views/videos.tsx`) puts the featured
-video and the Bilibili merge suggestions above a list with a search field
-and task tabs: All, Upcoming, Bilibili and Missing translation. Uploads
+video above a list with a search field and task tabs: All, Upcoming,
+Bilibili and Missing translation. Uploads
 merged into another video appear on that video's row, so only the Bilibili
 tab lists them on their own. Each row shows the
 thumbnail, the title, which opens the correction dialog, the platform, time,
@@ -197,15 +202,21 @@ section and what the platform replaced); one column on narrow screens. A
 corrected field is marked and offers a reset to the platform value beside its
 label. Refresh, cancel and save stay in the footer.
 
-The Review queue (`src/admin/views/review.tsx`) has tabs for schedule images,
-suspected cancellations and failed posts. An image or a suspected
-cancellation is a decision card: its left edge takes the state colour (honey
+The Review queue (`src/admin/views/review.tsx`) lists only what waits for a
+decision, in tabs for schedule images that need review, suspected
+cancellations, video merges and failed posts; a decision removes the item
+and the sidebar badge counts again. The images tab links to the Schedule
+page's images view. An image or a suspected cancellation is a decision
+card: its left edge takes the state colour (honey
 while it needs a decision, leaf once the image reaches the board, neutral
 when rejected), the image or the entry's date sits on the left, and the body
 shows the badges and source link, the model's verdict with a confidence bar
 and its reason or evidence, the facts, and a bottom bar with the note field
 and the decision buttons. A cancellation needs a reason before it can be
-confirmed.
+confirmed. The video merges tab (`merge-parts.tsx`) lists each Bilibili
+upload the merge rule merges at its next run or leaves to the operator,
+beside its candidates: Merge attaches it to one, and Keep separate keeps it
+apart so the rule never merges it.
 
 The console's Sources page (`src/admin/views/sources.tsx`) has a row of
 tabs for X, YouTube and Bilibili, each with a dot (or a lock) for whether

@@ -69,7 +69,8 @@ See [Core boundaries](architecture/core-boundaries.md) for the full contract.
 
 An unlinked, password-protected `/admin` console is organized around operator
 tasks: an overview of what waits for a decision and the active run, a review
-queue for schedule images, suspected cancellations, and failed extractions,
+queue for schedule images, suspected cancellations, video merges, and failed
+extractions,
 schedule curation with durable locks, posts, videos and the featured video,
 profile images, the run history and one-off step runs, sources with their
 timers, manual fetches and YouTube push, schedule detection settings, and the

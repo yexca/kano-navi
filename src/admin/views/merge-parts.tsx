@@ -1,5 +1,11 @@
 import { useState } from "react"
-import { Combine, ExternalLink, ImageOff, Unlink } from "lucide-react"
+import {
+  CheckCircle2,
+  Combine,
+  ExternalLink,
+  ImageOff,
+  Unlink,
+} from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import { formatDateTime } from "@/admin/format"
@@ -12,8 +18,10 @@ import {
   Badge,
   Button,
   ConfirmButton,
+  Empty,
   Facts,
   Field,
+  Loading,
   type Tone,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
@@ -228,60 +236,80 @@ const statusTone: Partial<Record<VideoMergeSuggestion["status"], Tone>> = {
   unverified: "sky",
 }
 
-/**
- * Uploads the matching rule merges at its next run, or leaves to the
- * operator because several videos match or a length is unknown.
- */
-export function MergeSuggestions({
-  reloadKey,
-  onMerged,
+/** Keeping an upload apart is durable: the rule never merges it. */
+function KeepSeparate({
+  uploadId,
+  onChanged,
 }: {
-  reloadKey: number
-  onMerged: () => void
+  uploadId: string
+  onChanged: () => void
 }) {
   const { t } = useAppSettings()
-  const { api } = useAdmin()
-  const suggestions = useResource(() => api.videoMerges(), [reloadKey])
-  const [expanded, setExpanded] = useState(false)
-  const items: VideoMergeSuggestion[] = suggestions.data?.items ?? []
-  if (!items.length) return null
-  const shown = expanded ? items : items.slice(0, 3)
+  const { api, act } = useAdmin()
+  const [busy, setBusy] = useState(false)
   return (
-    <section className="adm-merge-suggestions">
-      <h3>
-        <Combine aria-hidden />
-        {t("admin.videos.merge.suggestions", { count: items.length })}
-      </h3>
-      <p className="adm-muted">{t("admin.videos.merge.suggestionsHint")}</p>
+    <Button
+      size="sm"
+      variant="ghost"
+      icon={Unlink}
+      busy={busy}
+      onClick={async () => {
+        setBusy(true)
+        const result = await act(
+          () => api.keepVideoSeparate(uploadId),
+          "admin.notice.videoSeparate",
+        )
+        setBusy(false)
+        if (result) onChanged()
+      }}
+    >
+      {t("admin.videos.merge.keepSeparate")}
+    </Button>
+  )
+}
+
+/**
+ * The Review queue's merge decisions: uploads the matching rule merges at
+ * its next run, and those it leaves to the operator because several videos
+ * match or a match is incomplete. Each merges into a candidate or stays
+ * apart; either decision removes it and reads the overview's count again.
+ */
+export function MergeQueue() {
+  const { t } = useAppSettings()
+  const { api, refreshOverview } = useAdmin()
+  const suggestions = useResource(() => api.videoMerges(), [])
+  if (!suggestions.data) return <Loading />
+  const items: VideoMergeSuggestion[] = suggestions.data.items
+  const decided = () => {
+    void suggestions.reload()
+    void refreshOverview().catch(() => {})
+  }
+  if (!items.length)
+    return <Empty icon={CheckCircle2} title={t("admin.review.noMerges")} />
+  return (
+    <div className="adm-merge-queue">
+      <p className="adm-note">{t("admin.review.mergeHint")}</p>
       <ol>
-        {shown.map((item) => (
+        {items.map((item) => (
           <li key={item.bilibili.id} className="adm-merge-row">
             <div className="adm-merge-upload">
               <MiniVideo video={item.bilibili} />
-              <Badge tone={statusTone[item.status] ?? "neutral"}>
-                {t(`admin.videos.merge.status.${item.status}`)}
-              </Badge>
+              <div className="adm-chip-row">
+                <Badge tone={statusTone[item.status] ?? "neutral"}>
+                  {t(`admin.videos.merge.status.${item.status}`)}
+                </Badge>
+                <KeepSeparate uploadId={item.bilibili.id} onChanged={decided} />
+              </div>
             </div>
             <Candidates
               uploadId={item.bilibili.id}
               candidates={item.candidates}
-              onMerged={onMerged}
+              onMerged={decided}
             />
           </li>
         ))}
       </ol>
-      {items.length > 3 ? (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded
-            ? t("admin.videos.merge.showLess")
-            : t("admin.videos.merge.showAll", { count: items.length })}
-        </Button>
-      ) : null}
-    </section>
+    </div>
   )
 }
 
