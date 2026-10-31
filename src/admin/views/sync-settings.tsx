@@ -79,11 +79,17 @@ export function SyncSettingsForm({
     {},
   )
   const [busy, setBusy] = useState(false)
-  useEffect(() => setDraft({}), [data])
   const sections = (syncSettingGroups[group] as SyncSettingSection[]).filter(
     (entry) => !section || entry.id === section,
   )
   const fields = sections.flatMap((section) => section.fields)
+  // The timed and manual forms share one settings response. Reset only when
+  // a field owned by this form changes, so saving the other form cannot erase
+  // an unrelated draft.
+  const savedKey = fields
+    .map((field) => `${field}:${data.settings[field]}`)
+    .join("|")
+  useEffect(() => setDraft({}), [savedKey])
   const value = (field: SyncSettingField) =>
     draft[field] ?? String(data.settings[field] ?? "")
   const changed = fields.filter(

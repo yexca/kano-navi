@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/yexca/kano-navi/backend/internal/store/sqlite"
+	"github.com/yexca/kano-navi/backend/internal/testutil"
 )
 
 func TestVisitorRegionUsesCountryHeadersWithoutExposingThem(t *testing.T) {
@@ -68,5 +71,34 @@ func TestVisitorRegionMethod(t *testing.T) {
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/visitor-region", nil))
 	if recorder.Code != http.StatusMethodNotAllowed || recorder.Header().Get("Allow") != http.MethodGet {
 		t.Fatalf("status=%d allow=%q", recorder.Code, recorder.Header().Get("Allow"))
+	}
+}
+
+func TestVisitorRegionReadsPersistedSettingsForMainlandRequests(t *testing.T) {
+	store, path := openFixture(t)
+	testutil.Exec(t, path, `INSERT INTO app_settings(key,value,updated_at) VALUES
+		('visitor_region_enabled','1','2026-10-11T00:00:00.000Z'),
+		('visitor_region_provider_name','Synthetic provider','2026-10-11T00:00:00.000Z'),
+		('visitor_region_provider_url','https://provider.example.test','2026-10-11T00:00:00.000Z'),
+		('visitor_region_mirror_url','https://mirror.example.test','2026-10-11T00:00:00.000Z')`)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlite.OpenReadOnly(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	request := httptest.NewRequest(http.MethodGet, "/api/visitor-region", nil)
+	request.Header.Set("CF-IPCountry", "CN")
+	recorder := httptest.NewRecorder()
+	NewHandler(store).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body)
+	}
+	payload := decodeObject(t, recorder)
+	if payload["enabled"] != true || payload["mainlandChina"] != true || payload["providerName"] != "Synthetic provider" || payload["mirrorUrl"] != "https://mirror.example.test" {
+		t.Fatalf("payload=%v", payload)
 	}
 }

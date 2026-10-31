@@ -2,6 +2,8 @@ package secretstore
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -28,14 +30,15 @@ func TestRoundTripAndFailures(t *testing.T) {
 	}
 }
 
-// An externally supplied ciphertext of "synthetic-value" under the same
-// synthetic key must decrypt, which pins the stored format.
+// This fixture is produced by the TypeScript server/secret-store.ts format
+// with Node crypto, a fixed nonce, and the same synthetic key. Keeping it in
+// the repository makes the compatibility check mandatory in every test run.
 func TestReadsTypeScriptCiphertext(t *testing.T) {
-	value := os.Getenv("KANO_TS_CIPHERTEXT")
-	if value == "" {
-		t.Skip("no TypeScript ciphertext supplied")
+	fixture, err := os.ReadFile(filepath.Join("testdata", "typescript-ciphertext.txt"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	plain, err := Decrypt(value, "synthetic-key")
+	plain, err := Decrypt(strings.TrimSpace(string(fixture)), "synthetic-key")
 	if err != nil || plain != "synthetic-value" {
 		t.Fatalf("typescript ciphertext: %q %v", plain, err)
 	}
