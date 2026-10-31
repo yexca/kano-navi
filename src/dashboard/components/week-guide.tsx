@@ -13,6 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ImageIcon,
+  PanelBottomClose,
+  PanelRightClose,
   Radio,
   Sparkles,
 } from "lucide-react"
@@ -260,7 +262,7 @@ const MONTH_CHIPS = 3
 
 /**
  * Month overview: Monday-first weeks covering the month. Each day shows up to
- * three compact entries (dots on phones); its date selects that day.
+ * three compact entries (dots on phones); its cell selects that day.
  */
 function MonthGrid({
   monthStart,
@@ -315,6 +317,12 @@ function MonthGrid({
               key={key}
               className={`month-day${isToday ? " is-today" : ""}${key < todayKey ? " is-past" : ""}${outside ? " is-outside" : ""}${count ? " has-events" : ""}${key === selectedKey ? " is-selected" : ""}${weekday === 5 ? " is-saturday" : ""}${weekday === 6 ? " is-sunday" : ""}`}
               aria-current={isToday ? "date" : undefined}
+              onClick={(event) => {
+                // Entry links keep their own target; the rest of the cell
+                // picks the day, as its date button does for keyboards.
+                if (!(event.target as Element).closest("a, button"))
+                  onPickDay(day)
+              }}
             >
               <button
                 type="button"
@@ -394,8 +402,8 @@ function ProvenanceLegend({ t }: { t: Translator }) {
 
 /**
  * The month dialog's body: the month grid and, beside it on wide screens
- * (below it on narrow ones), the selected day's full entries. Remount it per
- * month so the selection starts over.
+ * (below it on narrow ones), the selected day's full entries until they are
+ * hidden. Remount it per month so the selection starts over.
  */
 export function ScheduleMonth({
   monthStart,
@@ -467,7 +475,7 @@ export function ScheduleMonth({
         t={t}
       />
       {archive ? (
-        <div className="month-layout">
+        <div className={`month-layout${selected ? "" : " is-collapsed"}`}>
           <MonthGrid
             monthStart={monthStart}
             byDay={byDay}
@@ -479,55 +487,64 @@ export function ScheduleMonth({
             now={now}
             t={t}
           />
-          <div className="month-detail" ref={detailRef} aria-live="polite">
-            {selected ? (
-              <>
-                <div className="month-detail-head">
-                  <h3>{formatLongDate(selected, locale)}</h3>
-                  <span>
-                    {t("schedule.weekCount", { count: selectedCount })}
-                  </span>
-                </div>
-                {selectedItems.length ? (
-                  <ol className="guide-day-events">
-                    {selectedItems.map((event) => (
-                      <GuideEvent
-                        key={event.id}
-                        event={event}
-                        locale={locale}
-                        now={now}
-                        t={t}
-                      />
-                    ))}
-                  </ol>
-                ) : (
-                  <p className="month-detail-empty">
-                    {selectedCount
-                      ? t("schedule.moreOnDay", { count: selectedCount })
-                      : t("schedule.dayEmpty")}
-                  </p>
-                )}
-                {selectedItems.length &&
-                selectedCount > selectedItems.length ? (
-                  <span className="guide-day-more">
-                    {t("schedule.moreOnDay", {
-                      count: selectedCount - selectedItems.length,
-                    })}
-                  </span>
-                ) : null}
+          {selected ? (
+            <div className="month-detail" ref={detailRef} aria-live="polite">
+              <div className="month-detail-head">
+                <h3>{formatLongDate(selected, locale)}</h3>
+                <span>{t("schedule.weekCount", { count: selectedCount })}</span>
                 <button
                   type="button"
-                  className="pill-button"
-                  onClick={() => onOpenWeek(selected)}
+                  className="round-button"
+                  onClick={() => setSelectedKey(null)}
+                  aria-label={t("schedule.hideDay")}
+                  title={t("schedule.hideDay")}
                 >
-                  {t("schedule.openWeek")}
-                  <ChevronRight aria-hidden="true" />
+                  <PanelRightClose
+                    className="month-detail-wide"
+                    aria-hidden="true"
+                  />
+                  <PanelBottomClose
+                    className="month-detail-narrow"
+                    aria-hidden="true"
+                  />
                 </button>
-              </>
-            ) : (
-              <p className="month-detail-empty">{t("schedule.monthHint")}</p>
-            )}
-          </div>
+              </div>
+              {selectedItems.length ? (
+                <ol className="guide-day-events">
+                  {selectedItems.map((event) => (
+                    <GuideEvent
+                      key={event.id}
+                      event={event}
+                      locale={locale}
+                      now={now}
+                      t={t}
+                    />
+                  ))}
+                </ol>
+              ) : (
+                <p className="month-detail-empty">
+                  {selectedCount
+                    ? t("schedule.moreOnDay", { count: selectedCount })
+                    : t("schedule.dayEmpty")}
+                </p>
+              )}
+              {selectedItems.length && selectedCount > selectedItems.length ? (
+                <span className="guide-day-more">
+                  {t("schedule.moreOnDay", {
+                    count: selectedCount - selectedItems.length,
+                  })}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className="pill-button"
+                onClick={() => onOpenWeek(selected)}
+              >
+                {t("schedule.openWeek")}
+                <ChevronRight aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {archive ? (
@@ -626,23 +643,16 @@ export function WeekGuide({
       id="schedule"
       aria-labelledby="guide-title"
     >
-      <SectionTitle
-        id="guide-title"
-        kicker={label}
-        title={t("schedule.title")}
-        note={t("schedule.note")}
-      >
+      <SectionTitle id="guide-title" kicker={label} title={t("schedule.title")}>
         <CalendarSubscribe t={t} />
         <button
           type="button"
-          className="pill-button is-collapsible"
+          className="pill-button"
           onClick={onOpenMonth}
           aria-haspopup="dialog"
-          aria-label={t("schedule.openMonth")}
-          title={t("schedule.openMonth")}
         >
           <CalendarDays aria-hidden="true" />
-          <span className="pill-label">{t("schedule.openMonth")}</span>
+          {t("schedule.openMonth")}
         </button>
         <div className="guide-nav" role="group" aria-label={label}>
           <button
@@ -745,7 +755,7 @@ export function WeekGuide({
               <>
                 <button
                   type="button"
-                  className="guide-image-thumb"
+                  className="guide-image-thumb media-opener"
                   onClick={() => onOpenImage(scheduleImage)}
                   aria-label={t("schedule.imageView")}
                 >

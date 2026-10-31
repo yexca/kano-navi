@@ -134,6 +134,16 @@
   the next one is ready and then changes once, instead of passing through an
   empty grid and a loading bar; the schedule-image slot keeps its size on wide
   screens.
+- The weekly schedule, Posts on X and the month dialogs drop their one-line
+  notes under the title, and the video archive names bilibili beside YouTube.
+- In the month view, a click anywhere in a day's cell opens its details, and
+  a button hides them so the grid takes the full width. On phones, tapping a
+  day with dots shows its entries instead of opening an entry's link, and the
+  Month view button keeps its label.
+- Images on the board, the Journey page and the LINE BLOG show the same zoom
+  cursor, and the image viewer keeps its close button in the top-right corner
+  of the screen and closes on a click anywhere outside the image, its arrows
+  and its details.
 
 </details>
 

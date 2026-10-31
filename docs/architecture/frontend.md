@@ -37,7 +37,10 @@ public pages share `src/site/`: `site-shell.tsx` (header with page navigation an
 Japan clock, footer, skip link, section title, empty and loading states;
 narrow screens show the site name and fold the page links into a menu behind
 the `kano-seal.tsx` deer seal),
-`media-dialog.tsx` (the native modal image viewer), `links.tsx` (external
+`media-dialog.tsx` (the native modal image viewer: its close button stays in
+the screen's top-right corner, and a click anywhere outside the image, its
+arrows and its details closes it; every control that opens it carries
+`media-opener`, which shows the zoom cursor), `links.tsx` (external
 links and platform marks), and `site.css` (shell, controls, tone classes and
 the dialog). A `pill-button is-collapsible` shows only its icon at 560px and
 below, so it keeps its label as `aria-label`. The board lives in
@@ -408,8 +411,11 @@ snapshot. Post archives follow stored revisions. These refreshes
 share the board's visibility pause and snapshot backoff rather than starting a
 separate archive timer. Changing the month or the post
 account, or closing the dialog, cancels the read and discards late pages.
-Picking a day in the month grid lists its entries beside the grid (below it on
-phones) and can show that week on the board. The post archive lays out full
+A click anywhere in a month-grid day (outside an entry link) picks it, listing
+its entries beside the grid (below it on phones) until the hide button clears
+the selection and the grid takes the full width; the panel can show that week
+on the board. On phones entries are dots that ignore taps, so a tap always
+picks the day. The post archive lays out full
 posts either as a masonry wall or as a single column, a choice kept in
 `localStorage` (`kano-post-archive-layout`). The masonry measures each post
 and places it, in order, under the column that ends highest

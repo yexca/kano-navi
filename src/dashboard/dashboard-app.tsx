@@ -12,7 +12,7 @@ import { WifiOff } from "lucide-react"
 import { useAppSettings } from "@/app-settings"
 import { MediaDialog, stepIndex } from "@/site/media-dialog"
 import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
-import { XLogo, YouTubeLogo } from "@/site/links"
+import { BilibiliLogo, XLogo, YouTubeLogo } from "@/site/links"
 import { POST_WINDOW_DAYS } from "./content"
 import { featuredVideoIdOf } from "./derive-dashboard"
 import { syncStateFor } from "./freshness"
@@ -76,7 +76,6 @@ function archiveCopy(
     return {
       kicker: t("nav.schedule"),
       title: t("schedule.monthTitle"),
-      note: t("schedule.note"),
       summary: total == null ? null : t("schedule.weekCount", { count: total }),
     }
   if (view.kind === "posts")
@@ -88,17 +87,17 @@ function archiveCopy(
         </>
       ),
       title: t("feed.archiveTitle"),
-      note: t("feed.archiveNote"),
       summary: total == null ? null : t("feed.monthCount", { count: total }),
     }
   return {
     kicker: (
       <>
         <YouTubeLogo className="kicker-icon" aria-hidden="true" /> YouTube
+        {" · "}
+        <BilibiliLogo className="kicker-icon" aria-hidden="true" /> bilibili
       </>
     ),
     title: t("videos.archiveTitle"),
-    note: t("videos.archiveNote"),
     summary: total == null ? null : t("videos.monthCount", { count: total }),
   }
 }

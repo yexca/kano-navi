@@ -24,7 +24,6 @@ export function ArchiveDialog({
   open,
   kicker,
   title,
-  note,
   summary,
   monthStart,
   onMonthChange,
@@ -38,7 +37,6 @@ export function ArchiveDialog({
   open: boolean
   kicker: ReactNode
   title: string
-  note?: ReactNode
   summary?: ReactNode
   monthStart: Date
   onMonthChange: (month: Date) => void
@@ -96,10 +94,9 @@ export function ArchiveDialog({
         <header className="archive-dialog-head">
           <div className="archive-dialog-heading">
             <p className="kicker">{kicker}</p>
-            <div className="archive-dialog-title">
-              <h2 id="archive-dialog-title">{title}</h2>
-              {note ? <p className="section-title-note">{note}</p> : null}
-            </div>
+            <h2 id="archive-dialog-title" className="archive-dialog-title">
+              {title}
+            </h2>
           </div>
           <button
             ref={closeRef}
