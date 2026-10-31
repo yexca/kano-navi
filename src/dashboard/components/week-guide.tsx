@@ -559,6 +559,7 @@ export function WeekGuide({
   weekStart,
   setWeekStart,
   range,
+  shownRange,
   adjacent,
   error,
   onRetry,
@@ -578,6 +579,8 @@ export function WeekGuide({
   weekStart: Date
   setWeekStart: (value: Date | ((value: Date) => Date)) => void
   range: { from: string; to: string }
+  /** The week the data belongs to; null until the first snapshot. */
+  shownRange: { from: string; to: string } | null
   adjacent: { previous: string | null; next: string | null }
   error: Error | null
   onRetry: () => unknown
@@ -593,9 +596,14 @@ export function WeekGuide({
   t: Translator
 }) {
   const todayKey = dateKey(new Date(now))
+  // Until the selected week's snapshot arrives, the last loaded week stays
+  // rendered, dimmed, so a week change swaps the layout once.
+  const dataRange = shownRange || range
+  const stale = shownRange != null && shownRange.from !== range.from
+  const shownWeek = keyToDate(dataRange.from)
   const byDay = useMemo(
-    () => groupByDay(events, range),
-    [events, range.from, range.to],
+    () => groupByDay(events, dataRange),
+    [events, dataRange.from, dataRange.to],
   )
   const loaded = countEvents(byDay)
   const today = japanToday()
@@ -603,8 +611,8 @@ export function WeekGuide({
   const adjacentKey = adjacent.next || adjacent.previous
   const jumpTarget =
     !loaded && !total && adjacentKey ? keyToDate(adjacentKey) : null
-  const weekStartId = localDateKey(weekStart)
-  const weekEndId = localDateKey(addDays(weekStart, 6))
+  const weekStartId = dataRange.from
+  const weekEndId = dataRange.to
   const scheduleImage = scheduleImages.find((asset) =>
     asset.url && asset.periodStart && asset.periodEnd
       ? asset.periodStart <= weekEndId && asset.periodEnd >= weekStartId
@@ -675,97 +683,117 @@ export function WeekGuide({
         </div>
       ) : null}
 
-      {isLoading && !loaded ? (
-        <Placeholder lines={4} />
-      ) : !loaded && !total ? (
-        <EmptyNote
-          title={t("schedule.emptyWeek")}
-          hint={t("schedule.emptyHint")}
-        >
-          {jumpTarget ? (
-            <button
-              type="button"
-              className="pill-button"
-              onClick={() => setWeekStart(startOfWeek(jumpTarget))}
-            >
-              {t("schedule.jumpTo", {
-                range: formatWeekRange(startOfWeek(jumpTarget), locale),
-              })}
-              <ChevronRight aria-hidden="true" />
-            </button>
-          ) : null}
-        </EmptyNote>
+      {!shownRange ? (
+        isLoading ? (
+          <Placeholder lines={4} />
+        ) : null
       ) : (
-        <WeekDays
-          weekStart={weekStart}
-          byDay={byDay}
-          dayCounts={dayCounts}
-          todayKey={todayKey}
-          locale={locale}
-          now={now}
-          t={t}
-        />
-      )}
-
-      <div className="guide-foot">
-        <p className="guide-legend">
-          <ProvenanceLegend t={t} />
-          <span>{t("schedule.weekCount", { count: total })}</span>
-        </p>
-        {hasNext ? (
-          <button type="button" className="pill-button" onClick={onLoadMore}>
-            {t("schedule.moreEvents")}
-          </button>
-        ) : null}
-      </div>
-
-      <div className="guide-image">
-        {scheduleImage ? (
-          <>
-            <button
-              type="button"
-              className="guide-image-thumb"
-              onClick={() => onOpenImage(scheduleImage)}
-              aria-label={t("schedule.imageView")}
+        <div
+          className={`guide-body${stale ? " is-stale" : ""}`}
+          aria-busy={isLoading || undefined}
+          inert={stale}
+        >
+          {!loaded && !total ? (
+            <EmptyNote
+              title={t("schedule.emptyWeek")}
+              hint={t("schedule.emptyHint")}
             >
-              <img
-                src={scheduleImage.url ?? undefined}
-                srcSet={mediaSrcSet(scheduleImage.url)}
-                sizes="240px"
-                alt={scheduleImage.alt || t("schedule.imageAlt")}
-                loading="lazy"
-              />
-            </button>
-            <div className="guide-image-copy">
-              <p className="kicker">{t("schedule.imageTitle")}</p>
-              <p>{t("schedule.imageNote")}</p>
-              <div className="guide-image-actions">
+              {jumpTarget ? (
                 <button
                   type="button"
                   className="pill-button"
-                  onClick={() => onOpenImage(scheduleImage)}
+                  onClick={() => setWeekStart(startOfWeek(jumpTarget))}
                 >
-                  {t("schedule.imageView")}
+                  {t("schedule.jumpTo", {
+                    range: formatWeekRange(startOfWeek(jumpTarget), locale),
+                  })}
+                  <ChevronRight aria-hidden="true" />
                 </button>
-                {scheduleImage.sourceUrl ? (
-                  <ExternalLink
-                    className="text-link"
-                    href={scheduleImage.sourceUrl}
-                  >
-                    {t("schedule.imageOpen")}
-                    <ArrowUpRight aria-hidden="true" />
-                  </ExternalLink>
-                ) : null}
-              </div>
-            </div>
-          </>
-        ) : (
-          <p className="guide-image-empty">
-            <ImageIcon aria-hidden="true" />
-            {t("schedule.imageEmpty")}
-          </p>
-        )}
-      </div>
+              ) : null}
+            </EmptyNote>
+          ) : (
+            <WeekDays
+              weekStart={shownWeek}
+              byDay={byDay}
+              dayCounts={dayCounts}
+              todayKey={todayKey}
+              locale={locale}
+              now={now}
+              t={t}
+            />
+          )}
+
+          <div className="guide-foot">
+            <p className="guide-legend">
+              <ProvenanceLegend t={t} />
+              <span>{t("schedule.weekCount", { count: total })}</span>
+            </p>
+            {hasNext ? (
+              <button
+                type="button"
+                className="pill-button"
+                onClick={onLoadMore}
+              >
+                {t("schedule.moreEvents")}
+              </button>
+            ) : null}
+          </div>
+
+          {/* The thumbnail slot keeps its size with or without an image. */}
+          <div className="guide-image">
+            {scheduleImage ? (
+              <>
+                <button
+                  type="button"
+                  className="guide-image-thumb"
+                  onClick={() => onOpenImage(scheduleImage)}
+                  aria-label={t("schedule.imageView")}
+                >
+                  <img
+                    src={scheduleImage.url ?? undefined}
+                    srcSet={mediaSrcSet(scheduleImage.url)}
+                    sizes="240px"
+                    alt={scheduleImage.alt || t("schedule.imageAlt")}
+                    loading="lazy"
+                  />
+                </button>
+                <div className="guide-image-copy">
+                  <p className="kicker">{t("schedule.imageTitle")}</p>
+                  <p>{t("schedule.imageNote")}</p>
+                  <div className="guide-image-actions">
+                    <button
+                      type="button"
+                      className="pill-button"
+                      onClick={() => onOpenImage(scheduleImage)}
+                    >
+                      {t("schedule.imageView")}
+                    </button>
+                    {scheduleImage.sourceUrl ? (
+                      <ExternalLink
+                        className="text-link"
+                        href={scheduleImage.sourceUrl}
+                      >
+                        {t("schedule.imageOpen")}
+                        <ArrowUpRight aria-hidden="true" />
+                      </ExternalLink>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="guide-image-thumb is-empty" aria-hidden="true">
+                  <ImageIcon />
+                </span>
+                <div className="guide-image-copy">
+                  <p className="kicker">{t("schedule.imageTitle")}</p>
+                  <p>{t("schedule.imageEmpty")}</p>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   )
 }

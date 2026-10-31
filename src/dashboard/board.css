@@ -875,6 +875,17 @@
   margin: 0 0 14px;
 }
 
+/* A week change keeps the last loaded week until the new one arrives. The
+   delay lets a quick read swap the days without dimming them first. */
+.guide-body {
+  transition: opacity 160ms ease;
+}
+
+.guide-body.is-stale {
+  opacity: 0.45;
+  transition-delay: 120ms;
+}
+
 .guide-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1178,18 +1189,15 @@
   gap: 8px 14px;
 }
 
-.guide-image-empty {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--soft);
-  font-size: 13px;
+.guide-image-thumb.is-empty {
+  display: grid;
+  place-items: center;
+  color: color-mix(in oklab, var(--soft) 55%, transparent);
 }
 
-.guide-image-empty svg {
-  width: 16px;
-  height: 16px;
+.guide-image-thumb.is-empty svg {
+  width: 22px;
+  height: 22px;
 }
 
 @media (max-width: 1040px) {
@@ -1311,6 +1319,10 @@
 
   .guide-image-thumb {
     width: 100%;
+  }
+
+  .guide-image-thumb.is-empty {
+    display: none;
   }
 }
 

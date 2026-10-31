@@ -295,6 +295,61 @@ test("dashboard hook recovers, coordinates requests and releases its resources",
     )
 
     await t.test(
+      "a week change keeps the loaded week, tagged with its range, until the new week arrives",
+      async (context) => {
+        const fixture = await setup(context, true)
+        const nextWeek = (week: Date) => new Date(week.getTime() + 7 * 864e5)
+        try {
+          await fixture.respond(0, snapshot(1))
+          await fixture.respondCalendar(0, calendarPage(1, null))
+          const loaded = fixture.current().calendarShownRange
+          assert.deepEqual(loaded, fixture.current().calendarRange)
+          await act(async () => fixture.current().setWeekStart(nextWeek))
+          // The old week's data stays paired with its own range.
+          assert.equal(fixture.current().calendarLoading, true)
+          assert.deepEqual(fixture.current().calendarShownRange, loaded)
+          assert.notDeepEqual(fixture.current().calendarRange, loaded)
+          assert.equal(fixture.current().calendar.events[0].id, "event-1")
+          // A failure belongs to the week that failed.
+          await act(async () =>
+            fixture.calendarRequests[1].reject(new Error("Synthetic outage")),
+          )
+          assert.equal(fixture.current().calendarLoading, false)
+          assert.ok(fixture.current().calendarError)
+          await act(async () =>
+            fixture
+              .current()
+              .setWeekStart(
+                (week: Date) => new Date(week.getTime() - 7 * 864e5),
+              ),
+          )
+          assert.equal(fixture.current().calendarError, null)
+          assert.equal(fixture.current().calendarLoading, false)
+          await act(async () => fixture.current().setWeekStart(nextWeek))
+          const next = fixture.calendarRequests.at(-1)!
+          await act(async () =>
+            next.resolve({
+              ok: true,
+              status: 200,
+              json: async () => ({
+                ...calendarPage(1, null),
+                events: [{ id: "event-next", liveStatus: null }],
+              }),
+            } as Response),
+          )
+          assert.equal(fixture.current().calendarLoading, false)
+          assert.deepEqual(
+            fixture.current().calendarShownRange,
+            fixture.current().calendarRange,
+          )
+          assert.equal(fixture.current().calendar.events[0].id, "event-next")
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
       "first failure retries with bounded backoff, and later failures retain the known snapshot",
       async (context) => {
         const fixture = await setup(context)

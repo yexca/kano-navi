@@ -170,8 +170,19 @@ export function useDashboard(now = Date.now()) {
     revision: 0,
     dayCounts: {},
   })
+  // The week the calendar snapshot belongs to. While another week loads, the
+  // board keeps this one rendered instead of pairing its data with new dates.
+  const [calendarShownRange, setCalendarShownRange] = useState<{
+    from: string
+    to: string
+  } | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(true)
-  const [calendarError, setCalendarError] = useState<Error | null>(null)
+  const [calendarFailure, setCalendarFailure] = useState<{
+    key: string
+    error: Error
+  } | null>(null)
+  const calendarError =
+    calendarFailure?.key === visibleKey ? calendarFailure.error : null
   const rangeRef = useRef(range)
   rangeRef.current = range
   const calendarRef = useRef(calendar)
@@ -214,7 +225,8 @@ export function useDashboard(now = Date.now()) {
       calendarKeyRef.current = key
       calendarRef.current = payload
       setCalendar(payload)
-      setCalendarError(null)
+      setCalendarShownRange({ from, to })
+      setCalendarFailure(null)
       setCalendarLoading(false)
       return { ok: true }
     } catch (caught) {
@@ -224,7 +236,7 @@ export function useDashboard(now = Date.now()) {
         key === rangeKey(rangeRef.current) &&
         error.name !== "AbortError"
       ) {
-        setCalendarError(error)
+        setCalendarFailure({ key, error })
         setCalendarLoading(false)
       }
       return { ok: false }
@@ -251,7 +263,7 @@ export function useDashboard(now = Date.now()) {
       const combined = { ...next, events: [...current.events, ...next.events] }
       calendarRef.current = combined
       setCalendar(combined)
-      setCalendarError(null)
+      setCalendarFailure(null)
     } catch (caught) {
       const error = caught instanceof Error ? caught : new Error(String(caught))
       if (
@@ -259,7 +271,7 @@ export function useDashboard(now = Date.now()) {
         key === rangeKey(rangeRef.current) &&
         error.name !== "AbortError"
       )
-        setCalendarError(error)
+        setCalendarFailure({ key, error })
     }
   }, [scope, loadCalendar])
   const calendarRetryRef = useRef(false)
@@ -593,7 +605,13 @@ export function useDashboard(now = Date.now()) {
     ...status,
     reload: load,
     calendar,
-    calendarLoading,
+    calendarShownRange,
+    // The selected week is loading until its own snapshot arrives; a failed
+    // read stops reporting it until a retry starts.
+    calendarLoading:
+      calendarShownRange == null || rangeKey(calendarShownRange) !== visibleKey
+        ? calendarLoading || !calendarError
+        : false,
     calendarError,
     reloadCalendar: loadCalendar,
     loadMoreCalendar,

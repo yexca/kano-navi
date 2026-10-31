@@ -115,6 +115,7 @@ export function DashboardApp() {
     error,
     reload,
     calendar,
+    calendarShownRange,
     calendarLoading,
     calendarError,
     reloadCalendar,
@@ -304,6 +305,7 @@ export function DashboardApp() {
 
         <WeekGuide
           range={calendarRange}
+          shownRange={calendarShownRange}
           events={calendar.events}
           scheduleImages={calendar.scheduleImages}
           isLoading={calendarLoading}
