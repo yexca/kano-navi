@@ -35,6 +35,7 @@ export const scriptJobs: Record<string, Job[]> = {
   "golangci-lint.yml": ["backend"],
   "make-help.ts": ["frontend"],
   "package-history-media.ts": ["frontend"],
+  "package-lineblog-comments.ts": ["frontend"],
   "package-lineblog.ts": ["frontend"],
   "privacy-allowlist.json": [],
   "production-smoke.ts": ["frontend", "docker"],
