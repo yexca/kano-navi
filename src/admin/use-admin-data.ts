@@ -46,6 +46,7 @@ import type {
   SourceChainUpdate,
   SourceSchedule,
   Sources,
+  RunRetention,
   StepCatalog,
   TranslationLocale,
   TranslationOwner,
@@ -130,6 +131,11 @@ function createClient(run: Runner, slow: Runner) {
     retryRun: (id: string) =>
       send<{ run: Run }>("POST", `/runs/${enc(id)}/retry`),
     stepCatalog: () => get<StepCatalog>("/runs/steps"),
+    runRetention: () => get<RunRetention>("/runs/retention"),
+    updateRunRetention: (body: {
+      succeededDays?: number
+      failedDays?: number
+    }) => send<RunRetention>("PUT", "/runs/retention", body),
 
     sources: () => get<Sources>("/sources"),
     updateSourceSchedule: (

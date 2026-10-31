@@ -163,6 +163,21 @@ export interface StepCatalog {
   skippedSteps: string[]
 }
 
+/** How long finished runs stay in the history; 0 days keeps them. */
+export interface RunRetention {
+  succeededDays: number
+  failedDays: number
+  maxDays: number
+  pruner: {
+    /** False when this process does not clean the history. */
+    available: boolean
+    intervalHours?: number
+    lastPrunedAt?: string | null
+    lastDeleted?: number
+    lastFailed?: boolean
+  }
+}
+
 export interface PushStatus {
   available: boolean
   enabled: boolean

@@ -41,6 +41,13 @@
 >   them and then ignored, so remove them from `.env` after that start.
 >   `YOUTUBE_BOOTSTRAP_VIDEOS` had no effect and is no longer read.
 >   `GET`/`PUT /api/admin/sync-settings` read and change them.
+> - The run history is cleaned when the server starts and then daily:
+>   succeeded and cancelled runs older than 30 days and failed, partial and
+>   blocked runs older than 90 days are deleted with their steps, attempts
+>   and `sync_runs` rows. The newest run of each timer and kind and the
+>   newest successful sync stay. Back up `data/` before the first start to
+>   keep the older history; the Runs page changes the windows afterwards
+>   (0 keeps runs forever).
 > - Profile media: `slot` is optional for `POST /api/admin/profile-media`,
 >   `/discover` and `/upload`. Discovery without one records both slots;
 >   the others start a candidate as an avatar.
@@ -120,6 +127,15 @@
   channel and every method tried with its code.
 - A run whose media step left images queued explains how many remain, and the
   step's counts list them as Remaining with the bound that stopped it.
+- The Runs page shows the run history beside the open run on a wide screen.
+  A run lists its steps one line each, with the outcome and a few counts;
+  a step opens to everything it counted, and failed or partial steps open by
+  themselves. Each recent run on the overview opens that run on the Runs
+  page, and the open run is part of the page address.
+- The Runs page has History cleanup: how many days succeeded and cancelled
+  runs, and failed, partial and blocked runs, stay in the history, and when
+  the last cleanup ran. `GET`/`PUT /api/admin/runs/retention` read and change
+  them.
 - The Profile images page previews the board's profile card with the avatar
   and banner in use (or the built-in images) above one list of candidates.
   Its Add dialog fetches the profile page, which records both the avatar and

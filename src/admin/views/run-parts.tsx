@@ -203,10 +203,15 @@ export function RunLine({
   run,
   onOpen,
   selected,
+  href,
+  onFollow,
 }: {
   run: Run
   onOpen?: () => void
   selected?: boolean
+  /** A link to the run elsewhere; a plain click calls onFollow instead. */
+  href?: string
+  onFollow?: () => void
 }) {
   const { t, locale } = useAppSettings()
   const outcome = runOutcome(run)
@@ -238,6 +243,29 @@ export function RunLine({
       <StatusBadge status={outcome} />
     </>
   )
+  if (href)
+    return (
+      <a
+        className="adm-run-line"
+        href={href}
+        onClick={(event) => {
+          // Modified clicks keep the browser's own new-tab behaviour.
+          if (
+            !onFollow ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          )
+            return
+          event.preventDefault()
+          onFollow()
+        }}
+      >
+        {content}
+      </a>
+    )
   return onOpen ? (
     <button
       type="button"

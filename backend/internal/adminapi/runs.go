@@ -525,3 +525,61 @@ func lastStep(runs []jobs.Job, step string) map[string]any {
 	}
 	return nil
 }
+
+// --- run retention ----------------------------------------------------------
+
+// runRetention is the run history cleanup: the operator's windows in days
+// (0 keeps runs forever), their bound and the newest pass of this process.
+func (a *api) runRetention(w http.ResponseWriter, r *http.Request) {
+	settings, err := a.Store.RunRetention(r.Context())
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	pruner := map[string]any{"available": false}
+	if a.RunPruner != nil {
+		pruner = a.RunPruner()
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"succeededDays": settings.SucceededDays, "failedDays": settings.FailedDays,
+		"maxDays": sqlite.RunRetentionMaxDays, "pruner": pruner,
+	})
+}
+
+// updateRunRetention accepts { succeededDays?, failedDays? }; omitted fields
+// keep their value. The next pass applies them.
+func (a *api) updateRunRetention(w http.ResponseWriter, r *http.Request) {
+	body, err := httpx.Body(w, r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	settings, err := a.Store.RunRetention(r.Context())
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
+	for key, raw := range body {
+		var target *int
+		switch key {
+		case "succeededDays":
+			target = &settings.SucceededDays
+		case "failedDays":
+			target = &settings.FailedDays
+		default:
+			httpx.WriteError(w, httpx.Invalid("%s is not a run retention field", key))
+			return
+		}
+		days, rangeErr := integer(raw, key, 0, sqlite.RunRetentionMaxDays)
+		if rangeErr != nil {
+			httpx.WriteError(w, rangeErr)
+			return
+		}
+		*target = days
+	}
+	if err = a.Store.SaveRunRetention(r.Context(), settings); err != nil {
+		workflowError(w, err, "not_found")
+		return
+	}
+	a.runRetention(w, r)
+}

@@ -365,7 +365,12 @@ export function OverviewView({ navigate }: ViewProps) {
         {overview.recentRuns.length ? (
           <div className="adm-run-list">
             {overview.recentRuns.map((run) => (
-              <RunLine key={run.id} run={run} />
+              <RunLine
+                key={run.id}
+                run={run}
+                href={`#runs/${encodeURIComponent(run.id)}`}
+                onFollow={() => navigate("runs", run.id)}
+              />
             ))}
           </div>
         ) : (

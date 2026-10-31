@@ -1005,6 +1005,43 @@ export const adminMessages = {
     "admin.runs.problem.remaining": ({ remaining }: { remaining: number }) =>
       `${plural(remaining, "image is", "images are")} still queued; the next run continues with them.`,
     "admin.runs.lastFinished": "Last finished {time}",
+    "admin.runs.steps": ({ count }: { count: number }) =>
+      plural(count, "step", "steps"),
+    "admin.runs.expandAll": "Open all",
+    "admin.runs.collapseAll": "Close all",
+    "admin.runs.stepSkipped": "Disabled in this process",
+    "admin.runs.noChanges": "Nothing to do",
+    "admin.runs.queuedAt": "Queued {time}",
+    "admin.runs.ranFor": "ran {duration}",
+    "admin.runs.runningFor": "running for {duration}",
+    "admin.runs.finishedAt": "finished {time}",
+    "admin.retention.title": "History cleanup",
+    "admin.retention.description":
+      "Once a day the server deletes finished runs older than these windows. The newest run of each timer and kind, and the newest successful sync, always stay.",
+    "admin.retention.succeeded": "Succeeded and cancelled runs",
+    "admin.retention.failed": "Failed, partial and blocked runs",
+    "admin.retention.days": ({ count }: { count: number }) =>
+      `Kept ${plural(count, "day", "days")}; 0 keeps them forever`,
+    "admin.retention.forever": "Kept forever",
+    "admin.retention.last": ({
+      time,
+      count,
+    }: {
+      time: string
+      count: number
+    }) => `Last cleanup ${time} removed ${plural(count, "run", "runs")}.`,
+    "admin.retention.lastFailed": ({
+      time,
+      count,
+    }: {
+      time: string
+      count: number
+    }) =>
+      `The last cleanup ${time} stopped with an error after removing ${plural(count, "run", "runs")}; the next one tries again.`,
+    "admin.retention.pending": "The server has not cleaned the history yet.",
+    "admin.retention.unavailable":
+      "This process does not clean the history; the server process does.",
+    "admin.notice.retentionSaved": "History cleanup saved",
     "admin.metric.yes": "Yes",
     "admin.metric.no": "No",
     "admin.metric.value": "Result",

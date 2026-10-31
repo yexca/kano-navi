@@ -1,10 +1,21 @@
-import { useState, type SubmitEvent } from "react"
 import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type SubmitEvent,
+} from "react"
+import {
+  Archive,
   Check,
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   ListChecks,
   Play,
   RefreshCw,
   RotateCcw,
+  Save,
   Sparkles,
   Square,
   TriangleAlert,
@@ -25,7 +36,7 @@ import {
   Callout,
   ConfirmButton,
   Empty,
-  Facts,
+  Field,
   Loading,
   Modal,
   PageHeader,
@@ -38,6 +49,9 @@ import {
   explainCode,
   metricLabel,
   RunLine,
+  RunMark,
+  runOutcome,
+  runTitle,
   stepIcons,
   stepResult,
   windowText,
@@ -153,6 +167,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 function splitResult(value: unknown) {
   const out = {
     error: null as string | null,
+    skipped: false,
     scalars: [] as [string, Scalar][],
     lists: [] as [string, Scalar[]][],
     groups: [] as [string, Record<string, unknown>][],
@@ -164,9 +179,10 @@ function splitResult(value: unknown) {
   }
   for (const [key, item] of Object.entries(value)) {
     if (item == null) continue
-    // The step's own source name repeats the card's heading.
+    // The step's own source name repeats the row's heading.
     if (key === "source" && typeof item === "string") continue
     if (key === "error" && typeof item === "string") out.error = item
+    else if (key === "skipped" && item === true) out.skipped = true
     else if (isScalar(item)) out.scalars.push([key, item])
     else if (Array.isArray(item)) {
       if (item.every(isRecord)) {
@@ -188,6 +204,39 @@ function metricTone(key: string, value: Scalar) {
   return undefined
 }
 
+/** The counts that say what a step did, first in its one-line summary. */
+const headlineCounts: Record<string, string[]> = {
+  x: ["posts", "discovered", "timelineGaps"],
+  youtube: ["videos", "updated", "discovered"],
+  bilibili: ["videos", "discovered"],
+  media: ["ready", "unchanged", "attempted"],
+  schedule: ["success", "uncertain", "cached"],
+  translate: ["success", "attempted"],
+  reconcile: ["merged", "eventsCreated", "videosMerged"],
+}
+
+/**
+ * Up to three non-zero counts for a step's summary: problems first, then the
+ * step's own headline counts, then whatever else it counted.
+ */
+function headline(step: string, scalars: [string, Scalar][]) {
+  const numbers = scalars.filter(
+    (entry): entry is [string, number] =>
+      typeof entry[1] === "number" && entry[1] !== 0,
+  )
+  const preferred = headlineCounts[step] || []
+  const ordered = [
+    ...numbers.filter(([key]) => badCounts.test(key)),
+    ...preferred.flatMap((key) =>
+      numbers.filter(([name]) => name === key && !badCounts.test(name)),
+    ),
+    ...numbers.filter(
+      ([key]) => !badCounts.test(key) && !preferred.includes(key),
+    ),
+  ]
+  return ordered.slice(0, 3)
+}
+
 function MetricValue({ value, t }: { value: Scalar; t: Translator }) {
   if (typeof value === "boolean")
     return <>{t(value ? "admin.metric.yes" : "admin.metric.no")}</>
@@ -195,6 +244,7 @@ function MetricValue({ value, t }: { value: Scalar; t: Translator }) {
   return <>{value}</>
 }
 
+/** Every plain count as a dense label/value list; zeros recede. */
 function Metrics({ items }: { items: [string, unknown][] }) {
   const { t } = useAppSettings()
   const scalars = items.filter((entry): entry is [string, Scalar] =>
@@ -202,11 +252,17 @@ function Metrics({ items }: { items: [string, unknown][] }) {
   )
   if (!scalars.length) return null
   return (
-    <dl className="adm-metrics">
+    <dl className="adm-kv">
       {scalars.map(([key, value]) => {
         const tone = metricTone(key, value)
         return (
-          <div key={key} className={tone ? `adm-tone-${tone}` : undefined}>
+          <div
+            key={key}
+            className={cn(
+              tone && `adm-tone-${tone}`,
+              (value === 0 || value === false) && "is-zero",
+            )}
+          >
             <dt>{metricLabel(key, t)}</dt>
             <dd>
               <MetricValue value={value} t={t} />
@@ -326,35 +382,11 @@ function Records({
   )
 }
 
-function WindowLine({ run, step }: { run: Run; step: string }) {
+/** Everything a step counted, shown when its row is open. */
+function StepDetails({ result }: { result: ReturnType<typeof splitResult> }) {
   const { t } = useAppSettings()
-  const window = run.fetchWindows?.[step]
-  if (!window) return null
-  return <small className="adm-muted">{windowText(window, step, t)}</small>
-}
-
-/** One step of a run: its outcome, error in words and what it counted. */
-function StepCard({ run, step }: { run: Run; step: string }) {
-  const { t } = useAppSettings()
-  const progress = run.progress[step] || "pending"
-  const Icon = stepIcons[step] || Sparkles
-  const result = splitResult(stepResult(run, step))
-  const empty =
-    !result.error &&
-    !result.scalars.length &&
-    !result.lists.length &&
-    !result.groups.length &&
-    !result.records.length
   return (
-    <li className={cn("adm-step-card", `adm-tone-${statusTone(progress)}`)}>
-      <header>
-        <span className="adm-step-card-icon">
-          <Icon aria-hidden />
-        </span>
-        <strong>{t(`admin.step.${step}`)}</strong>
-        <StatusBadge status={progress} />
-        <WindowLine run={run} step={step} />
-      </header>
+    <div className="adm-step-details">
       {result.error ? <CodeLine code={result.error} /> : null}
       <Metrics items={result.scalars} />
       {result.groups.map(([key, group]) => (
@@ -381,32 +413,166 @@ function StepCard({ run, step }: { run: Run; step: string }) {
       {result.lists.map(([key, items]) => (
         <div key={key} className="adm-metric-list">
           <span>{metricLabel(key, t)}</span>
-          {key === "errors" ? (
-            <span className="adm-chip-row">
-              {items.map((item, index) => (
+          <span className="adm-chip-row">
+            {items.map((item, index) =>
+              key === "errors" ? (
                 <code key={index} title={explainCode(String(item), t) || ""}>
                   {String(item)}
                 </code>
-              ))}
-            </span>
-          ) : (
-            <span className="adm-chip-row">
-              {items.map((item, index) => (
+              ) : (
                 <span key={index} className="adm-metric-chip">
                   {String(item)}
                 </span>
-              ))}
-            </span>
-          )}
+              ),
+            )}
+          </span>
         </div>
       ))}
       {result.records.map(([key, records]) => (
         <Records key={key} name={key} records={records} />
       ))}
-      {empty && !["pending", "running", "queued"].includes(progress) ? (
-        <p className="adm-muted">{t("admin.runs.noCounts")}</p>
-      ) : null}
+    </div>
+  )
+}
+
+/**
+ * One step of a run as one line: its outcome, its window and what it did in
+ * a few counts. Opening it shows everything it counted.
+ */
+function StepRow({
+  run,
+  step,
+  open,
+  onToggle,
+}: {
+  run: Run
+  step: string
+  open: boolean
+  onToggle: () => void
+}) {
+  const { t } = useAppSettings()
+  const progress = run.progress[step] || "pending"
+  const Icon = stepIcons[step] || Sparkles
+  const result = splitResult(stepResult(run, step))
+  const window = run.fetchWindows?.[step]
+  const waiting = ["pending", "running", "queued"].includes(progress)
+  const detailed =
+    Boolean(result.error) ||
+    result.scalars.length > 0 ||
+    result.lists.length > 0 ||
+    result.groups.length > 0 ||
+    result.records.length > 0
+  const counts = headline(step, result.scalars)
+  const summary = result.error ? (
+    <span className="adm-tone-danger">
+      {explainCode(result.error, t) || t("admin.code.unknown")}
+    </span>
+  ) : result.skipped ? (
+    <span className="adm-muted">{t("admin.runs.stepSkipped")}</span>
+  ) : counts.length ? (
+    counts.map(([key, value]) => {
+      const tone = metricTone(key, value)
+      return (
+        <span key={key} className={cn(tone && `adm-tone-${tone}`)}>
+          <b>{value.toLocaleString()}</b> {metricLabel(key, t)}
+        </span>
+      )
+    })
+  ) : waiting ? null : (
+    <span className="adm-muted">{t("admin.runs.noChanges")}</span>
+  )
+  const head = (
+    <>
+      <span
+        className={cn("adm-step-row-icon", `adm-tone-${statusTone(progress)}`)}
+      >
+        <Icon aria-hidden />
+      </span>
+      <span className="adm-step-row-name">
+        <strong>{t(`admin.step.${step}`)}</strong>
+        {window ? <small>{windowText(window, step, t)}</small> : null}
+      </span>
+      <span className="adm-step-row-summary">{summary}</span>
+      <StatusBadge status={progress} />
+      {detailed ? (
+        <ChevronDown className="adm-step-row-chevron" aria-hidden />
+      ) : (
+        <span aria-hidden />
+      )}
+    </>
+  )
+  return (
+    <li className={cn("adm-step-row", open && "is-open")}>
+      {detailed ? (
+        <button
+          type="button"
+          className="adm-step-row-head"
+          aria-expanded={open}
+          onClick={onToggle}
+        >
+          {head}
+        </button>
+      ) : (
+        <div className="adm-step-row-head">{head}</div>
+      )}
+      {open && detailed ? <StepDetails result={result} /> : null}
     </li>
+  )
+}
+
+/** Steps that open by themselves: those that failed or stopped short. */
+function troubledSteps(run: Run) {
+  return run.steps.filter((step) => {
+    const progress = run.progress[step]
+    const result = stepResult(run, step)
+    return (
+      progress === "failed" ||
+      progress === "partial" ||
+      (isRecord(result) && typeof result.error === "string")
+    )
+  })
+}
+
+/** The run's steps in order, each one line until opened. */
+function StepList({ run }: { run: Run }) {
+  const { t } = useAppSettings()
+  const [open, setOpen] = useState(() => troubledSteps(run))
+  const allOpen = open.length === run.steps.length
+  return (
+    <section className="adm-step-list">
+      <header>
+        <h3>{t("admin.runs.steps", { count: run.steps.length })}</h3>
+        <button
+          type="button"
+          className="adm-filter-reset"
+          onClick={() => setOpen(allOpen ? [] : [...run.steps])}
+        >
+          {allOpen ? (
+            <ChevronsDownUp aria-hidden />
+          ) : (
+            <ChevronsUpDown aria-hidden />
+          )}
+          {t(allOpen ? "admin.runs.collapseAll" : "admin.runs.expandAll")}
+        </button>
+      </header>
+      <ol>
+        {run.steps.map((step) => (
+          <StepRow
+            key={step}
+            run={run}
+            step={step}
+            open={open.includes(step)}
+            onToggle={() =>
+              setOpen((current) =>
+                current.includes(step)
+                  ? current.filter((id) => id !== step)
+                  : [...current, step],
+              )
+            }
+          />
+        ))}
+      </ol>
+    </section>
   )
 }
 
@@ -485,91 +651,180 @@ function RunProblems({ run }: { run: Run }) {
   )
 }
 
-function RunDetail({ run, onChanged }: { run: Run; onChanged: () => void }) {
+/** When the run was queued, how long it took and how long it waited. */
+function RunTimes({ run }: { run: Run }) {
   const { t, locale } = useAppSettings()
+  const parts = [
+    t("admin.runs.queuedAt", { time: formatDateTime(run.createdAt, locale) }),
+  ]
+  if (run.startedAt)
+    parts.push(
+      run.finishedAt
+        ? t("admin.runs.ranFor", {
+            duration: formatDuration(run.startedAt, run.finishedAt),
+          })
+        : t("admin.runs.runningFor", {
+            duration: formatDuration(run.startedAt, null),
+          }),
+    )
+  if (run.finishedAt)
+    parts.push(
+      t("admin.runs.finishedAt", {
+        time: formatDateTime(run.finishedAt, locale),
+      }),
+    )
+  return <p className="adm-run-times">{parts.join(" · ")}</p>
+}
+
+function RunDetail({
+  run,
+  onChanged,
+  withHeader,
+}: {
+  run: Run
+  onChanged: () => void
+  /** The side pane names the run; inline, the row above already does. */
+  withHeader?: boolean
+}) {
+  const { t } = useAppSettings()
   const { api, act, refreshOverview } = useAdmin()
   const active = run.status === "queued" || run.status === "running"
+  const outcome = runOutcome(run)
+  const actions =
+    active || run.status === "failed" ? (
+      <div className="adm-actions">
+        {active ? (
+          <ConfirmButton
+            size="sm"
+            icon={Square}
+            onConfirm={async () => {
+              if (
+                await act(
+                  () => api.cancelRun(run.id),
+                  "admin.notice.cancelRequested",
+                )
+              ) {
+                onChanged()
+                void refreshOverview().catch(() => {})
+              }
+            }}
+          >
+            {t("admin.action.cancel")}
+          </ConfirmButton>
+        ) : null}
+        {run.status === "failed" ? (
+          <Button
+            size="sm"
+            icon={RotateCcw}
+            onClick={async () => {
+              if (
+                await act(() => api.retryRun(run.id), "admin.notice.runQueued")
+              ) {
+                onChanged()
+                void refreshOverview().catch(() => {})
+              }
+            }}
+          >
+            {t("admin.runs.retry")}
+          </Button>
+        ) : null}
+      </div>
+    ) : null
   return (
     <div className="adm-run-detail">
+      {withHeader ? (
+        <header className="adm-run-detail-head">
+          <RunMark status={outcome} />
+          <div>
+            <h3>{runTitle(run, t)}</h3>
+            <RunTimes run={run} />
+          </div>
+          <StatusBadge status={outcome} />
+        </header>
+      ) : (
+        <RunTimes run={run} />
+      )}
+      {actions}
       <RunProblems run={run} />
-      <Facts
-        items={[
-          [t("admin.runs.created"), formatDateTime(run.createdAt, locale)],
-          [
-            t("admin.runs.started"),
-            formatDateTime(run.startedAt, locale) || null,
-          ],
-          [
-            t("admin.runs.finished"),
-            formatDateTime(run.finishedAt, locale) || null,
-          ],
-          [
-            t("admin.runs.duration"),
-            run.startedAt
-              ? formatDuration(run.startedAt, run.finishedAt)
-              : null,
-          ],
-        ]}
-      />
-      <ul className="adm-step-cards">
-        {run.steps.map((step) => (
-          <StepCard key={step} run={run} step={step} />
-        ))}
-      </ul>
-      {active || run.status === "failed" ? (
-        <div className="adm-actions">
-          {active ? (
-            <ConfirmButton
-              size="sm"
-              icon={Square}
-              onConfirm={async () => {
-                if (
-                  await act(
-                    () => api.cancelRun(run.id),
-                    "admin.notice.cancelRequested",
-                  )
-                ) {
-                  onChanged()
-                  void refreshOverview().catch(() => {})
-                }
-              }}
-            >
-              {t("admin.action.cancel")}
-            </ConfirmButton>
-          ) : null}
-          {run.status === "failed" ? (
-            <Button
-              size="sm"
-              icon={RotateCcw}
-              onClick={async () => {
-                if (
-                  await act(
-                    () => api.retryRun(run.id),
-                    "admin.notice.runQueued",
-                  )
-                ) {
-                  onChanged()
-                  void refreshOverview().catch(() => {})
-                }
-              }}
-            >
-              {t("admin.runs.retry")}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
+      <StepList key={run.id} run={run} />
     </div>
   )
 }
 
-function HistoryPanel() {
+// Wide enough for the history list and the open run side by side.
+const splitQuery = "(min-width: 1200px)"
+
+function useSplit() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const media = window.matchMedia(splitQuery)
+      media.addEventListener("change", onChange)
+      return () => media.removeEventListener("change", onChange)
+    },
+    () => window.matchMedia(splitQuery).matches,
+    () => false,
+  )
+}
+
+/** The run history; `open` is the run named in the address (#runs/<id>). */
+function HistoryPanel({
+  open,
+  onOpen,
+}: {
+  open: string
+  onOpen: (id: string) => void
+}) {
   const { t, locale } = useAppSettings()
   const { api, overview } = useAdmin()
+  const split = useSplit()
   const [page, setPage] = useState(1)
-  const [open, setOpen] = useState("")
   const activeId = overview?.activeRun?.id
   const runs = useResource(() => api.runs(page), [page, activeId])
   const latest = overview?.recentRuns?.[0]
+  // A linked run that is not on this page, such as one newer runs pushed
+  // off it, is read on its own and listed first; a deleted one is ignored.
+  const missing = Boolean(
+    open && runs.data && !runs.data.items.some((run) => run.id === open),
+  )
+  const linked = useResource(
+    () =>
+      missing
+        ? api.run(open).then(
+            (found) => found.run,
+            () => null,
+          )
+        : Promise.resolve(null),
+    [open, missing],
+  )
+  const listed = runs.data?.items || []
+  // The overview poll carries fresher progress for the active run.
+  const items = (
+    missing && linked.data?.id === open ? [linked.data, ...listed] : listed
+  ).map((run) => (run.id === activeId && overview?.activeRun) || run)
+  // A run opened from elsewhere, such as the overview, scrolls into view
+  // once it is listed; one chosen here stays where it was clicked.
+  const clicked = useRef("")
+  const scrolled = useRef("")
+  const shown = items.some((run) => run.id === open)
+  useEffect(() => {
+    if (
+      !open ||
+      !shown ||
+      open === clicked.current ||
+      open === scrolled.current
+    )
+      return
+    scrolled.current = open
+    document.getElementById(`run-${open}`)?.scrollIntoView({ block: "start" })
+  }, [open, shown])
+  const choose = (id: string) => {
+    clicked.current = id
+    onOpen(id)
+  }
+  // Side by side, the newest run is open until another is chosen.
+  const selected = split
+    ? items.find((run) => run.id === open) || items[0]
+    : items.find((run) => run.id === open)
   return (
     <Panel
       icon={Workflow}
@@ -587,37 +842,51 @@ function HistoryPanel() {
     >
       {!runs.data ? (
         <Loading />
-      ) : runs.data.items.length ? (
-        <>
-          <div className="adm-run-list">
-            {runs.data.items.map((listed) => {
-              // The overview poll carries fresher progress for the active run.
-              const run =
-                (listed.id === activeId && overview?.activeRun) || listed
-              return (
-                <div
-                  key={run.id}
-                  className={cn("adm-run-item", open === run.id && "is-open")}
-                >
-                  <RunLine
-                    run={run}
-                    selected={open === run.id}
-                    onOpen={() => setOpen(open === run.id ? "" : run.id)}
-                  />
-                  {open === run.id ? (
-                    <RunDetail run={run} onChanged={() => void runs.reload()} />
-                  ) : null}
-                </div>
-              )
-            })}
+      ) : items.length ? (
+        <div className={cn("adm-runs", split && "is-split")}>
+          <div className="adm-runs-list">
+            <div className="adm-run-list">
+              {items.map((run) => {
+                const isOpen = selected?.id === run.id
+                return (
+                  <div
+                    key={run.id}
+                    id={`run-${run.id}`}
+                    className={cn("adm-run-item", isOpen && "is-open")}
+                  >
+                    <RunLine
+                      run={run}
+                      selected={isOpen}
+                      onOpen={() => choose(!split && isOpen ? "" : run.id)}
+                    />
+                    {!split && isOpen ? (
+                      <RunDetail
+                        run={run}
+                        onChanged={() => void runs.reload()}
+                      />
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+            <Pager
+              page={runs.data.page}
+              totalPages={runs.data.totalPages}
+              total={runs.data.total}
+              onPage={setPage}
+            />
           </div>
-          <Pager
-            page={runs.data.page}
-            totalPages={runs.data.totalPages}
-            total={runs.data.total}
-            onPage={setPage}
-          />
-        </>
+          {split && selected ? (
+            <aside className="adm-runs-pane" aria-label={runTitle(selected, t)}>
+              <RunDetail
+                key={selected.id}
+                run={selected}
+                withHeader
+                onChanged={() => void runs.reload()}
+              />
+            </aside>
+          ) : null}
+        </div>
       ) : (
         <Empty title={t("admin.overview.noRunsYet")}>
           {t("admin.overview.noRunsHint")}
@@ -627,7 +896,118 @@ function HistoryPanel() {
   )
 }
 
-export function RunsView(_: ViewProps) {
+/** How long finished runs stay in the history before the daily cleanup. */
+function RetentionPanel() {
+  const { t, locale } = useAppSettings()
+  const { api, act } = useAdmin()
+  const retention = useResource(() => api.runRetention(), [])
+  const [draft, setDraft] = useState<{ succeeded: number; failed: number }>()
+  const [busy, setBusy] = useState(false)
+  const data = retention.data
+  useEffect(() => {
+    if (data)
+      setDraft({ succeeded: data.succeededDays, failed: data.failedDays })
+  }, [data])
+  const save = async (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!draft) return
+    setBusy(true)
+    const next = await act(
+      () =>
+        api.updateRunRetention({
+          succeededDays: draft.succeeded,
+          failedDays: draft.failed,
+        }),
+      "admin.notice.retentionSaved",
+    )
+    setBusy(false)
+    if (next) retention.setData(next)
+  }
+  const days = (value: number) =>
+    value === 0
+      ? t("admin.retention.forever")
+      : t("admin.retention.days", { count: value })
+  return (
+    <Panel
+      icon={Archive}
+      title={t("admin.retention.title")}
+      description={t("admin.retention.description")}
+    >
+      {!data || !draft ? (
+        <Loading />
+      ) : (
+        <form className="adm-form adm-retention" onSubmit={save}>
+          <div className="adm-retention-fields">
+            <Field
+              label={t("admin.retention.succeeded")}
+              hint={days(draft.succeeded)}
+            >
+              <input
+                type="number"
+                min={0}
+                max={data.maxDays}
+                step={1}
+                value={draft.succeeded}
+                onChange={(e) =>
+                  setDraft({ ...draft, succeeded: Number(e.target.value) })
+                }
+                required
+              />
+            </Field>
+            <Field
+              label={t("admin.retention.failed")}
+              hint={days(draft.failed)}
+            >
+              <input
+                type="number"
+                min={0}
+                max={data.maxDays}
+                step={1}
+                value={draft.failed}
+                onChange={(e) =>
+                  setDraft({ ...draft, failed: Number(e.target.value) })
+                }
+                required
+              />
+            </Field>
+          </div>
+          <div className="adm-retention-foot">
+            <p className="adm-muted">
+              {!data.pruner.available
+                ? t("admin.retention.unavailable")
+                : data.pruner.lastPrunedAt
+                  ? t(
+                      data.pruner.lastFailed
+                        ? "admin.retention.lastFailed"
+                        : "admin.retention.last",
+                      {
+                        time: formatRelative(data.pruner.lastPrunedAt, locale),
+                        count: data.pruner.lastDeleted ?? 0,
+                      },
+                    )
+                  : t("admin.retention.pending")}
+            </p>
+            <Button
+              type="submit"
+              size="sm"
+              icon={Save}
+              busy={busy}
+              disabled={
+                busy ||
+                (draft.succeeded === data.succeededDays &&
+                  draft.failed === data.failedDays)
+              }
+            >
+              {t("admin.action.save")}
+            </Button>
+          </div>
+        </form>
+      )}
+    </Panel>
+  )
+}
+
+export function RunsView({ tab, navigate }: ViewProps) {
   const { t } = useAppSettings()
   const { start, overview } = useAdmin()
   const [picking, setPicking] = useState(false)
@@ -660,7 +1040,8 @@ export function RunsView(_: ViewProps) {
           </>
         }
       />
-      <HistoryPanel />
+      <HistoryPanel open={tab} onOpen={(id) => navigate("runs", id)} />
+      <RetentionPanel />
       {picking ? <StepRunDialog onClose={() => setPicking(false)} /> : null}
     </div>
   )

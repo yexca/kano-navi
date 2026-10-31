@@ -94,7 +94,9 @@ constrained values (`synthetic`, `x_recent`, `capability_not_migrated`);
 `youtube_recent`, `bilibili_recent`, `youtube_live`, `media_download`,
 `schedule_extract`, `text_translate` or `event_reconcile`), and a step with
 neither finishes `blocked`. `recovery_count` counts how often a run was
-queued again by a retry or by recovery from an expired lease.
+queued again by a retry or by recovery from an expired lease. Finished runs
+and their steps, attempts and `sync_runs` rows are deleted after their
+[retention window](workflows.md#run-execution).
 
 `source_schedules` holds each source's timer
 ([ADR-0003](../decisions/ADR-0003-per-source-sync-schedules.md)): `source`

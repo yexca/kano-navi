@@ -79,6 +79,8 @@ is occupied.
    [source schedules](workflows.md#source-schedules) hold them.
 7. The timer starts unless `WORKFLOW_SCHEDULER_ENABLED=0`. It submits due
    source schedules, earliest first.
+8. The run history cleanup deletes finished runs past their
+   [retention window](workflows.md#run-execution), then repeats daily.
 
 ## Package Ownership
 

@@ -413,8 +413,16 @@ queue and tests them one at a time.
 
 List filters in the console are one row of pills, one per filter, with a
 date range pill and a clear button that appears while a filter narrows the
-list. Run details explain stored error codes in words and keep the code
-beside them.
+list. The Runs page puts the run history beside the open run on a wide
+screen (the newest run is open until another is chosen) and opens a run in
+place on a narrower one. The open run is in the address (`#runs/<id>`): the
+overview's recent runs link there, and a linked run scrolls into view, read
+on its own and listed first when newer runs pushed it off the first page. A
+run lists its steps one line each: the step's
+outcome, its window and up to three non-zero counts, problems first. A step
+opens to everything it counted, as label and value lines with zeros
+receding; failed and partial steps open by themselves. Run details explain
+stored error codes in words and keep the code beside them.
 
 ## Related Docs
 

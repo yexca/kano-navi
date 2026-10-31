@@ -500,6 +500,25 @@ cancelled at once, and a running one stops its network requests and finishes
 `cancelled` with its pending steps. Finishing a run updates its `sync_runs`
 row and the dashboard revision and releases the lease.
 
+**Retention.** The server process deletes finished runs past their
+retention window when it starts and then once a day. Succeeded and
+cancelled runs are kept 30 days by default; failed, partial and blocked runs
+90 days. Both windows are operator settings in `app_settings`
+(`run_retention_succeeded_days`, `run_retention_failed_days`, 0–3650; 0 keeps
+those runs forever), edited on `/admin` → Runs → History cleanup, and the
+next pass applies a saved value. A run's age counts from `finished_at`
+(`created_at` when it has none). A pass deletes a run with its
+`workflow_run_steps`, `workflow_step_attempts` and `sync_runs` rows in one
+transaction, at most 200 runs per transaction, then applies the same windows
+to `sync_runs` rows that belong to no stored run (`success`; `failed` and
+`partial`). It never deletes a queued, running or leased run, the newest
+run of each `workflow_id` (the live-status probe paces itself and the
+Sources page reads each schedule's last run from it) or the newest
+successful `sync_runs` row (the board's freshness reads it), whatever their
+age. A deleted run can no longer be retried. The pass is local database
+work, not a run: it does not use the queue, and
+`WORKFLOW_SCHEDULER_ENABLED=0` does not stop it.
+
 Schedule-step outcomes combine post extraction and image verification. An
 image-only failure cannot be reported as success: a scan with failures and no
 successful/cached/uncertain work is `failed`; mixed outcomes are `partial`.

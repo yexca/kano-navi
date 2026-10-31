@@ -117,6 +117,8 @@ a saved workflow reports that ID there, and its name is not read.
 | `POST /runs`             | see below                 | `202 {run}`; `409 {error:"busy", run}` |
 | `POST /runs/{id}/cancel` |                           | `202 {run}`                            |
 | `POST /runs/{id}/retry`  |                           | `202 {run}`; `409 busy`                |
+| `GET /runs/retention`    |                           | retention settings and cleanup status  |
+| `PUT /runs/retention`    | see below                 | retention settings and cleanup status  |
 
 `POST /runs` starts exactly one of:
 
@@ -158,6 +160,16 @@ steps, sync settings and windows, so no saved definition is needed. A manual
 fetch's `fetchWindows` entry is its frozen selection with its `method`; a
 stored run frozen without a method still reads as stored, and running it
 again fails its fetch step.
+
+`GET /runs/retention` answers `{succeededDays, failedDays, maxDays, pruner}`:
+the [retention windows](workflows.md#run-execution) in days (0 keeps those
+runs forever), their bound (3650) and the cleanup of this process.
+`pruner` is `{available: false}` in a process that does not clean the
+history, otherwise `{available, running, intervalHours, lastPrunedAt,
+lastDeleted, lastFailed}` for its newest pass since start (`lastPrunedAt`
+null before the first). `PUT /runs/retention` accepts `{succeededDays?,
+failedDays?}`, each an integer from 0 to 3650; omitted fields keep their
+value, and another field or value answers `400 invalid_input`.
 
 ## Sources
 

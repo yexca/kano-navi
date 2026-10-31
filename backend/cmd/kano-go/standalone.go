@@ -99,6 +99,11 @@ func runStandalone(cfg config.Config) int {
 	}
 	probe.Start()
 	defer probe.Stop()
+	// Run history retention is local database work and runs whatever the
+	// timers' switch says.
+	pruner := &workflow.RunPruner{Store: store}
+	pruner.Start()
+	defer pruner.Stop()
 	// YouTube push is configured in /admin; it stays inactive until enabled
 	// there and while SKIP_YOUTUBE disables the source.
 	push := websub.New(ytsource.OptionsFromEnv().ChannelID, nil, youtubePushTrigger(manager))
@@ -115,6 +120,7 @@ func runStandalone(cfg config.Config) int {
 			Scheduler:    scheduler.Status,
 			YoutubePush:  pushAdmin.Status,
 			LiveProbe:    probe.Status,
+			RunPruner:    pruner.Status,
 			YoutubeYTDLP: run.steps.Youtube.YTDLP,
 			SkippedSteps: run.skipped,
 			XHandles:     run.xOptions.Handles,
@@ -147,6 +153,7 @@ func runStandalone(cfg config.Config) int {
 	case <-ctx.Done():
 		push.Stop()
 		probe.Stop()
+		pruner.Stop()
 		scheduler.Stop()
 		queue.Close()
 		shutdown, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)

@@ -170,6 +170,12 @@ uses the same timer process, so `WORKFLOW_SCHEDULER_ENABLED=0` or
 `SKIP_YOUTUBE=1` stops it. See
 [Workflows](../architecture/workflows.md#live-status-probe).
 
+How long finished runs stay in the run history is an operator setting as
+well: `/admin` → Runs → History cleanup, stored in `app_settings` as
+`run_retention_succeeded_days` (default 30) and `run_retention_failed_days`
+(default 90). See
+[Workflows](../architecture/workflows.md#run-execution).
+
 ## Related Docs
 
 - [Local development](../development/local-dev.md)
