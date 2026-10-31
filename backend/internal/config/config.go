@@ -45,8 +45,8 @@ type Config struct {
 	// PublicOrigin is the site's public origin from PUBLIC_ORIGIN. It only
 	// makes the share tags in index.html absolute; empty leaves them relative.
 	PublicOrigin string
-	// HealthCheck probes a running standalone process and exits; the scratch
-	// image has no shell or HTTP client for a container health check.
+	// HealthCheck probes a running standalone process and exits; the production
+	// image uses this command for its container health check.
 	HealthCheck bool
 }
 

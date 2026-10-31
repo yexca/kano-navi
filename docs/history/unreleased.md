@@ -1,14 +1,16 @@
 # Unreleased
 
 > [!IMPORTANT]
-> **Upgrade notes.** No environment variables were added or removed.
+> **Upgrade notes.** `YTDLP_BINARY` is optional. Set it to a fixed yt-dlp
+> executable path to enable the method; leaving it empty preserves the
+> existing chain behavior.
 > Startup adds the `source_schedules.chain_json` and
 > `workflow_runs.source_chain_json` columns; nothing is migrated.
 >
 > - Each X and YouTube timer reads through a method chain. Until one is saved
 >   on the Sources page, X tries the FxTwitter timeline, then the profile page,
 >   and leaves the X API off; YouTube tries the Data API (with a key), the RSS
->   feed, then the uploads tab.
+>   feed, the configured yt-dlp method when enabled, then the uploads tab.
 > - To let X fall back to the official API during FxTwitter outages, enable
 >   `api` in the X chain. It needs `X_API_BEARER_TOKEN` and runs only after
 >   three consecutive timeline failures of an account, for at most 100 posts
@@ -18,7 +20,7 @@
 > - Manual X API fetches read quoted statuses and skip reposts, and their
 >   posts count toward the X API daily usage.
 > - `POST /api/admin/runs` with `kind: "fetch"` requires a `method`
->   (`timeline` or `api` for X, `api` or `rss` for YouTube) and accepts
+>   (`timeline` or `api` for X, `api`, `rss` or `ytdlp` for YouTube) and accepts
 >   `options`. The `recent` mode and YouTube date windows (`range`, `before`
 >   and YouTube `recent`) are removed; X date ranges and backfills need the X
 >   API method, and the whole YouTube uploads playlist needs the YouTube API
@@ -38,8 +40,9 @@
   reads, the count or dates, and the steps that follow: the FxTwitter timeline
   (newest posts, or every page to the end of the timeline), the X API (newest
   posts, a date range, or a backfill before the oldest post), the YouTube Data
-  API (newest uploads, or the whole uploads playlist) or the YouTube RSS feed
-  (newest 15). Methods the server cannot run show the variable they need.
+  API (newest uploads, or the whole uploads playlist), the YouTube RSS feed
+  (newest 15) or yt-dlp (bounded metadata listing). Methods the server cannot
+  run show the variable they need.
 - A fetch never falls back to another method: a method that fails fails the
   run with its code.
 - Options run schedule extraction (X) or translation after the fetch, or

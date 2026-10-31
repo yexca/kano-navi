@@ -24,7 +24,7 @@ export type StepProgress =
   | "cancelled"
 
 /** A manual fetch's listing method; see the server's method table. */
-export type FetchMethodId = "timeline" | "api" | "rss"
+export type FetchMethodId = "timeline" | "api" | "rss" | "ytdlp"
 
 /**
  * What a method reads: the newest `count` per X account or for the channel,
@@ -178,6 +178,11 @@ export interface LiveProbeStatus {
   nextRunAt: string | null
   activeVideos: number
   maxVideos: number
+}
+
+export interface YTDLPStatus {
+  available: boolean
+  version?: string
 }
 
 export type ScheduleSource = "x" | "youtube" | "bilibili"

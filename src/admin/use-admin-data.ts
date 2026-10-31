@@ -54,6 +54,7 @@ import type {
   VideoCorrection,
   VideoHistory,
   VideoMergeSuggestion,
+  YTDLPStatus,
 } from "@/admin/types"
 
 type Runner = <T>(
@@ -146,6 +147,9 @@ function createClient(run: Runner, slow: Runner) {
         "POST",
         "/sources/youtube/push/rotate-secret",
       ),
+    ytdlp: () => get<YTDLPStatus>("/sources/youtube/ytdlp"),
+    updateYTDLP: () =>
+      send<YTDLPStatus>("POST", "/sources/youtube/ytdlp/update"),
 
     events: (filters: Record<string, any>) =>
       get<Page<AdminEvent>>(`/events${query(filters)}`),

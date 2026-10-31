@@ -527,6 +527,7 @@ export const adminMessages = {
     "admin.fetch.method.x.api": "X API",
     "admin.fetch.method.youtube.api": "Data API",
     "admin.fetch.method.youtube.rss": "RSS feed",
+    "admin.fetch.method.youtube.ytdlp": "yt-dlp",
     "admin.fetch.methodHint.x.timeline":
       "The public timeline, 100 posts a page. Posts already stored keep what they have.",
     "admin.fetch.methodHint.x.api":
@@ -535,6 +536,8 @@ export const adminMessages = {
       "The uploads playlist through YOUTUBE_API_KEY, 50 videos and one quota unit a page.",
     "admin.fetch.methodHint.youtube.rss":
       "The public feed, which lists the newest 15 uploads.",
+    "admin.fetch.methodHint.youtube.ytdlp":
+      "The configured yt-dlp executable, which reads upload metadata without downloading media.",
     "admin.fetch.needs": "Needs {variable} on the server.",
     "admin.fetch.unavailable": "This method is not available on the server.",
     "admin.fetch.selection": "Read",
@@ -652,6 +655,7 @@ export const adminMessages = {
     "admin.chain.method.x.api": "X API",
     "admin.chain.method.youtube.api": "Data API uploads playlist",
     "admin.chain.method.youtube.rss": "RSS feed",
+    "admin.chain.method.youtube.ytdlp": "yt-dlp upload metadata",
     "admin.chain.method.youtube.videos_page": "Uploads tab (IDs only)",
     "admin.chain.method.bilibili.list": "Upload list",
     "admin.chain.youtubeAPIOff":
@@ -673,6 +677,14 @@ export const adminMessages = {
     "admin.confirm.title": "Progressive confirmation",
     "admin.confirm.description":
       "YouTube confirms a video in steps: push queues a read when it appears, the live-status probe follows streams around their start, and follow-up checks reread it after it ends. The timer catches what these miss.",
+    "admin.ytdlp.title": "yt-dlp",
+    "admin.ytdlp.description":
+      "Use the configured yt-dlp executable as an additional YouTube listing method and update it from the server.",
+    "admin.ytdlp.status": "Status",
+    "admin.ytdlp.available": "Available",
+    "admin.ytdlp.unavailable": "Not configured",
+    "admin.ytdlp.version": "Version",
+    "admin.ytdlp.update": "Update yt-dlp",
     "admin.followUp.title": "Follow-up checks",
     "admin.followUp.description":
       "Every YouTube read rereads the watch page of up to 10 finished videos at these times after their end, start or publication, to pick up a new thumbnail or title. Videos older than 8 days are left alone.",
@@ -810,6 +822,7 @@ export const adminMessages = {
     "admin.notice.mediaSelected": "Profile image updated",
     "admin.notice.pushSaved": "Push settings saved",
     "admin.notice.liveProbeSaved": "Live probe settings saved",
+    "admin.notice.ytdlpUpdated": "yt-dlp updated",
     "admin.notice.scheduleSaved": "Timer saved",
     "admin.notice.secretRotated": "Signing secret rotated",
     "admin.notice.extractionSaved": "Detection settings saved",

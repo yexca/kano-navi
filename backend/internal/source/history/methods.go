@@ -15,6 +15,8 @@ const (
 	MethodAPI = "api"
 	// MethodRSS reads the YouTube channel's public feed.
 	MethodRSS = "rss"
+	// MethodYTDLP reads YouTube through the locally installed yt-dlp binary.
+	MethodYTDLP = "ytdlp"
 )
 
 // Method describes what one listing method of a source can serve.
@@ -52,6 +54,7 @@ var methods = map[string][]Method{
 	SourceYoutube: {
 		{ID: MethodAPI, Modes: []string{ModeCount, ModeAll}, MaxCount: MaxCount, PageSize: 50, Requires: "YOUTUBE_API_KEY", Refresh: true},
 		{ID: MethodRSS, Modes: []string{ModeCount}, MaxCount: feedLimit, PageSize: feedLimit, Refresh: true},
+		{ID: MethodYTDLP, Modes: []string{ModeCount, ModeAll}, MaxCount: MaxCount, PageSize: MaxCount, Requires: "YTDLP_BINARY", Refresh: true},
 	},
 }
 

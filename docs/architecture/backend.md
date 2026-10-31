@@ -4,7 +4,8 @@ The backend is the Go module in `backend/`. `kano-go serve` runs the public
 API, the operator console, workflows and timers, schedule extraction, MCP and
 the built frontend from one process, against the SQLite snapshot and the
 `data/` tree. Releases, the published image, local development and CI all run
-it; no Node runtime is shipped. Node is the frontend build toolchain only.
+it. The production image also carries Node.js as yt-dlp's JavaScript runtime;
+the Go service remains the only application process.
 
 Public HTTP and MCP contracts are in [Public API](public-api.md); operator
 routes are in the [Admin API](admin-api.md).

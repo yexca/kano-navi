@@ -144,16 +144,18 @@ again fails its fetch step.
 
 ## Sources
 
-| Method and path                            | Body                                      | Result                    |
-| ------------------------------------------ | ----------------------------------------- | ------------------------- |
-| `GET /sources`                             |                                           | per-source status (below) |
-| `PUT /sources/{source}/schedule`           | `{enabled, intervalMinutes, sync, chain}` | `SourceSchedule`          |
-| `POST /sources/{source}/run`               |                                           | `202 {run}`; `409 busy`   |
-| `GET /sources/youtube/push`                |                                           | push status               |
-| `PUT /sources/youtube/push`                | `{enabled, callbackUrl}`                  | push status               |
-| `POST /sources/youtube/push/rotate-secret` |                                           | push status               |
-| `GET /sources/youtube/live-probe`          |                                           | live probe status         |
-| `PUT /sources/youtube/live-probe`          | `{enabled, intervalMinutes}`              | live probe status         |
+| Method and path                            | Body                                      | Result                         |
+| ------------------------------------------ | ----------------------------------------- | ------------------------------ |
+| `GET /sources`                             |                                           | per-source status (below)      |
+| `PUT /sources/{source}/schedule`           | `{enabled, intervalMinutes, sync, chain}` | `SourceSchedule`               |
+| `POST /sources/{source}/run`               |                                           | `202 {run}`; `409 busy`        |
+| `GET /sources/youtube/push`                |                                           | push status                    |
+| `PUT /sources/youtube/push`                | `{enabled, callbackUrl}`                  | push status                    |
+| `POST /sources/youtube/push/rotate-secret` |                                           | push status                    |
+| `GET /sources/youtube/live-probe`          |                                           | live probe status              |
+| `PUT /sources/youtube/live-probe`          | `{enabled, intervalMinutes}`              | live probe status              |
+| `GET /sources/youtube/ytdlp`               |                                           | `{available, version}`         |
+| `POST /sources/youtube/ytdlp/update`       |                                           | updated `{available, version}` |
 
 ```json
 {
@@ -167,8 +169,8 @@ again fails its fetch step.
 `FetchMethod` describes one manual fetch method in the order the console
 offers them: `{id, modes, maxCount, pageSize, requires, refresh, extract,
 available}`. `requires` names the environment variable the method needs
-(`X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY`), never its value, and is absent
-for the public `timeline` and `rss` methods; `available` is false while
+(`X_API_BEARER_TOKEN`, `YOUTUBE_API_KEY` or `YTDLP_BINARY`), never its value, and is absent
+for public methods; `available` is false while
 it, or the method's adapter, is missing. `refresh` and `extract` say which
 options the method takes.
 
@@ -181,7 +183,7 @@ disables the source. `sync` is `{mode: "incremental", max}` (default, `max` 50) 
 `{methods, fixed}`, where `methods` lists `{id, enabled, available,
 requires}` in the order reads try them. `available` is false while the
 method's credential is missing, and `requires` names its variable
-(`X_API_BEARER_TOKEN` or `YOUTUBE_API_KEY`) for the `api` methods. `fixed`
+(`X_API_BEARER_TOKEN`, `YOUTUBE_API_KEY` or `YTDLP_BINARY`) for methods that need one. `fixed`
 is true for Bilibili, whose one method `list` cannot change. The X chain adds
 `apiGate`, `apiDailyCap`, `apiUsage` (`{day, posts}`, the posts X API
 answers returned on the current Japan day) and `timelineFailures`, each

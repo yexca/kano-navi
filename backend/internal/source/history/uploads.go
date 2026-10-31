@@ -24,6 +24,13 @@ type Uploads interface {
 	DescribeVideos(ctx context.Context, listed []ytsource.Video, stored map[string]ytsource.Video, formats *ytsource.FormatSets) ytsource.Described
 }
 
+// YTDLPUploads is implemented by the YouTube adapter when a local yt-dlp
+// executable is configured. It is optional so existing test and sidecar
+// adapters can continue to implement the API/RSS interface only.
+type YTDLPUploads interface {
+	YTDLPUploads(ctx context.Context, limit int) ([]ytsource.Video, error)
+}
+
 // formatListPages bounds the pages an all fetch reads of each format
 // playlist (UULV, UULF) to classify old ended broadcasts: 1,000 entries each.
 const formatListPages = 20
@@ -61,6 +68,33 @@ func (f *Fetcher) FetchUploads(ctx context.Context, request Request) (Result, er
 		return Result{}, err
 	}
 	result := Result{Window: window, Errors: []string{}, Items: []Item{}}
+	if window.Method == MethodYTDLP {
+		reader, ok := f.Uploads.(YTDLPUploads)
+		if !ok {
+			return result, &Error{Code: "youtube_ytdlp_unavailable", Requested: 1}
+		}
+		limit := window.Count
+		if window.Mode == ModeAll {
+			limit = MaxCount
+		}
+		result.Requested++
+		videos, fetchErr := reader.YTDLPUploads(ctx, limit)
+		if fetchErr != nil {
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
+			return result, &Error{Code: uploadsCode(fetchErr), Requested: result.Requested}
+		}
+		videos = videos[:min(len(videos), limit)]
+		written, writeErr := f.Store.WriteHistoryPage(ctx, Page{Source: SourceYoutube, Account: request.Account, Window: window, Videos: videos, KeepStored: !window.Refresh})
+		if writeErr != nil {
+			return result, writeErr
+		}
+		result.Listed = len(videos)
+		result.HasMore = window.Mode == ModeAll && len(videos) == limit
+		result.add(written, videoItems(videos))
+		return result, nil
+	}
 	if window.Method == MethodRSS {
 		result.Requested++
 		videos, fetchErr := f.Uploads.FeedUploads(ctx)

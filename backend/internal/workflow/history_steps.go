@@ -42,6 +42,15 @@ func (h *HistorySource) MethodAvailable(source, method string) bool {
 		return h.Fetcher.Uploads != nil && strings.TrimSpace(h.YoutubeKey) != ""
 	case source == history.SourceYoutube && method == history.MethodRSS:
 		return h.Fetcher.Uploads != nil
+	case source == history.SourceYoutube && method == history.MethodYTDLP:
+		reader, ok := h.Fetcher.Uploads.(history.YTDLPUploads)
+		if !ok {
+			return false
+		}
+		if checker, ok := reader.(interface{ YTDLPAvailable() bool }); ok {
+			return checker.YTDLPAvailable()
+		}
+		return true
 	}
 	return false
 }

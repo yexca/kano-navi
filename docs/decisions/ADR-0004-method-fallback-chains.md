@@ -39,13 +39,15 @@ X API gate or its daily cap), or on quota and rate limiting. A later page's
 failure does not fall back: the run keeps the earlier pages and is partial,
 as before.
 
-| Source   | Methods (default order)                        | Default                        |
-| -------- | ---------------------------------------------- | ------------------------------ |
-| X        | `timeline` (FxTwitter), `profile`, `api`       | `api` off                      |
-| YouTube  | `api` (uploads playlist), `rss`, `videos_page` | all on (`api` runs with a key) |
-| Bilibili | `list`                                         | fixed, not reorderable         |
+| Source   | Methods (default order)                                            | Default                                        |
+| -------- | ------------------------------------------------------------------ | ---------------------------------------------- |
+| X        | `timeline` (FxTwitter), `profile`, `api`                           | `api` off                                      |
+| YouTube  | `api` (uploads playlist), `rss`, `ytdlp` (metadata), `videos_page` | `api`, `rss` and `videos_page` on; `ytdlp` off |
+| Bilibili | `list`                                                             | fixed, not reorderable                         |
 
-The default is the former order, so an upgrade reads exactly as before.
+The default keeps the existing order and leaves yt-dlp off until the operator
+configures `YTDLP_BINARY` and enables the method. A stored chain from before
+yt-dlp was introduced gains the disabled method without changing its order.
 
 Each run freezes its chain in `workflow_runs.source_chain_json`, as
 `source_sync_json` freezes the sync setting, so retries and recoveries read

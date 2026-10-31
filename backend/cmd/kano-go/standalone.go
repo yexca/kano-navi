@@ -110,6 +110,7 @@ func runStandalone(cfg config.Config) int {
 			Scheduler:    scheduler.Status,
 			YoutubePush:  pushAdmin.Status,
 			LiveProbe:    probe.Status,
+			YoutubeYTDLP: run.steps.Youtube.YTDLP,
 			SkippedSteps: run.skipped,
 			XHandles:     run.xOptions.Handles,
 			Bilibili:     run.steps.Bilibili,

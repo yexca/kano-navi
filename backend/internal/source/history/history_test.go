@@ -123,7 +123,7 @@ func TestSelectValidatesTheMethodAndItsModes(t *testing.T) {
 	}{
 		{"x", "", `{"mode":"count","count":5}`, false, "method must be one of timeline, api"},
 		{"x", "rss", `{"mode":"count","count":5}`, false, "method must be one of timeline, api"},
-		{"youtube", "timeline", `{"mode":"count","count":5}`, false, "method must be one of api, rss"},
+		{"youtube", "timeline", `{"mode":"count","count":5}`, false, "method must be one of api, rss, ytdlp"},
 		{"x", "timeline", `null`, false, "fetch window is required"},
 		{"x", "timeline", `{"mode":"range","startDate":"2026-03-01","endDate":"2026-03-07"}`, false, ErrRetired.Error()},
 		{"x", "timeline", `{"mode":"recent","days":7}`, false, ErrRetired.Error()},
@@ -215,7 +215,7 @@ func TestMethodsDescribeTheirCapabilities(t *testing.T) {
 	if len(x) != 2 || x[0].ID != MethodTimeline || x[1].ID != MethodAPI || x[1].Requires != "X_API_BEARER_TOKEN" || x[0].Refresh || !x[0].Extract {
 		t.Fatalf("x=%+v", x)
 	}
-	if len(youtube) != 2 || youtube[0].Requires != "YOUTUBE_API_KEY" || youtube[1].ID != MethodRSS || youtube[1].MaxCount != 15 || youtube[1].Extract || !youtube[1].Refresh {
+	if len(youtube) != 3 || youtube[0].Requires != "YOUTUBE_API_KEY" || youtube[1].ID != MethodRSS || youtube[1].MaxCount != 15 || youtube[1].Extract || !youtube[1].Refresh || youtube[2].ID != MethodYTDLP || youtube[2].Requires != "YTDLP_BINARY" || youtube[2].MaxCount != MaxCount || !youtube[2].Refresh {
 		t.Fatalf("youtube=%+v", youtube)
 	}
 	// Callers get copies.

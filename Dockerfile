@@ -1,8 +1,9 @@
 # One static Go binary serves the public API, the operator console, workflows
-# and timers, MCP and the built frontend. Node only builds the frontend; no
-# Node runtime is shipped. The frontend and backend stages run on the build
-# machine and Go cross-compiles for the target, so a multi-platform build
-# (linux/amd64, linux/arm64) needs no emulation: the runtime stage only copies.
+# and timers, MCP and the built frontend. The runtime also carries yt-dlp and
+# its JavaScript runtime for the optional YouTube metadata method. The frontend
+# and backend stages run on the build machine and Go cross-compiles for the
+# target, so a multi-platform build (linux/amd64, linux/arm64) needs no
+# emulation.
 FROM --platform=$BUILDPLATFORM node:24.22.1-bookworm-slim AS frontend
 
 WORKDIR /app
@@ -16,6 +17,7 @@ RUN npx vite build
 
 FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm AS backend
 ARG TARGETARCH
+ARG YTDLP_VERSION=2026.10.26
 
 WORKDIR /src
 
@@ -31,6 +33,28 @@ RUN VERSION="$(grep -m1 '^  "version"' /tmp/package.json | sed 's/.*"version": "
     -ldflags "-X github.com/yexca/kano-navi/backend/internal/buildinfo.Version=${VERSION}" \
     -o /out/kano-go ./cmd/kano-go \
   && mkdir -p /out/data
+
+# yt-dlp is bundled for the target architecture. The release checksum is
+# checked before the executable enters the runtime image.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && case "$TARGETARCH" in \
+       amd64) YTDLP_ASSET=yt-dlp_linux ;; \
+       arm64) YTDLP_ASSET=yt-dlp_linux_aarch64 ;; \
+       *) echo "unsupported yt-dlp architecture: $TARGETARCH" >&2; exit 1 ;; \
+     esac \
+  && curl --fail --location --silent --show-error --retry 3 --max-time 120 \
+       "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/${YTDLP_ASSET}" \
+       --output /out/yt-dlp \
+  && curl --fail --location --silent --show-error --retry 3 --max-time 30 \
+       "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/SHA2-256SUMS" \
+       --output /tmp/yt-dlp-sha256sums \
+  && EXPECTED_SHA="$(awk -v asset="$YTDLP_ASSET" '$2 == asset { print $1; exit }' /tmp/yt-dlp-sha256sums)" \
+  && test -n "$EXPECTED_SHA" \
+  && printf '%s  %s\n' "$EXPECTED_SHA" /out/yt-dlp | sha256sum --check --status \
+  && chmod 0755 /out/yt-dlp \
+  && rm -f /tmp/yt-dlp-sha256sums
 
 # Node for the development image, on its own platform rather than the build
 # machine's.
@@ -66,15 +90,16 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
-FROM scratch AS runtime
+FROM node:24.22.1-bookworm-slim AS runtime
 
 ENV APP_MODE=production \
-    PORT=7657
+    PORT=7657 \
+    YTDLP_BINARY=/app/yt-dlp
 
 WORKDIR /app
 
-COPY --from=backend /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=backend /out/kano-go /app/kano-go
+COPY --from=backend /out/yt-dlp /app/yt-dlp
 COPY --from=backend /out/data /app/data
 COPY --from=frontend /app/dist /app/dist
 # Bundled profile and schedule fallbacks are read from public/assets.

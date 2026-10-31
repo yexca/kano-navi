@@ -37,11 +37,11 @@ const (
 // with whether the default chain enables them. The default is the order the
 // recent steps used before chains, so an upgrade changes nothing: X reads
 // the timeline, then the profile page, and leaves the API off; YouTube tries
-// the Data API (with a key), the feed, then the uploads tab. Bilibili has one
+// the Data API (with a key), the feed, yt-dlp when configured, then the uploads tab. Bilibili has one
 // fixed method.
 var chainMethods = map[string][]ChainMethod{
 	"x":        {{ID: "timeline", Enabled: true}, {ID: "profile", Enabled: true}, {ID: "api", Enabled: false}},
-	"youtube":  {{ID: "api", Enabled: true}, {ID: "rss", Enabled: true}, {ID: "videos_page", Enabled: true}},
+	"youtube":  {{ID: "api", Enabled: true}, {ID: "rss", Enabled: true}, {ID: "ytdlp", Enabled: false}, {ID: "videos_page", Enabled: true}},
 	"bilibili": {{ID: "list", Enabled: true}},
 }
 
@@ -130,8 +130,25 @@ func (c SourceChain) Uses(id string) bool { return slices.Contains(c.Enabled(), 
 // longer valid, as '{}' is, reads as the default.
 func readSourceChain(source, raw string) SourceChain {
 	var stored SourceChain
-	if json.Unmarshal([]byte(raw), &stored) == nil && stored.Problem(source) == "" {
-		return stored
+	if json.Unmarshal([]byte(raw), &stored) == nil {
+		stored = upgradeSourceChain(source, stored)
+		if stored.Problem(source) == "" {
+			return stored
+		}
 	}
 	return DefaultSourceChain(source)
+}
+
+// upgradeSourceChain adds newly introduced optional methods to a valid older
+// chain without reordering the operator's existing choices.
+func upgradeSourceChain(source string, stored SourceChain) SourceChain {
+	if source == "youtube" {
+		for _, method := range stored.Methods {
+			if method.ID == "ytdlp" {
+				return stored
+			}
+		}
+		stored.Methods = append(stored.Methods, ChainMethod{ID: "ytdlp", Enabled: false})
+	}
+	return stored
 }
