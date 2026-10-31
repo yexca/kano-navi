@@ -607,6 +607,29 @@ function Block({
   }
 }
 
+function sourceHost(address: string) {
+  try {
+    return new URL(address).hostname
+  } catch {
+    return address
+  }
+}
+
+/**
+ * The site a picture's archived bytes came from, as the viewer's small print
+ * rather than a link: most of those addresses no longer open.
+ */
+function SourceNote({ source }: { source: string }) {
+  const { t } = useAppSettings()
+  return <>{t("lineblog.recoveredFrom", { host: sourceHost(source) })}</>
+}
+
+/** Whether a picture has a caption or a link for the viewer's panel. */
+function hasImageDetails(image: LineblogImage) {
+  return Boolean(meaningfulAlt(image.alt) || image.href)
+}
+
+/** The viewer's panel for a picture with a caption or a link. */
 function ImageDetails({ image }: { image: LineblogImage }) {
   const { t } = useAppSettings()
   const alt = meaningfulAlt(image.alt)
@@ -616,11 +639,6 @@ function ImageDetails({ image }: { image: LineblogImage }) {
       {image.href ? (
         <ExternalLink href={image.href}>
           {t("lineblog.linkInPost")}
-        </ExternalLink>
-      ) : null}
-      {image.source ? (
-        <ExternalLink href={image.source}>
-          {t("lineblog.recoveredFrom")}
         </ExternalLink>
       ) : null}
     </div>
@@ -716,7 +734,12 @@ function Article({
             />
           ) : null
         }}
-        renderDetails={(image) => <ImageDetails image={image} />}
+        renderDetails={(image) =>
+          hasImageDetails(image) ? <ImageDetails image={image} /> : null
+        }
+        renderNote={(image) =>
+          image.source ? <SourceNote source={image.source} /> : null
+        }
       />
     </article>
   )

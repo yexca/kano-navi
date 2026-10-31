@@ -45,7 +45,8 @@ export const lineblogMessages = {
     "lineblog.imageUnavailable": "图片暂时无法读取",
     "lineblog.originalImage": "原图片地址",
     "lineblog.linkInPost": "文章中的链接",
-    "lineblog.recoveredFrom": "存档来源",
+    "lineblog.recoveredFrom": ({ host }: { host: string }) =>
+      `存档来源：${host}`,
     "lineblog.standIn":
       "替代图：原图没有存档，这里是同一批官方素材的公开版本。",
     "lineblog.tweetPictures": "嵌入推文中的图片。",
@@ -107,7 +108,7 @@ export const lineblogMessages = {
     "lineblog.imageUnavailable": "画像を読み込めません",
     "lineblog.originalImage": "元の画像のアドレス",
     "lineblog.linkInPost": "記事内のリンク",
-    "lineblog.recoveredFrom": "復元元",
+    "lineblog.recoveredFrom": ({ host }: { host: string }) => `復元元：${host}`,
     "lineblog.standIn":
       "代替画像：元の画像は保存されていないため、公開されている同じ公式素材を表示しています。",
     "lineblog.tweetPictures": "埋め込まれたツイートの画像です。",
@@ -174,7 +175,8 @@ export const lineblogMessages = {
     "lineblog.imageUnavailable": "Image unavailable",
     "lineblog.originalImage": "Original image address",
     "lineblog.linkInPost": "Link in the post",
-    "lineblog.recoveredFrom": "Recovered from",
+    "lineblog.recoveredFrom": ({ host }: { host: string }) =>
+      `Recovered from ${host}`,
     "lineblog.standIn":
       "Stand-in: the original was not archived; this is the same official material as published elsewhere.",
     "lineblog.tweetPictures": "Pictures from the embedded tweet.",

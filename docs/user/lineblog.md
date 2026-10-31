@@ -21,7 +21,8 @@ shows the blog's profile, the ten most recent articles, and a monthly archive
 grouped by year. Dates and times are in Japan time, as the blog showed them.
 
 Select a photo to view it in full; arrow keys move between the article's
-photos. Videos that were embedded from YouTube play from the archived copy,
+photos. Small print at the bottom names the site the picture was recovered
+from; most of those original addresses no longer open. Videos that were embedded from YouTube play from the archived copy,
 with a link to the original on YouTube.
 
 ## Comments

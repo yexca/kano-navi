@@ -6,12 +6,14 @@ import { useAppSettings } from "@/app-settings"
 
 /** Parts of the viewer a click keeps open; a click anywhere else closes it. */
 const KEEP_OPEN =
-  "img, a, button, .media-dialog-bar, .media-dialog-details, .history-missing"
+  "img, a, button, .media-dialog-bar, .media-dialog-details, .media-dialog-note, .history-missing"
 
 /**
  * Native modal image viewer shared by the public pages. Escape, the close
  * button in the screen corner and a click outside the image and its controls
  * close it; arrow keys page through a set, and focus returns to the opener.
+ * Details show in a panel beside the image; an item's small-print note
+ * closes the panel, or the viewer when the set has no details.
  */
 export function MediaDialog<T>({
   items,
@@ -21,6 +23,7 @@ export function MediaDialog<T>({
   onStep,
   renderImage,
   renderDetails,
+  renderNote,
 }: {
   items: T[] | null | undefined
   index: number
@@ -28,7 +31,10 @@ export function MediaDialog<T>({
   onClose: () => void
   onStep: (offset: number) => void
   renderImage: (item: T) => ReactNode
+  /** The item's panel content; null when it has none. */
   renderDetails?: (item: T) => ReactNode
+  /** Small print at the bottom of the panel or the viewer. */
+  renderNote?: (item: T) => ReactNode
 }) {
   const { t } = useAppSettings()
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -52,11 +58,20 @@ export function MediaDialog<T>({
   const item = items?.[index]
   if (!open || !item) return null
   const many = items.length > 1
+  // A set keeps one layout while it steps: the panel shows for every item
+  // once any item has details.
+  const panel =
+    renderDetails !== undefined &&
+    items.some((entry) => (renderDetails(entry) ?? null) !== null)
+  const details = panel ? renderDetails(item) : null
+  const note = renderNote?.(item) ?? null
+  const noteText =
+    note !== null ? <p className="media-dialog-note">{note}</p> : null
 
   return (
     <dialog
       ref={dialogRef}
-      className={`media-dialog${renderDetails ? " has-details" : ""}${many ? " has-steps" : ""}`}
+      className={`media-dialog${panel ? " has-details" : ""}${!panel && note !== null ? " has-note" : ""}${many ? " has-steps" : ""}`}
       aria-label={label}
       onCancel={(event) => {
         event.preventDefault()
@@ -78,8 +93,11 @@ export function MediaDialog<T>({
     >
       <div className="media-dialog-frame">
         <div className="media-dialog-stage">{renderImage(item)}</div>
-        {renderDetails ? (
-          <div className="media-dialog-details">{renderDetails(item)}</div>
+        {panel ? (
+          <div className="media-dialog-details">
+            {details}
+            {noteText}
+          </div>
         ) : null}
         {many ? (
           <div className="media-dialog-bar">
@@ -104,6 +122,7 @@ export function MediaDialog<T>({
             </button>
           </div>
         ) : null}
+        {panel ? null : noteText}
       </div>
       <button
         ref={closeRef}
