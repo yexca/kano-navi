@@ -599,9 +599,12 @@ export interface AdminVideosPage extends Page<AdminVideo> {
   featuredVideo: AdminVideo | null
 }
 
+export type ProfileSlot = "avatar" | "banner"
+
 export interface ProfileMedia {
   id: string
-  slot: "avatar" | "banner"
+  /** The slot the candidate is active for, or the one that found it. */
+  slot: ProfileSlot
   source: "x" | "youtube" | "upload"
   sourceUrl: string | null
   downloadStatus: string | null

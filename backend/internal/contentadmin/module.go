@@ -89,6 +89,7 @@ func (m *Module) AdminRoutes() []httpx.Route {
 		{Method: http.MethodGet, Path: "/profile-media/{id}/preview", Handler: m.guard(id(m.previewProfileMedia))},
 		{Method: http.MethodPost, Path: "/profile-media/{id}/download", Handler: m.guard(id(m.downloadProfileMediaRoute))},
 		{Method: http.MethodPost, Path: "/profile-media/{id}/select", Handler: m.guard(id(m.selectProfileMediaRoute))},
+		{Method: http.MethodDelete, Path: "/profile-media/{id}", Handler: m.guard(id(m.deleteProfileMediaRoute))},
 		{Method: http.MethodGet, Path: "/schedule-images", Handler: m.guard(m.listScheduleAssetsRoute)},
 		{Method: http.MethodPost, Path: "/schedule-images/{id}/review", Handler: m.guard(id(m.manualReviewRoute))},
 		{Method: http.MethodPut, Path: "/schedule-images/{id}/period", Handler: m.guard(id(m.periodRoute))},

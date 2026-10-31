@@ -40,6 +40,12 @@
 >   them and then ignored, so remove them from `.env` after that start.
 >   `YOUTUBE_BOOTSTRAP_VIDEOS` had no effect and is no longer read.
 >   `GET`/`PUT /api/admin/sync-settings` read and change them.
+> - Profile media: `slot` is optional for `POST /api/admin/profile-media`,
+>   `/discover` and `/upload`. Discovery without one records both slots;
+>   the others start a candidate as an avatar.
+>   `POST /api/admin/profile-media/{id}/select` accepts `{slot}` and moves the
+>   candidate to that slot, and `DELETE /api/admin/profile-media/{id}` removes
+>   a candidate. A source URL stays one candidate whichever slot finds it.
 
 <details>
 <summary><strong>Operator console</strong></summary>
@@ -109,6 +115,12 @@
   channel and every method tried with its code.
 - A run whose media step left images queued explains how many remain, and the
   step's counts list them as Remaining with the bound that stopped it.
+- The Profile images page previews the board's profile card with the avatar
+  and banner in use (or the built-in images) above one list of candidates.
+  Its Add dialog fetches the profile page, which records both the avatar and
+  the banner it names, or uploads an image URL, a dropped file or a chosen
+  file. Any ready candidate can be used as the avatar or the banner, opened
+  full size, or deleted after a second click.
 
 </details>
 

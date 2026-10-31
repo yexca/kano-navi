@@ -4118,80 +4118,364 @@ blockquote.adm-verdict-reason {
   font-weight: 600;
 }
 
-.adm-profile-current {
+.adm-profile-preview-panel {
+  container-type: inline-size;
+}
+
+/* The board's profile card at its own size, beside what each slot uses. */
+.adm-profile-preview {
   display: grid;
-  place-items: center;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+}
+
+.adm-profile-card {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
   overflow: hidden;
+  padding-bottom: 18px;
   border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius);
+  background: hsl(var(--background));
+  box-shadow: var(--shadow-sm);
+}
+
+.adm-profile-card-banner {
+  width: 100%;
+  height: 128px;
   background: var(--adm-sunken);
+}
+
+.adm-profile-card-banner img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 30%;
+}
+
+.adm-profile-card-avatar {
+  width: 84px;
+  height: 84px;
+  margin: -42px 0 4px 18px;
+  border: 4px solid hsl(var(--background));
+  border-radius: 50%;
+  background: var(--adm-sunken);
+  object-fit: cover;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Placeholder lines where the card shows the name and catchphrase. */
+.adm-profile-card-line {
+  width: 58%;
+  height: 12px;
+  margin-left: 18px;
+  border-radius: 999px;
+  background: var(--adm-sunken);
+}
+
+.adm-profile-card-line.is-short {
+  width: 36%;
+  height: 9px;
+}
+
+.adm-profile-slots {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.adm-profile-slots > div {
+  display: grid;
+  gap: 8px;
+  padding: 14px 0;
+}
+
+.adm-profile-slots > div + div {
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-profile-slots dt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.adm-profile-slots dt svg {
+  width: 16px;
+  height: 16px;
+  color: var(--adm-accent);
+}
+
+.adm-profile-slots dt small,
+.adm-profile-slots dd small {
+  color: var(--adm-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-profile-slots dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+}
+
+.adm-profile-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--adm-sunken);
+  color: var(--adm-text);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* The Add dialog's tabs: a profile fetch, or an image URL or file. */
+.adm-profile-add {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.adm-profile-add > p {
+  margin: 0;
   color: var(--adm-muted);
   font-size: 13px;
 }
 
-.adm-profile-current.is-avatar {
-  width: 112px;
-  height: 112px;
-  border-radius: 50%;
+.adm-profile-add-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
-.adm-profile-current.is-banner {
-  aspect-ratio: 3 / 1;
+.adm-profile-add .adm-segmented {
+  background: var(--adm-surface);
+  box-shadow: inset 0 0 0 1px var(--adm-line);
+}
+
+.adm-profile-add .adm-segmented button {
+  min-width: 64px;
+  justify-content: center;
+}
+
+.adm-profile-add .adm-segmented button.is-active {
+  background: var(--adm-accent-soft);
+  color: var(--adm-accent);
+  box-shadow: none;
+}
+
+.adm-profile-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-profile-or::before,
+.adm-profile-or::after {
+  flex: 1;
+  height: 1px;
+  background: var(--adm-line);
+  content: "";
+}
+
+.adm-profile-drop {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 1.5px dashed var(--adm-line-strong);
   border-radius: var(--adm-radius-sm);
+  background: var(--adm-sunken);
+  color: var(--adm-text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
-.adm-profile-current img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.adm-profile-drop svg {
+  width: 22px;
+  height: 22px;
+  color: var(--adm-accent);
+}
+
+.adm-profile-drop strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.adm-profile-drop small {
+  color: var(--adm-muted);
+  font-size: 12px;
+}
+
+.adm-profile-drop:hover,
+.adm-profile-drop.is-over {
+  border-color: var(--adm-accent);
+  background: var(--adm-accent-soft);
+}
+
+.adm-profile-drop:disabled {
+  cursor: progress;
+  opacity: 0.7;
 }
 
 .adm-candidate-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
 }
 
 .adm-candidate {
   display: grid;
+  grid-template-rows: auto 1fr;
   overflow: hidden;
   border: 1px solid var(--adm-line);
   border-radius: var(--adm-radius-sm);
+  background: var(--adm-surface);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.adm-candidate:hover {
+  border-color: var(--adm-line-strong);
 }
 
 .adm-candidate.is-active {
   border-color: var(--leaf);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--leaf) 18%, transparent);
 }
 
+/* Every candidate fits whole in the same frame, so square avatars and wide
+ * banners compare side by side. */
 .adm-candidate-preview {
+  position: relative;
   display: grid;
   place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-bottom: 1px solid var(--adm-line);
   background: var(--adm-sunken);
   color: var(--adm-muted);
 }
 
-.adm-candidate-preview.is-avatar {
-  aspect-ratio: 1;
+.adm-candidate-preview > button {
+  position: absolute;
+  inset: 0;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
-.adm-candidate-preview.is-banner {
-  aspect-ratio: 3 / 1;
+.adm-candidate-preview > button:focus-visible {
+  outline: none;
+  box-shadow: inset var(--adm-focus);
 }
 
 .adm-candidate-preview img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+}
+
+.adm-candidate-preview > button:hover img {
+  transform: scale(1.03);
+}
+
+.adm-candidate-flag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--adm-surface);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
 }
 
 .adm-candidate-body {
   display: grid;
-  gap: 6px;
-  padding: 10px;
+  align-content: start;
+  gap: 8px;
+  padding: 10px 12px 12px;
 }
 
 .adm-candidate-body small {
   color: var(--adm-muted);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-candidate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 8px;
+}
+
+.adm-candidate-meta span {
+  white-space: nowrap;
+}
+
+.adm-candidate-body .adm-error-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.adm-candidate-use {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-candidate-use > span {
+  margin-right: 2px;
+  color: var(--adm-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.adm-candidate-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.adm-candidate-tools > :last-child {
+  margin-left: auto;
+}
+
+@container (max-width: 640px) {
+  .adm-profile-preview {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .adm-profile-card {
+    width: min(100%, 340px);
+  }
 }
 
 /* ------------------------------------------------------- detection and llm */

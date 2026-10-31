@@ -191,8 +191,9 @@ type profileCandidate struct {
 	SourceURL *string `json:"sourceUrl,omitempty"`
 }
 
-// upsertProfileCandidate registers a candidate without downloading it. A
-// ready candidate keeps its cached file and status when it is seen again.
+// upsertProfileCandidate registers a candidate without downloading it. A source
+// URL is one candidate whichever slot found it: seeing it again updates that
+// row, keeping its slot, and a ready candidate keeps its cached file and status.
 func upsertProfileCandidate(ctx context.Context, q queryer, candidate profileCandidate, now string) (string, error) {
 	slot := normalizedProfileSlot(candidate.Slot)
 	source := normalizedProfileSource(candidate.Source)
@@ -208,7 +209,12 @@ func upsertProfileCandidate(ctx context.Context, q queryer, candidate profileCan
 	}
 	id := ""
 	if sourceURL != "" {
-		id = profileCandidateID(slot, sourceURL)
+		err := q.QueryRowContext(ctx, `SELECT id FROM profile_media WHERE source_url = ? ORDER BY is_active DESC, created_at ASC, id ASC LIMIT 1`, sourceURL).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			id = profileCandidateID(slot, sourceURL)
+		} else if err != nil {
+			return "", err
+		}
 	} else {
 		uuid, err := randomUUID()
 		if err != nil {
@@ -228,7 +234,7 @@ func upsertProfileCandidate(ctx context.Context, q queryer, candidate profileCan
 	     id, slot, source, source_ref, source_url, status, is_active, created_at, updated_at, raw_json
 	   ) VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?)
 	   ON CONFLICT(id) DO UPDATE SET
-	     slot=excluded.slot, source=excluded.source,
+	     source=excluded.source,
 	     source_ref=COALESCE(excluded.source_ref, profile_media.source_ref),
 	     source_url=COALESCE(excluded.source_url, profile_media.source_url),
 	     status=CASE WHEN profile_media.status = 'ready' THEN 'ready' ELSE 'pending' END,

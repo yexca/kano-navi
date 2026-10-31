@@ -214,7 +214,9 @@ redownload records its outcome/error while keeping any ready candidate and
 selected file available. A successful redownload updates the candidate hash and
 MIME only; the selected file keeps its own active hash/MIME and versioned public
 URL until the operator selects it. `/media/profile/:slot` validates and serves
-that selected version, so its bytes, ETag, and URL hash agree.
+that selected version, so its bytes, ETag, and URL hash agree. Selecting writes
+`data/avatar/<slot>.<ext>` for the chosen slot. Deleting a candidate removes
+only its row: its content-addressed file and any selected file stay on disk.
 
 Startup repairs selected hash/MIME from the selected file's bytes rather than
 the candidate, whatever the stored active metadata says. This is

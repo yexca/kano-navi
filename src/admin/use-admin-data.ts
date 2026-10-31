@@ -35,6 +35,7 @@ import type {
   Page,
   ProfileMedia,
   ProfileMediaState,
+  ProfileSlot,
   Provider,
   QueueRoute,
   RouteTarget,
@@ -268,28 +269,25 @@ function createClient(run: Runner, slow: Runner) {
       send<{ video: AdminVideo }>("POST", `/videos/${enc(id)}/unmerge`, {}),
 
     profileMedia: () => get<ProfileMediaState>("/profile-media"),
-    addProfileMedia: (slot: string, source: string, sourceUrl: string) =>
-      send<ProfileMediaState>("POST", "/profile-media", {
-        slot,
-        source,
-        sourceUrl,
-      }),
-    discoverProfileMedia: (slot: string, source: string) =>
+    addProfileMedia: (source: string, sourceUrl: string) =>
+      send<ProfileMediaState>("POST", "/profile-media", { source, sourceUrl }),
+    /** Without a slot, discovery reads both the avatar and the banner. */
+    discoverProfileMedia: (source: string) =>
       sendSlow<ProfileMediaState & { candidates: ProfileMedia[] }>(
         "POST",
         "/profile-media/discover",
-        { slot, source },
+        { source },
       ),
-    uploadProfileMedia: (slot: string, file: Blob) =>
-      sendSlow<ProfileMediaState>(
-        "POST",
-        `/profile-media/upload${query({ slot })}`,
-        file,
-      ),
+    uploadProfileMedia: (file: Blob) =>
+      sendSlow<ProfileMediaState>("POST", "/profile-media/upload", file),
     downloadProfileMedia: (id: string) =>
       sendSlow<ProfileMediaState>("POST", `/profile-media/${enc(id)}/download`),
-    selectProfileMedia: (id: string) =>
-      send<ProfileMediaState>("POST", `/profile-media/${enc(id)}/select`),
+    selectProfileMedia: (id: string, slot: ProfileSlot) =>
+      send<ProfileMediaState>("POST", `/profile-media/${enc(id)}/select`, {
+        slot,
+      }),
+    deleteProfileMedia: (id: string) =>
+      send<ProfileMediaState>("DELETE", `/profile-media/${enc(id)}`),
 
     extraction: () => get<Extraction>("/extraction"),
     updateExtraction: (body: Partial<Extraction>) =>

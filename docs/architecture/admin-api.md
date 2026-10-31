@@ -491,15 +491,28 @@ of `revisions`.
 
 ## Profile media
 
-| Method and path                     | Body                | Result                      |
-| ----------------------------------- | ------------------- | --------------------------- |
-| `GET /profile-media`                |                     | `{items, active}`           |
-| `POST /profile-media`               | `{slot, sourceUrl}` | `201 {item, items, active}` |
-| `POST /profile-media/discover`      | `{slot?, source?}`  | discovery result            |
-| `POST /profile-media/upload?slot=`  | raw image body      | `201 {item, items, active}` |
-| `GET /profile-media/{id}/preview`   |                     | image bytes (ready only)    |
-| `POST /profile-media/{id}/download` |                     | `{item, items, active}`     |
-| `POST /profile-media/{id}/select`   |                     | `{item, items, active}`     |
+| Method and path                     | Body                         | Result                      |
+| ----------------------------------- | ---------------------------- | --------------------------- |
+| `GET /profile-media`                |                              | `{items, active}`           |
+| `POST /profile-media`               | `{source, sourceUrl, slot?}` | `201 {item, items, active}` |
+| `POST /profile-media/discover`      | `{source, slot?}`            | discovery result            |
+| `POST /profile-media/upload?slot=`  | raw image body (`slot?`)     | `201 {item, items, active}` |
+| `GET /profile-media/{id}/preview`   |                              | image bytes (ready only)    |
+| `POST /profile-media/{id}/download` |                              | `{item, items, active}`     |
+| `POST /profile-media/{id}/select`   | `{slot?}`                    | `{item, items, active}`     |
+| `DELETE /profile-media/{id}`        |                              | `{items, active}`           |
+
+`source` is `x` or `youtube`, and `slot` is `avatar` or `banner`. A candidate's
+`slot` is the slot it is active for, or otherwise the one that found it; an
+added or uploaded candidate without one starts as an avatar. A source URL is
+one candidate whichever slot finds it. Discovery without a slot records the
+avatar and the banner the profile page names, and its result then has no
+`slot`. Selection uses the given slot, or the candidate's own, and moves the
+candidate there; the slot it leaves falls back to the built-in image.
+Deleting the active candidate falls back to the built-in image, an unknown ID
+answers `404 profile_media_not_found`, and a later discovery may record a
+deleted URL again. Files follow
+[Selected Profile Media](media-cache.md#selected-profile-media).
 
 ## Translations
 

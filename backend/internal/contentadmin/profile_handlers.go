@@ -23,7 +23,7 @@ type profileItemResponse struct {
 }
 
 type profileDiscoverResponse struct {
-	Slot       string         `json:"slot"`
+	Slot       string         `json:"slot,omitempty"`
 	Source     string         `json:"source"`
 	SourceURL  string         `json:"sourceUrl"`
 	Candidates []ProfileMedia `json:"candidates"`
@@ -57,20 +57,35 @@ func (m *Module) writeProfileItem(w http.ResponseWriter, r *http.Request, status
 	httpx.WriteJSON(w, status, profileItemResponse{Item: item, profileMediaPayload: payload})
 }
 
-// discoverySlotAndSource validates the shared slot/source pair. Uploads are
-// never a remote source.
+// discoverySlotAndSource validates the shared slot/source pair. The slot is
+// optional and stays empty when omitted; uploads are never a remote source.
 func discoverySlotAndSource(slotText, sourceText *string) (string, string, error) {
 	slot, source := "", ""
 	if slotText != nil {
-		slot = normalizedProfileSlot(*slotText)
+		if slot = normalizedProfileSlot(*slotText); slot == "" {
+			return "", "", httpx.Invalid("slot or source is invalid")
+		}
 	}
 	if sourceText != nil {
 		source = normalizedProfileSource(*sourceText)
 	}
-	if slot == "" || source == "" || source == "upload" {
+	if source == "" || source == "upload" {
 		return "", "", httpx.Invalid("slot or source is invalid")
 	}
 	return slot, source, nil
+}
+
+// optionalSlot reads an optional slot; empty means the caller decides.
+func optionalSlot(value string) (string, error) {
+	text, err := textValue(value, "slot", false, 16)
+	if err != nil || text == nil {
+		return "", err
+	}
+	slot := normalizedProfileSlot(*text)
+	if slot == "" {
+		return "", httpx.Invalid("slot is invalid")
+	}
+	return slot, nil
 }
 
 func (m *Module) addProfileMedia(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +94,7 @@ func (m *Module) addProfileMedia(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
-	slotText, err := textField(body, "slot", true, 16)
+	slotText, err := textField(body, "slot", false, 16)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -93,6 +108,9 @@ func (m *Module) addProfileMedia(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
+	}
+	if slot == "" {
+		slot = "avatar"
 	}
 	rawURL, err := textValue(jsString(body["sourceUrl"]), "url", false, 2000)
 	if err != nil {
@@ -151,7 +169,7 @@ func (m *Module) discoverProfileMediaRoute(w http.ResponseWriter, r *http.Reques
 		httpx.WriteError(w, err)
 		return
 	}
-	slotText, err := textField(body, "slot", true, 16)
+	slotText, err := textField(body, "slot", false, 16)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -181,15 +199,17 @@ func (m *Module) discoverProfileMediaRoute(w http.ResponseWriter, r *http.Reques
 }
 
 // discoverProfileMedia reads one allow-listed public profile page and records
-// the image URLs it references. It runs only for an explicit operator action
-// and holds no transaction while the page is fetched.
+// the image URLs it references. Without a slot it reads both the avatar and the
+// banner keys, and each URL keeps the first slot that found it. It runs only
+// for an explicit operator action and holds no transaction while the page is
+// fetched.
 func (m *Module) discoverProfileMedia(ctx context.Context, slot, source string) (*profileDiscoverResponse, error) {
 	var xURL, youtubeURL, avatarURL, bannerURL sql.NullString
 	err := m.db.QueryRowContext(ctx, `SELECT x_url, youtube_url, avatar_url, banner_url FROM profiles ORDER BY id LIMIT 1`).Scan(&xURL, &youtubeURL, &avatarURL, &bannerURL)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
-	pageURL, existing := defaultXProfilePage, avatarURL.String
+	pageURL := defaultXProfilePage
 	if source == "x" && xURL.String != "" {
 		pageURL = xURL.String
 	}
@@ -199,9 +219,6 @@ func (m *Module) discoverProfileMedia(ctx context.Context, slot, source string) 
 			pageURL = youtubeURL.String
 		}
 	}
-	if slot == "banner" {
-		existing = bannerURL.String
-	}
 	page, err := m.fetchAllowed(ctx, pageURL, pageFetch)
 	if err != nil {
 		return nil, err
@@ -209,21 +226,28 @@ func (m *Module) discoverProfileMedia(ctx context.Context, slot, source string) 
 	if !page.ok() {
 		return nil, httpStatusFailure(pageFetch, page.status)
 	}
+	slots := []string{slot}
+	if slot == "" {
+		slots = []string{"avatar", "banner"}
+	}
+	existing := map[string]string{"avatar": avatarURL.String, "banner": bannerURL.String}
 	seen := map[string]bool{}
-	candidates := []string{}
+	candidates := []profileCandidate{}
 	// A page can contain unrelated social images; those are skipped safely.
-	for _, value := range append(discoveredImageURLs(string(page.body), slot), existing) {
-		imageURL, ok := profileImageURL(value)
-		if !ok || seen[imageURL] {
-			continue
+	for _, found := range slots {
+		for _, value := range append(discoveredImageURLs(string(page.body), found), existing[found]) {
+			imageURL, ok := profileImageURL(value)
+			if !ok || seen[imageURL] {
+				continue
+			}
+			seen[imageURL] = true
+			candidates = append(candidates, profileCandidate{Slot: found, Source: source, SourceRef: &page.url, SourceURL: &imageURL})
 		}
-		seen[imageURL] = true
-		candidates = append(candidates, imageURL)
 	}
 	now := m.timestamp()
 	err = m.inTx(ctx, func(tx *sql.Tx) error {
-		for i := range candidates {
-			if _, upsertErr := upsertProfileCandidate(ctx, tx, profileCandidate{Slot: slot, Source: source, SourceRef: &page.url, SourceURL: &candidates[i]}, now); upsertErr != nil {
+		for _, candidate := range candidates {
+			if _, upsertErr := upsertProfileCandidate(ctx, tx, candidate, now); upsertErr != nil {
 				return upsertErr
 			}
 		}
@@ -260,15 +284,13 @@ func (m *Module) uploadProfileMedia(w http.ResponseWriter, r *http.Request, slot
 		}
 		content = body
 	}
-	slotText, err := textValue(slotParam, "slot", true, 16)
+	slot, err := optionalSlot(slotParam)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
-	slot := normalizedProfileSlot(*slotText)
 	if slot == "" {
-		httpx.WriteError(w, httpx.Invalid("slot is invalid"))
-		return
+		slot = "avatar"
 	}
 	if len(content) == 0 {
 		httpx.WriteError(w, httpx.Invalid("image body is required"))
@@ -347,7 +369,17 @@ func (m *Module) fetchProfileImage(ctx context.Context, candidate *ProfileMedia)
 }
 
 func (m *Module) selectProfileMediaRoute(w http.ResponseWriter, r *http.Request, id string) {
-	if err := m.selectProfileMedia(r.Context(), id); err != nil {
+	body, err := httpx.Body(w, r)
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	slot, err := optionalSlot(jsString(body["slot"]))
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	if err := m.selectProfileMedia(r.Context(), id, slot); err != nil {
 		writeFailure(w, err)
 		return
 	}
@@ -355,9 +387,12 @@ func (m *Module) selectProfileMediaRoute(w http.ResponseWriter, r *http.Request,
 }
 
 // selectProfileMedia copies a ready candidate to data/avatar/<slot>.<ext> and
-// makes it the active image for its slot. The copied bytes are re-verified so
-// the public reader's hash and MIME checks agree with the stored metadata.
-func (m *Module) selectProfileMedia(ctx context.Context, id string) error {
+// makes it the active image for that slot, or for its own slot when none is
+// given. A candidate selected for the other slot moves there, so a slot it was
+// active for falls back to the built-in image. The copied bytes are
+// re-verified so the public reader's hash and MIME checks agree with the
+// stored metadata.
+func (m *Module) selectProfileMedia(ctx context.Context, id, slot string) error {
 	m.selectMu.Lock()
 	defer m.selectMu.Unlock()
 	candidate, err := getProfileMedia(ctx, m.db, id)
@@ -383,24 +418,64 @@ func (m *Module) selectProfileMedia(ctx context.Context, id string) error {
 	if extension == "" || mimeType != *candidate.MIMEType || sha256Hex(content) != *candidate.SHA256 {
 		return failure("profile media cache file does not match its metadata")
 	}
-	if candidate.Slot != "avatar" && candidate.Slot != "banner" {
+	if slot == "" {
+		slot = candidate.Slot
+	}
+	if slot != "avatar" && slot != "banner" {
 		return failure("invalid profile media slot")
 	}
-	destination := "avatar/" + candidate.Slot + "." + extension
+	destination := "avatar/" + slot + "." + extension
 	if err = m.writeRootFile(destination, content, false); err != nil {
 		return failure("profile media destination is invalid")
 	}
 	now := m.timestamp()
 	return m.inTx(ctx, func(tx *sql.Tx) error {
-		if _, execErr := tx.ExecContext(ctx, `UPDATE profile_media SET is_active=0, updated_at=? WHERE slot=?`, now, candidate.Slot); execErr != nil {
+		if _, execErr := tx.ExecContext(ctx, `UPDATE profile_media SET is_active=0, updated_at=? WHERE slot=? AND is_active=1 AND id<>?`, now, slot, candidate.ID); execErr != nil {
 			return execErr
 		}
-		if _, execErr := tx.ExecContext(ctx, `UPDATE profile_media SET is_active=1, active_cache_path=?, active_sha256=?, active_mime_type=?, updated_at=? WHERE id=?`,
-			destination, *candidate.SHA256, mimeType, now, candidate.ID); execErr != nil {
+		if _, execErr := tx.ExecContext(ctx, `UPDATE profile_media SET slot=?, is_active=1, active_cache_path=?, active_sha256=?, active_mime_type=?, updated_at=? WHERE id=?`,
+			slot, destination, *candidate.SHA256, mimeType, now, candidate.ID); execErr != nil {
 			return execErr
 		}
 		return sqlite.BumpRevisionTx(ctx, tx, now)
 	})
+}
+
+// deleteProfileMediaRoute removes one candidate row. Its cached and selected
+// files stay on disk. Deleting the active candidate leaves its slot on the
+// built-in image, and discovery may record a deleted URL again.
+func (m *Module) deleteProfileMediaRoute(w http.ResponseWriter, r *http.Request, id string) {
+	m.selectMu.Lock()
+	defer m.selectMu.Unlock()
+	candidate, err := getProfileMedia(r.Context(), m.db, id)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	if candidate == nil {
+		httpx.WriteCode(w, http.StatusNotFound, "profile_media_not_found")
+		return
+	}
+	now := m.timestamp()
+	err = m.inTx(r.Context(), func(tx *sql.Tx) error {
+		if _, execErr := tx.ExecContext(r.Context(), `DELETE FROM profile_media WHERE id=?`, candidate.ID); execErr != nil {
+			return execErr
+		}
+		if !candidate.IsActive {
+			return nil
+		}
+		return sqlite.BumpRevisionTx(r.Context(), tx, now)
+	})
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	payload, err := m.profilePayload(r.Context())
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, payload)
 }
 
 func (m *Module) previewProfileMedia(w http.ResponseWriter, r *http.Request, id string) {

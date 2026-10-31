@@ -230,6 +230,7 @@ func TestReadOnlyStoreRejectsEveryMutation(t *testing.T) {
 	} {
 		f.request(http.MethodPost, path, "application/json", []byte(`{}`)).expect(t, http.StatusServiceUnavailable, "read_only")
 	}
+	f.request(http.MethodDelete, "/profile-media/abc", "", nil).expect(t, http.StatusServiceUnavailable, "read_only")
 	f.put("/schedule-images/abc/period", map[string]any{}).expect(t, http.StatusServiceUnavailable, "read_only")
 	f.put("/posts/abc/quote/hidden", map[string]any{"hidden": true}).expect(t, http.StatusServiceUnavailable, "read_only")
 	if len(f.network.visited) != 0 {
@@ -268,7 +269,20 @@ func TestProfileCandidateUpsert(t *testing.T) {
 		t.Fatalf("upsert duplicated or cleared the candidate: %s", again.raw)
 	}
 
-	f.post("/profile-media", map[string]any{"source": "x"}).expectInvalid(t, "slot is required")
+	// A URL is one candidate whichever slot sees it; the row keeps its slot.
+	other := f.post("/profile-media", map[string]any{"slot": "banner", "source": "x", "sourceUrl": normalized})
+	other.expect(t, http.StatusCreated, "")
+	if len(list(t, other.json["items"])) != 1 || object(t, other.json["item"])["id"] != item["id"] || object(t, other.json["item"])["slot"] != "avatar" {
+		t.Fatalf("another slot duplicated or moved the candidate: %s", other.raw)
+	}
+	// Without a slot a new candidate starts as an avatar.
+	unslotted := f.post("/profile-media", map[string]any{"source": "x", "sourceUrl": "https://pbs.twimg.com/profile_banners/1/b"})
+	unslotted.expect(t, http.StatusCreated, "")
+	if object(t, unslotted.json["item"])["slot"] != "avatar" {
+		t.Fatalf("an unslotted candidate must start as an avatar: %s", unslotted.raw)
+	}
+
+	f.post("/profile-media", map[string]any{"slot": "avatar"}).expectInvalid(t, "source is required")
 	f.post("/profile-media", map[string]any{"slot": "avatar", "source": "upload", "sourceUrl": normalized}).expectInvalid(t, "slot or source is invalid")
 	f.post("/profile-media", map[string]any{"slot": "cover", "source": "x", "sourceUrl": normalized}).expectInvalid(t, "slot or source is invalid")
 	f.post("/profile-media", map[string]any{"slot": "avatar", "source": "x"}).expectInvalid(t, "sourceUrl is required")
@@ -507,6 +521,68 @@ func TestUploadSelectAndPublicRead(t *testing.T) {
 	}
 }
 
+func TestSelectForAnotherSlotAndDelete(t *testing.T) {
+	f := newFixture(t, true)
+	first, second := syntheticPNG(40), syntheticPNG(41)
+	upload := func(image []byte) string {
+		t.Helper()
+		uploaded := f.request(http.MethodPost, "/profile-media/upload", "image/png", image)
+		uploaded.expect(t, http.StatusCreated, "")
+		item := object(t, uploaded.json["item"])
+		if item["slot"] != "avatar" {
+			t.Fatalf("an upload without a slot must start as an avatar: %#v", item)
+		}
+		return item["id"].(string)
+	}
+	firstID, secondID := upload(first), upload(second)
+	f.post("/profile-media/"+firstID+"/select", map[string]any{}).expect(t, http.StatusOK, "")
+	f.post("/profile-media/"+secondID+"/select", map[string]any{"slot": "cover"}).expectInvalid(t, "slot is invalid")
+
+	// Selecting the avatar for the banner moves it; the avatar falls back.
+	before := f.revision()
+	moved := f.post("/profile-media/"+firstID+"/select", map[string]any{"slot": "banner"})
+	moved.expect(t, http.StatusOK, "")
+	item := object(t, moved.json["item"])
+	if item["slot"] != "banner" || item["isActive"] != true || item["activeCachePath"] != "avatar/banner.png" {
+		t.Fatalf("unexpected moved candidate: %#v", item)
+	}
+	active := object(t, moved.json["active"])
+	if active["avatar"] != nil || object(t, active["banner"])["id"] != firstID {
+		t.Fatalf("unexpected active slots after the move: %#v", active)
+	}
+	if f.revision() == before {
+		t.Fatal("moving the selection must bump the dashboard revision")
+	}
+	served, err := f.store.ReadProfileMedia(context.Background(), "banner", sha256Hex(first))
+	if err != nil || !bytes.Equal(served.Content, first) {
+		t.Fatalf("public reader rejected the moved banner: %v", err)
+	}
+
+	// Another candidate for the same slot replaces it there.
+	f.post("/profile-media/"+secondID+"/select", map[string]any{"slot": "banner"}).expect(t, http.StatusOK, "")
+	if f.text(`SELECT group_concat(id) FROM profile_media WHERE is_active=1`) != secondID {
+		t.Fatal("exactly the last banner selection must be active")
+	}
+
+	// Deleting an inactive candidate keeps the revision; the active one bumps it.
+	before = f.revision()
+	deleted := f.request(http.MethodDelete, "/profile-media/"+firstID, "", nil)
+	deleted.expect(t, http.StatusOK, "")
+	if len(list(t, deleted.json["items"])) != 1 || f.revision() != before {
+		t.Fatalf("unexpected list or revision after deleting an inactive candidate: %s", deleted.raw)
+	}
+	deleted = f.request(http.MethodDelete, "/profile-media/"+secondID, "", nil)
+	deleted.expect(t, http.StatusOK, "")
+	if len(list(t, deleted.json["items"])) != 0 || object(t, deleted.json["active"])["banner"] != nil || f.revision() == before {
+		t.Fatalf("deleting the active banner must clear it and bump the revision: %s", deleted.raw)
+	}
+	// The selected and cached files stay on disk.
+	if _, err := os.Stat(filepath.Join(f.dataRoot, "avatar", "banner.png")); err != nil {
+		t.Fatalf("deletion removed the selected file: %v", err)
+	}
+	f.request(http.MethodDelete, "/profile-media/"+secondID, "", nil).expect(t, http.StatusNotFound, "profile_media_not_found")
+}
+
 func TestUploadValidation(t *testing.T) {
 	f := newFixture(t, true)
 	image := syntheticPNG(20)
@@ -681,6 +757,22 @@ func TestDiscoverRegistersAllowlistedCandidates(t *testing.T) {
 		t.Fatalf("discovery fetched images: %v", f.network.visited)
 	}
 
+	// Without a slot both keys are read; known URLs keep their rows and slots.
+	both := f.post("/profile-media/discover", map[string]any{"source": "x"})
+	both.expect(t, http.StatusOK, "")
+	if _, present := both.json["slot"]; present {
+		t.Fatalf("a discovery of both slots names no slot: %s", both.raw)
+	}
+	slots := map[string]string{}
+	for _, entry := range list(t, both.json["items"]) {
+		candidate := object(t, entry)
+		slots[candidate["sourceUrl"].(string)] = candidate["slot"].(string)
+	}
+	if len(slots) != len(want)+1 || slots["https://pbs.twimg.com/profile_banners/1/banner"] != "banner" || slots[want[0]] != "avatar" {
+		t.Fatalf("unexpected candidates after discovering both slots: %v", slots)
+	}
+
+	f.post("/profile-media/discover", map[string]any{"slot": "cover", "source": "x"}).expectInvalid(t, "slot or source is invalid")
 	f.post("/profile-media/discover", map[string]any{"slot": "avatar", "source": "upload"}).expectInvalid(t, "slot or source is invalid")
 	f.post("/profile-media/discover", map[string]any{"slot": "avatar"}).expectInvalid(t, "source is required")
 }
