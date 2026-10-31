@@ -18,7 +18,7 @@ func TestSourceChainsDefaultToTheFormerOrderAndRoundTrip(t *testing.T) {
 	if got := x.Chain.Enabled(); len(got) != 2 || got[0] != "timeline" || got[1] != "profile" || x.Chain.APIGate != DefaultXAPIGate || x.Chain.APIDailyCap != DefaultXAPIDailyCap {
 		t.Fatalf("x chain=%+v", x.Chain)
 	}
-	if got := scheduleOf(t, s, "youtube", 180).Chain.Enabled(); len(got) != 3 || got[0] != "api" || got[2] != "videos_page" {
+	if got := scheduleOf(t, s, "youtube", 180).Chain.Enabled(); len(got) != 3 || got[0] != "api" || got[1] != "rss" || got[2] != "videos_page" {
 		t.Fatalf("youtube chain=%v", got)
 	}
 	if b := scheduleOf(t, s, "bilibili", 180).Chain; len(b.Methods) != 1 || b.Methods[0].ID != "list" {
@@ -42,6 +42,12 @@ func TestSourceChainsDefaultToTheFormerOrderAndRoundTrip(t *testing.T) {
 		if _, err := s.SaveSourceSchedule(ctx, x, 180, now); !errors.Is(err, ErrWorkflowValidation) {
 			t.Errorf("%s: err=%v", name, err)
 		}
+	}
+	// A chain stored before yt-dlp was introduced keeps its order and gains
+	// the optional method disabled.
+	got := upgradeSourceChain("youtube", SourceChain{Methods: []ChainMethod{{"videos_page", true}, {"rss", false}, {"api", true}}})
+	if len(got.Methods) != 4 || got.Methods[0].ID != "videos_page" || got.Methods[3].ID != "ytdlp" || got.Methods[3].Enabled {
+		t.Fatalf("upgraded=%+v", got)
 	}
 	// A stored chain that no longer validates reads as the default.
 	if _, err := s.DB().Exec(`UPDATE source_schedules SET chain_json='{"methods":[{"id":"gone","enabled":true}]}' WHERE source='youtube'`); err != nil {
@@ -71,7 +77,7 @@ func TestRunsFreezeTheirChains(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chain := got.SourceChain["youtube"]; len(chain.Methods) != 3 || chain.Methods[0].ID != "rss" || chain.Uses("api") {
+	if chain := got.SourceChain["youtube"]; len(chain.Methods) != 4 || chain.Methods[0].ID != "rss" || chain.Uses("api") {
 		t.Fatalf("frozen=%+v", got.SourceChain)
 	}
 }

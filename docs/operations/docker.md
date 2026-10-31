@@ -73,8 +73,9 @@ docker build -t kano-navi:local .
 KANO_IMAGE=kano-navi:local docker compose up -d --pull never
 ```
 
-The image is built from `scratch`: one static Go binary, the built frontend,
-the bundled assets and a CA bundle. It has no shell and no Node runtime. The
+The runtime image contains the static Go binary, the built frontend, the
+bundled assets, Node.js and the checksum-verified yt-dlp `2026.10.26`
+executable. The
 container health check runs `kano-go healthcheck`. One-shot maintenance
 commands run against the mounted `./data`:
 
@@ -142,8 +143,10 @@ its own data volume and synthetic authentication, checks public pages and API
 contracts, and removes the container and anonymous volume afterwards.
 It does not mount the operator data/ directory or load .env.
 
-The runtime stage copies the `kano-go` binary, `dist/` with its
-precompressed siblings, `public/` and a CA bundle. The embedded schema and static seeds are compiled into the binary.
+The runtime stage copies the `kano-go` and yt-dlp executables, `dist/` with its
+precompressed siblings, and `public/`. The embedded schema and static seeds
+are compiled into the binary. `YTDLP_BINARY` defaults to `/app/yt-dlp` in the
+production Compose deployment; set it to an empty value to disable the method.
 Production starts through `kano-go serve`, validates authentication before
 opening SQLite and stores runtime state only in the `/app/data` volume.
 

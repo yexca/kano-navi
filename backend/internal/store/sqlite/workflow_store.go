@@ -126,6 +126,7 @@ func (s *Store) decodeRunConfig(x *WorkflowRun, lookback, windows, sync, chain s
 			return ErrWorkflowStorage
 		}
 		for source, setting := range stored {
+			setting = upgradeSourceChain(source, setting)
 			if setting.Problem(source) == "" {
 				if x.SourceChain == nil {
 					x.SourceChain = map[string]SourceChain{}

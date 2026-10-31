@@ -47,6 +47,7 @@ import type {
   SourceSchedule,
   SourceSync,
   Sources,
+  YTDLPStatus,
 } from "@/admin/types"
 import {
   Badge,
@@ -1354,6 +1355,58 @@ function ConfirmationPanel({
   )
 }
 
+function YTDLPPanel({
+  status,
+  onChange,
+}: {
+  status: YTDLPStatus | undefined
+  onChange: (status: YTDLPStatus) => void
+}) {
+  const { t } = useAppSettings()
+  const { api, act } = useAdmin()
+  const [busy, setBusy] = useState(false)
+  const available = status?.available === true
+  const update = async () => {
+    setBusy(true)
+    const next = await act(() => api.updateYTDLP(), "admin.notice.ytdlpUpdated")
+    setBusy(false)
+    if (next) onChange(next)
+  }
+  return (
+    <Panel
+      level={3}
+      icon={Download}
+      title={t("admin.ytdlp.title")}
+      description={t("admin.ytdlp.description")}
+    >
+      <div className="adm-form">
+        <Facts
+          items={[
+            [
+              t("admin.ytdlp.status"),
+              available
+                ? t("admin.ytdlp.available")
+                : t("admin.ytdlp.unavailable"),
+            ],
+            [t("admin.ytdlp.version"), status?.version || null],
+          ]}
+        />
+        <div className="adm-form-actions">
+          <Button
+            size="sm"
+            icon={RotateCw}
+            busy={busy}
+            disabled={!available}
+            onClick={update}
+          >
+            {t("admin.ytdlp.update")}
+          </Button>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
 const sourceIds: ScheduleSource[] = ["x", "youtube", "bilibili"]
 
 /**
@@ -1366,6 +1419,7 @@ export function SourcesView({ tab, navigate }: ViewProps) {
   const { t, locale } = useAppSettings()
   const { api, overview } = useAdmin()
   const sources = useResource(() => api.sources(), [])
+  const ytdlp = useResource(() => api.ytdlp(), [])
   const data = sources.data
   const selected = sourceIds.includes(tab as ScheduleSource)
     ? (tab as ScheduleSource)
@@ -1473,10 +1527,18 @@ export function SourcesView({ tab, navigate }: ViewProps) {
                 />
               ) : null}
               {selected === "youtube" ? (
-                <ConfirmationPanel
-                  youtube={data.youtube}
-                  onChange={(youtube) => sources.setData({ ...data, youtube })}
-                />
+                <>
+                  <ConfirmationPanel
+                    youtube={data.youtube}
+                    onChange={(youtube) =>
+                      sources.setData({ ...data, youtube })
+                    }
+                  />
+                  <YTDLPPanel
+                    status={ytdlp.data}
+                    onChange={(next) => ytdlp.setData(next)}
+                  />
+                </>
               ) : null}
             </section>
             <div className="adm-source-fetch">

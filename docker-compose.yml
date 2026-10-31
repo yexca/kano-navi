@@ -18,5 +18,6 @@ services:
       WORKFLOW_SCHEDULER_ENABLED: ${WORKFLOW_SCHEDULER_ENABLED:-1}
       X_HANDLES: ${X_HANDLES:-kano_2525,_Kanotic}
       YOUTUBE_CHANNEL_ID: ${YOUTUBE_CHANNEL_ID:-UCShXNLMXCfstmWKH_q86B8w}
+      YTDLP_BINARY: ${YTDLP_BINARY-/app/yt-dlp}
     volumes:
       - ./data:/app/data

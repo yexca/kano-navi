@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -26,7 +27,7 @@ type Result struct {
 	Errors                           []string
 	Discovered, Requested, Inspected int
 	// Listing names the chain method that served this run's uploads:
-	// ListingAPI, ListingFeed, ListingVideosPage, or "" when none did.
+	// ListingAPI, ListingFeed, ListingVideosPage, ListingYTDLP, or "" when none did.
 	Listing string
 	// Tried lists the chain methods the run tried, in order, as "<method>"
 	// for the one that served and "<method>: <code>" for the others.
@@ -50,6 +51,7 @@ const (
 	ListingAPI        = "api"
 	ListingFeed       = "rss"
 	ListingVideosPage = "videos_page"
+	ListingYTDLP      = "ytdlp"
 )
 
 // videosPageLimit bounds the IDs taken from the uploads tab, the newest ones,
@@ -85,13 +87,18 @@ type Adapter struct {
 	Client  *Client
 	Options Options
 	Now     func() time.Time
+	YTDLP   *YTDLP
 }
 
 func NewAdapter(c *Client, options Options) *Adapter {
 	if c == nil {
 		c = NewClient(nil)
 	}
-	return &Adapter{c, options, time.Now}
+	var ytdlp *YTDLP
+	if strings.TrimSpace(options.YTDLPBinary) != "" {
+		ytdlp = NewYTDLP(options.YTDLPBinary)
+	}
+	return &Adapter{Client: c, Options: options, Now: time.Now, YTDLP: ytdlp}
 }
 
 // List selects the listed uploads one recent run considers, newest first.
@@ -380,6 +387,25 @@ func (a *Adapter) listUploads(ctx context.Context, result *Result, state State, 
 			result.Listing = ListingFeed
 			result.Tried = append(result.Tried, listing)
 			return entries, nil, false, nil
+		case ListingYTDLP:
+			if a.YTDLP == nil {
+				fail(listing, &Error{"youtube_ytdlp_unavailable"}, true)
+				continue
+			}
+			entries, ytdlpErr := a.YTDLP.ListUploads(ctx, a.Options.ChannelID, min(list.Limit, MaxListLimit))
+			if ytdlpErr != nil || len(entries) == 0 {
+				if ctx.Err() != nil {
+					return nil, nil, false, ctx.Err()
+				}
+				fail(listing, ytdlpErr, true)
+				if ytdlpErr != nil {
+					err = ytdlpErr
+				}
+				continue
+			}
+			result.Listing = ListingYTDLP
+			result.Tried = append(result.Tried, listing)
+			return entries, nil, false, nil
 		case ListingVideosPage:
 			body, readErr := a.Client.VideosPage(ctx, a.Options.ChannelID)
 			ids := []string{}
@@ -486,6 +512,21 @@ func (a *Adapter) FeedUploads(ctx context.Context) ([]Video, error) {
 		return nil, err
 	}
 	return ParseFeed(body)
+}
+
+// YTDLPUploads lists recent uploads through the optional yt-dlp executable.
+// It is exposed separately from the timed chain so manual fetches can select
+// the method without making the history package depend on the runner type.
+func (a *Adapter) YTDLPUploads(ctx context.Context, limit int) ([]Video, error) {
+	if a == nil || a.YTDLP == nil {
+		return nil, &Error{"youtube_ytdlp_unavailable"}
+	}
+	return a.YTDLP.ListUploads(ctx, a.Options.ChannelID, limit)
+}
+
+// YTDLPAvailable reports whether the configured executable can run now.
+func (a *Adapter) YTDLPAvailable() bool {
+	return a != nil && a.YTDLP != nil && a.YTDLP.Available()
 }
 
 // cursorFloor is the publication time of the stored cursor, the newest upload

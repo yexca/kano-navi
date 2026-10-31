@@ -10,12 +10,13 @@ what the method reads. `POST /api/admin/runs` with
 starts one; the [Admin API](admin-api.md#runs) describes the body and its
 options.
 
-| Source  | Method     | Needs                | Modes                              | Listing                                                |
-| ------- | ---------- | -------------------- | ---------------------------------- | ------------------------------------------------------ |
-| X       | `timeline` |                      | `count` (1–200), `all`             | public FxTwitter timeline, 100 statuses a page         |
-| X       | `api`      | `X_API_BEARER_TOKEN` | `count` (1–200), `range`, `before` | full-archive search, 100 posts a page                  |
-| YouTube | `api`      | `YOUTUBE_API_KEY`    | `count` (1–200), `all`             | uploads playlist, 50 entries and one quota unit a page |
-| YouTube | `rss`      |                      | `count` (1–15)                     | public feed, its newest 15 uploads in one request      |
+| Source  | Method     | Needs                | Modes                              | Listing                                                  |
+| ------- | ---------- | -------------------- | ---------------------------------- | -------------------------------------------------------- |
+| X       | `timeline` |                      | `count` (1–200), `all`             | public FxTwitter timeline, 100 statuses a page           |
+| X       | `api`      | `X_API_BEARER_TOKEN` | `count` (1–200), `range`, `before` | full-archive search, 100 posts a page                    |
+| YouTube | `api`      | `YOUTUBE_API_KEY`    | `count` (1–200), `all`             | uploads playlist, 50 entries and one quota unit a page   |
+| YouTube | `rss`      |                      | `count` (1–15)                     | public feed, its newest 15 uploads in one request        |
+| YouTube | `ytdlp`    | `YTDLP_BINARY`       | `count` (1–200), `all`             | configured yt-dlp upload listing, without media download |
 
 - `count` reads the newest `count` records per X account or for the channel,
   stored or not, whatever their age.
@@ -135,7 +136,7 @@ promise a complete export of its archive.
 
 ### YouTube methods
 
-Both methods read through the YouTube source client, with its 10-second
+The API and RSS methods read through the YouTube source client, with its 10-second
 timeout, 4 MiB response limit, rejected redirects and controlled codes. The
 `api` method pages the channel's uploads playlist (`playlistItems.list` on the
 `UU` playlist, the key only in the `X-Goog-Api-Key` header), newest first; an
@@ -143,6 +144,13 @@ entry that a new upload shifts onto the next page is listed once. The `rss`
 method reads the public feed once, with the feed's retries after an upstream
 5xx or connection failure (see [YouTube](sources.md#youtube)). Failures record
 `youtube_api_*` or `youtube_feed_*` codes.
+
+The `ytdlp` method requires `YTDLP_BINARY` and runs the configured executable
+with `--flat-playlist --dump-single-json --skip-download`. It reads the newest
+channel entries, maps the metadata yt-dlp provides onto the stored video fields,
+and never downloads media. A `count` fetch is capped at 200 entries; an `all`
+fetch uses the same bounded 200-entry request and reports more work when the
+executable returns exactly 200 entries. It records `youtube_ytdlp_*` codes.
 
 Videos are written as the listing describes them: title, publication time,
 largest thumbnail and the kind their title gives. The `api` method then checks
@@ -176,7 +184,9 @@ entries of each format playlist once per run when it holds an ended broadcast.
 
 The `rss` method only lists: its 15 uploads are within the recent step's own
 listing, which checks their details. Neither method reads the streams page,
-watch pages or the detail queue, and neither writes incremental state.
+watch pages or the detail queue, and neither writes incremental state. The
+`ytdlp` method also writes only the listed video rows and does not advance the
+timed source cursor.
 
 ### Budgets and checkpoints
 
@@ -268,14 +278,14 @@ or channel's own records, when the chain skips the method, or on quota and
 rate limits. A later page that fails keeps the earlier pages and leaves the
 run partial without falling back.
 
-| Source     | Methods, in default order                                                                         | Default   |
-| ---------- | ------------------------------------------------------------------------------------------------- | --------- |
-| `x`        | `timeline` (FxTwitter timeline), `profile` (logged-out `x.com/<handle>`, IDs only), `api` (X API) | `api` off |
-| `youtube`  | `api` (Data API uploads playlist), `rss` (public feed), `videos_page` (uploads tab, IDs only)     | all on    |
-| `bilibili` | `list` (the upload list)                                                                          | fixed     |
+| Source     | Methods, in default order                                                                                         | Default                                |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `x`        | `timeline` (FxTwitter timeline), `profile` (logged-out `x.com/<handle>`, IDs only), `api` (X API)                 | `api` off                              |
+| `youtube`  | `api` (Data API uploads playlist), `rss` (public feed), `ytdlp` (metadata), `videos_page` (uploads tab, IDs only) | api, rss and videos_page on; ytdlp off |
+| `bilibili` | `list` (the upload list)                                                                                          | fixed                                  |
 
-The default is the order the recent steps have always used, so an
-unconfigured chain reads as the steps did without one. A method whose
+The default keeps the existing order and leaves yt-dlp off until it is
+configured, so an unconfigured chain reads as the steps did without one. A method whose
 credential the process lacks is skipped with `x_api_unavailable` or
 `youtube_api_key_missing`. The chain covers listing methods only: detail
 requests (vxtwitter, watch pages) and fixed helper reads (the streams page,

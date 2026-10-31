@@ -70,9 +70,11 @@ func (a *api) chainEntry(ctx context.Context, schedule sqlite.SourceSchedule) (m
 	methods := []map[string]any{}
 	for _, method := range schedule.Chain.Methods {
 		item := map[string]any{"id": method.ID, "enabled": method.Enabled, "available": true}
-		if method.ID == history.MethodAPI {
+		if method.ID == history.MethodAPI || method.ID == history.MethodYTDLP {
 			if described, ok := history.Lookup(schedule.Source, method.ID); ok {
-				item["requires"] = described.Requires
+				if described.Requires != "" {
+					item["requires"] = described.Requires
+				}
 			}
 			item["available"] = a.methodAvailable(schedule.Source, method.ID)
 		}

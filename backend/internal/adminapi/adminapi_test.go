@@ -389,7 +389,7 @@ func TestSourceFetchMethods(t *testing.T) {
 	if got := describe(x); got != "timeline [count all] 200 true <nil>; api [count range before] 200 false X_API_BEARER_TOKEN" {
 		t.Fatalf("x methods=%s", got)
 	}
-	if got := describe(youtube); got != "api [count all] 200 true YOUTUBE_API_KEY; rss [count] 15 true <nil>" {
+	if got := describe(youtube); got != "api [count all] 200 true YOUTUBE_API_KEY; rss [count] 15 true <nil>; ytdlp [count all] 200 true YTDLP_BINARY" {
 		t.Fatalf("youtube methods=%s", got)
 	}
 	if _, legacy := x["windows"]; legacy {
@@ -454,7 +454,11 @@ func TestFetchMethodsFailClosedWithoutHistoryWiring(t *testing.T) {
 	a := &api{}
 	for _, source := range []string{"x", "youtube"} {
 		methods := a.fetchMethods(source)
-		if len(methods) != 2 {
+		want := 2
+		if source == "youtube" {
+			want = 3
+		}
+		if len(methods) != want {
 			t.Fatalf("%s methods=%v", source, methods)
 		}
 		for _, method := range methods {

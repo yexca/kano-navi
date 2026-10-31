@@ -19,6 +19,7 @@ import (
 	"github.com/yexca/kano-navi/backend/internal/jobs"
 	bilisource "github.com/yexca/kano-navi/backend/internal/source/bilibili"
 	"github.com/yexca/kano-navi/backend/internal/source/history"
+	ytsource "github.com/yexca/kano-navi/backend/internal/source/youtube"
 	"github.com/yexca/kano-navi/backend/internal/store/sqlite"
 )
 
@@ -52,6 +53,9 @@ type Options struct {
 	// Bilibili reads single uploads for operators; nil disables the routes
 	// that need it.
 	Bilibili *bilisource.Adapter
+	// YoutubeYTDLP is the optional local yt-dlp runner used by the YouTube
+	// source and its operator update route.
+	YoutubeYTDLP *ytsource.YTDLP
 	// FetchMethods describes a source's manual fetch methods and which of
 	// them can run now. Without it no method can run, which keeps a read-only
 	// sidecar from accepting work its queue cannot run.
@@ -112,6 +116,8 @@ func (a *api) routes() []httpx.Route {
 		{Method: http.MethodPost, Path: "/sources/{source}/run", Handler: a.needRuns(a.runSource)},
 		{Method: http.MethodGet, Path: "/sources/youtube/live-probe", Handler: a.liveProbe},
 		{Method: http.MethodPut, Path: "/sources/youtube/live-probe", Handler: a.updateLiveProbe},
+		{Method: http.MethodGet, Path: "/sources/youtube/ytdlp", Handler: a.ytdlpStatus},
+		{Method: http.MethodPost, Path: "/sources/youtube/ytdlp/update", Handler: a.updateYTDLP},
 
 		{Method: http.MethodGet, Path: "/events", Handler: a.listEvents},
 		{Method: http.MethodPost, Path: "/events", Handler: a.createEvent},

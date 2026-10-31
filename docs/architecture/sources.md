@@ -211,7 +211,7 @@ The `youtube` step lists the uploads of `YOUTUBE_CHANNEL_ID` (the current
 main channel by default) through the YouTube schedule's
 [method chain](workflows.md#method-chains): by default the Data API's uploads
 playlist when `YOUTUBE_API_KEY` is set (see [Data API](#data-api)), then the
-RSS feed, then the uploads tab. It takes the newest listed uploads and stores the ones
+RSS feed, configured yt-dlp when its method is enabled, and the uploads tab. It takes the newest listed uploads and stores the ones
 not stored yet; see [source schedules](workflows.md#source-schedules). An
 incremental run takes at most the YouTube schedule's `max` (50 by default and
 for full syncs; the feed lists 15) uploads that are not stored yet, plus the
@@ -295,7 +295,7 @@ are detail candidates, after the streams page's. The tab has no publication time
 those IDs add no unchecked rows and leave the cursor alone; a watch page
 supplies a new video's time from `publishDate` (a stored time always wins).
 The step result reports where the uploads came from as `listing`: `api`,
-`rss`, `videos_page`, or empty when nothing answered, `tried` lists every
+`rss`, `ytdlp`, `videos_page`, or empty when nothing answered, `tried` lists every
 listing method tried with its code, and a run that recorded
 failures lists their controlled codes as `errors`, each once in order of
 first appearance with `×n` when it occurred n times (for example

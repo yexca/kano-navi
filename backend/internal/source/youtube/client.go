@@ -256,6 +256,9 @@ type Options struct {
 	// APIKey is the optional YOUTUBE_API_KEY. When set, the recent step lists
 	// uploads and reads details through the Data API before the public pages.
 	APIKey string
+	// YTDLPBinary names the optional yt-dlp executable. An empty value leaves
+	// the method disabled for this adapter.
+	YTDLPBinary string
 }
 
 func OptionsFromEnv() Options {
@@ -270,5 +273,5 @@ func OptionsFromEnv() Options {
 		}
 		return n
 	}
-	return Options{channel, bounded("YOUTUBE_BOOTSTRAP_VIDEOS", 6, 1, 30), bounded("YOUTUBE_MAX_DETAIL_REQUESTS", 12, 1, 50), strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY"))}
+	return Options{ChannelID: channel, BootstrapVideos: bounded("YOUTUBE_BOOTSTRAP_VIDEOS", 6, 1, 30), MaxDetailRequests: bounded("YOUTUBE_MAX_DETAIL_REQUESTS", 12, 1, 50), APIKey: strings.TrimSpace(os.Getenv("YOUTUBE_API_KEY")), YTDLPBinary: strings.TrimSpace(os.Getenv("YTDLP_BINARY"))}
 }
