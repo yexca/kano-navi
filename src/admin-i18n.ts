@@ -516,8 +516,6 @@ export const adminMessages = {
     "admin.profile.source.upload": "Upload",
 
     "admin.runs.title": "Runs",
-    "admin.runs.description":
-      "Every run shares one queue: only one runs at a time and a busy queue refuses new work.",
     "admin.runs.stepRun": "Run steps once",
     "admin.runs.stepRunHint":
       "Pick any steps and run them once; nothing is saved. Sources also run on their own timers on the Sources page.",
@@ -530,6 +528,9 @@ export const adminMessages = {
     "admin.runs.started": "Started",
     "admin.runs.finished": "Finished",
     "admin.runs.retry": "Retry",
+    "admin.runs.copyDiagnostics": "Copy diagnostics",
+    "admin.runs.copyDiagnosticsHint":
+      "This browser refused the clipboard. Select the text and copy it.",
 
     "admin.sources.title": "Sources",
     "admin.sources.x.hint":
@@ -859,6 +860,7 @@ export const adminMessages = {
     "admin.notice.runQueued": "Run queued",
     "admin.notice.busy": "Another run is in progress",
     "admin.notice.cancelRequested": "Cancellation requested",
+    "admin.notice.diagnosticsCopied": "Diagnostics copied",
     "admin.notice.eventCreated": "Entry created and locked",
     "admin.notice.eventSaved": "Entry saved and locked",
     "admin.notice.eventConfirmed": "Entry confirmed and locked",
@@ -1005,8 +1007,6 @@ export const adminMessages = {
     "admin.runs.runningFor": "running for {duration}",
     "admin.runs.finishedAt": "finished {time}",
     "admin.retention.title": "History cleanup",
-    "admin.retention.description":
-      "Once a day the server deletes finished runs older than these windows. The newest run of each timer and kind, and the newest successful sync, always stay.",
     "admin.retention.succeeded": "Succeeded and cancelled runs",
     "admin.retention.failed": "Failed, partial and blocked runs",
     "admin.retention.days": ({ count }: { count: number }) =>
@@ -1653,8 +1653,6 @@ export const adminMessages = {
     "admin.profile.source.upload": "上传",
 
     "admin.runs.title": "运行",
-    "admin.runs.description":
-      "所有运行共用一个队列：同时只运行一个，队列忙时会拒绝新任务。",
     "admin.runs.stepRun": "单次运行步骤",
     "admin.runs.stepRunHint":
       "任选步骤运行一次，不会保存。来源也会在“来源”页按各自的定时器运行。",

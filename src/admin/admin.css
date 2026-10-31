@@ -2520,6 +2520,13 @@ a.adm-run-line:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.adm-shell .adm-diagnostics {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
 .adm-problems {
   display: grid;
   gap: 6px;

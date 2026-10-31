@@ -443,7 +443,11 @@ run lists its steps one line each: the step's
 outcome, its window and up to three non-zero counts, problems first. A step
 opens to everything it counted, as label and value lines with zeros
 receding; failed and partial steps open by themselves. Run details explain
-stored error codes in words and keep the code beside them.
+stored error codes in words and keep the code beside them. A failed or
+partial run copies its diagnostics for an agent or an issue: each step's
+outcome and error code, then the stored run as JSON, with codes and English
+labels so the text matches the source. A browser that refuses the clipboard
+shows the text in a dialog to copy by hand.
 
 ## Related Docs
 

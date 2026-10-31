@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
+  ClipboardCopy,
   ListChecks,
   Play,
   RefreshCw,
@@ -50,6 +51,7 @@ import {
   metricLabel,
   RunLine,
   RunMark,
+  runDiagnostics,
   runOutcome,
   runTitle,
   stepIcons,
@@ -651,6 +653,52 @@ function RunProblems({ run }: { run: Run }) {
   )
 }
 
+/**
+ * Copies the run as text for diagnosing it elsewhere. A browser that refuses
+ * the clipboard, such as on a plain-HTTP address, shows the text to copy by
+ * hand instead.
+ */
+function CopyDiagnostics({ run }: { run: Run }) {
+  const { t } = useAppSettings()
+  const { notify } = useAdmin()
+  const [text, setText] = useState<string | null>(null)
+  const copy = async () => {
+    const value = runDiagnostics(run)
+    try {
+      await navigator.clipboard.writeText(value)
+      notify("admin.notice.diagnosticsCopied")
+    } catch {
+      setText(value)
+    }
+  }
+  return (
+    <>
+      <Button size="sm" icon={ClipboardCopy} onClick={() => void copy()}>
+        {t("admin.runs.copyDiagnostics")}
+      </Button>
+      {text !== null ? (
+        <Modal
+          open
+          wide
+          title={t("admin.runs.copyDiagnostics")}
+          onClose={() => setText(null)}
+        >
+          <div className="adm-form">
+            <p className="adm-muted">{t("admin.runs.copyDiagnosticsHint")}</p>
+            <textarea
+              className="adm-diagnostics"
+              readOnly
+              rows={16}
+              value={text}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+          </div>
+        </Modal>
+      ) : null}
+    </>
+  )
+}
+
 /** When the run was queued, how long it took and how long it waited. */
 function RunTimes({ run }: { run: Run }) {
   const { t, locale } = useAppSettings()
@@ -690,8 +738,9 @@ function RunDetail({
   const { api, act, refreshOverview } = useAdmin()
   const active = run.status === "queued" || run.status === "running"
   const outcome = runOutcome(run)
+  const troubled = outcome === "failed" || outcome === "partial"
   const actions =
-    active || run.status === "failed" ? (
+    active || troubled ? (
       <div className="adm-actions">
         {active ? (
           <ConfirmButton
@@ -728,6 +777,7 @@ function RunDetail({
             {t("admin.runs.retry")}
           </Button>
         ) : null}
+        {troubled ? <CopyDiagnostics run={run} /> : null}
       </div>
     ) : null
   return (
@@ -928,11 +978,7 @@ function RetentionPanel() {
       ? t("admin.retention.forever")
       : t("admin.retention.days", { count: value })
   return (
-    <Panel
-      icon={Archive}
-      title={t("admin.retention.title")}
-      description={t("admin.retention.description")}
-    >
+    <Panel icon={Archive} title={t("admin.retention.title")}>
       {!data || !draft ? (
         <Loading />
       ) : (
@@ -1016,7 +1062,6 @@ export function RunsView({ tab, navigate }: ViewProps) {
     <div className="adm-view">
       <PageHeader
         title={t("admin.runs.title")}
-        description={t("admin.runs.description")}
         actions={
           <>
             <Button icon={ListChecks} onClick={() => setPicking(true)}>

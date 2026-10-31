@@ -138,6 +138,41 @@ export function stepResult(run: Run, step: string): unknown {
 }
 
 /**
+ * A run as plain text for diagnosing it elsewhere, such as with a coding
+ * agent: a summary with each step's outcome and error code, then the whole
+ * stored run. It keeps codes and English labels rather than the console's
+ * words so the text matches the source.
+ */
+export function runDiagnostics(run: Run) {
+  const lines = [
+    `Kano Navi run ${run.id}`,
+    [
+      `Kind: ${run.kind}`,
+      `outcome: ${runOutcome(run)}`,
+      `triggered by: ${run.triggeredBy}`,
+      ...(run.sourceSchedule ? [`source: ${run.sourceSchedule}`] : []),
+    ].join("; "),
+    `Queued ${run.createdAt}; started ${run.startedAt ?? "-"}; finished ${run.finishedAt ?? "-"}`,
+  ]
+  if (run.error) lines.push(`Error: ${run.error}`)
+  if (run.run?.message && run.run.message !== run.error)
+    lines.push(`Message: ${run.run.message}`)
+  lines.push("Steps:")
+  for (const step of run.steps) {
+    const result = stepResult(run, step) as
+      { error?: unknown; errors?: unknown } | undefined
+    const codes = [
+      result?.error,
+      ...(Array.isArray(result?.errors) ? result.errors : []),
+    ].filter((code): code is string => typeof code === "string")
+    const suffix = codes.length ? ` (${[...new Set(codes)].join(", ")})` : ""
+    lines.push(`- ${step}: ${run.progress[step] || "pending"}${suffix}`)
+  }
+  lines.push("", "Stored run:", "```json", JSON.stringify(run, null, 2), "```")
+  return lines.join("\n")
+}
+
+/**
  * A run's source window in words: the method, the mode and its count, days
  * or dates.
  */

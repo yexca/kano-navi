@@ -145,6 +145,9 @@
   a step opens to everything it counted, and failed or partial steps open by
   themselves. Each recent run on the overview opens that run on the Runs
   page, and the open run is part of the page address.
+- A failed or partial run on the Runs page has Copy diagnostics, which copies
+  its steps, error codes and stored record as text for diagnosing it
+  elsewhere.
 - The Runs page has History cleanup: how many days succeeded and cancelled
   runs, and failed, partial and blocked runs, stay in the history, and when
   the last cleanup ran. `GET`/`PUT /api/admin/runs/retention` read and change
