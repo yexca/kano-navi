@@ -172,8 +172,9 @@
   the models as Claude Opus 5.5, GPT-6.1-Sol and GPT-5.6-Sol.
 - Switching weeks in the weekly schedule keeps the current week dimmed until
   the next one is ready and then changes once, instead of passing through an
-  empty grid and a loading bar; the schedule-image slot keeps its size on wide
-  screens.
+  empty grid and a loading bar.
+- The weekly schedule shows its schedule-image strip only for a week that
+  has a schedule image, without a "No schedule image for this week" note.
 - The weekly schedule, Posts on X and the month dialogs drop their one-line
   notes under the title, and the video archive names bilibili beside YouTube.
 - In the month view, a click anywhere in a day's cell opens its details, and

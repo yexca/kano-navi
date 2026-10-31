@@ -432,9 +432,9 @@ week rendered with its own dates, dimmed and inert after a short delay, and
 swaps the whole body (days, count and schedule image) once the selected week
 arrives; a failed read reports its error only while its week is selected. A
 refresh of the shown week keeps its days or empty-week note in place and swaps
-the data when it arrives, so a quiet week does not flicker on each refresh. On
-wider screens the schedule-image thumbnail keeps its slot when a week has no
-image.
+the data when it arrives, so a quiet week does not flicker on each refresh. The
+schedule-image strip below the days appears only for a week with a schedule
+image; a week without one has no strip or placeholder.
 Adjacent-date hints support jumping to stored activity in either direction.
 
 Snapshot, calendar and archive reads use `cache: "no-cache"`: the browser
