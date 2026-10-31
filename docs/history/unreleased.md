@@ -67,6 +67,10 @@
   `/api/admin/sync-settings`) and the translation limits. Saved values apply
   from the next run.
 - The LLM page and its panels drop their explanatory paragraphs.
+- The Detection page picks one of two modes in place of the stage switches:
+  Keyword match, which shows the keyword list, or Everything to the LLM. It
+  drops its explanatory paragraphs, and hovering the keyword list no longer
+  highlights the first keyword's remove button.
 - The console is wider (up to 1600px). The Overview lists Bilibili beside X
   and YouTube under Sources and drops its explanatory paragraphs.
 - The Posts page is a feed with one row of columns per post: account and

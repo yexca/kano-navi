@@ -764,25 +764,9 @@ export const adminMessages = {
     "admin.fetch.headingFor": "Manual fetch · {source}",
     "admin.fetch.noneYet": "No manual fetch of this source yet.",
 
-    "admin.models.extraction": "Detection stages",
-    "admin.models.extractionHint":
-      "Keyword candidates feed the board stage; the message stage reads ordinary posts.",
+    "admin.models.extraction": "Detection mode",
     "admin.models.extractionOn": "Extraction on",
     "admin.models.extractionOff": "Extraction off",
-    "admin.models.stage.keyword": "Keyword candidates",
-    "admin.models.stage.keywordHint":
-      "Pick stored posts that look like a schedule board, without a model.",
-    "admin.models.stage.vision": "Schedule boards",
-    "admin.models.stage.visionHint":
-      "Send candidate posts and their cached images to the board route.",
-    "admin.models.stage.visionNeedsKeywords":
-      "Boards need keyword candidates enabled to find posts.",
-    "admin.models.stage.message": "Single messages",
-    "admin.models.stage.messageHint":
-      "Check ordinary posts that mention a date or stream.",
-    "admin.models.stage.allPosts": "Send every post to the model",
-    "admin.models.stage.allPostsHint":
-      "Skip the local date and stream check: every post with text or images goes to the message route. Each new post costs one model call.",
     "admin.models.keywords": "Keywords",
     "admin.models.keywordsHint":
       "{count} of {max} · press Enter or a comma to add one, {length} characters each",
@@ -1179,11 +1163,16 @@ export const adminMessages = {
     "admin.site.title": "Site",
     "admin.action.discard": "Discard",
     "admin.detection.title": "Detection",
-    "admin.detection.description":
-      "How stored posts become schedule candidates. The models that read them are set up on the LLM page.",
+    "admin.detection.mode": "Posts sent to the model",
+    "admin.detection.mode.keyword": "Keyword match",
+    "admin.detection.mode.llm": "Everything to the LLM",
+    "admin.detection.modeHint.keyword":
+      "Posts with a keyword are read as schedule images; other posts that mention a date or stream are read as text.",
+    "admin.detection.modeHint.llm":
+      "Every post with text or images goes to the model, without a keyword or date check. Each new post costs one model call.",
+    "admin.detection.modeHint.custom":
+      "The saved stages match neither mode. Pick one to replace them.",
     "admin.detection.models": "Models in use",
-    "admin.detection.modelsHint":
-      "Each stage calls the first usable model in the schedule queue that has the tag it needs.",
     "admin.detection.editQueue": "Edit the queue",
     "admin.detection.stage.text": "Text posts",
     "admin.detection.stage.image": "Schedule images",
@@ -1744,23 +1733,9 @@ export const adminMessages = {
       "立即运行此来源的步骤一次，下次定时运行的时间不变。",
     "admin.timer.never": "从未",
 
-    "admin.models.extraction": "识别阶段",
-    "admin.models.extractionHint":
-      "关键词候选供日程表阶段使用；单条消息阶段读取普通贴文。",
+    "admin.models.extraction": "识别方式",
     "admin.models.extractionOn": "提取已开启",
     "admin.models.extractionOff": "提取已关闭",
-    "admin.models.stage.keyword": "关键词候选",
-    "admin.models.stage.keywordHint":
-      "不调用模型，挑选看起来像日程表的已存贴文。",
-    "admin.models.stage.vision": "日程表",
-    "admin.models.stage.visionHint": "把候选贴文和缓存图片发送给日程表路由。",
-    "admin.models.stage.visionNeedsKeywords":
-      "日程表需要开启关键词候选才能找到贴文。",
-    "admin.models.stage.message": "单条消息",
-    "admin.models.stage.messageHint": "检查提到日期或直播的普通贴文。",
-    "admin.models.stage.allPosts": "所有贴文都交给模型",
-    "admin.models.stage.allPostsHint":
-      "跳过本地的日期和直播检查：每条带文字或图片的贴文都发送给单条消息路由。每条新贴文消耗一次模型调用。",
     "admin.models.keywords": "关键词",
     "admin.models.keywordsHint":
       "{count}/{max} 个 · 按回车或逗号添加，每个最多 {length} 字",
@@ -2072,11 +2047,16 @@ export const adminMessages = {
     "admin.site.title": "站点",
     "admin.action.discard": "放弃更改",
     "admin.detection.title": "日程识别",
-    "admin.detection.description":
-      "存储的贴文如何成为日程候选。读取它们的模型在“LLM 模型”页设置。",
+    "admin.detection.mode": "交给模型的贴文",
+    "admin.detection.mode.keyword": "关键词匹配",
+    "admin.detection.mode.llm": "全部交给 LLM",
+    "admin.detection.modeHint.keyword":
+      "含关键词的贴文按日程图片读取；其他提到日期或直播的贴文按文字读取。",
+    "admin.detection.modeHint.llm":
+      "每条带文字或图片的贴文都交给模型，不做关键词或日期检查。每条新贴文消耗一次模型调用。",
+    "admin.detection.modeHint.custom":
+      "已保存的阶段设置不属于任一方式，选择一种即可替换。",
     "admin.detection.models": "当前使用的模型",
-    "admin.detection.modelsHint":
-      "每个阶段调用日程队列中第一个可用且带有所需标签的模型。",
     "admin.detection.editQueue": "编辑队列",
     "admin.detection.stage.text": "文字贴文",
     "admin.detection.stage.image": "日程图片",

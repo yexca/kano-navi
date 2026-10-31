@@ -5232,26 +5232,6 @@ blockquote.adm-verdict-reason {
 
 /* ------------------------------------------------------- detection and llm */
 
-.adm-stage-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.adm-stage {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--adm-line);
-  border-radius: var(--adm-radius-sm);
-}
-
-.adm-stage-sub {
-  padding-top: 12px;
-  border-top: 1px dashed var(--adm-line);
-}
-
 .adm-stage-models {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -6055,12 +6035,6 @@ blockquote.adm-verdict-reason {
 }
 
 /* ------------------------------------------------------------- responsive */
-
-@media (max-width: 1080px) {
-  .adm-stage-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 
 /* Below this the manual fetch follows the settings. */
 @media (max-width: 1280px) {

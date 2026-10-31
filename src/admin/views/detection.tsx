@@ -7,11 +7,11 @@ import type { Extraction } from "@/admin/types"
 import {
   Badge,
   Button,
-  Field,
+  FieldGroup,
   Loading,
   PageHeader,
   Panel,
-  Switch,
+  Segmented,
   TagInput,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
@@ -19,6 +19,45 @@ import { firstUsable, ProviderMark } from "@/admin/views/llm"
 
 const keywordLimit = 30
 const keywordLength = 80
+
+type DetectionMode = "keyword" | "llm"
+type Stages = Pick<
+  Extraction,
+  "keywordEnabled" | "visionEnabled" | "messageEnabled" | "messageAllPosts"
+>
+
+const detectionModes: DetectionMode[] = ["keyword", "llm"]
+
+/**
+ * The stage flags behind each mode. Keyword match reads keyword posts as
+ * schedule boards and other dated posts as messages; the LLM mode sends every
+ * post with text or images through the message route.
+ */
+const modeStages: Record<DetectionMode, Stages> = {
+  keyword: {
+    keywordEnabled: true,
+    visionEnabled: true,
+    messageEnabled: true,
+    messageAllPosts: false,
+  },
+  llm: {
+    keywordEnabled: false,
+    visionEnabled: false,
+    messageEnabled: true,
+    messageAllPosts: true,
+  },
+}
+
+/** The mode whose flags the settings carry, or null for any other mix. */
+function detectionMode(stages: Stages) {
+  return (
+    detectionModes.find((mode) =>
+      (Object.keys(modeStages[mode]) as (keyof Stages)[]).every(
+        (key) => stages[key] === modeStages[mode][key],
+      ),
+    ) ?? null
+  )
+}
 
 function ExtractionPanel() {
   const { t } = useAppSettings()
@@ -36,6 +75,7 @@ function ExtractionPanel() {
       </Panel>
     )
   const saved = extraction.data
+  const mode = detectionMode(draft)
   const dirty =
     draft.keywordEnabled !== saved.keywordEnabled ||
     draft.visionEnabled !== saved.visionEnabled ||
@@ -62,7 +102,6 @@ function ExtractionPanel() {
     <Panel
       icon={ScanText}
       title={t("admin.models.extraction")}
-      description={t("admin.models.extractionHint")}
       actions={
         <>
           <Badge tone={saved.enabled ? "leaf" : "neutral"}>
@@ -83,70 +122,41 @@ function ExtractionPanel() {
         </>
       }
     >
-      <div className="adm-stage-grid">
-        <div className="adm-stage">
-          <Switch
-            checked={draft.keywordEnabled}
-            onChange={(keywordEnabled) =>
-              setDraft({ ...draft, keywordEnabled })
-            }
-            label={t("admin.models.stage.keyword")}
-            description={t("admin.models.stage.keywordHint")}
-          />
-        </div>
-        <div className="adm-stage">
-          <Switch
-            checked={draft.visionEnabled}
-            onChange={(visionEnabled) => setDraft({ ...draft, visionEnabled })}
-            label={t("admin.models.stage.vision")}
-            description={t("admin.models.stage.visionHint")}
-          />
-          {draft.visionEnabled && !draft.keywordEnabled ? (
-            <p className="adm-inline-error">
-              <TriangleAlert aria-hidden />
-              {t("admin.models.stage.visionNeedsKeywords")}
-            </p>
-          ) : null}
-        </div>
-        <div className="adm-stage">
-          <Switch
-            checked={draft.messageEnabled}
-            onChange={(messageEnabled) =>
-              setDraft({ ...draft, messageEnabled })
-            }
-            label={t("admin.models.stage.message")}
-            description={t("admin.models.stage.messageHint")}
-          />
-          <div className="adm-stage-sub">
-            <Switch
-              checked={draft.messageAllPosts}
-              disabled={!draft.messageEnabled}
-              onChange={(messageAllPosts) =>
-                setDraft({ ...draft, messageAllPosts })
-              }
-              label={t("admin.models.stage.allPosts")}
-              description={t("admin.models.stage.allPostsHint")}
-            />
-          </div>
-        </div>
-      </div>
-      <Field
-        label={t("admin.models.keywords")}
-        hint={t("admin.models.keywordsHint", {
-          count: draft.keywords.length,
-          max: keywordLimit,
-          length: keywordLength,
-        })}
+      <FieldGroup
+        label={t("admin.detection.mode")}
+        hint={t(`admin.detection.modeHint.${mode ?? "custom"}`)}
       >
-        <TagInput
-          value={draft.keywords}
-          onChange={(keywords) => setDraft({ ...draft, keywords })}
-          label={t("admin.models.keywords")}
-          placeholder={t("admin.models.keywordsPlaceholder")}
-          max={keywordLimit}
-          maxLength={keywordLength}
+        <Segmented<DetectionMode | "">
+          label={t("admin.detection.mode")}
+          value={mode ?? ""}
+          onChange={(next) =>
+            next && setDraft({ ...draft, ...modeStages[next] })
+          }
+          options={detectionModes.map((value) => ({
+            value,
+            label: t(`admin.detection.mode.${value}`),
+          }))}
         />
-      </Field>
+      </FieldGroup>
+      {mode === "keyword" ? (
+        <FieldGroup
+          label={t("admin.models.keywords")}
+          hint={t("admin.models.keywordsHint", {
+            count: draft.keywords.length,
+            max: keywordLimit,
+            length: keywordLength,
+          })}
+        >
+          <TagInput
+            value={draft.keywords}
+            onChange={(keywords) => setDraft({ ...draft, keywords })}
+            label={t("admin.models.keywords")}
+            placeholder={t("admin.models.keywordsPlaceholder")}
+            max={keywordLimit}
+            maxLength={keywordLength}
+          />
+        </FieldGroup>
+      ) : null}
       <div className="adm-form-actions">
         {dirty ? (
           <>
@@ -185,7 +195,6 @@ function ModelSummary({ onOpen }: { onOpen: () => void }) {
     <Panel
       icon={Bot}
       title={t("admin.detection.models")}
-      description={t("admin.detection.modelsHint")}
       actions={
         <Button size="sm" icon={ArrowRight} onClick={onOpen}>
           {t("admin.detection.editQueue")}
@@ -226,10 +235,7 @@ export function DetectionView({ navigate }: ViewProps) {
   const { t } = useAppSettings()
   return (
     <div className="adm-view">
-      <PageHeader
-        title={t("admin.detection.title")}
-        description={t("admin.detection.description")}
-      />
+      <PageHeader title={t("admin.detection.title")} />
       <ExtractionPanel />
       <ModelSummary onOpen={() => navigate("llm")} />
     </div>
