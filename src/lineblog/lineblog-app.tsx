@@ -98,10 +98,10 @@ function hasTranslation(post: LineblogPost, translation: Translation) {
 }
 
 /**
- * The same mark as a translated video title: AI while the translation lines
- * show, Original while they are hidden. The menu bar's mark switches every
- * article; an article's own mark switches that article until the menu bar's
- * is used.
+ * The same mark as a translated video title: AI, lit while the translation
+ * lines show and off while they are hidden. The menu bar's mark switches
+ * every article; an article's own mark switches that article until the menu
+ * bar's is used.
  */
 function TranslationMark({
   on,
@@ -113,21 +113,19 @@ function TranslationMark({
   onToggle: () => void
 }) {
   const { t } = useAppSettings()
-  const label = t(on ? "translation.machineShort" : "translation.original")
-  const spoken = on ? t("translation.machine") : label
   const action = t(on ? "translation.showOriginal" : "lineblog.translationOn")
   const scope = all ? `${t("lineblog.allArticles")} · ` : ""
-  const hint = on ? `${t("translation.machineHint")} · ` : ""
   return (
     <button
       type="button"
-      className={cn("translation-mark", !on && "is-original")}
-      title={`${scope}${hint}${action}`}
-      aria-label={`${scope}${spoken}: ${action}`}
+      className={cn("translation-mark", on && "is-active")}
+      title={`${scope}${t("translation.machineHint")} · ${action}`}
+      aria-label={`${scope}${t("translation.machine")}`}
+      aria-pressed={on}
       onClick={onToggle}
     >
       <Languages aria-hidden="true" />
-      {label}
+      {t("translation.machineShort")}
     </button>
   )
 }

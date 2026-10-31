@@ -225,16 +225,19 @@ and Japanese content always gets the source. The header's language menu
 defaults to "Same as interface", and the operator console shows only the
 interface choice. The LINE BLOG paragraph translations and the schedule
 month grid follow the same content locale, while feed links, history copy
-and the bilibili-first rule follow the interface locale. Block
-text such as a post uses `TranslatedText`, which labels the origin (AI,
-platform or editor) and offers a Show original button. A card title uses
-`TranslationToggle`, a compact switch that reads "AI" (or "Translated" for
-a platform's or editor's wording) and swaps in the source; its tooltip and
-accessible name spell out the origin, and the tooltip holds the source. Video and schedule titles
+and the bilibili-first rule follow the interface locale. Translated wording
+is followed by `TranslationToggle`, a translate icon and "AI" whatever the
+translation's origin, lit (`is-active`, `aria-pressed`) while the
+translation shows; selecting it shows the source and turns it off. Its
+tooltip and accessible name spell out the origin (AI, platform or editor),
+and on a title the tooltip holds the source. A post's switch follows its
+last word; while the board's six-line clamp hides the end of the post, it
+keeps its hidden place in the text and a copy shows beside Read more. The
+LINE BLOG archive's marks use the same class and states. Video and schedule titles
 go through `src/dashboard/components/translated-title.tsx`: `TranslatedTitle`
 for a card title (spotlight tickets, shelf tickets, cards and rows, archive
-rows, week-guide entries) and `TranslatedHeading`, with the full note, for
-the shelf's lead card. A button cannot go inside a link, so these cards are
+rows, week-guide entries) and `TranslatedHeading` for the shelf's lead card.
+A button cannot go inside a link, so these cards are
 not links themselves: the title is the link (`.card-link`), and
 `followCardLink` in `src/site/links.tsx` opens it from anywhere else on the
 card. A clamped title clamps only its wording, so the switch stays visible.

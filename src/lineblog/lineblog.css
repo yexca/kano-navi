@@ -340,12 +340,12 @@
 }
 
 .lb .translation-mark:hover,
-.lb .translation-mark.is-original {
+.lb .translation-mark.is-active {
   border-color: color-mix(in oklab, var(--lb-accent) 45%, transparent);
   color: var(--lb-accent);
 }
 
-.lb .translation-mark.is-original {
+.lb .translation-mark.is-active {
   background: color-mix(in oklab, var(--lb-accent) 10%, transparent);
 }
 

@@ -22,7 +22,7 @@ import {
 } from "lucide-react"
 
 import {
-  TranslationNote,
+  TranslationToggle,
   useTranslatedText,
 } from "@/components/translated-text"
 import { EmptyNote, Placeholder, SectionTitle } from "@/site/site-shell"
@@ -278,20 +278,22 @@ function PostNote({
   const textRef = useRef<HTMLParagraphElement>(null)
   const quoteRef = useRef<HTMLParagraphElement>(null)
   const [overflows, setOverflows] = useState(false)
+  const [textClipped, setTextClipped] = useState(false)
   const [reading, setReading] = useState(false)
   // "Read more" appears only while the clamp hides some of the post's or
-  // the quote's wording.
+  // the quote's wording; the translation switch moves beside it while the
+  // clamp hides the end of the post's own wording.
   useLayoutEffect(() => {
     const elements = [textRef.current, quoteRef.current].filter(
       (element): element is HTMLParagraphElement => Boolean(element),
     )
     if (!elements.length || !clamp) return
-    const check = () =>
-      setOverflows(
-        elements.some(
-          (element) => element.scrollHeight > element.clientHeight + 1,
-        ),
-      )
+    const clipped = (element: HTMLParagraphElement | null) =>
+      Boolean(element && element.scrollHeight > element.clientHeight + 1)
+    const check = () => {
+      setOverflows(elements.some(clipped))
+      setTextClipped(clipped(textRef.current))
+    }
     check()
     const observer = new ResizeObserver(check)
     for (const element of elements) observer.observe(element)
@@ -383,18 +385,25 @@ function PostNote({
         lang={wording.lang}
       >
         {wording.text}
+        <TranslationToggle
+          state={wording}
+          t={t}
+          className={clamp && textClipped ? "is-clipped" : undefined}
+        />
       </p>
       {clamp && overflows ? (
-        <button
-          type="button"
-          className="post-note-expand"
-          aria-haspopup="dialog"
-          onClick={() => setReading(true)}
-        >
-          {t("feed.readMore")}
-        </button>
+        <div className="post-note-more">
+          <button
+            type="button"
+            className="post-note-expand"
+            aria-haspopup="dialog"
+            onClick={() => setReading(true)}
+          >
+            {t("feed.readMore")}
+          </button>
+          {textClipped ? <TranslationToggle state={wording} t={t} /> : null}
+        </div>
       ) : null}
-      <TranslationNote state={wording} t={t} />
       {mediaGrid}
       {quote(false)}
       <Engagement post={post} locale={locale} t={t} />
@@ -417,8 +426,8 @@ function PostNote({
             )}
             <p className="post-note-text" lang={wording.lang}>
               {wording.text}
+              <TranslationToggle state={wording} t={t} />
             </p>
-            <TranslationNote state={wording} t={t} />
             {mediaGrid}
             {quote(true)}
             <Engagement post={post} locale={locale} t={t} />

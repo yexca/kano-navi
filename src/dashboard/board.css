@@ -2488,41 +2488,39 @@ a.month-event:hover {
   outline-offset: 2px;
 }
 
-/* Where a translation came from, and the way back to the source wording. */
-.translation-note {
+/*
+ * A post's switch follows its last word. While the board's clamp hides the
+ * end of a long post, that one keeps its place (so the clamp does not change)
+ * and the copy beside Read more is the one shown.
+ */
+.post-note-text .translation-mark {
+  margin: 0 0 0 6px;
+  vertical-align: 1px;
+}
+
+.post-note-text .translation-mark.is-clipped {
+  visibility: hidden;
+}
+
+.post-note-more {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
-  margin: -4px 0 0;
-  color: var(--soft);
-  font-size: 12px;
+  gap: 8px;
+  margin: -6px 0 0;
 }
 
-.translation-note svg {
-  width: 13px;
-  height: 13px;
-  flex: none;
+.post-note-more .post-note-expand {
+  margin: 0;
 }
 
-.translation-note button {
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--berry);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
+.post-note-more .translation-mark {
+  margin: 0;
 }
 
-.translation-note button:hover {
-  text-decoration: underline;
-}
-
-.translation-note button:focus-visible {
-  outline: 2px solid var(--berry);
-  outline-offset: 2px;
+/* The lead card's heading carries the switch after its last word. */
+.translated-heading .translation-mark {
+  margin: 0 0 0 10px;
+  vertical-align: middle;
 }
 
 /* A spotlight ticket title is not clamped, so the switch follows its last word. */

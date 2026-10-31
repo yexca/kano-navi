@@ -53,9 +53,9 @@ translated. The links commenters left to their own blogs are not kept.
 With Simplified Chinese or English as the content language (see
 [Pages and Settings](index.md#pages-and-settings)), each paragraph is followed
 by its translation into that language; Japanese shows the original only. The menu
-bar carries the same **AI** mark as translated video titles: select it to
-hide the translations of every article, and select **Original** to show them
-again; the choice is remembered on this device. The same mark on an
+bar carries the same **AI** mark as translated video titles. It is lit while
+the translations show: select it to hide the translations of every article,
+and select it again to show them; the choice is remembered on this device. The same mark on an
 article's date line switches that article alone, until the menu bar's mark
 is used again. Both translations come with the recovered archive and are AI
 translations of the Japanese posts.

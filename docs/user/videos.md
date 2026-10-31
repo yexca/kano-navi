@@ -20,8 +20,9 @@ Shorts** filter shows one kind at a time.
 A video that also has a bilibili upload carries a two-platform mark and a link
 for each platform. Chinese readers open such past videos on bilibili first;
 reservations and live streams always open on YouTube. Video titles appear in
-your content language when a translation is available, with a switch to the
-original wording.
+your content language when a translation is available, followed by an **AI**
+mark that is lit while the translation shows; select it to see the original
+wording and again to bring the translation back.
 
 ## Past Videos
 

@@ -882,7 +882,8 @@
 
 /*
  * The translation switch after translated wording (TranslationToggle, the
- * LINE BLOG archive's date lines): AI translation or Original.
+ * LINE BLOG archive's date lines): lit while the translation shows, plain
+ * while the original does.
  */
 .translation-mark {
   display: inline-flex;
@@ -914,7 +915,7 @@
   outline-offset: 2px;
 }
 
-.translation-mark.is-original {
+.translation-mark.is-active {
   border-color: color-mix(in oklab, var(--berry) 45%, transparent);
   background: var(--berry-wash);
   color: var(--berry);

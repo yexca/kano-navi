@@ -75,105 +75,48 @@ export function useTranslatedText(
   }
 }
 
-/** The origin label and the show-original button under translated wording. */
-export function TranslationNote({
-  state,
-  t,
-  className,
-}: {
-  state: TranslatedTextState
-  t: Translator
-  className?: string
-}) {
-  const { available, shown } = state
-  if (!available) return null
-  return (
-    <p className={cn("translation-note", className)}>
-      <Languages aria-hidden="true" />
-      <span
-        title={
-          shown?.origin === "machine" ? t("translation.machineHint") : undefined
-        }
-      >
-        {shown
-          ? translationOriginLabel(shown, t)
-          : t("translation.originalShown")}
-      </span>
-      <button type="button" onClick={state.toggle} aria-pressed={!shown}>
-        {shown
-          ? t("translation.showOriginal")
-          : t("translation.showTranslation")}
-      </button>
-    </p>
-  )
-}
-
-/** Block wording, such as a post's text, followed by its translation note. */
-export function TranslatedText({
-  original,
-  translations,
-  sourceLanguage,
-  t,
-  className,
-}: {
-  original: string
-  translations?: Translations | null
-  sourceLanguage?: string | null
-  t: Translator
-  className?: string
-}) {
-  const state = useTranslatedText(original, translations, sourceLanguage)
-  return (
-    <>
-      <p className={className} lang={state.lang}>
-        {state.text}
-      </p>
-      <TranslationNote state={state} t={t} />
-    </>
-  )
-}
-
 /**
- * A compact switch after a translated title: it names the translation (AI,
- * or Translated for an editor's or a platform's) and swaps in the source
- * wording. Its tooltip previews the source wording; screen readers hear the
- * full origin.
+ * The switch after translated wording: a translate icon and "AI", lit while
+ * the translation shows. Selecting it shows the source wording and turns it
+ * off; selecting it again brings the translation back. Its tooltip and
+ * accessible name spell out where the translation came from (AI, a platform
+ * or the editor), and a title's tooltip previews the source wording.
  */
 export function TranslationToggle({
   state,
   original,
   t,
+  className,
 }: {
   state: TranslatedTextState
-  original: string
+  /** Short source wording, such as a title, to preview in the tooltip. */
+  original?: string
   t: Translator
+  className?: string
 }) {
   const { available, shown } = state
   if (!available) return null
-  const label = shown
-    ? t(
-        shown.origin === "machine"
-          ? "translation.machineShort"
-          : "translation.translated",
-      )
-    : t("translation.original")
-  const spoken = shown ? translationOriginLabel(shown, t) : label
-  const action = shown
-    ? t("translation.showOriginal")
-    : t("translation.showTranslation")
-  const hint = shown
-    ? `${spoken} · ${t("translation.originalIs", { text: original })}`
-    : action
+  const origin = translationOriginLabel(available, t)
+  const hint = [
+    origin,
+    available.origin === "machine" ? t("translation.machineHint") : null,
+    shown && original
+      ? t("translation.originalIs", { text: original })
+      : t(shown ? "translation.showOriginal" : "translation.showTranslation"),
+  ]
+    .filter(Boolean)
+    .join(" · ")
   return (
     <button
       type="button"
-      className={cn("translation-mark", !shown && "is-original")}
+      className={cn("translation-mark", shown && "is-active", className)}
       title={hint}
-      aria-label={`${spoken}: ${action}`}
+      aria-label={origin}
+      aria-pressed={Boolean(shown)}
       onClick={state.toggle}
     >
       <Languages aria-hidden="true" />
-      {label}
+      {t("translation.machineShort")}
     </button>
   )
 }

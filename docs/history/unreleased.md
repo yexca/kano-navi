@@ -135,6 +135,10 @@
   language for video and schedule titles, posts and LINE BLOG translations.
   Content follows the interface by default, so existing visitors see no
   change until they pick one.
+- Every translation switch is one translate icon with **AI**, lit while the
+  translation shows and off while the original does, in place of the
+  Original label and the origin line with Show original. Posts carry it after
+  their last word, and the latest video's heading carries it too.
 - The Overview console has an off-by-default switch for a localized mainland
   China site suggestion when the reverse proxy reports that country.
 - A new LINE BLOG page brings back Kano's 2015–2019 archive with 99 Japanese
