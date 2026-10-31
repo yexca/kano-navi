@@ -53,11 +53,19 @@
 
 /* ---- Header ------------------------------------------------------------ */
 
-/* The art carries the blog's title. At 1000px and narrower it scales to show
-   1000 of its 2600px, positioned so the title at its left stays in view. */
+/* The art carries the blog's title and is centred at its own size, as on the
+   blog. At 1000px and narrower it scales to keep its middle 1000 of 2600px,
+   the part a 1000px window showed. A phone showed the blog's 1280px-wide page
+   zoomed out, so phones keep the art's middle 1280px. */
 .lb-banner {
   height: clamp(110px, 39vw, 390px);
-  background: #dfdfdf var(--lb-header) 45% center / auto 100% no-repeat;
+  background: #dfdfdf var(--lb-header) center / auto 100% no-repeat;
+}
+
+@media (max-width: 760px) {
+  .lb-banner {
+    height: calc(100vw * 390 / 1280);
+  }
 }
 
 .lb-banner-link {
@@ -65,6 +73,10 @@
   height: 100%;
 }
 
+/* The blog's menu bar: 13px bold grey links, 65px tall, that turn the accent
+   colour with a 3px bar under them on hover. Home is the platform's icon,
+   whose house sits at its centre. The current Home of the index shows no bar,
+   as on the blog. */
 .lb-menu {
   border-bottom: 1px solid var(--lb-rule);
   background: var(--lb-paper);
@@ -73,64 +85,145 @@
 .lb-menu-inner {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 28px;
-  width: min(100%, 960px);
-  min-height: 64px;
+  width: min(100%, calc(960px + 2 * var(--gutter)));
   margin-inline: auto;
-  padding: 10px var(--gutter);
-  font-size: 13px;
-  font-weight: 700;
+  padding-inline: var(--gutter);
 }
 
 .lb .lb-menu-inner a {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  position: relative;
+  display: block;
+  padding: 27px 15px 25px;
   color: var(--lb-soft);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.lb .lb-menu-inner a.lb-menu-home,
-.lb .lb-menu-inner a[aria-current="page"] {
+.lb .lb-menu-inner a:hover {
   color: var(--lb-accent);
+  text-decoration: none;
 }
 
-/* The original icon image: only its centre, where the house sits, shows. If
-   it is missing, its alternative text stands in for it. */
+.lb-menu-inner a:hover::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--lb-accent);
+}
+
+.lb-menu-inner a.lb-menu-home[aria-current="page"]::after {
+  background: var(--lb-paper);
+}
+
+.lb .lb-menu-inner a.lb-menu-home {
+  margin-left: -15px;
+  padding-block: 0;
+}
+
+/* If the icon is missing, its alternative text stands in for it. */
 .lb-menu-home img {
+  display: block;
   width: 30px;
-  height: 44px;
+  height: 65px;
   object-fit: none;
 }
 
-.lb-menu-inner svg {
-  width: 17px;
-  height: 17px;
+/* The archive's own controls, after the blog's links: every article's
+   translation and the design picker. */
+.lb-menu-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
 }
 
-.lb-translation-toggle {
+.lb-design-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
-  padding: 6px 12px;
+  height: 28px;
+  padding: 0 8px 0 4px;
   border: 1px solid var(--lb-rule);
   border-radius: 999px;
   color: var(--lb-soft);
-  background: transparent;
+  background: var(--lb-paper);
   font-size: 12px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.lb-translation-toggle[aria-pressed="true"] {
-  border-color: var(--lb-accent);
+.lb-design-button:hover,
+.lb-design-button[data-state="open"],
+.lb-design-button.is-chosen {
+  border-color: color-mix(in oklab, var(--lb-accent) 45%, transparent);
   color: var(--lb-accent);
-  background: color-mix(in oklab, var(--lb-accent) 10%, transparent);
 }
 
-.lb-translation-toggle svg {
-  width: 15px;
-  height: 15px;
+.lb-design-button img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--lb-wash);
+}
+
+.lb-design-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* The picker's menu opens outside the page, so it sets its own sizes. */
+.lb-design-menu {
+  width: min(340px, calc(100vw - 32px));
+  max-height: var(--radix-dropdown-menu-content-available-height);
+}
+
+.lb-design-item {
+  gap: 10px;
+}
+
+.lb-design-photo {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: hsl(var(--muted));
+}
+
+/* The header strip shows the art's middle, where its title sits. */
+.lb-design-header {
+  flex: none;
+  width: 72px;
+  height: 32px;
+  border-radius: 4px;
+  background: hsl(var(--muted)) center / cover no-repeat;
+}
+
+.lb-design-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lb-design-copy small {
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+}
+
+.lb-design-accent {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 
 /* ---- Layout ------------------------------------------------------------ */
@@ -140,9 +233,9 @@
   grid-template-columns: minmax(0, 660px) 240px;
   justify-content: space-between;
   gap: 60px;
-  width: min(100%, 960px);
+  width: min(100%, calc(960px + 2 * var(--gutter)));
   margin-inline: auto;
-  padding: 48px var(--gutter) 40px;
+  padding: 60px var(--gutter) 40px;
 }
 
 .lb-main {
@@ -231,10 +324,29 @@
 }
 
 .lb-article-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
   margin: 0;
   color: var(--lb-faint);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+/* The shared translation mark, in the design's accent colour. */
+.lb .translation-mark {
+  margin: 0;
+}
+
+.lb .translation-mark:hover,
+.lb .translation-mark.is-original {
+  border-color: color-mix(in oklab, var(--lb-accent) 45%, transparent);
+  color: var(--lb-accent);
+}
+
+.lb .translation-mark.is-original {
+  background: color-mix(in oklab, var(--lb-accent) 10%, transparent);
 }
 
 .lb-article-body {
@@ -748,8 +860,7 @@
   place-items: center;
   width: 60px;
   height: 60px;
-  margin: 0 max(var(--gutter), calc((100% - 960px) / 2 + var(--gutter))) 48px
-    auto;
+  margin: 0 max(var(--gutter), calc((100% - 960px) / 2)) 48px auto;
   border-block: 1px solid var(--lb-rule);
   color: var(--lb-accent);
 }
@@ -779,12 +890,12 @@
 }
 
 @media (max-width: 560px) {
-  .lb-menu-inner {
-    gap: 4px 18px;
+  .lb-menu-tools {
+    gap: 6px;
   }
 
-  .lb-translation-toggle {
-    margin-left: 0;
+  .lb-design-button span {
+    display: none;
   }
 
   .lb-card-image {

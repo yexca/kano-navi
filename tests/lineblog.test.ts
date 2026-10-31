@@ -26,8 +26,10 @@ import {
   posts,
 } from "../src/lineblog/content.ts"
 import {
+  chosenDesign,
   designFor,
   designMedia,
+  designOptions,
   designs,
   homeIcon,
 } from "../src/lineblog/designs.ts"
@@ -465,6 +467,27 @@ test("a page takes the blog's design of its newest article", () => {
   assert.equal(designFor("2018-12-03").header.media, "03adb75fc762.jpg")
   assert.equal(designFor("2019-03-20").profile.media, "e4293469ed7c.jpg")
   assert.equal(designFor(undefined), designs[designs.length - 1])
+})
+
+test("a reader picks among the blog's distinct looks or follows the articles", () => {
+  // The 2017-03-13 design changed only the profile text, so it joins the
+  // 2016 look, which then applies its newer text.
+  assert.deepEqual(
+    designOptions.map((option) => [option.id, option.until]),
+    [
+      ["2015-01-01", "2016-03-18"],
+      ["2016-03-18", "2017-04-14"],
+      ["2017-04-14", "2017-04-29"],
+      ["2017-04-29", "2018-05-18"],
+      ["2018-05-18", "2018-07-21"],
+      ["2018-07-21", "2018-12-04"],
+      ["2018-12-04", undefined],
+    ],
+  )
+  assert.equal(chosenDesign("2016-03-18")?.since, "2017-03-13")
+  assert.equal(chosenDesign("2018-12-04"), designs[designs.length - 1])
+  assert.equal(chosenDesign(null), null)
+  assert.equal(chosenDesign("2017-03-13"), null)
 })
 
 test("recovered pictures replace remote addresses and follow embedded tweets", () => {

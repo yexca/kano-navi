@@ -28,8 +28,6 @@ export function addPostFile(file: LineblogPostFile) {
 
 export const PAGE_SIZE = 3
 export const ORIGINAL_BLOG = "https://lineblog.me/kano/"
-/** The blog's menu bar linked Kano's official site. */
-export const OFFICIAL_SITE = "https://whv-amusic.com/kano/"
 
 /** Recovered media stay in the server's data directory. */
 export function mediaUrl(name: string) {

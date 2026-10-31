@@ -4,9 +4,12 @@ The Line Blog page brings back Kano's LINE BLOG from 2015 to 2019: 99 articles i
 their original Japanese, with the photos, pictographs, and videos they were
 posted with. It is an unofficial archive built mainly on a fan's recovery of
 the blog from web archive captures, credited on the About page, and laid out
-like the original blog with its own header art and profile photos.
+like the original blog with its own header art, menu bar and profile photos.
 The blog changed its design a few times; each page shows the design the blog
-had when its articles were posted.
+had when its articles were posted. The design picker at the right of the menu
+bar keeps one of the blog's designs, with its header art and profile photo,
+on every page instead; **Auto** returns to the design of the articles shown.
+The choice is remembered on this device.
 
 ## Reading
 
@@ -23,10 +26,12 @@ with a link to the original on YouTube.
 ## Translation
 
 In Simplified Chinese and English, each paragraph is followed by its
-translation into that language; Japanese shows the original only. Use
-**显示中文翻译** or **Show the English translation** in the menu bar to hide or
-show the translations; the choice is remembered on this device. The Chinese
-translations come with the recovered archive; the English ones are machine
+translation into that language; Japanese shows the original only. The menu
+bar carries the same **AI** mark as translated video titles: select it to
+hide the translations of every article, and select **Original** to show them
+again; the choice is remembered on this device. The same mark on an
+article's date line switches that article alone, until the menu bar's mark
+is used again. Both translations come with the recovered archive and are AI
 translations of the Japanese posts.
 
 ## What Was Not Preserved

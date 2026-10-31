@@ -2477,48 +2477,6 @@ a.month-event:hover {
   outline-offset: 2px;
 }
 
-/* The translation switch after a card title: AI translation or Original. */
-.translation-mark {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 3px;
-  margin-bottom: 2px;
-  padding: 0 7px 0 5px;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: var(--paper);
-  color: var(--soft);
-  font: 700 10.5px / 17px var(--font-body);
-  letter-spacing: 0;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    color 160ms ease,
-    border-color 160ms ease;
-}
-
-.translation-mark:hover {
-  border-color: color-mix(in oklab, var(--berry) 45%, transparent);
-  color: var(--berry);
-}
-
-.translation-mark:focus-visible {
-  outline: 2px solid var(--berry);
-  outline-offset: 2px;
-}
-
-.translation-mark.is-original {
-  border-color: color-mix(in oklab, var(--berry) 45%, transparent);
-  background: var(--berry-wash);
-  color: var(--berry);
-}
-
-.translation-mark svg {
-  width: 11px;
-  height: 11px;
-}
-
 /* A spotlight ticket title is not clamped, so the switch follows its last word. */
 .ticket-title.translated-title {
   display: block;

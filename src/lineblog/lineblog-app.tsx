@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 import {
   ArrowUp,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ImageOff,
@@ -16,6 +17,16 @@ import {
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 import { mediaSrcSet, mediaVariantUrl } from "@/lib/media"
 import { ExternalLink, YouTubeLogo } from "@/site/links"
 import { MediaDialog, stepIndex } from "@/site/media-dialog"
@@ -26,7 +37,6 @@ import {
   SkipLink,
 } from "@/site/site-shell"
 import {
-  OFFICIAL_SITE,
   archiveMonths,
   articleHref,
   isEmoji,
@@ -42,7 +52,14 @@ import {
   postMonth,
   posts,
 } from "./content"
-import { designFor, homeIcon, type LineblogDesign } from "./designs"
+import {
+  chosenDesign,
+  designFor,
+  designOptions,
+  homeIcon,
+  type LineblogDesign,
+  type LineblogDesignOption,
+} from "./designs"
 import { loadView, viewLoaded } from "./post-files"
 import type {
   LineblogBlock,
@@ -58,6 +75,7 @@ import "./lineblog.css"
 await loadView(window.location.search).catch(() => undefined)
 
 const TRANSLATION_KEY = "kano-lineblog-translation"
+const DESIGN_KEY = "kano-lineblog-design"
 
 /** The translation each interface language shows; Japanese shows none. */
 const TRANSLATIONS = {
@@ -66,6 +84,51 @@ const TRANSLATIONS = {
 } as const
 
 type Translation = (typeof TRANSLATIONS)[keyof typeof TRANSLATIONS]
+
+/** Whether a post carries any of the translation's lines. */
+function hasTranslation(post: LineblogPost, translation: Translation) {
+  return (
+    Boolean(post[translation.title]) ||
+    post.blocks.some(
+      (block) => block.type === "p" && Boolean(block[translation.blocks]),
+    )
+  )
+}
+
+/**
+ * The same mark as a translated video title: AI while the translation lines
+ * show, Original while they are hidden. The menu bar's mark switches every
+ * article; an article's own mark switches that article until the menu bar's
+ * is used.
+ */
+function TranslationMark({
+  on,
+  all = false,
+  onToggle,
+}: {
+  on: boolean
+  all?: boolean
+  onToggle: () => void
+}) {
+  const { t } = useAppSettings()
+  const label = t(on ? "translation.machineShort" : "translation.original")
+  const spoken = on ? t("translation.machine") : label
+  const action = t(on ? "translation.showOriginal" : "lineblog.translationOn")
+  const scope = all ? `${t("lineblog.allArticles")} · ` : ""
+  const hint = on ? `${t("translation.machineHint")} · ` : ""
+  return (
+    <button
+      type="button"
+      className={cn("translation-mark", !on && "is-original")}
+      title={`${scope}${hint}${action}`}
+      aria-label={`${scope}${spoken}: ${action}`}
+      onClick={onToggle}
+    >
+      <Languages aria-hidden="true" />
+      {label}
+    </button>
+  )
+}
 
 /** How wide each kind of picture shows (lineblog.css); viewers keep originals. */
 const SIZES = {
@@ -83,6 +146,24 @@ function readTranslation() {
     return window.localStorage.getItem(TRANSLATION_KEY) !== "off"
   } catch {
     return true
+  }
+}
+
+function readDesign() {
+  try {
+    const id = window.localStorage.getItem(DESIGN_KEY)
+    return chosenDesign(id) ? id : null
+  } catch {
+    return null
+  }
+}
+
+function remember(key: string, value: string | null) {
+  try {
+    if (value === null) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, value)
+  } catch {
+    // The choice then lasts for this visit only.
   }
 }
 
@@ -555,14 +636,24 @@ function ImageDetails({ image }: { image: LineblogImage }) {
 function Article({
   post,
   single,
-  translation,
+  offered,
+  translationOn,
+  translationRound,
 }: {
   post: LineblogPost
   single: boolean
-  translation: Translation | null
+  offered: Translation | null
+  translationOn: boolean
+  /** Counts uses of the menu bar's switch. */
+  translationRound: number
 }) {
   const { t } = useAppSettings()
   const images = useMemo(() => postImages(post.blocks), [post])
+  const translated = offered && hasTranslation(post, offered) ? offered : null
+  // The article's own switch holds until the menu bar's is used.
+  const [own, setOwn] = useState<{ round: number; on: boolean } | null>(null)
+  const on = own?.round === translationRound ? own.on : translationOn
+  const translation = on ? translated : null
   const translatedTitle = translation && post[translation.title]
   const [open, setOpen] = useState(-1)
   const context = useMemo<ContentContext>(
@@ -587,6 +678,12 @@ function Article({
         ) : null}
         <p className="lb-article-date">
           <time dateTime={post.published}>{postDate(post.published)}</time>
+          {translated ? (
+            <TranslationMark
+              on={on}
+              onToggle={() => setOwn({ round: translationRound, on: !on })}
+            />
+          ) : null}
         </p>
       </header>
       <div className="lb-article-body" lang="ja">
@@ -821,14 +918,122 @@ function Sidebar({
   )
 }
 
+function designPeriod(
+  t: ReturnType<typeof useAppSettings>["t"],
+  option: LineblogDesignOption,
+) {
+  const month = (date: string) => date.slice(0, 7).replace("-", "/")
+  // The first design dates from before the blog's first post.
+  const oldest = posts.at(-1)?.published.slice(0, 10) ?? option.id
+  const from = month(option.id < oldest ? oldest : option.id)
+  const to = option.until ? month(option.until) : ""
+  // A design shown for part of one month reads as that month.
+  if (to === from) return from
+  return t("lineblog.designPeriod", { from, to })
+}
+
+/**
+ * Picks the blog's header art and profile photo: Auto follows the articles
+ * shown, as the blog did, and a period keeps that design on every view.
+ */
+function DesignPicker({
+  choice,
+  design,
+  onChoose,
+}: {
+  choice: string | null
+  design: LineblogDesign
+  onChoose: (id: string | null) => void
+}) {
+  const { t } = useAppSettings()
+  const chosen = designOptions.find((option) => option.id === choice)
+  const current = chosen ? designPeriod(t, chosen) : t("lineblog.designAuto")
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn("lb-design-button", chosen && "is-chosen")}
+          aria-label={`${t("lineblog.design")}: ${current}`}
+          title={t("lineblog.design")}
+        >
+          <img
+            src={mediaVariantUrl(mediaUrl(design.profile.media), 320)}
+            alt=""
+            width={20}
+            height={20}
+            decoding="async"
+          />
+          <span>{current}</span>
+          <ChevronDown aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="lb-design-menu overflow-y-auto"
+      >
+        <DropdownMenuLabel>{t("lineblog.design")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup
+          value={choice ?? "auto"}
+          onValueChange={(value) => onChoose(value === "auto" ? null : value)}
+        >
+          <DropdownMenuRadioItem value="auto" className="lb-design-item">
+            <span className="lb-design-copy">
+              <strong>{t("lineblog.designAuto")}</strong>
+              <small>{t("lineblog.designAutoHint")}</small>
+            </span>
+          </DropdownMenuRadioItem>
+          {designOptions.map((option) => (
+            <DropdownMenuRadioItem
+              key={option.id}
+              value={option.id}
+              className="lb-design-item"
+            >
+              <img
+                className="lb-design-photo"
+                src={mediaVariantUrl(
+                  mediaUrl(option.design.profile.media),
+                  320,
+                )}
+                alt=""
+                width={32}
+                height={32}
+                loading="lazy"
+                decoding="async"
+              />
+              <span
+                className="lb-design-header"
+                style={{
+                  backgroundImage: `url("${mediaVariantUrl(mediaUrl(option.design.header.media), 640)}")`,
+                }}
+                aria-hidden="true"
+              />
+              <span className="lb-design-copy">
+                <strong>{designPeriod(t, option)}</strong>
+              </span>
+              <span
+                className="lb-design-accent"
+                style={{ background: option.design.accent }}
+                aria-hidden="true"
+              />
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function LineblogApp() {
   const { t, locale } = useAppSettings()
   const { search, onClick, onIntent } = useLineblogLocation()
   const view = useMemo(() => lineblogView(search), [search])
   const loaded = useViewPosts(search, view.shown)
   const [translationOn, setTranslationOn] = useState(readTranslation)
+  const [translationRound, setTranslationRound] = useState(0)
+  const [designChoice, setDesignChoice] = useState(readDesign)
   const offered = locale === "ja" ? null : TRANSLATIONS[locale]
-  const translation = translationOn ? offered : null
 
   useEffect(() => {
     const title = view.article
@@ -843,18 +1048,22 @@ export function LineblogApp() {
   const toggleTranslation = () => {
     const next = !translationOn
     setTranslationOn(next)
-    try {
-      window.localStorage.setItem(TRANSLATION_KEY, next ? "on" : "off")
-    } catch {
-      // The choice then lasts for this visit only.
-    }
+    setTranslationRound((round) => round + 1)
+    remember(TRANSLATION_KEY, next ? "on" : "off")
+  }
+
+  const chooseDesign = (id: string | null) => {
+    setDesignChoice(id)
+    remember(DESIGN_KEY, id)
   }
 
   const shownPost = view.article ?? view.shown[0]
-  const design = designFor(
-    shownPost &&
-      postDate(shownPost.published).slice(0, 10).replaceAll("/", "-"),
-  )
+  const design =
+    chosenDesign(designChoice) ??
+    designFor(
+      shownPost &&
+        postDate(shownPost.published).slice(0, 10).replaceAll("/", "-"),
+    )
   const designStyle = {
     "--lb-design": design.accent,
     "--lb-header": `url("${mediaUrl(design.header.media)}")`,
@@ -902,20 +1111,23 @@ export function LineblogApp() {
                 decoding="async"
               />
             </a>
-            <ExternalLink href={OFFICIAL_SITE}>
-              <span lang="ja">鹿乃オフィシャルサイト</span>
+            <ExternalLink href={design.officialSite} lang="ja">
+              鹿乃オフィシャルサイト
             </ExternalLink>
-            {offered ? (
-              <button
-                type="button"
-                className="lb-translation-toggle"
-                aria-pressed={translationOn}
-                onClick={toggleTranslation}
-              >
-                <Languages aria-hidden="true" />
-                {t("lineblog.translationOn")}
-              </button>
-            ) : null}
+            <div className="lb-menu-tools">
+              {offered ? (
+                <TranslationMark
+                  on={translationOn}
+                  all
+                  onToggle={toggleTranslation}
+                />
+              ) : null}
+              <DesignPicker
+                choice={designChoice}
+                design={design}
+                onChoose={chooseDesign}
+              />
+            </div>
           </div>
         </nav>
 
@@ -948,7 +1160,9 @@ export function LineblogApp() {
                   key={post.id}
                   post={post}
                   single={Boolean(view.article)}
-                  translation={translation}
+                  offered={offered}
+                  translationOn={translationOn}
+                  translationRound={translationRound}
                 />
               ))
             ) : loaded.failed ? (

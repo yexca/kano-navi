@@ -55,7 +55,11 @@ packaged, and what an instance needs to show it.
   that shows it (the 2016 art from its own `?v=0318` stamp), and a page uses
   the design of the newest article it shows. Two profile photos were never
   archived (one from 2018-01 to 2018-05, one shown on 2018-12-04); those
-  periods keep the photo before or after them.
+  periods keep the photo before or after them. Each design also carries the
+  official-site address of the menu bar. A reader can pick one design in place
+  of the automatic one: the picker offers each run of designs with the same
+  header, profile photo and accent once, applying the run's latest design,
+  and the browser remembers the choice.
 
 Archive media are named by the first 12 hex digits of a SHA-256: an image by
 its bytes, a downloaded YouTube video by its watch address
@@ -94,7 +98,7 @@ npm run lineblog:package -- --from /path/to/Kano_LINE_Blog_Recovery
 
 The archive holds `BLOG/` (Japanese originals), `BLOG_zh-cn/` and `BLOG_en/`
 (the same articles with Simplified Chinese or English translation lines
-inserted; the English lines are machine translations of the Japanese),
+inserted; both are machine translations of the Japanese),
 `media/`, and `media-parts/`,
 where each video over 100 MiB is a gzip-compressed tar split into numbered
 parts. Packaging:
@@ -155,7 +159,7 @@ other, including every design's art;
 route. Browser verification covers the article list, months, single
 articles with their neighbours, back and forward (including after a reload),
 the image viewer, video
-playback, the translation switch in Chinese and English, each design's header and profile,
+playback, the menu bar's and each article's translation switch in Chinese and English, the design picker and each design's header and profile,
 three languages, themes, and desktop and mobile layouts.
 
 ## Related Docs

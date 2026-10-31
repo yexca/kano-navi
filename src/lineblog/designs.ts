@@ -21,11 +21,16 @@ export type LineblogDesign = {
   accent: string
   /** The profile text beside it, kept in its original Japanese. */
   profileText: string
+  /** The official site the menu bar linked as 鹿乃オフィシャルサイト. */
+  officialSite: string
   header: LineblogArt
   profile: LineblogArt
 }
 
 const OBS = "https://obs.line-scdn.net/"
+
+const SITE_WHV = "https://whv-amusic.com/kano/"
+const SITE_AMEBA = "https://kano-official.amebaownd.com/"
 
 const header2015: LineblogArt = {
   media: "941e5735900c.jpg",
@@ -108,6 +113,7 @@ export const designs: LineblogDesign[] = [
     since: "2015-01-01",
     accent: "#913143",
     profileText: PROFILE_TWO_SINGLES,
+    officialSite: SITE_WHV,
     header: header2015,
     profile: profile2015,
   },
@@ -117,6 +123,7 @@ export const designs: LineblogDesign[] = [
     since: "2016-03-18",
     accent: "#f2746f",
     profileText: PROFILE_TWO_SINGLES,
+    officialSite: SITE_WHV,
     header: header2016,
     profile: profile2016,
   },
@@ -124,6 +131,7 @@ export const designs: LineblogDesign[] = [
     since: "2017-03-13",
     accent: "#f2746f",
     profileText: PROFILE_FOUR_SINGLES,
+    officialSite: SITE_WHV,
     header: header2016,
     profile: profile2016,
   },
@@ -131,6 +139,7 @@ export const designs: LineblogDesign[] = [
     since: "2017-04-14",
     accent: "#f2746f",
     profileText: PROFILE_FOUR_SINGLES,
+    officialSite: SITE_WHV,
     header: header2016,
     profile: profile2017,
   },
@@ -138,6 +147,7 @@ export const designs: LineblogDesign[] = [
     since: "2017-04-29",
     accent: "#826856",
     profileText: PROFILE_FOUR_SINGLES,
+    officialSite: SITE_WHV,
     header: header2017,
     profile: profile2017,
   },
@@ -145,6 +155,7 @@ export const designs: LineblogDesign[] = [
     since: "2018-05-18",
     accent: "#826856",
     profileText: PROFILE_FOUR_SINGLES,
+    officialSite: SITE_WHV,
     header: header2017,
     profile: profile2018,
   },
@@ -152,6 +163,7 @@ export const designs: LineblogDesign[] = [
     since: "2018-07-21",
     accent: "#376c9c",
     profileText: PROFILE_FOUR_SINGLES,
+    officialSite: SITE_WHV,
     header: header2017,
     profile: profile2018,
   },
@@ -159,10 +171,48 @@ export const designs: LineblogDesign[] = [
     since: "2018-12-04",
     accent: "#376c9c",
     profileText: PROFILE_FOUR_SINGLES,
+    officialSite: SITE_WHV,
     header: header2018,
     profile: profile2019,
   },
 ]
+
+export type LineblogDesignOption = {
+  /** The choice's stored value: the Japan date its first design applies from. */
+  id: string
+  /** The latest design of the run, which a reader's choice applies. */
+  design: LineblogDesign
+  /** Japan date (exclusive) of the next choice, if any. */
+  until?: string
+}
+
+/**
+ * The looks a reader can pick in place of the automatic one. A run of
+ * designs with the same header, profile photo and accent counts as one.
+ */
+export const designOptions = designs.reduce<LineblogDesignOption[]>(
+  (options, design) => {
+    const last = options.at(-1)
+    if (
+      last &&
+      last.design.header === design.header &&
+      last.design.profile === design.profile &&
+      last.design.accent === design.accent
+    ) {
+      last.design = design
+      return options
+    }
+    if (last) last.until = design.since
+    options.push({ id: design.since, design })
+    return options
+  },
+  [],
+)
+
+/** The design of a reader's choice, or null for the automatic one. */
+export function chosenDesign(id: string | null) {
+  return designOptions.find((option) => option.id === id)?.design ?? null
+}
 
 /** The blog's own art, for packaging alongside the posts' media. */
 export function designMedia() {

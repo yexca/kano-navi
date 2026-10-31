@@ -9,6 +9,12 @@ export const lineblogMessages = {
     "lineblog.home": "首页",
     "lineblog.translation": "中文翻译",
     "lineblog.translationOn": "显示中文翻译",
+    "lineblog.allArticles": "所有文章",
+    "lineblog.design": "博客外观",
+    "lineblog.designAuto": "自动",
+    "lineblog.designAutoHint": "随所显示文章的日期变化",
+    "lineblog.designPeriod": ({ from, to }: { from: string; to: string }) =>
+      to ? `${from} – ${to}` : `${from} 起`,
     "lineblog.profile": "博主资料",
     "lineblog.recent": "最新文章",
     "lineblog.archive": "存档",
@@ -48,7 +54,7 @@ export const lineblogMessages = {
     "lineblog.photo": "照片",
     "lineblog.toTop": "回到顶部",
     "lineblog.disclaimer":
-      "LINE BLOG 存档中的文章、图片与视频，其权利归鹿乃及相应权利人所有。本页为粉丝整理的离线存档，与 LINE 及相关组织无关。",
+      "LINE BLOG 存档中的文章、图片与视频，其权利归鹿乃及相应权利人所有。本页为粉丝整理的离线存档，与 LINE 及相关组织无关。中文翻译由 AI 根据日文原文生成。",
   },
   ja: {
     "lineblog.metaTitle": "LINE BLOG アーカイブ · 鹿乃ちゃん何してるか",
@@ -60,6 +66,12 @@ export const lineblogMessages = {
     "lineblog.home": "Home",
     "lineblog.translation": "中国語訳",
     "lineblog.translationOn": "中国語訳を表示",
+    "lineblog.allArticles": "すべての記事",
+    "lineblog.design": "ブログのデザイン",
+    "lineblog.designAuto": "自動",
+    "lineblog.designAutoHint": "表示中の記事の日付に合わせて変わります",
+    "lineblog.designPeriod": ({ from, to }: { from: string; to: string }) =>
+      to ? `${from} – ${to}` : `${from}〜`,
     "lineblog.profile": "プロフィール",
     "lineblog.recent": "最新記事",
     "lineblog.archive": "アーカイブ",
@@ -112,6 +124,12 @@ export const lineblogMessages = {
     "lineblog.home": "Home",
     "lineblog.translation": "English translation",
     "lineblog.translationOn": "Show the English translation",
+    "lineblog.allArticles": "All articles",
+    "lineblog.design": "Blog design",
+    "lineblog.designAuto": "Auto",
+    "lineblog.designAutoHint": "Follows the dates of the articles shown",
+    "lineblog.designPeriod": ({ from, to }: { from: string; to: string }) =>
+      to ? `${from} – ${to}` : `From ${from}`,
     "lineblog.profile": "Profile",
     "lineblog.recent": "Recent posts",
     "lineblog.archive": "Archive",
@@ -157,6 +175,6 @@ export const lineblogMessages = {
     "lineblog.photo": "Photo",
     "lineblog.toTop": "Back to top",
     "lineblog.disclaimer":
-      "Posts, images and videos in the LINE BLOG archive belong to Kano and their respective rights holders. This page is a fan-made offline archive, unaffiliated with LINE or related organizations. The English translations are machine translations of the Japanese posts.",
+      "Posts, images and videos in the LINE BLOG archive belong to Kano and their respective rights holders. This page is a fan-made offline archive, unaffiliated with LINE or related organizations. The English translations are AI translations of the Japanese posts.",
   },
 }

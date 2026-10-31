@@ -113,9 +113,11 @@
 
 - A new LINE BLOG page brings back Kano's 2015–2019 archive with 99 Japanese
   articles, their photos, pictographs and archived YouTube videos, the
-  original-era layouts, monthly archive and article links. English and
-  Simplified Chinese readers can show paragraph translations, and the About
-  page credits the fan recovery project.
+  original-era layouts, monthly archive and article links. A menu-bar picker
+  keeps one era's header art and profile photo in place of the automatic one.
+  English and Simplified Chinese readers can show or hide the AI paragraph
+  translations for every article or one article, and the About page credits
+  the fan recovery project.
 - Today's weekly schedule row uses a berry date disc and accent rule on
   phones and tablets, while the site header shows the name with an
   `Unofficial` mark on wide screens.
