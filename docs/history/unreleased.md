@@ -166,6 +166,10 @@
 - A quote of one of the board's own posts shows that post's translation in
   the content language, with its own **AI** switch at the end of the quote's
   header line.
+- The header names the blog page LINE BLOG, and its About link reads 关于 in
+  Chinese and について in Japanese. The About page drops its tagline and the
+  Full journey link, folds the LINE BLOG note into the overview, and lists
+  the models as Claude Opus 5.5, GPT-6.1-Sol and GPT-5.6-Sol.
 - Switching weeks in the weekly schedule keeps the current week dimmed until
   the next one is ready and then changes once, instead of passing through an
   empty grid and a loading bar; the schedule-image slot keeps its size on wide

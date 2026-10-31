@@ -19,7 +19,7 @@ These pages describe what you can see and do on the site.
 ## Pages and Settings
 
 Every page shares one header with the site name (with an "Unofficial" mark on
-wide screens), the page links (Now, Journey, Line Blog, About), a live
+wide screens), the page links (Now, Journey, LINE BLOG, About), a live
 Japan-time clock, and language and theme controls.
 
 - **Languages:** English, Japanese, and Simplified Chinese. The language
@@ -31,7 +31,7 @@ Japan-time clock, and language and theme controls.
 - **Themes:** light and dark, following your system until you pick one.
 - **Layouts:** every page works on phones, tablets, and desktops.
 
-The About page introduces the project, credits the sources of the Line Blog
+The About page introduces the project, credits the sources of the LINE BLOG
 archive and the AI models that helped build the site, and states the license.
 
 ## Freshness and Sources
