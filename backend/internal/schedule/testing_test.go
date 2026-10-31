@@ -23,6 +23,10 @@ const (
 	testTimestamp   = "2026-04-01T00:00:00.000Z"
 )
 
+// defaultAttempts is the calls a model gets per input before an operator
+// changes the setting.
+var defaultAttempts = sqlite.DefaultSyncSettings().LLMModelAttempts
+
 type recordedRequest struct {
 	url     string
 	headers http.Header

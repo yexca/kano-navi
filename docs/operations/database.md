@@ -39,8 +39,9 @@ Provider API keys entered in `/admin` require `LLM_SECRETS_KEY` and are
 encrypted before they reach SQLite; they are never returned by the API. Once
 configured, keys are read only by the server-side synchronization process.
 Provider eligibility is based on the original post modality: Text, Image, or
-both for mixed input. A failed provider is retried up to three total calls
-before the next compatible provider is used.
+both for mixed input. A failed provider gets up to the
+[attempts per model](configuration.md#sync-settings) in total calls before the
+next compatible provider is used.
 X synchronization reads both handles in `X_HANDLES` and keeps a separate cursor
 for each account.
 

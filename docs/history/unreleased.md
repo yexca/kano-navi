@@ -46,8 +46,12 @@
 
 - The Sources page has X and YouTube read limits (status requests, known-post
   refreshes, first-run age, full-sync cap, video pages, manual fetch pages,
-  request timeout and spacing), and the LLM page has the translation limits.
-  Saved values apply from the next run.
+  request timeout and spacing), and the LLM page has the model limits: the
+  attempts each model gets for an input before the next model in its queue
+  takes over (3 by default, 1–10, `llmModelAttempts` in
+  `/api/admin/sync-settings`) and the translation limits. Saved values apply
+  from the next run.
+- The LLM page and its panels drop their explanatory paragraphs.
 - The Posts page shows times as Japan-time `YYYY-MM-DD HH:mm` in every
   language: a post's and its quote's publication and a queued refresh.
 

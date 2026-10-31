@@ -778,13 +778,14 @@ the original post modality. Text-only input requires `text`; image-only input
 requires `image`; mixed input requires a model with both tags. Only ready cached images are sent to the model. A post that
 declares an image but whose cache is not ready is recorded as `media_pending`
 and is not silently reduced to text-only input. Each provider uses OpenAI
-Responses, Chat Completions, or Anthropic Messages, receives at most three total calls (one
-initial request plus two retries), and then yields to the next enabled, keyed,
+Responses, Chat Completions, or Anthropic Messages, receives at most the
+[attempts per model](../operations/configuration.md#sync-settings) in total
+calls (three by default), and then yields to the next enabled, keyed,
 capability-compatible target in queue order; targets whose capabilities do
 not fit the input are skipped without a call. `llm_providers.max_retries`
 always stores 2 (startup sets every row to it), and the admin API validates
-but does not store a different `maxRetries`; it is not a cost-control
-override.
+but does not store a different `maxRetries`; calls follow the attempts
+setting, not this column.
 
 ### LLM Provider Catalog
 

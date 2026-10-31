@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// SyncSettings are the operator's bounds of source reads and the translate
-// step. Every run reads them when it starts, so a change applies to the next
-// run.
+// SyncSettings are the operator's bounds of source reads, the translate step
+// and model calls. Every run reads them when it starts, so a change applies
+// to the next run.
 type SyncSettings struct {
 	// XBootstrapDays is the age limit of an X account's first run.
 	XBootstrapDays int `json:"xBootstrapDays"`
@@ -32,11 +32,14 @@ type SyncSettings struct {
 	// step.
 	TranslationScanLimit    int `json:"translationScanLimit"`
 	TranslationLookbackDays int `json:"translationLookbackDays"`
+	// LLMModelAttempts is how many calls one model gets for one input before
+	// the next model in the queue takes over.
+	LLMModelAttempts int `json:"llmModelAttempts"`
 }
 
 // SyncSettingSpec describes one setting: its API field, its app_settings key,
-// the environment variable a first start imports it from, its default and
-// its inclusive bounds.
+// the environment variable a first start imports it from (none when empty),
+// its default and its inclusive bounds.
 type SyncSettingSpec struct {
 	Field   string `json:"field"`
 	key     string
@@ -62,6 +65,7 @@ var SyncSettingSpecs = []SyncSettingSpec{
 	{Field: "fetchRequestDelayMs", key: "sync_fetch_request_delay_ms", env: "SYNC_REQUEST_DELAY_MS", Default: 0, Min: 0, Max: 10000, clamp: true, value: func(s *SyncSettings) *int { return &s.FetchRequestDelayMS }},
 	{Field: "translationScanLimit", key: "sync_translation_scan_limit", env: "TRANSLATION_SCAN_LIMIT", Default: 20, Min: 1, Max: 200, clamp: true, value: func(s *SyncSettings) *int { return &s.TranslationScanLimit }},
 	{Field: "translationLookbackDays", key: "sync_translation_lookback_days", env: "TRANSLATION_LOOKBACK_DAYS", Default: 30, Min: 1, Max: 3650, clamp: true, value: func(s *SyncSettings) *int { return &s.TranslationLookbackDays }},
+	{Field: "llmModelAttempts", key: "sync_llm_model_attempts", Default: 3, Min: 1, Max: 10, value: func(s *SyncSettings) *int { return &s.LLMModelAttempts }},
 }
 
 // DefaultSyncSettings are the settings before an operator changes any.
@@ -173,6 +177,9 @@ func (s *Store) ImportSyncSettings(ctx context.Context, getenv func(string) stri
 	}
 	defer tx.Rollback()
 	for _, spec := range SyncSettingSpecs {
+		if spec.env == "" {
+			continue
+		}
 		n, e := strconv.Atoi(strings.TrimSpace(getenv(spec.env)))
 		if e != nil {
 			continue

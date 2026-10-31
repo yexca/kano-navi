@@ -135,8 +135,9 @@ func (e *Extractor) verifyAsset(ctx context.Context, assetID string, force bool)
 		images:       []cachedImage{*image},
 	}
 	message := "all configured LLM providers failed"
+	attempts := e.modelAttempts(ctx)
 	for _, target := range providers {
-		for attempt := 0; attempt <= llmMaxRetries; attempt++ {
+		for attempt := 0; attempt < attempts; attempt++ {
 			result, applied, err := e.attemptVerification(ctx, target, call, update, fingerprint)
 			if err == nil {
 				if !applied {
@@ -149,7 +150,7 @@ func (e *Extractor) verifyAsset(ctx context.Context, assetID string, force bool)
 				return assetResult{}, ctx.Err()
 			}
 			message = storedMessage(err)
-			if attempt < llmMaxRetries {
+			if attempt < attempts-1 {
 				if err = e.sleep(ctx, retryDelay(attempt)); err != nil {
 					abandon()
 					return assetResult{}, err

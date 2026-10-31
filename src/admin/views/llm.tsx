@@ -1228,15 +1228,8 @@ export function LlmView({ tab, navigate }: ViewProps) {
     data?.providers[0]
   return (
     <div className="adm-view">
-      <PageHeader
-        title={t("admin.llm.title")}
-        description={t("admin.llm.description")}
-      />
-      <Panel
-        icon={Route}
-        title={t("admin.llm.queues")}
-        description={t("admin.models.routesHint")}
-      >
+      <PageHeader title={t("admin.llm.title")} />
+      <Panel icon={Route} title={t("admin.llm.queues")}>
         {!data ? (
           <Loading />
         ) : (
@@ -1253,7 +1246,6 @@ export function LlmView({ tab, navigate }: ViewProps) {
                 <Languages aria-hidden />
                 {t("admin.models.translation")}
               </h3>
-              <p className="adm-muted">{t("admin.models.translationHint")}</p>
               <QueueEditor
                 catalog={data}
                 route="translate"
@@ -1263,7 +1255,7 @@ export function LlmView({ tab, navigate }: ViewProps) {
           </div>
         )}
       </Panel>
-      <SyncSettingsPanel group="translation" level={2} />
+      <SyncSettingsPanel group="llm" level={2} />
       <Panel
         icon={Bot}
         title={t("admin.models.providers")}

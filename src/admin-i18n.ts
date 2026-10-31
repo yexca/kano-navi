@@ -725,9 +725,7 @@ export const adminMessages = {
     "admin.ytdlp.update": "Update yt-dlp",
     "admin.syncSettings.x.title": "X read limits",
     "admin.syncSettings.youtube.title": "YouTube read limits",
-    "admin.syncSettings.translation.title": "Translation limits",
-    "admin.syncSettings.description":
-      "Bounds of each run. Saved values apply from the next run; a running one keeps its own.",
+    "admin.syncSettings.llm.title": "Model limits",
     "admin.syncSettings.range": "{min}–{max}, default {default}.",
     "admin.syncSettings.shared": "Shared by X and YouTube.",
     "admin.syncSettings.field.xMaxStatusRequests": "Status requests per run",
@@ -755,10 +753,11 @@ export const adminMessages = {
     "admin.syncSettings.field.fetchRequestDelayMs": "Request spacing (ms)",
     "admin.syncSettings.hint.fetchRequestDelayMs":
       "Wait between the pages of a manual fetch.",
-    "admin.syncSettings.field.translationScanLimit": "Items per run",
+    "admin.syncSettings.field.translationScanLimit": "Translations per run",
     "admin.syncSettings.hint.translationScanLimit":
       "Posts and titles the translate step sends to a model.",
-    "admin.syncSettings.field.translationLookbackDays": "Lookback (days)",
+    "admin.syncSettings.field.translationLookbackDays":
+      "Translation lookback (days)",
     "admin.syncSettings.hint.translationLookbackDays":
       "Age of posts and videos translated without a request.",
     "admin.followUp.title": "Follow-up checks",
@@ -766,6 +765,9 @@ export const adminMessages = {
       "Every YouTube read rereads the watch page of up to 10 finished videos at these times after their end, start or publication, to pick up a new thumbnail or title. Videos older than 8 days are left alone.",
     "admin.followUp.automatic": "Automatic",
     "admin.followUp.offsets": "Rechecked after",
+    "admin.syncSettings.field.llmModelAttempts": "Attempts per model",
+    "admin.syncSettings.hint.llmModelAttempts":
+      "Calls a model gets for one input before the next model in its queue takes over.",
     "admin.fetch.headingFor": "Manual fetch · {source}",
     "admin.fetch.noneYet": "No manual fetch of this source yet.",
 
@@ -793,8 +795,6 @@ export const adminMessages = {
       "{count} of {max} · press Enter or a comma to add one, {length} characters each",
     "admin.models.keywordsPlaceholder": "Type a keyword and press Enter",
     "admin.models.unsaved": "Unsaved changes",
-    "admin.models.routesHint":
-      "Each stage walks its queue from the top and calls the first usable model with the tag it needs: Text for posts, Image for schedule images. A model gets three attempts before the next one takes over.",
     "admin.models.providers": "Providers",
     "admin.models.providersHint":
       "Keys are stored encrypted and never shown again.",
@@ -906,8 +906,6 @@ export const adminMessages = {
     "admin.notice.extractionSaved": "Detection settings saved",
     "admin.notice.queueSaved": "Queue saved",
     "admin.models.translation": "Translation queue",
-    "admin.models.translationHint":
-      "Models that translate X posts and YouTube titles into English and Simplified Chinese. The translate step uses only this queue; leave it empty to turn machine translation off.",
     "admin.route.translationEmptyHint":
       "Without a model, the translate step skips safely and keeps operator requests.",
     "admin.route.translationNeedsText":
@@ -1153,8 +1151,6 @@ export const adminMessages = {
     "admin.detection.stage.image": "Schedule images",
     "admin.detection.noModel": "No usable model",
     "admin.llm.title": "LLM",
-    "admin.llm.description":
-      "The model queues and the providers behind them. Listing a provider's models and tests run only when you ask.",
     "admin.llm.queues": "Model queues",
     "admin.llm.queue.schedule": "Schedule extraction",
     "admin.route.addModel": "Add model",
@@ -1763,8 +1759,6 @@ export const adminMessages = {
       "{count}/{max} 个 · 按回车或逗号添加，每个最多 {length} 字",
     "admin.models.keywordsPlaceholder": "输入关键词后按回车",
     "admin.models.unsaved": "有未保存的修改",
-    "admin.models.routesHint":
-      "每个阶段从队列顶部开始，调用第一个可用且带有所需标签的模型：贴文需要“文本”，日程图片需要“图片”。每个模型最多尝试三次，之后由下一个接手。",
     "admin.models.providers": "服务商",
     "admin.models.providersHint": "Key 加密保存，保存后不会再显示。",
     "admin.models.noProviders": "还没有服务商",
@@ -1870,8 +1864,6 @@ export const adminMessages = {
     "admin.notice.extractionSaved": "识别设置已保存",
     "admin.notice.queueSaved": "队列已保存",
     "admin.models.translation": "翻译队列",
-    "admin.models.translationHint":
-      "把 X 动态和 YouTube 标题翻译为英文和简体中文的模型。翻译步骤只使用这个队列；留空即关闭机器翻译。",
     "admin.route.translationEmptyHint":
       "没有模型时，翻译步骤会安全跳过，并保留人工发起的请求。",
     "admin.route.translationNeedsText":
@@ -2082,8 +2074,6 @@ export const adminMessages = {
     "admin.detection.stage.image": "日程图片",
     "admin.detection.noModel": "没有可用模型",
     "admin.llm.title": "LLM 模型",
-    "admin.llm.description":
-      "模型队列及其背后的服务商。只有在你操作时才会获取服务商的模型列表或进行测试。",
     "admin.llm.queues": "模型队列",
     "admin.llm.queue.schedule": "日程提取",
     "admin.route.addModel": "添加模型",

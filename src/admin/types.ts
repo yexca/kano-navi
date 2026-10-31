@@ -207,6 +207,7 @@ export type SyncSettingField =
   | "fetchRequestDelayMs"
   | "translationScanLimit"
   | "translationLookbackDays"
+  | "llmModelAttempts"
 
 export interface SyncSettings {
   settings: Record<SyncSettingField, number>

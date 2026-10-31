@@ -141,9 +141,10 @@ func (t *Translator) translate(ctx context.Context, item sqlite.TranslationCandi
 		jsonOutput:   true,
 	}
 	message := "provider request failed"
+	attempts := e.modelAttempts(ctx)
 	for _, target := range providers {
 		call, repaired := baseCall, false
-		for attempt := 0; attempt <= llmMaxRetries; attempt++ {
+		for attempt := 0; attempt < attempts; attempt++ {
 			diagnostics := modelDiagnostics{}
 			call.diagnostics = &diagnostics
 			result, err := t.attempt(ctx, item, target, call)
@@ -165,7 +166,7 @@ func (t *Translator) translate(ctx context.Context, item sqlite.TranslationCandi
 				return "", ctx.Err()
 			}
 			message = storedMessage(err)
-			if attempt == llmMaxRetries {
+			if attempt == attempts-1 {
 				break
 			}
 			retry, wait := retryTranslation(&call, message, &repaired)

@@ -109,10 +109,13 @@ and save it only in the ignored environment file or deployment secret store.
 
 ## Sync Settings
 
-The read limits of source steps, manual fetches and the translate step are
-operator settings in `app_settings`, edited on `/admin` → Sources (the X and
-YouTube read limits) and `/admin` → LLM (translation limits). Each run reads
-them when it starts, so a saved value applies from the next run.
+The read limits of source steps, manual fetches and the translate step, and
+the attempts each model gets, are operator settings in `app_settings`, edited
+on `/admin` → Sources (the X and YouTube read limits) and `/admin` → LLM
+(model limits: the attempts and the translation limits). Each run reads the
+limits when it
+starts, so a saved value applies from the next run; the attempts per model
+are read for each post, image or translation a model is called for.
 
 | Setting                      | Default | Range      | Purpose                                                                     |
 | ---------------------------- | ------- | ---------- | --------------------------------------------------------------------------- |
@@ -126,12 +129,14 @@ them when it starts, so a saved value applies from the next run.
 | Request spacing (ms)         | `0`     | 0–10000    | Wait between the pages of a manual fetch                                    |
 | Translation items per run    | `20`    | 1–200      | Posts and titles the translate step sends to a model                        |
 | Translation lookback (days)  | `30`    | 1–3650     | Age of posts and videos the translate step covers unrequested               |
+| Attempts per model           | `3`     | 1–10       | Calls one model gets for an input before the next queued model takes over   |
 
 On startup, each setting without a stored value takes the integer value of
 its environment variable, if set: `X_MAX_STATUS_REQUESTS`, `X_REFRESH_KNOWN`,
 `X_BOOTSTRAP_DAYS`, `X_DISCOVERY_LIMIT`, `YOUTUBE_MAX_DETAIL_REQUESTS`,
 `SOURCE_HISTORY_MAX_PAGES`, `SYNC_TIMEOUT_MS`, `SYNC_REQUEST_DELAY_MS`,
-`TRANSLATION_SCAN_LIMIT` and `TRANSLATION_LOOKBACK_DAYS`, in table order.
+`TRANSLATION_SCAN_LIMIT` and `TRANSLATION_LOOKBACK_DAYS`, in table order;
+the attempts per model have no variable.
 Manual fetch pages, the timeout, the spacing and the translation limits take
 an out-of-range value at the nearest bound; the others ignore it. A stored
 value is never replaced from the environment, so these variables have no

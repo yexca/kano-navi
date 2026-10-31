@@ -20,8 +20,6 @@ const (
 	// to the schedule queue.
 	routeTranslate = "translate"
 
-	llmMaxRetries = 2
-
 	extractionToolName   = "kano_schedule_extraction"
 	verificationToolName = "kano_schedule_asset_verification"
 	translationToolName  = "kano_text_translation"

@@ -254,7 +254,8 @@ one, and rejects other fields and intervals outside 5–360 minutes with
 `settings` maps each field (`xMaxStatusRequests`, `xRefreshKnown`,
 `xBootstrapDays`, `xDiscoveryLimit`, `youtubeMaxDetailRequests`,
 `fetchMaxPages`, `fetchTimeoutMs`, `fetchRequestDelayMs`,
-`translationScanLimit`, `translationLookbackDays`) to its integer value, and
+`translationScanLimit`, `translationLookbackDays`, `llmModelAttempts`) to its
+integer value, and
 `fields` lists `{field, default, min, max}` for each. `PUT` keeps omitted
 fields and answers `400 invalid_input` for an unknown field or a value that is
 not an integer within its range; the next run reads the saved values.

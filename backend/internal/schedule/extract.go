@@ -494,7 +494,8 @@ func (e *Extractor) extractWithProvider(ctx context.Context, item post, images [
 		})
 	}
 	message := "provider request failed"
-	for attempt := 0; attempt <= llmMaxRetries; attempt++ {
+	attempts := e.modelAttempts(ctx)
+	for attempt := 0; attempt < attempts; attempt++ {
 		status, err := e.attemptExtraction(ctx, item, images, fingerprint, version, target, inputMode, route, running.id)
 		if err == nil {
 			return status, nil
@@ -504,7 +505,7 @@ func (e *Extractor) extractWithProvider(ctx context.Context, item post, images [
 			return "", ctx.Err()
 		}
 		message = storedMessage(err)
-		if attempt < llmMaxRetries {
+		if attempt < attempts-1 {
 			if err = e.sleep(ctx, retryDelay(attempt)); err != nil {
 				abandon()
 				return "", err

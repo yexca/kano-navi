@@ -23,7 +23,7 @@ export const syncSettingGroups = {
     "fetchTimeoutMs",
     "fetchRequestDelayMs",
   ],
-  translation: ["translationScanLimit", "translationLookbackDays"],
+  llm: ["llmModelAttempts", "translationScanLimit", "translationLookbackDays"],
 } satisfies Record<string, SyncSettingField[]>
 
 /** The fetch bounds X and YouTube share; their hint says so. */
@@ -34,7 +34,7 @@ const sharedFields = new Set<SyncSettingField>([
 ])
 
 /**
- * The read bounds of one group: whole numbers within each field's range,
+ * The run bounds of one group: whole numbers within each field's range,
  * saved together. The next run reads them; a running one keeps its values.
  */
 export function SyncSettingsPanel({
@@ -79,7 +79,6 @@ export function SyncSettingsPanel({
       level={level}
       icon={Gauge}
       title={t(`admin.syncSettings.${group}.title`)}
-      description={t("admin.syncSettings.description")}
     >
       {!data ? (
         <Loading />
@@ -91,7 +90,10 @@ export function SyncSettingsPanel({
             void save()
           }}
         >
-          <div className="adm-form-row">
+          {/* Three fields share one row rather than leaving one alone. */}
+          <div
+            className={`adm-form-row is-top${fields.length === 3 ? " is-three" : ""}`}
+          >
             {fields.map((field) => {
               const spec = data.fields.find((entry) => entry.field === field)
               return spec ? (
@@ -105,7 +107,7 @@ export function SyncSettingsPanel({
                       max: spec.max,
                       default: spec.default,
                     }),
-                    sharedFields.has(field) && group !== "translation"
+                    sharedFields.has(field) && group !== "llm"
                       ? t("admin.syncSettings.shared")
                       : null,
                   ]

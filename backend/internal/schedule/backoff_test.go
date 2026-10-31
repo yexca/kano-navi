@@ -31,7 +31,7 @@ func (f *fixture) backoffState(postID string) string {
 func TestFailedPostBacksOffAndStopsRetrying(t *testing.T) {
 	f := messageFixture(t)
 	f.failing()
-	perFailure := llmMaxRetries + 1
+	perFailure := defaultAttempts
 	steps := []struct {
 		offset   time.Duration
 		requests int
@@ -82,7 +82,7 @@ func TestBackoffStartsOverForNewInputAndClearsOnSuccess(t *testing.T) {
 	if got := f.backoffState("post-1"); got != "2|2026-04-28T07:00:00.000Z" {
 		t.Fatalf("backoff = %q", got)
 	}
-	perFailure := llmMaxRetries + 1
+	perFailure := defaultAttempts
 
 	// Edited content is new input: it is tried at once and counts from one.
 	f.at(backoffStart.Add(2 * time.Hour))
@@ -138,7 +138,7 @@ func TestReprocessRequestBypassesBackoff(t *testing.T) {
 	if got := f.backoffState("post-1"); got != "4|-" {
 		t.Fatalf("backoff = %q", got)
 	}
-	perFailure := llmMaxRetries + 1
+	perFailure := defaultAttempts
 	// The extractor honours a queued request even when the flag alone was
 	// set, and the forced failure starts the count over.
 	f.requestReprocess("post-1")
@@ -178,7 +178,7 @@ func TestBackoffPostsLeaveTheScanLimitToOtherWork(t *testing.T) {
 	if countOf(result.Counts, "backoff") != scanLimit || countOf(result.Counts, "attempted") != 1 || countOf(result.Counts, "failed") != 1 {
 		t.Fatalf("second scan = %v", result.Counts)
 	}
-	if got := f.provider.count() - before; got != llmMaxRetries+1 {
+	if got := f.provider.count() - before; got != defaultAttempts {
 		t.Errorf("provider requests = %d, want only the fresh post's", got)
 	}
 	if got := f.backoffState("fresh"); got != "1|2026-04-28T01:01:00.000Z" {

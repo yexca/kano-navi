@@ -7,7 +7,7 @@ func TestSyncSettings(t *testing.T) {
 	code, payload := c.call(t, "GET", "/api/admin/sync-settings", "")
 	settings, _ := payload["settings"].(map[string]any)
 	fields, _ := payload["fields"].([]any)
-	if code != 200 || settings["xMaxStatusRequests"] != float64(12) || settings["fetchTimeoutMs"] != float64(7000) || len(fields) != 10 {
+	if code != 200 || settings["xMaxStatusRequests"] != float64(12) || settings["fetchTimeoutMs"] != float64(7000) || settings["llmModelAttempts"] != float64(3) || len(fields) != 11 {
 		t.Fatalf("status=%d %v", code, payload)
 	}
 	if first := fields[0].(map[string]any); first["field"] != "xBootstrapDays" || first["default"] != float64(7) || first["min"] != float64(1) || first["max"] != float64(30) {

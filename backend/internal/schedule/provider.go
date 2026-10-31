@@ -225,6 +225,14 @@ func timeoutFor(p provider) time.Duration {
 	return time.Duration(ms * float64(time.Millisecond))
 }
 
+// modelAttempts is how many calls one model gets for one input before the
+// next model in the queue takes over: the operator's setting, or its
+// default when the settings cannot be read.
+func (e *Extractor) modelAttempts(ctx context.Context) int {
+	settings, _ := e.store.SyncSettings(ctx)
+	return settings.LLMModelAttempts
+}
+
 func retryDelay(attempt int) time.Duration {
 	return min(1000, 100*time.Duration(1<<max(0, attempt))) * time.Millisecond
 }

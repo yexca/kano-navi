@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yexca/kano-navi/backend/internal/store/sqlite"
 )
 
 const (
@@ -225,7 +227,7 @@ func TestProviderFailureKeepsEventsAndRecordsFailure(t *testing.T) {
 			f.provider.respond = test.respond
 			f.requestReprocess("post-1")
 			result := f.scan()
-			if got := f.provider.count(); got != 1+llmMaxRetries+1 {
+			if got := f.provider.count(); got != 1+defaultAttempts {
 				t.Errorf("provider requests = %d, want one initial request and two retries", got-1)
 			}
 			for _, host := range f.provider.hosts() {
@@ -260,6 +262,21 @@ func TestProviderFailureKeepsEventsAndRecordsFailure(t *testing.T) {
 				t.Errorf("recovery = %q %v", recovered.Status, recovered.Counts)
 			}
 		})
+	}
+}
+
+// The operator's attempts setting decides how many calls a failing model
+// gets for one post.
+func TestModelAttemptsFollowTheSetting(t *testing.T) {
+	f := messageFixture(t)
+	settings := sqlite.DefaultSyncSettings()
+	settings.LLMModelAttempts = 5
+	if err := f.store.SaveSyncSettings(context.Background(), settings); err != nil {
+		t.Fatal(err)
+	}
+	f.provider.respond = func(recordedRequest) (int, string) { return http.StatusBadGateway, `{}` }
+	if result := f.scan(); result.Status != "failed" || f.provider.count() != 5 {
+		t.Errorf("result = %q %v after %d requests", result.Status, result.Counts, f.provider.count())
 	}
 }
 
@@ -487,7 +504,7 @@ func TestScheduleImageVerificationFailureIsRecorded(t *testing.T) {
 	f.provider.respond = func(recordedRequest) (int, string) { return http.StatusTooManyRequests, `{}` }
 	result := f.scan()
 	assets, _ := result.Counts["assetVerification"].(map[string]any)
-	if result.Status != "failed" || countOf(assets, "failed") != 1 || f.provider.count() != llmMaxRetries+1 {
+	if result.Status != "failed" || countOf(assets, "failed") != 1 || f.provider.count() != defaultAttempts {
 		t.Errorf("result = %q %v after %d requests", result.Status, result.Counts, f.provider.count())
 	}
 	if got := f.text(`SELECT llm_status || '|' || llm_reason || '|' || (llm_checked_at IS NOT NULL) FROM schedule_asset_reviews`); got != "failed|LLM request failed (HTTP 429)|1" {
