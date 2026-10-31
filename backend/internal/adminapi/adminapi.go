@@ -103,6 +103,8 @@ func (a *api) routes() []httpx.Route {
 		{Method: http.MethodDelete, Path: "/session", Handler: a.Auth.Logout},
 
 		{Method: http.MethodGet, Path: "/overview", Handler: a.overview},
+		{Method: http.MethodGet, Path: "/settings/visitor-region", Handler: a.visitorRegionSettings},
+		{Method: http.MethodPut, Path: "/settings/visitor-region", Handler: a.updateVisitorRegionSettings},
 
 		{Method: http.MethodGet, Path: "/runs", Handler: a.needRuns(a.listRuns)},
 		{Method: http.MethodPost, Path: "/runs", Handler: a.needRuns(a.startRun)},

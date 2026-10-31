@@ -440,6 +440,11 @@ func (a *api) pushStatus() map[string]any {
 
 func (a *api) overview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	visitorRegion, err := a.visitorRegionSettingsValue(ctx)
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
+	}
 	counts, err := a.Store.AdminCounts(ctx, a.Now().In(japanZone).Format("2006-01-02"))
 	if err != nil {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
@@ -486,11 +491,13 @@ func (a *api) overview(w http.ResponseWriter, r *http.Request) {
 	youtube := source("youtube")
 	youtube["push"] = map[string]any{"enabled": push["enabled"] == true, "verified": push["verified"] == true}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"activeRun":  active,
-		"recentRuns": recent[:min(len(recent), 6)],
-		"scheduler":  scheduler,
-		"timers":     timers,
-		"sources":    map[string]any{"x": source("x"), "youtube": youtube},
+		"visitorRegionEnabled": visitorRegion.Enabled,
+		"visitorRegion":        visitorRegion,
+		"activeRun":            active,
+		"recentRuns":           recent[:min(len(recent), 6)],
+		"scheduler":            scheduler,
+		"timers":               timers,
+		"sources":              map[string]any{"x": source("x"), "youtube": youtube},
 		"review": map[string]int{
 			"pendingImages":          counts.PendingImages,
 			"suspectedCancellations": counts.SuspectedCancellations,

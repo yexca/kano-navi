@@ -1,0 +1,118 @@
+.visitor-region-toast {
+  position: fixed;
+  z-index: 60;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  display: grid;
+  width: min(420px, calc(100vw - 32px));
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 18px;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  box-shadow: var(--shadow-lg);
+  animation: visitor-region-toast-in 180ms ease-out both;
+}
+
+.visitor-region-toast-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.visitor-region-toast-copy strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.visitor-region-toast-copy p {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.visitor-region-toast-provider-link {
+  color: var(--berry);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--berry) 60%, transparent);
+  text-underline-offset: 3px;
+}
+
+.visitor-region-toast-provider-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.visitor-region-toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.visitor-region-toast-actions a,
+.visitor-region-toast-actions button {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.visitor-region-toast-actions a {
+  background: var(--berry);
+  color: white;
+}
+
+.visitor-region-toast-actions a:hover {
+  filter: brightness(0.95);
+}
+
+.visitor-region-toast-actions button {
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+
+.visitor-region-toast-actions button:hover {
+  color: hsl(var(--foreground));
+  background: color-mix(in oklab, hsl(var(--muted)) 60%, transparent);
+}
+
+.visitor-region-toast-actions a:focus-visible,
+.visitor-region-toast-actions button:focus-visible,
+.visitor-region-toast-provider-link:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+@keyframes visitor-region-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visitor-region-toast {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .visitor-region-toast {
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: min(calc(100% - 24px), 420px);
+  }
+
+  .visitor-region-toast-actions a,
+  .visitor-region-toast-actions button {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+}

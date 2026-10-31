@@ -94,7 +94,10 @@ modal dialog, toasts); `views/` one file per section; and `admin.css` styles
 them with `adm-` prefixed selectors. `src/components/ui/` contains
 basic UI primitives, while the CSS files contain layout and design tokens. The
 presentation layer must not open SQLite or call X, YouTube, OpenAI,
-or a third-party proxy directly.
+or a third-party proxy directly. The root app checks the same-origin
+`/api/visitor-region` response once per browser session; when the operator has
+enabled the setting and it reports mainland China, a dismissible Toast offers
+the optional mainland China site.
 
 ## Request and UI Ownership
 

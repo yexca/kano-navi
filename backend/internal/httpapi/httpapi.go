@@ -116,6 +116,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.health(w, r)
+	case "/api/visitor-region":
+		if r.Method != http.MethodGet {
+			writeMethodNotAllowed(w, http.MethodGet)
+			return
+		}
+		h.visitorRegion(w, r)
 	case "/api/dashboard/revision":
 		w.Header().Set("Vary", "Accept-Encoding")
 		if r.Method != http.MethodGet {

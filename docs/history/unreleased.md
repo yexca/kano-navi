@@ -131,6 +131,8 @@
 <details>
 <summary><strong>Public pages</strong></summary>
 
+- The Overview console has an off-by-default switch for a localized mainland
+  China site suggestion when the reverse proxy reports that country.
 - A new LINE BLOG page brings back Kano's 2015–2019 archive with 99 Japanese
   articles, their photos, pictographs and archived YouTube videos, the
   original-era layouts, monthly archive, the blog's own 前の記事/次の記事

@@ -471,6 +471,19 @@ func TestFetchMethodsFailClosedWithoutHistoryWiring(t *testing.T) {
 
 func TestOverviewCountsWhatNeedsReview(t *testing.T) {
 	c := newConsole(t, "development", "", &gatedSteps{})
+	code, settings := c.call(t, "GET", "/api/admin/settings/visitor-region", "")
+	if code != 200 || settings["enabled"] != false {
+		t.Fatalf("visitor region default=%d %v", code, settings)
+	}
+	if code, settings = c.call(t, "PUT", "/api/admin/settings/visitor-region", `{}`); code != 400 || settings["message"] != "enabled is required" {
+		t.Fatalf("visitor region missing=%d %v", code, settings)
+	}
+	if code, settings = c.call(t, "PUT", "/api/admin/settings/visitor-region", `{"enabled":true,"providerName":"Provider","providerUrl":"https://provider.example.test","mirrorUrl":"https://mirror.example.test"}`); code != 200 || settings["enabled"] != true || settings["providerName"] != "Provider" {
+		t.Fatalf("visitor region enable=%d %v", code, settings)
+	}
+	if code, settings = c.call(t, "GET", "/api/admin/overview", ""); code != 200 || settings["visitorRegionEnabled"] != true {
+		t.Fatalf("visitor region overview=%d %v", code, settings)
+	}
 	c.exec(t, `INSERT INTO events(id,source,title,starts_on,timezone,time_precision,provenance,manual_locked,cancellation_status,created_at,updated_at) VALUES
 	 ('past','x','Past','2026-03-01','Asia/Tokyo','unknown','automatic',0,'none','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z'),
 	 ('soon','x','Soon','2026-03-02','Asia/Tokyo','unknown','automatic',0,'llm_suspected','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z'),

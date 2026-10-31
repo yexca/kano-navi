@@ -51,6 +51,7 @@ import type {
   TranslationRequestResult,
   TranslationSummary,
   AdminTranslation,
+  VisitorRegionSettings,
   VideoCorrection,
   VideoHistory,
   VideoMergeSuggestion,
@@ -115,6 +116,8 @@ function createClient(run: Runner, slow: Runner) {
     logout: () => send<null>("DELETE", "/session"),
 
     overview: () => get<Overview>("/overview"),
+    updateVisitorRegion: (settings: VisitorRegionSettings) =>
+      send<VisitorRegionSettings>("PUT", "/settings/visitor-region", settings),
     runs: (page: number) =>
       get<Page<Run>>(`/runs${query({ page, pageSize: 15 })}`),
     run: (id: string) => get<{ run: Run }>(`/runs/${enc(id)}`),

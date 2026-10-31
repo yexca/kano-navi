@@ -31,6 +31,18 @@ the source time unknown. Media-only runs,
 cursor cleanup and API reads do not advance these source timestamps. Internal
 account IDs, checkpoints and fetch errors remain protected.
 
+`GET /api/visitor-region` returns `{ "enabled": false, "mainlandChina": false }`
+by default. When the operator enables the setting with a provider name,
+provider website and mirror site, it also returns `providerName`, `providerUrl`
+and `mirrorUrl`. It returns `mainlandChina: true` when the configured edge or
+reverse proxy supplies a `CN` country code, and `false` otherwise. It reads `CF-IPCountry` first, then `X-Country-Code`,
+`X-Geo-Country` and `X-Visitor-Country`; the proxy must overwrite these
+headers rather than pass visitor-supplied values through. The response is
+`no-store` and contains no address or raw header. The public pages use this
+boolean only to offer the optional mainland China site link. The operator
+console controls whether the response can enable that suggestion through its
+`visitor_region_enabled` setting, which defaults to off.
+
 `backend/internal/publicview` owns shared public event, synchronization,
 and selected profile-media projections for HTTP and MCP. A public sync summary
 contains only id, source, start/finish times, status, and a fixed status

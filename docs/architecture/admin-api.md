@@ -49,6 +49,7 @@ external work:
 
 ```json
 {
+  "visitorRegionEnabled": false,
   "activeRun": Run | null,
   "recentRuns": [Run],            // newest 6
   "scheduler": {"enabled", "running", "tickSeconds"},
@@ -74,6 +75,22 @@ external work:
 (`sync_state.last_success_at`). `lastStep` is `{runId, status, finishedAt}` of
 the source's step in the newest finished run among the last 20 that included
 it, or `null`.
+
+The overview's `visitorRegionEnabled` flag controls the public pages' optional
+mainland China site suggestion. It defaults to `false`.
+
+## Site settings
+
+| Method and path                | Body                     | Result                   |
+| ------------------------------ | ------------------------ | ------------------------ |
+| `GET /settings/visitor-region` |                          | `{ "enabled": boolean }` |
+| `PUT /settings/visitor-region` | `{ "enabled": boolean }` | `{ "enabled": boolean }` |
+
+The setting is stored in `app_settings` as `visitor_region_enabled`,
+`visitor_region_provider_name`, `visitor_region_provider_url` and
+`visitor_region_mirror_url`. Enabling it requires a provider name and absolute
+HTTP(S) URLs for the provider website and mirror site. It only enables the
+same-origin country-code check described in the [public API](public-api.md#public-snapshot-contract); it never sends an IP to a geolocation service.
 
 ## Runs
 

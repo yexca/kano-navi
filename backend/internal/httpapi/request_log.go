@@ -19,7 +19,7 @@ func RequestLog(next http.Handler, output io.Writer) http.Handler {
 		next.ServeHTTP(measured, r)
 		route := "unmatched"
 		switch r.URL.Path {
-		case "/api/health", "/api/dashboard/revision", "/api/dashboard/events", "/api/dashboard", "/api/calendar", "/api/posts", "/api/videos", "/api/websub/youtube":
+		case "/api/health", "/api/visitor-region", "/api/dashboard/revision", "/api/dashboard/events", "/api/dashboard", "/api/calendar", "/api/posts", "/api/videos", "/api/websub/youtube":
 			route = r.URL.Path
 		default:
 			switch {

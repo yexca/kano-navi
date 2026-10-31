@@ -125,7 +125,17 @@ export interface SourceHealth {
   push?: { enabled: boolean; verified: boolean }
 }
 
+export interface VisitorRegionSettings {
+  enabled: boolean
+  providerName: string
+  providerUrl: string
+  mirrorUrl: string
+}
+
 export interface Overview {
+  /** Public mainland-China site suggestion; absent on older sidecars. */
+  visitorRegionEnabled?: boolean
+  visitorRegion?: VisitorRegionSettings
   activeRun: Run | null
   recentRuns: Run[]
   scheduler: { enabled: boolean; running: boolean; tickSeconds: number | null }

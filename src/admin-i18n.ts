@@ -150,6 +150,18 @@ export const adminMessages = {
     "admin.overview.noRunsYet": "No runs yet",
     "admin.overview.noRunsHint":
       "Start a sync or turn on a source timer to read the sources.",
+    "admin.overview.visitorRegion": "Mainland China site suggestion",
+    "admin.overview.visitorRegionHint":
+      "When enabled, visitors whose reverse proxy reports mainland China see a Toast linking to the optional mainland China site.",
+    "admin.overview.visitorRegionToggle": "Offer the mainland China site",
+    "admin.overview.visitorRegionToggleHint":
+      "Off by default. The browser never sends visitor IPs to a geolocation service.",
+    "admin.overview.visitorRegionProvider": "Provider name",
+    "admin.overview.visitorRegionProviderPlaceholder": "e.g. a provider",
+    "admin.overview.visitorRegionProviderUrl": "Provider website",
+    "admin.overview.visitorRegionMirrorUrl": "Mirror site",
+    "admin.overview.visitorRegionMirrorHint":
+      "Visitors who match the country check follow this URL.",
 
     "admin.review.title": "Review queue",
     "admin.review.description":
@@ -846,6 +858,7 @@ export const adminMessages = {
     "admin.notice.liveProbeSaved": "Live probe settings saved",
     "admin.notice.ytdlpUpdated": "yt-dlp updated",
     "admin.notice.scheduleSaved": "Timer saved",
+    "admin.notice.visitorRegionSaved": "Mainland China site suggestion saved",
     "admin.notice.secretRotated": "Signing secret rotated",
     "admin.notice.extractionSaved": "Detection settings saved",
     "admin.notice.queueSaved": "Queue saved",
@@ -1270,6 +1283,18 @@ export const adminMessages = {
     "admin.overview.allRuns": "全部运行",
     "admin.overview.noRunsYet": "还没有运行记录",
     "admin.overview.noRunsHint": "启动一次同步，或开启来源定时器来读取来源。",
+    "admin.overview.visitorRegion": "中国大陆站点提示",
+    "admin.overview.visitorRegionHint":
+      "开启后，反向代理报告访客位于中国大陆时，页面会显示前往中国大陆站点的 Toast。",
+    "admin.overview.visitorRegionToggle": "提供中国大陆站点",
+    "admin.overview.visitorRegionToggleHint":
+      "默认关闭。浏览器不会把访客 IP 发送给地理位置服务。",
+    "admin.overview.visitorRegionProvider": "提供者名称",
+    "admin.overview.visitorRegionProviderPlaceholder": "例如：提供者名称",
+    "admin.overview.visitorRegionProviderUrl": "提供者网站",
+    "admin.overview.visitorRegionMirrorUrl": "镜像站点",
+    "admin.overview.visitorRegionMirrorHint":
+      "符合地区检测条件的访客将打开这个地址。",
 
     "admin.review.title": "待审核",
     "admin.review.description":
@@ -1800,6 +1825,7 @@ export const adminMessages = {
     "admin.notice.pushSaved": "推送设置已保存",
     "admin.notice.liveProbeSaved": "直播探测设置已保存",
     "admin.notice.scheduleSaved": "定时器已保存",
+    "admin.notice.visitorRegionSaved": "中国大陆站点提示设置已保存",
     "admin.notice.secretRotated": "签名密钥已轮换",
     "admin.notice.extractionSaved": "识别设置已保存",
     "admin.notice.queueSaved": "队列已保存",

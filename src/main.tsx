@@ -14,6 +14,7 @@ import {
   useAppSettings,
 } from "@/app-settings"
 import type { PageMessages } from "@/i18n"
+import { VisitorRegionToast } from "@/components/visitor-region-toast"
 import { historyMove, inPlaceUrl, pagePath } from "@/lib/page-path"
 import "./index.css"
 
@@ -402,6 +403,7 @@ globalThis.__kanoRootElement = rootElement
 reactRoot.render(
   <AppSettingsProvider>
     <PageRouter />
+    <VisitorRegionToast />
   </AppSettingsProvider>,
 )
 
