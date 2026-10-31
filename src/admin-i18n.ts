@@ -150,12 +150,12 @@ export const adminMessages = {
     "admin.overview.noRunsYet": "No runs yet",
     "admin.overview.noRunsHint":
       "Start a sync or turn on a source timer to read the sources.",
-    "admin.overview.visitorRegion": "Mainland China site suggestion",
-    "admin.overview.visitorRegionToggle": "Offer the mainland China site",
-    "admin.overview.visitorRegionProvider": "Provider name",
-    "admin.overview.visitorRegionProviderPlaceholder": "e.g. a provider",
-    "admin.overview.visitorRegionProviderUrl": "Provider website",
-    "admin.overview.visitorRegionMirrorUrl": "Mirror site",
+    "admin.site.visitorRegion": "Mainland China site suggestion",
+    "admin.site.visitorRegionToggle": "Offer the mainland China site",
+    "admin.site.visitorRegionProvider": "Provider name",
+    "admin.site.visitorRegionProviderPlaceholder": "e.g. a provider",
+    "admin.site.visitorRegionProviderUrl": "Provider website",
+    "admin.site.visitorRegionMirrorUrl": "Mirror site",
 
     "admin.review.title": "Review queue",
     "admin.review.description":
@@ -614,7 +614,6 @@ export const adminMessages = {
     "admin.push.title": "YouTube push",
     "admin.push.description":
       "Let YouTube's hub notify this site about new videos, which queues a YouTube read.",
-    "admin.push.off": "Off",
     "admin.push.enable": "Receive push notifications",
     "admin.push.enableHint":
       "Needs a public HTTPS callback that reaches this server.",
@@ -633,7 +632,7 @@ export const adminMessages = {
     "admin.liveProbe.title": "Live-status probe",
     "admin.liveProbe.description":
       "Rechecks only the watch pages of streams that are about to start or still running, at most {max} per run, so the board shows On air from YouTube's own state.",
-    "admin.liveProbe.on": "On",
+    "admin.liveProbe.notRunning": "Not running",
     "admin.liveProbe.enable": "Probe active streams",
     "admin.liveProbe.enableHint":
       "Runs in the server's job queue, every few minutes around a stream's start, and only while a video is active.",
@@ -705,6 +704,7 @@ export const adminMessages = {
       "Timed X reads reach the X API only after an account's timeline keeps failing, and only up to a daily cap.",
     "admin.xapi.inChain": "Method {rank} in the chain",
     "admin.xapi.offInChain": "Off in the chain",
+    "admin.xapi.usageHint": "{posts} of {cap} posts today",
     "admin.confirm.title": "Progressive confirmation",
     "admin.confirm.description":
       "YouTube confirms a video in steps: push queues a read when it appears, the live-status probe follows streams around their start, and follow-up checks reread it after it ends. The timer catches what these miss.",
@@ -716,8 +716,6 @@ export const adminMessages = {
     "admin.ytdlp.unavailable": "Not configured",
     "admin.ytdlp.version": "Version",
     "admin.ytdlp.update": "Update yt-dlp",
-    "admin.syncSettings.x.title": "X read limits",
-    "admin.syncSettings.youtube.title": "YouTube read limits",
     "admin.syncSettings.llm.title": "Model limits",
     "admin.syncSettings.range": "{min}–{max}, default {default}.",
     "admin.syncSettings.shared": "Shared by X and YouTube.",
@@ -1173,12 +1171,12 @@ export const adminMessages = {
     "admin.sources.timer": "Timer",
     "admin.sources.timedReads": "Timed reads",
     "admin.sources.xapi": "X API limits",
-    "admin.sources.advanced.x": "Read limits",
-    "admin.sources.advanced.youtube": "Read limits and yt-dlp",
-    "admin.sources.advancedHint":
-      "Bounds of each run and the tools behind them. Rarely changed.",
+    "admin.sources.limits.timed": "Timed read limits",
+    "admin.sources.limits.manual": "Manual fetch limits",
     "admin.nav.detection": "Detection",
     "admin.nav.llm": "LLM",
+    "admin.nav.site": "Site",
+    "admin.site.title": "Site",
     "admin.action.discard": "Discard",
     "admin.detection.title": "Detection",
     "admin.detection.description":
@@ -1361,12 +1359,12 @@ export const adminMessages = {
     "admin.overview.allRuns": "全部运行",
     "admin.overview.noRunsYet": "还没有运行记录",
     "admin.overview.noRunsHint": "启动一次同步，或开启来源定时器来读取来源。",
-    "admin.overview.visitorRegion": "中国大陆站点提示",
-    "admin.overview.visitorRegionToggle": "提供中国大陆站点",
-    "admin.overview.visitorRegionProvider": "提供者名称",
-    "admin.overview.visitorRegionProviderPlaceholder": "例如：提供者名称",
-    "admin.overview.visitorRegionProviderUrl": "提供者网站",
-    "admin.overview.visitorRegionMirrorUrl": "镜像站点",
+    "admin.site.visitorRegion": "中国大陆站点提示",
+    "admin.site.visitorRegionToggle": "提供中国大陆站点",
+    "admin.site.visitorRegionProvider": "提供者名称",
+    "admin.site.visitorRegionProviderPlaceholder": "例如：提供者名称",
+    "admin.site.visitorRegionProviderUrl": "提供者网站",
+    "admin.site.visitorRegionMirrorUrl": "镜像站点",
 
     "admin.review.title": "待审核",
     "admin.review.description":
@@ -1692,7 +1690,6 @@ export const adminMessages = {
     "admin.push.title": "YouTube 推送",
     "admin.push.description":
       "让 YouTube 的 Hub 在有新视频时通知本站，从而排队一次 YouTube 读取。",
-    "admin.push.off": "关闭",
     "admin.push.enable": "接收推送通知",
     "admin.push.enableHint": "需要一个能访问到本服务器的公开 HTTPS 回调地址。",
     "admin.push.unavailable": "YouTube 已被 SKIP_YOUTUBE 停用。",
@@ -1710,7 +1707,6 @@ export const adminMessages = {
     "admin.liveProbe.title": "直播状态探测",
     "admin.liveProbe.description":
       "只重新读取即将开始或仍在进行的直播的观看页，每次最多 {max} 个，让看板按 YouTube 自己的状态显示直播中。",
-    "admin.liveProbe.on": "开启",
     "admin.liveProbe.enable": "探测进行中的直播",
     "admin.liveProbe.enableHint":
       "在服务器任务队列中运行：直播开始前后每隔几分钟检查一次，且只在有活跃视频时运行。",
@@ -2072,6 +2068,8 @@ export const adminMessages = {
     "admin.sources.timerBlocked": "定时器已开启，但本进程未运行",
     "admin.nav.detection": "日程识别",
     "admin.nav.llm": "LLM 模型",
+    "admin.nav.site": "站点",
+    "admin.site.title": "站点",
     "admin.action.discard": "放弃更改",
     "admin.detection.title": "日程识别",
     "admin.detection.description":

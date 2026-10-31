@@ -10,23 +10,20 @@ import {
   Sparkles,
   Square,
 } from "lucide-react"
-import { useEffect, useState } from "react"
 
 import { useAppSettings } from "@/app-settings"
 import type { ViewProps } from "@/admin"
 import { formatDateTime, formatRelative } from "@/admin/format"
-import type { SourceHealth, VisitorRegionSettings } from "@/admin/types"
+import type { SourceHealth } from "@/admin/types"
 import {
   Badge,
   Button,
   ConfirmButton,
   Empty,
-  Field,
   Loading,
   PageHeader,
   Panel,
   StatusBadge,
-  Switch,
 } from "@/admin/ui"
 import { useAdmin } from "@/admin/use-admin-data"
 import { RunLine, RunSteps, runTitle, stepIcons } from "@/admin/views/run-parts"
@@ -76,78 +73,6 @@ function SourceRow({
         ) : null}
       </span>
     </li>
-  )
-}
-
-function VisitorRegionPanel({ settings }: { settings: VisitorRegionSettings }) {
-  const { t } = useAppSettings()
-  const { api, act } = useAdmin()
-  const [draft, setDraft] = useState(settings)
-  const [busy, setBusy] = useState(false)
-  useEffect(() => setDraft(settings), [settings])
-  const dirty =
-    draft.enabled !== settings.enabled ||
-    draft.providerName !== settings.providerName ||
-    draft.providerUrl !== settings.providerUrl ||
-    draft.mirrorUrl !== settings.mirrorUrl
-  const set = (patch: Partial<VisitorRegionSettings>) =>
-    setDraft((current) => ({ ...current, ...patch }))
-  const save = async () => {
-    setBusy(true)
-    await act(
-      () => api.updateVisitorRegion(draft),
-      "admin.notice.visitorRegionSaved",
-    )
-    setBusy(false)
-  }
-  return (
-    <Panel title={t("admin.overview.visitorRegion")}>
-      <div className="adm-form">
-        <Switch
-          checked={draft.enabled}
-          disabled={busy}
-          onChange={(enabled) => set({ enabled })}
-          label={t("admin.overview.visitorRegionToggle")}
-        />
-        <div className="adm-form-row">
-          <Field label={t("admin.overview.visitorRegionProvider")}>
-            <input
-              value={draft.providerName}
-              onChange={(event) => set({ providerName: event.target.value })}
-              maxLength={120}
-              placeholder={t("admin.overview.visitorRegionProviderPlaceholder")}
-            />
-          </Field>
-          <Field label={t("admin.overview.visitorRegionProviderUrl")}>
-            <input
-              type="url"
-              value={draft.providerUrl}
-              onChange={(event) => set({ providerUrl: event.target.value })}
-              placeholder="https://"
-            />
-          </Field>
-        </div>
-        <Field label={t("admin.overview.visitorRegionMirrorUrl")}>
-          <input
-            type="url"
-            value={draft.mirrorUrl}
-            onChange={(event) => set({ mirrorUrl: event.target.value })}
-            placeholder="https://"
-          />
-        </Field>
-        <div className="adm-form-actions">
-          <Button
-            size="sm"
-            variant="primary"
-            busy={busy}
-            disabled={!dirty}
-            onClick={() => void save()}
-          >
-            {t("admin.action.save")}
-          </Button>
-        </div>
-      </div>
-    </Panel>
   )
 }
 
@@ -339,17 +264,6 @@ export function OverviewView({ navigate }: ViewProps) {
           ),
         )}
       </div>
-
-      <VisitorRegionPanel
-        settings={
-          overview.visitorRegion || {
-            enabled: overview.visitorRegionEnabled === true,
-            providerName: "",
-            providerUrl: "",
-            mirrorUrl: "",
-          }
-        }
-      />
 
       <Panel
         title={t("admin.overview.recent")}

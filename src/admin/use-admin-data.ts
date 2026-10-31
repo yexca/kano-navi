@@ -120,6 +120,7 @@ function createClient(run: Runner, slow: Runner) {
     logout: () => send<null>("DELETE", "/session"),
 
     overview: () => get<Overview>("/overview"),
+    visitorRegion: () => get<VisitorRegionSettings>("/settings/visitor-region"),
     updateVisitorRegion: (settings: VisitorRegionSettings) =>
       send<VisitorRegionSettings>("PUT", "/settings/visitor-region", settings),
     runs: (page: number) =>

@@ -1536,7 +1536,7 @@
   padding-bottom: 0;
 }
 
-.adm-confirm-step header {
+.adm-confirm-head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -1556,7 +1556,8 @@
   font-weight: 750;
 }
 
-.adm-confirm-mark {
+.adm-confirm-mark,
+.adm-confirm-step .adm-fold-mark {
   display: inline-grid;
   place-items: center;
   width: 30px;
@@ -1566,7 +1567,8 @@
   color: var(--adm-accent);
 }
 
-.adm-shell .adm-confirm-mark svg {
+.adm-shell .adm-confirm-mark svg,
+.adm-shell .adm-confirm-step .adm-fold-mark svg {
   width: 16px;
   height: 16px;
 }
@@ -1892,6 +1894,40 @@
   background: var(--honey);
 }
 
+/* Limits in a narrow column: one field per row, the label beside its
+   input and the hint below both. */
+.adm-limit-rows {
+  display: grid;
+}
+
+.adm-field.adm-limit-row {
+  grid-template-columns: minmax(0, 1fr) 112px;
+  grid-template-areas:
+    "label input"
+    "hint hint";
+  align-items: center;
+  gap: 4px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--adm-line);
+}
+
+.adm-field.adm-limit-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.adm-limit-row > .adm-field-label {
+  grid-area: label;
+}
+
+.adm-limit-row > input {
+  grid-area: input;
+}
+
+.adm-limit-row > .adm-field-hint {
+  grid-area: hint;
+}
+
 /* Read limits split by the runs they bound. */
 .adm-sync-section {
   display: grid;
@@ -1919,83 +1955,123 @@
   clear: both;
 }
 
-/* The folded advanced settings: a summary row that opens onto the read
-   limits (and yt-dlp) laid out flat inside it. */
-.adm-source-advanced {
-  padding: 0;
-}
-
-.adm-source-advanced > summary {
-  display: flex;
+/* A folded section: a header row of icon, title, controls and chevron
+   that opens onto its body. As a panel the body sits below a rule; inside
+   the progressive confirmation it follows the step's header. */
+.adm-fold-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px;
-  list-style: none;
   cursor: pointer;
 }
 
-.adm-source-advanced > summary::-webkit-details-marker {
-  display: none;
+.adm-fold-mark {
+  display: inline-grid;
+  place-items: center;
 }
 
-.adm-source-advanced > summary:focus-visible {
-  border-radius: var(--adm-radius);
-  outline: none;
-  box-shadow: var(--adm-focus);
-}
-
-.adm-shell .adm-source-advanced > summary > svg {
-  flex: none;
+.adm-shell .adm-fold-mark svg {
   width: 18px;
   height: 18px;
   color: var(--adm-accent);
 }
 
-.adm-source-advanced > summary > span {
+.adm-fold-title {
   display: grid;
-  flex: 1;
+  gap: 2px;
   min-width: 0;
 }
 
-.adm-source-advanced > summary strong {
+.adm-fold-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.adm-fold-name :is(h3, h4) {
+  min-width: 0;
+  margin: 0;
   font-size: 15px;
   font-weight: 750;
 }
 
-.adm-source-advanced > summary small {
+.adm-fold-name button {
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.adm-fold-name button:focus-visible {
+  outline: none;
+  box-shadow: var(--adm-focus);
+}
+
+.adm-fold-title small {
   color: var(--adm-muted);
   font-size: 12px;
 }
 
-.adm-shell .adm-source-advanced > summary .adm-source-advanced-chevron {
+.adm-fold-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.adm-shell .adm-fold-chevron {
+  width: 18px;
+  height: 18px;
   color: var(--adm-muted);
   transition: transform 0.15s ease;
 }
 
-.adm-source-advanced[open] > summary .adm-source-advanced-chevron {
+.adm-fold.is-open .adm-fold-chevron {
   transform: rotate(180deg);
 }
 
-.adm-panel.adm-source-advanced > * + * {
+.adm-panel.adm-fold {
+  padding: 0;
+}
+
+.adm-panel.adm-fold > * + * {
   margin-top: 0;
 }
 
-.adm-source-advanced-body {
-  display: grid;
-  padding: 0 20px 20px;
+.adm-panel.adm-fold > .adm-fold-head {
+  padding: 16px 20px;
 }
 
-.adm-source-advanced-body > .adm-panel {
-  padding: 18px 0 0;
-  border: 0;
+.adm-panel.adm-fold > .adm-fold-body {
+  padding: 18px 20px 20px;
   border-top: 1px solid var(--adm-line);
+}
+
+/* A panel inside a fold lays out flat. */
+.adm-fold-body > .adm-panel {
+  padding: 0;
+  border: 0;
   border-radius: 0;
   background: none;
   box-shadow: none;
 }
 
-.adm-source-advanced-body > .adm-panel + .adm-panel {
-  margin-top: 18px;
+.adm-fold-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.adm-confirm-step .adm-fold-name h4 {
+  font-size: 14px;
 }
 
 .adm-panel-header p {
@@ -6156,12 +6232,12 @@ blockquote.adm-verdict-reason {
     padding: 12px 16px;
   }
 
-  .adm-source-advanced > summary {
+  .adm-panel.adm-fold > .adm-fold-head {
     padding: 14px 16px;
   }
 
-  .adm-source-advanced-body {
-    padding: 0 16px 16px;
+  .adm-panel.adm-fold > .adm-fold-body {
+    padding: 16px;
   }
 
   /* On a phone the source tabs share the width. */
@@ -6619,4 +6695,17 @@ blockquote.adm-verdict-reason {
 
 .adm-chain-actions .adm-switch {
   margin-right: 6px;
+}
+
+/* On a phone a fold's controls move under its title. */
+@media (max-width: 560px) {
+  .adm-fold-head {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .adm-fold-controls {
+    grid-row: 2;
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+  }
 }

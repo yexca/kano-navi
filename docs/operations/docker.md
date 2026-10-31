@@ -39,7 +39,7 @@ without Fetch Metadata need the original public Host and forwarded protocol
 to match any supplied `Origin`.
 
 To enable the optional mainland China site suggestion, enter the provider name,
-provider website and mirror site, turn on the setting in `/admin`, then configure the proxy to overwrite `CF-IPCountry`,
+provider website and mirror site, turn on the setting on `/admin` → Site, then configure the proxy to overwrite `CF-IPCountry`,
 `X-Country-Code`, `X-Geo-Country` or `X-Visitor-Country` with its country code.
 The setting is off by default and Cloudflare's `CF-IPCountry` is checked first.
 Requests that reach the Go listener without one of these headers receive

@@ -2,6 +2,7 @@ import {
   useEffect,
   useId,
   useState,
+  type ComponentType,
   type ReactNode,
   type SubmitEvent,
 } from "react"
@@ -13,6 +14,7 @@ import {
   ChevronDown,
   CircleHelp,
   Download,
+  Gauge,
   History,
   Info,
   KeyRound,
@@ -51,6 +53,7 @@ import type {
   SourceSchedule,
   SourceSync,
   Sources,
+  SyncSettings,
   YTDLPStatus,
 } from "@/admin/types"
 import {
@@ -60,6 +63,7 @@ import {
   ConfirmButton,
   Facts,
   Field,
+  FieldGroup,
   IconButton,
   Loading,
   Modal,
@@ -81,7 +85,7 @@ import {
   stepResult,
   windowText,
 } from "@/admin/views/run-parts"
-import { SyncSettingsPanel } from "@/admin/views/sync-settings"
+import { SyncSettingsForm } from "@/admin/views/sync-settings"
 import { cn } from "@/lib/utils"
 
 const intervals = [15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080]
@@ -366,6 +370,83 @@ function HelpField({
   )
 }
 
+/**
+ * A folded section: a header row that opens onto its settings. Controls in
+ * the header, such as a quick switch or a status badge, work while it is
+ * closed, and pressing anywhere else on the header opens or closes it. The
+ * body stays mounted, so unsaved edits survive folding.
+ */
+function Fold({
+  icon: FoldIcon,
+  title,
+  level = 3,
+  help,
+  hint,
+  controls,
+  className,
+  children,
+}: {
+  icon: LucideIcon | ComponentType<{ "aria-hidden"?: boolean }>
+  title: string
+  /** 4 for a fold inside a panel, such as a confirmation step. */
+  level?: 3 | 4
+  help?: ReactNode
+  hint?: ReactNode
+  controls?: ReactNode
+  className?: string
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  const Heading = level === 4 ? "h4" : "h3"
+  return (
+    <section
+      className={cn("adm-fold", open && "is-open", className)}
+      aria-labelledby={`${id}-title`}
+    >
+      <header
+        className="adm-fold-head"
+        onClick={(event) => {
+          // The title button, the help and the controls handle their own.
+          if (
+            !(event.target as Element).closest(
+              "button, a, input, label, select",
+            )
+          )
+            setOpen(!open)
+        }}
+      >
+        <span className="adm-fold-mark">
+          <FoldIcon aria-hidden />
+        </span>
+        <span className="adm-fold-title">
+          <span className="adm-fold-name">
+            <Heading id={`${id}-title`}>
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={`${id}-body`}
+                onClick={() => setOpen(!open)}
+              >
+                {title}
+              </button>
+            </Heading>
+            {help ? <HelpButton title={title}>{help}</HelpButton> : null}
+          </span>
+          {hint ? <small>{hint}</small> : null}
+        </span>
+        {controls ? (
+          <span className="adm-fold-controls">{controls}</span>
+        ) : null}
+        <ChevronDown aria-hidden className="adm-fold-chevron" />
+      </header>
+      <div id={`${id}-body`} className="adm-fold-body" hidden={!open}>
+        {children}
+      </div>
+    </section>
+  )
+}
+
 /** A count against its limit: the number, the limit and a bar. */
 function Meter({
   label,
@@ -400,16 +481,12 @@ interface TimedDraft {
   minutes: number
   sync: SourceSync | null
   methods: ChainMethod[]
-  gate: number
-  cap: number
 }
 
 const draftOf = (schedule: SourceSchedule): TimedDraft => ({
   minutes: schedule.intervalMinutes,
   sync: schedule.sync,
   methods: schedule.chain.methods,
-  gate: schedule.chain.apiGate ?? 0,
-  cap: schedule.chain.apiDailyCap ?? 1,
 })
 
 const methodsKey = (methods: ChainMethod[]) =>
@@ -420,8 +497,6 @@ function timedChanges(draft: TimedDraft, saved: TimedDraft) {
   const chain: SourceChainUpdate = {}
   if (methodsKey(draft.methods) !== methodsKey(saved.methods))
     chain.methods = draft.methods.map(({ id, enabled }) => ({ id, enabled }))
-  if (draft.gate !== saved.gate) chain.apiGate = draft.gate
-  if (draft.cap !== saved.cap) chain.apiDailyCap = draft.cap
   return {
     ...(draft.minutes !== saved.minutes
       ? { intervalMinutes: draft.minutes }
@@ -435,19 +510,16 @@ function timedChanges(draft: TimedDraft, saved: TimedDraft) {
 
 /**
  * How the timer reads a source, saved together: the interval and, for X and
- * YouTube, how much each run reads; the method chain (ADR-0004) that timed
- * reads try from the top; and for X the gate and daily cap that open the X
- * API. A method this process cannot run is greyed with the variable it
- * needs, a source SKIP_* disables keeps its chain locked, and Bilibili's one
- * method is read-only.
+ * YouTube, how much each run reads; and the method chain (ADR-0004) that
+ * timed reads try from the top. A method this process cannot run is greyed
+ * with the variable it needs, a source SKIP_* disables keeps its chain
+ * locked, and Bilibili's one method is read-only.
  */
 function TimedReadsPanel({
   schedule,
-  accounts,
   onChange,
 }: {
   schedule: SourceSchedule
-  accounts: string[]
   onChange: (schedule: SourceSchedule) => void
 }) {
   const { t } = useAppSettings()
@@ -485,10 +557,6 @@ function TimedReadsPanel({
     next.splice(index + by, 0, method)
     set({ methods: next })
   }
-  const apiRank = methods.findIndex((method) => method.id === "api")
-  const apiMethod = methods[apiRank]
-  const failures = chain.timelineFailures || {}
-  const streaks = [...new Set([...accounts, ...Object.keys(failures)])]
   const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!dirty) return
@@ -527,7 +595,7 @@ function TimedReadsPanel({
           </Field>
           {sync ? (
             <>
-              <Choice label={t("admin.timer.sync")}>
+              <FieldGroup label={t("admin.timer.sync")}>
                 <Segmented
                   label={t("admin.timer.sync")}
                   value={sync.mode}
@@ -547,7 +615,7 @@ function TimedReadsPanel({
                     { value: "count", label: t("admin.fetch.mode.count") },
                   ]}
                 />
-              </Choice>
+              </FieldGroup>
               <HelpField
                 label={t(`admin.timer.syncLimit.${sync.mode}.${source}`)}
                 help={
@@ -670,68 +738,6 @@ function TimedReadsPanel({
             <p className="adm-field-hint">{t("admin.chain.youtubeAPIOff")}</p>
           ) : null}
         </fieldset>
-        {source === "x" && apiMethod ? (
-          <fieldset className="adm-timed-section">
-            <legend>
-              {t("admin.sources.xapi")}
-              <HelpButton title={t("admin.sources.xapi")}>
-                <p>{t("admin.xapi.description")}</p>
-                <dl className="adm-help-terms">
-                  <dt>{t("admin.chain.apiGate")}</dt>
-                  <dd>{t("admin.chain.apiGateHint")}</dd>
-                  <dt>{t("admin.chain.apiDailyCap")}</dt>
-                  <dd>{t("admin.chain.apiDailyCapHint")}</dd>
-                </dl>
-              </HelpButton>
-              {!apiMethod.available ? null : apiMethod.enabled ? (
-                <Badge tone="leaf">
-                  {t("admin.xapi.inChain", { rank: apiRank + 1 })}
-                </Badge>
-              ) : (
-                <Badge>{t("admin.xapi.offInChain")}</Badge>
-              )}
-            </legend>
-            <div className="adm-form-row is-top">
-              <Field label={t("admin.chain.apiGate")}>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={draft.gate}
-                  onChange={(e) => set({ gate: Number(e.target.value) })}
-                  required
-                />
-              </Field>
-              <Field label={t("admin.chain.apiDailyCap")}>
-                <input
-                  type="number"
-                  min={1}
-                  max={10000}
-                  value={draft.cap}
-                  onChange={(e) => set({ cap: Number(e.target.value) })}
-                  required
-                />
-              </Field>
-            </div>
-            <ul className="adm-meters">
-              <Meter
-                label={t("admin.chain.usage")}
-                value={chain.apiUsage?.posts ?? 0}
-                of={chain.apiDailyCap ?? 0}
-                unit={t("admin.chain.usageUnit")}
-              />
-              {streaks.map((account) => (
-                <Meter
-                  key={account}
-                  label={`@${account}`}
-                  value={failures[account] ?? 0}
-                  of={chain.apiGate ?? 0}
-                  unit={t("admin.chain.streakUnit")}
-                />
-              ))}
-            </ul>
-          </fieldset>
-        ) : null}
         <div
           className={cn(
             "adm-form-actions adm-timed-actions",
@@ -767,24 +773,136 @@ function TimedReadsPanel({
 }
 
 /**
- * A labelled segmented choice. It is a group rather than a <label>, so the
- * label text never presses the first segment.
+ * X's API limits, folded: the gate of timeline failures that opens the X API
+ * for an account and the daily cap of posts it may read, saved together,
+ * with today's usage and each account's failures as meters against them.
+ * The header shows the API's place in the saved chain and today's usage.
  */
-function Choice({
-  label,
-  hint,
-  children,
+function XAPIPanel({
+  schedule,
+  accounts,
+  onChange,
 }: {
-  label: string
-  hint?: ReactNode
-  children: ReactNode
+  schedule: SourceSchedule
+  accounts: string[]
+  onChange: (schedule: SourceSchedule) => void
 }) {
+  const { t } = useAppSettings()
+  const { api, act } = useAdmin()
+  const chain = schedule.chain
+  const savedGate = chain.apiGate ?? 0
+  const savedCap = chain.apiDailyCap ?? 1
+  const [gate, setGate] = useState(savedGate)
+  const [cap, setCap] = useState(savedCap)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => setGate(savedGate), [savedGate])
+  useEffect(() => setCap(savedCap), [savedCap])
+  const rank = chain.methods.findIndex((method) => method.id === "api")
+  const method = chain.methods[rank]
+  if (!method) return null
+  const failures = chain.timelineFailures || {}
+  const streaks = [...new Set([...accounts, ...Object.keys(failures)])]
+  const update: SourceChainUpdate = {
+    ...(gate !== savedGate ? { apiGate: gate } : {}),
+    ...(cap !== savedCap ? { apiDailyCap: cap } : {}),
+  }
+  const dirty = Object.keys(update).length > 0
+  const submit = async (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!dirty) return
+    setBusy(true)
+    const next = await act(
+      () => api.updateSourceSchedule(schedule.source, { chain: update }),
+      "admin.notice.scheduleSaved",
+    )
+    setBusy(false)
+    if (next) onChange(next)
+  }
   return (
-    <div className="adm-field">
-      <span className="adm-field-label">{label}</span>
-      {children}
-      {hint ? <span className="adm-field-hint">{hint}</span> : null}
-    </div>
+    <Fold
+      icon={KeyRound}
+      title={t("admin.sources.xapi")}
+      className="adm-panel"
+      help={
+        <>
+          <p>{t("admin.xapi.description")}</p>
+          <dl className="adm-help-terms">
+            <dt>{t("admin.chain.apiGate")}</dt>
+            <dd>{t("admin.chain.apiGateHint")}</dd>
+            <dt>{t("admin.chain.apiDailyCap")}</dt>
+            <dd>{t("admin.chain.apiDailyCapHint")}</dd>
+          </dl>
+        </>
+      }
+      hint={t("admin.xapi.usageHint", {
+        posts: chain.apiUsage?.posts ?? 0,
+        cap: savedCap,
+      })}
+      controls={
+        !method.available ? null : method.enabled ? (
+          <Badge tone="leaf">
+            {t("admin.xapi.inChain", { rank: rank + 1 })}
+          </Badge>
+        ) : (
+          <Badge>{t("admin.xapi.offInChain")}</Badge>
+        )
+      }
+    >
+      <form className="adm-form" onSubmit={submit}>
+        <fieldset className="adm-fold-fields" disabled={schedule.skipped}>
+          <div className="adm-form-row is-top">
+            <Field label={t("admin.chain.apiGate")}>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={gate}
+                onChange={(e) => setGate(Number(e.target.value))}
+                required
+              />
+            </Field>
+            <Field label={t("admin.chain.apiDailyCap")}>
+              <input
+                type="number"
+                min={1}
+                max={10000}
+                value={cap}
+                onChange={(e) => setCap(Number(e.target.value))}
+                required
+              />
+            </Field>
+          </div>
+        </fieldset>
+        <ul className="adm-meters">
+          <Meter
+            label={t("admin.chain.usage")}
+            value={chain.apiUsage?.posts ?? 0}
+            of={savedCap}
+            unit={t("admin.chain.usageUnit")}
+          />
+          {streaks.map((account) => (
+            <Meter
+              key={account}
+              label={`@${account}`}
+              value={failures[account] ?? 0}
+              of={savedGate}
+              unit={t("admin.chain.streakUnit")}
+            />
+          ))}
+        </ul>
+        <div className="adm-form-actions">
+          <Button
+            type="submit"
+            size="sm"
+            icon={Save}
+            busy={busy}
+            disabled={!dirty || busy}
+          >
+            {t("admin.action.save")}
+          </Button>
+        </div>
+      </form>
+    </Fold>
   )
 }
 
@@ -856,7 +974,7 @@ function FetchForm({
   }
   return (
     <form className="adm-form" onSubmit={submit}>
-      <Choice
+      <FieldGroup
         label={t("admin.fetch.method")}
         hint={t(`admin.fetch.methodHint.${source}.${method.id}`)}
       >
@@ -874,7 +992,7 @@ function FetchForm({
             ),
           }))}
         />
-      </Choice>
+      </FieldGroup>
       {method.available ? null : (
         <p className="adm-inline-error">
           <KeyRound aria-hidden />
@@ -883,7 +1001,7 @@ function FetchForm({
             : t("admin.fetch.unavailable")}
         </p>
       )}
-      <Choice
+      <FieldGroup
         label={t("admin.fetch.selection")}
         hint={t(
           current === "all"
@@ -900,7 +1018,7 @@ function FetchForm({
             label: t(`admin.fetch.mode.${value}`),
           }))}
         />
-      </Choice>
+      </FieldGroup>
       {current === "count" ? (
         <Field
           label={t(
@@ -1186,8 +1304,8 @@ function FetchPanel({
   )
 }
 
-/** One step of YouTube's progressive confirmation, its explanation behind
- * a question mark beside its title. */
+/** A step of YouTube's progressive confirmation without settings, its
+ * explanation behind a question mark beside its title. */
 function Stage({
   icon: StageIcon,
   title,
@@ -1205,7 +1323,7 @@ function Stage({
   return (
     <li className="adm-confirm-step">
       <section aria-labelledby={id}>
-        <header>
+        <header className="adm-confirm-head">
           <span className="adm-confirm-mark">
             <StageIcon aria-hidden />
           </span>
@@ -1243,107 +1361,113 @@ function PushStage({
     if (next) onChange(next)
   }
   return (
-    <Stage
-      icon={Radio}
-      title={t("admin.push.title")}
-      help={
-        <>
-          <p>{t("admin.push.description")}</p>
-          <p>{t("admin.push.enableHint")}</p>
-        </>
-      }
-      badge={
-        push.enabled ? (
-          <Badge tone={push.verified ? "leaf" : "honey"}>
-            {t(
-              push.verified
-                ? "admin.overview.pushVerified"
-                : "admin.overview.pushPending",
-            )}
-          </Badge>
-        ) : (
-          <Badge>{t("admin.push.off")}</Badge>
-        )
-      }
-    >
-      <div className="adm-form">
-        <Switch
-          checked={push.enabled}
-          disabled={!push.available || busy !== ""}
-          onChange={(enabled) =>
-            save({ enabled, callbackUrl: callback || null })
-          }
-          label={t("admin.push.enable")}
-          description={push.available ? null : t("admin.push.unavailable")}
-        />
-        <Field
-          label={t("admin.push.callback")}
-          hint={t("admin.push.callbackHint", { path: push.callbackPath })}
-        >
-          <input
-            type="url"
-            value={callback}
-            onChange={(e) => setCallback(e.target.value)}
-            placeholder="https://"
+    <li className="adm-confirm-step">
+      <Fold
+        icon={Radio}
+        level={4}
+        title={t("admin.push.title")}
+        help={
+          <>
+            <p>{t("admin.push.description")}</p>
+            <p>{t("admin.push.enableHint")}</p>
+          </>
+        }
+        controls={
+          <>
+            {push.enabled ? (
+              <Badge tone={push.verified ? "leaf" : "honey"}>
+                {t(
+                  push.verified
+                    ? "admin.overview.pushVerified"
+                    : "admin.overview.pushPending",
+                )}
+              </Badge>
+            ) : null}
+            <Switch
+              compact
+              checked={push.enabled}
+              disabled={!push.available || busy !== ""}
+              onChange={(enabled) =>
+                save({ enabled, callbackUrl: callback || null })
+              }
+              label={t("admin.push.enable")}
+            />
+          </>
+        }
+      >
+        <div className="adm-form">
+          {push.available ? null : (
+            <p className="adm-field-hint">{t("admin.push.unavailable")}</p>
+          )}
+          <Field
+            label={t("admin.push.callback")}
+            hint={t("admin.push.callbackHint", { path: push.callbackPath })}
+          >
+            <input
+              type="url"
+              value={callback}
+              onChange={(e) => setCallback(e.target.value)}
+              placeholder="https://"
+            />
+          </Field>
+          <div className="adm-form-actions">
+            <ConfirmButton
+              size="sm"
+              variant="ghost"
+              icon={RotateCw}
+              disabled={!push.secretConfigured}
+              onConfirm={async () => {
+                const next = await act(
+                  () => api.rotatePushSecret(),
+                  "admin.notice.secretRotated",
+                )
+                if (next) onChange(next)
+              }}
+            >
+              {t("admin.push.rotate")}
+            </ConfirmButton>
+            <Button
+              size="sm"
+              icon={Save}
+              busy={busy === "save"}
+              disabled={callback === (push.callbackUrl || "")}
+              onClick={() => save({ callbackUrl: callback || null })}
+            >
+              {t("admin.action.save")}
+            </Button>
+          </div>
+          <Facts
+            items={[
+              [
+                t("admin.push.secret"),
+                t(
+                  push.secretConfigured
+                    ? "admin.push.secretSet"
+                    : "admin.push.secretUnset",
+                ),
+              ],
+              [
+                t("admin.push.lease"),
+                formatDateTime(push.leaseExpiresAt, locale) || null,
+              ],
+              [
+                t("admin.push.renewal"),
+                formatDateTime(push.nextRenewalAt, locale) || null,
+              ],
+              [
+                t("admin.push.notified"),
+                formatDateTime(push.lastNotificationAt, locale) || null,
+              ],
+              [
+                t("admin.push.triggered"),
+                formatDateTime(push.lastTriggeredAt, locale) || null,
+              ],
+              [t("admin.push.lastError"), push.lastError],
+            ]}
           />
-        </Field>
-        <div className="adm-form-actions">
-          <ConfirmButton
-            size="sm"
-            variant="ghost"
-            icon={RotateCw}
-            disabled={!push.secretConfigured}
-            onConfirm={async () => {
-              const next = await act(
-                () => api.rotatePushSecret(),
-                "admin.notice.secretRotated",
-              )
-              if (next) onChange(next)
-            }}
-          >
-            {t("admin.push.rotate")}
-          </ConfirmButton>
-          <Button
-            size="sm"
-            icon={Save}
-            busy={busy === "save"}
-            disabled={callback === (push.callbackUrl || "")}
-            onClick={() => save({ callbackUrl: callback || null })}
-          >
-            {t("admin.action.save")}
-          </Button>
         </div>
-        <Facts
-          items={[
-            [
-              t("admin.push.secret"),
-              t(
-                push.secretConfigured
-                  ? "admin.push.secretSet"
-                  : "admin.push.secretUnset",
-              ),
-            ],
-            [
-              t("admin.push.lease"),
-              formatDateTime(push.leaseExpiresAt, locale) || null,
-            ],
-            [
-              t("admin.push.renewal"),
-              formatDateTime(push.nextRenewalAt, locale) || null,
-            ],
-            [
-              t("admin.push.notified"),
-              formatDateTime(push.lastNotificationAt, locale) || null,
-            ],
-            [
-              t("admin.push.triggered"),
-              formatDateTime(push.lastTriggeredAt, locale) || null,
-            ],
-            [t("admin.push.lastError"), push.lastError],
-          ]}
-        />
-      </div>
-    </Stage>
+      </Fold>
+    </li>
   )
 }
 
@@ -1373,109 +1497,114 @@ function LiveProbeStage({
   }
   const running = probe.enabled && probe.available
   return (
-    <Stage
-      icon={RadioTower}
-      title={t("admin.liveProbe.title")}
-      help={
-        <>
-          <p>{t("admin.liveProbe.description", { max: probe.maxVideos })}</p>
-          <p>{t("admin.liveProbe.enableHint")}</p>
-          <dl className="adm-help-terms">
-            <dt>{t("admin.liveProbe.interval")}</dt>
-            <dd>
-              {t("admin.liveProbe.intervalHint", {
-                min: probe.minIntervalMinutes,
-                max: probe.maxIntervalMinutes,
-              })}
-            </dd>
-          </dl>
-        </>
-      }
-      badge={
-        running ? (
-          <Badge tone="leaf">{t("admin.liveProbe.on")}</Badge>
-        ) : (
-          <Badge>{t("admin.push.off")}</Badge>
-        )
-      }
-    >
-      <form
-        className="adm-form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          save({ intervalMinutes: minutes })
-        }}
+    <li className="adm-confirm-step">
+      <Fold
+        icon={RadioTower}
+        level={4}
+        title={t("admin.liveProbe.title")}
+        help={
+          <>
+            <p>{t("admin.liveProbe.description", { max: probe.maxVideos })}</p>
+            <p>{t("admin.liveProbe.enableHint")}</p>
+            <dl className="adm-help-terms">
+              <dt>{t("admin.liveProbe.interval")}</dt>
+              <dd>
+                {t("admin.liveProbe.intervalHint", {
+                  min: probe.minIntervalMinutes,
+                  max: probe.maxIntervalMinutes,
+                })}
+              </dd>
+            </dl>
+          </>
+        }
+        controls={
+          <>
+            {probe.enabled && !running ? (
+              <Badge tone="honey">{t("admin.liveProbe.notRunning")}</Badge>
+            ) : null}
+            <Switch
+              compact
+              checked={probe.enabled}
+              disabled={!probe.available || busy !== ""}
+              onChange={(enabled) => save({ enabled })}
+              label={t("admin.liveProbe.enable")}
+            />
+          </>
+        }
       >
-        <Switch
-          checked={probe.enabled}
-          disabled={!probe.available || busy !== ""}
-          onChange={(enabled) => save({ enabled })}
-          label={t("admin.liveProbe.enable")}
-          description={
-            probe.available ? null : t("admin.liveProbe.unavailable")
-          }
-        />
-        <Field
-          label={t("admin.liveProbe.interval")}
-          hint={t("admin.liveProbe.intervalRange", {
-            min: probe.minIntervalMinutes,
-            max: probe.maxIntervalMinutes,
-          })}
+        <form
+          className="adm-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            save({ intervalMinutes: minutes })
+          }}
         >
-          <input
-            type="number"
-            min={probe.minIntervalMinutes}
-            max={probe.maxIntervalMinutes}
-            step={1}
-            value={minutes}
-            onChange={(e) => setMinutes(Number(e.target.value))}
-            required
-          />
-        </Field>
-        <div className="adm-form-actions">
-          <Button
-            type="submit"
-            size="sm"
-            icon={Save}
-            busy={busy === "save"}
-            disabled={minutes === probe.intervalMinutes || busy !== ""}
+          {probe.available ? null : (
+            <p className="adm-field-hint">{t("admin.liveProbe.unavailable")}</p>
+          )}
+          <Field
+            label={t("admin.liveProbe.interval")}
+            hint={t("admin.liveProbe.intervalRange", {
+              min: probe.minIntervalMinutes,
+              max: probe.maxIntervalMinutes,
+            })}
           >
-            {t("admin.action.save")}
-          </Button>
-        </div>
-        <Facts
-          items={[
-            [
-              t("admin.liveProbe.lastRun"),
-              probe.lastRunAt
-                ? `${formatDateTime(probe.lastRunAt, locale)} · ${formatRelative(probe.lastRunAt, locale)}`
-                : null,
-            ],
-            [
-              t("admin.liveProbe.nextRun"),
-              probe.nextRunAt
-                ? `${formatDateTime(probe.nextRunAt, locale)} · ${formatRelative(probe.nextRunAt, locale)}`
-                : null,
-            ],
-            [
-              t("admin.liveProbe.active"),
-              t("admin.liveProbe.activeCount", {
-                count: probe.activeVideos,
-                max: probe.maxVideos,
-              }),
-            ],
-          ]}
-        />
-      </form>
-    </Stage>
+            <input
+              type="number"
+              min={probe.minIntervalMinutes}
+              max={probe.maxIntervalMinutes}
+              step={1}
+              value={minutes}
+              onChange={(e) => setMinutes(Number(e.target.value))}
+              required
+            />
+          </Field>
+          <div className="adm-form-actions">
+            <Button
+              type="submit"
+              size="sm"
+              icon={Save}
+              busy={busy === "save"}
+              disabled={minutes === probe.intervalMinutes || busy !== ""}
+            >
+              {t("admin.action.save")}
+            </Button>
+          </div>
+          <Facts
+            items={[
+              [
+                t("admin.liveProbe.lastRun"),
+                probe.lastRunAt
+                  ? `${formatDateTime(probe.lastRunAt, locale)} · ${formatRelative(probe.lastRunAt, locale)}`
+                  : null,
+              ],
+              [
+                t("admin.liveProbe.nextRun"),
+                probe.nextRunAt
+                  ? `${formatDateTime(probe.nextRunAt, locale)} · ${formatRelative(probe.nextRunAt, locale)}`
+                  : null,
+              ],
+              [
+                t("admin.liveProbe.active"),
+                t("admin.liveProbe.activeCount", {
+                  count: probe.activeVideos,
+                  max: probe.maxVideos,
+                }),
+              ],
+            ]}
+          />
+        </form>
+      </Fold>
+    </li>
   )
 }
 
 /**
  * YouTube's progressive confirmation: push queues a read as a video appears,
  * the live-status probe follows streams around their start, and follow-up
- * checks reread finished videos. The follow-ups have no setting; they ride
- * on every YouTube read.
+ * checks reread finished videos. Push and the probe each fold their settings
+ * and figures under a header with their state and a quick switch. The
+ * follow-ups have no setting; they ride on every YouTube read.
  */
 function ConfirmationPanel({
   youtube,
@@ -1547,11 +1676,21 @@ function YTDLPPanel({
     if (next) onChange(next)
   }
   return (
-    <Panel
-      level={3}
+    <Fold
       icon={Download}
       title={t("admin.ytdlp.title")}
-      description={t("admin.ytdlp.description")}
+      className="adm-panel"
+      help={<p>{t("admin.ytdlp.description")}</p>}
+      hint={status?.version || undefined}
+      controls={
+        status ? (
+          <Badge tone={available ? "leaf" : "neutral"}>
+            {available
+              ? t("admin.ytdlp.available")
+              : t("admin.ytdlp.unavailable")}
+          </Badge>
+        ) : null
+      }
     >
       <div className="adm-form">
         <Facts
@@ -1577,41 +1716,47 @@ function YTDLPPanel({
           </Button>
         </div>
       </div>
-    </Panel>
+    </Fold>
   )
 }
 
 /**
- * A source's rarely changed settings, folded: its read limits and, for
- * YouTube, the yt-dlp executable.
+ * One section of a source's read limits, folded: the bounds of its timed
+ * reads, or of the manual fetches that X and YouTube share, one field per
+ * row beside the manual fetch. Both sections edit the page's one read of the
+ * settings.
  */
-function AdvancedPanel({
+function LimitsPanel({
   source,
-  ytdlp,
-  onYTDLP,
+  section,
+  settings,
+  onSaved,
 }: {
   source: "x" | "youtube"
-  ytdlp: YTDLPStatus | undefined
-  onYTDLP: (status: YTDLPStatus) => void
+  section: "timed" | "manual"
+  settings: SyncSettings | undefined
+  onSaved: (settings: SyncSettings) => void
 }) {
   const { t } = useAppSettings()
   return (
-    <details className="adm-panel adm-source-advanced">
-      <summary>
-        <SlidersHorizontal aria-hidden />
-        <span>
-          <strong>{t(`admin.sources.advanced.${source}`)}</strong>
-          <small>{t("admin.sources.advancedHint")}</small>
-        </span>
-        <ChevronDown aria-hidden className="adm-source-advanced-chevron" />
-      </summary>
-      <div className="adm-source-advanced-body">
-        <SyncSettingsPanel group={source} bare />
-        {source === "youtube" ? (
-          <YTDLPPanel status={ytdlp} onChange={onYTDLP} />
-        ) : null}
-      </div>
-    </details>
+    <Fold
+      icon={section === "timed" ? Gauge : SlidersHorizontal}
+      title={t(`admin.sources.limits.${section}`)}
+      className="adm-panel"
+      hint={section === "manual" ? t("admin.syncSettings.shared") : undefined}
+    >
+      {settings ? (
+        <SyncSettingsForm
+          group={source}
+          section={section}
+          data={settings}
+          onSaved={onSaved}
+          rows={section === "manual"}
+        />
+      ) : (
+        <Loading />
+      )}
+    </Fold>
   )
 }
 
@@ -1620,9 +1765,10 @@ const sourceIds: ScheduleSource[] = ["x", "youtube", "bilibili"]
 /**
  * The Sources page: a tab per source, then the selected source's summary
  * (timer state, runs, the timer switch and Run now). Below it the timed-read
- * settings, YouTube's progressive confirmation and the folded advanced
- * settings fill the main column; the manual fetch, or Bilibili's account and
- * single-upload form, sits beside them. On a narrower screen the side column
+ * settings fill the main column, followed by X's API limits or YouTube's
+ * progressive confirmation, the timed-read limits and yt-dlp, each folded;
+ * the manual fetch and its folded limits, or Bilibili's account and
+ * single-upload form, sit beside them. On a narrower screen the side column
  * follows the main one.
  */
 export function SourcesView({ tab, navigate }: ViewProps) {
@@ -1630,6 +1776,9 @@ export function SourcesView({ tab, navigate }: ViewProps) {
   const { api, overview } = useAdmin()
   const sources = useResource(() => api.sources(), [])
   const ytdlp = useResource(() => api.ytdlp(), [])
+  // One read for both limit sections: a second read of the same path would
+  // supersede the first.
+  const limits = useResource(() => api.syncSettings(), [])
   const data = sources.data
   const selected = sourceIds.includes(tab as ScheduleSource)
     ? (tab as ScheduleSource)
@@ -1710,9 +1859,15 @@ export function SourcesView({ tab, navigate }: ViewProps) {
                   <TimedReadsPanel
                     key={selected}
                     schedule={current}
-                    accounts={data.x.accounts.map((entry) => entry.account)}
                     onChange={setSchedule}
                   />
+                  {selected === "x" ? (
+                    <XAPIPanel
+                      schedule={current}
+                      accounts={data.x.accounts.map((entry) => entry.account)}
+                      onChange={setSchedule}
+                    />
+                  ) : null}
                   {selected === "youtube" ? (
                     <ConfirmationPanel
                       youtube={data.youtube}
@@ -1722,12 +1877,20 @@ export function SourcesView({ tab, navigate }: ViewProps) {
                     />
                   ) : null}
                   {selected === "bilibili" ? null : (
-                    <AdvancedPanel
+                    <LimitsPanel
+                      key={`${selected}-timed`}
                       source={selected}
-                      ytdlp={ytdlp.data}
-                      onYTDLP={(next) => ytdlp.setData(next)}
+                      section="timed"
+                      settings={limits.data}
+                      onSaved={limits.setData}
                     />
                   )}
+                  {selected === "youtube" ? (
+                    <YTDLPPanel
+                      status={ytdlp.data}
+                      onChange={(next) => ytdlp.setData(next)}
+                    />
+                  ) : null}
                 </div>
                 <div className="adm-source-aside">
                   {selected === "bilibili" ? (
@@ -1736,12 +1899,21 @@ export function SourcesView({ tab, navigate }: ViewProps) {
                       onAdded={() => void sources.reload()}
                     />
                   ) : (
-                    <FetchPanel
-                      key={selected}
-                      source={selected}
-                      sources={data}
-                      onOpenRuns={() => navigate("runs")}
-                    />
+                    <>
+                      <FetchPanel
+                        key={selected}
+                        source={selected}
+                        sources={data}
+                        onOpenRuns={() => navigate("runs")}
+                      />
+                      <LimitsPanel
+                        key={`${selected}-manual`}
+                        source={selected}
+                        section="manual"
+                        settings={limits.data}
+                        onSaved={limits.setData}
+                      />
+                    </>
                   )}
                 </div>
               </div>

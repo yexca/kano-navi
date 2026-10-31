@@ -97,22 +97,25 @@
   how many records were new, already stored or failed, the pages it read,
   whether it reached the end (or should be repeated to continue), and the
   first new records.
-- The Sources page has a tab per source, with a dot for whether its timer
-  runs. The selected source opens with a summary of its timer state, next
+- The Sources page has a tab per source, with the platform's logo and a dot
+  for whether its timer runs. The selected source opens with a summary of its timer state, next
   and last run and last successful read, with the timer switch and Run now. Its timed reads follow as one form with
   one Save: the interval, the sync setting and the method chain, where
   methods switch on or off and move up or down. The manual fetch sits beside
   them; on a narrower screen it follows them. Methods the server cannot run
   show the variable they need, a source a `SKIP_*` setting turns off shows
   as locked, and Bilibili shows its one fixed method.
-- The timed reads of X add the X API limits: the gate and daily cap, where
-  the chain has the method, and meters of today's usage and each account's
-  timeline failures against them. A question mark beside a title or label,
-  such as the chain, the X API limits and each progressive-confirmation step,
-  opens its explanation. YouTube adds its progressive confirmation: push, the
-  live-status probe and the follow-up checks of finished videos (1 hour,
-  1 day, 3 days and 7 days). Read limits, split into timed reads and manual
-  fetches, and yt-dlp for YouTube, sit in a folded section at the end.
+- Settings below the timed reads are folds that each save on their own,
+  with their state in the header. X adds its X API limits: the gate and
+  daily cap, where the chain has the method, and meters of today's usage and
+  each account's timeline failures against them. YouTube adds its
+  progressive confirmation, where push and the live-status probe fold their
+  settings under a header with a quick switch, then the follow-up checks of
+  finished videos (1 hour, 1 day, 3 days and 7 days), and yt-dlp. Timed-read
+  limits fold in the main column and the manual-fetch limits, shared by X
+  and YouTube, under the manual fetch. A question mark beside a title or
+  label, such as the chain, the X API limits and each
+  progressive-confirmation step, opens its explanation.
 - The Schedule page has a calendar view beside its list: a month grid whose
   entries are chips styled by review state, where a chip opens the entry and
   a day shows its entries below the grid. The list groups entries under a
@@ -223,8 +226,8 @@
   translation shows and off while the original does, in place of the
   Original label and the origin line with Show original. Posts carry it after
   their last word, and the latest video's heading carries it too.
-- The Overview console has an off-by-default switch for a localized mainland
-  China site suggestion when the reverse proxy reports that country.
+- The console's Site page has an off-by-default switch for a localized
+  mainland China site suggestion when the reverse proxy reports that country.
 - A new LINE BLOG page brings back Kano's 2015–2019 archive with 99 Japanese
   articles, their photos, pictographs and archived YouTube videos, the
   original-era layouts, monthly archive, the blog's own 前の記事/次の記事

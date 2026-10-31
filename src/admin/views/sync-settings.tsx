@@ -51,47 +51,45 @@ export const syncSettingGroups = {
   ],
 } satisfies Record<string, SyncSettingSection[]>
 
-/** The fetch bounds X and YouTube share; their hint says so. */
-const sharedFields = new Set<SyncSettingField>([
-  "fetchMaxPages",
-  "fetchTimeoutMs",
-  "fetchRequestDelayMs",
-])
-
 /**
  * The run bounds of one group: whole numbers within each field's range,
  * saved together. The next run reads them; a running one keeps its values.
  * A group with several sections titles each, such as X's timed reads and
- * manual fetches.
+ * manual fetches, unless the form shows only one of them. The caller owns the
+ * settings, so forms of one page share a single read.
  */
-export function SyncSettingsPanel({
+export function SyncSettingsForm({
   group,
-  level = 3,
-  bare = false,
+  section,
+  data,
+  onSaved,
+  rows = false,
 }: {
   group: keyof typeof syncSettingGroups
-  /** 2 on a page of top-level panels, such as the LLM page. */
-  level?: 2 | 3
-  /** Without the panel's own title, inside a section that names it. */
-  bare?: boolean
+  /** Only this section of the group, such as the manual fetches. */
+  section?: SyncSettingSection["id"]
+  data: SyncSettings
+  onSaved: (settings: SyncSettings) => void
+  /** One field per row, label beside its input, for a narrow column. */
+  rows?: boolean
 }) {
   const { t } = useAppSettings()
   const { api, act } = useAdmin()
-  const resource = useResource(() => api.syncSettings(), [])
-  const data = resource.data
   const [draft, setDraft] = useState<Partial<Record<SyncSettingField, string>>>(
     {},
   )
   const [busy, setBusy] = useState(false)
   useEffect(() => setDraft({}), [data])
-  const sections: SyncSettingSection[] = syncSettingGroups[group]
+  const sections = (syncSettingGroups[group] as SyncSettingSection[]).filter(
+    (entry) => !section || entry.id === section,
+  )
   const fields = sections.flatMap((section) => section.fields)
   const value = (field: SyncSettingField) =>
-    draft[field] ?? String(data?.settings[field] ?? "")
+    draft[field] ?? String(data.settings[field] ?? "")
   const changed = fields.filter(
     (field) =>
       draft[field] !== undefined &&
-      Number(draft[field]) !== data?.settings[field],
+      Number(draft[field]) !== data.settings[field],
   )
   const save = async () => {
     setBusy(true)
@@ -103,96 +101,109 @@ export function SyncSettingsPanel({
       "admin.notice.syncSettingsSaved",
     )
     setBusy(false)
-    if (next) resource.setData(next as SyncSettings)
+    if (next) onSaved(next as SyncSettings)
   }
-  const row = (sectionFields: SyncSettingField[]): ReactNode =>
-    data ? (
-      // Three fields share one row rather than leaving one alone.
-      <div
-        className={cn(
-          "adm-form-row is-top",
-          sectionFields.length === 3 && "is-three",
-        )}
-      >
-        {sectionFields.map((field) => {
-          const spec = data.fields.find((entry) => entry.field === field)
-          return spec ? (
-            <Field
-              key={field}
-              label={t(`admin.syncSettings.field.${field}`)}
-              hint={[
-                t(`admin.syncSettings.hint.${field}`),
-                t("admin.syncSettings.range", {
-                  min: spec.min,
-                  max: spec.max,
-                  default: spec.default,
-                }),
-                sharedFields.has(field) && group !== "llm"
-                  ? t("admin.syncSettings.shared")
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              <input
-                type="number"
-                inputMode="numeric"
-                min={spec.min}
-                max={spec.max}
-                step={1}
-                required
-                value={value(field)}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    [field]: event.target.value,
-                  }))
-                }
-              />
-            </Field>
-          ) : null
-        })}
+  const row = (sectionFields: SyncSettingField[]): ReactNode => (
+    // Three fields share one row rather than leaving one alone.
+    <div
+      className={cn(
+        rows ? "adm-limit-rows" : "adm-form-row is-top",
+        !rows && sectionFields.length === 3 && "is-three",
+      )}
+    >
+      {sectionFields.map((field) => {
+        const spec = data.fields.find((entry) => entry.field === field)
+        return spec ? (
+          <Field
+            key={field}
+            className={rows ? "adm-limit-row" : undefined}
+            label={t(`admin.syncSettings.field.${field}`)}
+            hint={[
+              t(`admin.syncSettings.hint.${field}`),
+              t("admin.syncSettings.range", {
+                min: spec.min,
+                max: spec.max,
+                default: spec.default,
+              }),
+            ].join(" ")}
+          >
+            <input
+              type="number"
+              inputMode="numeric"
+              min={spec.min}
+              max={spec.max}
+              step={1}
+              required
+              value={value(field)}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  [field]: event.target.value,
+                }))
+              }
+            />
+          </Field>
+        ) : null
+      })}
+    </div>
+  )
+  return (
+    <form
+      className="adm-form"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void save()
+      }}
+    >
+      {sections.length === 1
+        ? row(sections[0].fields)
+        : sections.map((section) => (
+            <fieldset key={section.id} className="adm-sync-section">
+              <legend>{t(`admin.syncSettings.section.${section.id}`)}</legend>
+              {row(section.fields)}
+            </fieldset>
+          ))}
+      <div className="adm-form-actions">
+        <Button
+          type="submit"
+          size="sm"
+          icon={Save}
+          busy={busy}
+          disabled={!changed.length || busy}
+        >
+          {t("admin.action.save")}
+        </Button>
       </div>
-    ) : null
+    </form>
+  )
+}
+
+/** A group's run bounds as a titled panel that reads them itself. */
+export function SyncSettingsPanel({
+  group,
+  level = 3,
+}: {
+  group: keyof typeof syncSettingGroups
+  /** 2 on a page of top-level panels, such as the LLM page. */
+  level?: 2 | 3
+}) {
+  const { t } = useAppSettings()
+  const { api } = useAdmin()
+  const resource = useResource(() => api.syncSettings(), [])
   return (
     <Panel
       level={level}
-      icon={bare ? undefined : Gauge}
-      title={bare ? undefined : t(`admin.syncSettings.${group}.title`)}
-      className={bare ? "is-bare" : undefined}
+      icon={Gauge}
+      title={t(`admin.syncSettings.${group}.title`)}
     >
-      {!data ? (
-        <Loading />
+      {resource.data ? (
+        <SyncSettingsForm
+          group={group}
+          data={resource.data}
+          onSaved={(next) => resource.setData(next)}
+        />
       ) : (
-        <form
-          className="adm-form"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void save()
-          }}
-        >
-          {sections.length === 1
-            ? row(sections[0].fields)
-            : sections.map((section) => (
-                <fieldset key={section.id} className="adm-sync-section">
-                  <legend>
-                    {t(`admin.syncSettings.section.${section.id}`)}
-                  </legend>
-                  {row(section.fields)}
-                </fieldset>
-              ))}
-          <div className="adm-form-actions">
-            <Button
-              type="submit"
-              size="sm"
-              icon={Save}
-              busy={busy}
-              disabled={!changed.length || busy}
-            >
-              {t("admin.action.save")}
-            </Button>
-          </div>
-        </form>
+        <Loading />
       )}
     </Panel>
   )

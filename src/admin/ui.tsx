@@ -253,6 +253,29 @@ export function Field({
   )
 }
 
+/**
+ * A labelled field around a control with several buttons, such as segments
+ * or removable chips. It is a group rather than a <label>, so hovering or
+ * pressing the label never reaches the first button.
+ */
+export function FieldGroup({
+  label,
+  hint,
+  children,
+}: {
+  label: ReactNode
+  hint?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className="adm-field">
+      <span className="adm-field-label">{label}</span>
+      {children}
+      {hint ? <span className="adm-field-hint">{hint}</span> : null}
+    </div>
+  )
+}
+
 export function Switch({
   checked,
   onChange,

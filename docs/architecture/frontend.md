@@ -84,7 +84,7 @@ video show `PlatformLinks` in that order and an `aria-hidden`
 in `src/index.css`. The hidden `/admin` console
 lives in `src/admin/` and is organized around operator tasks: `index.tsx`
 registers the views (Overview, Review queue, Schedule, Posts, Videos, Profile
-images, Runs, Sources, Detection, LLM) and renders the shell
+images, Runs, Sources, Detection, LLM, Site) and renders the shell
 with hash routing (`#view/tab`; a `#content/<tab>` link opens the matching
 view and a `#models` link opens LLM); `use-admin-data.ts` owns every
 [Admin API](admin-api.md) call, the session and the overview poll that tracks
@@ -219,31 +219,40 @@ beside its candidates: Merge attaches it to one, and Keep separate keeps it
 apart so the rule never merges it.
 
 The console's Sources page (`src/admin/views/sources.tsx`) has a row of
-tabs for X, YouTube and Bilibili, each with a dot (or a lock) for whether
-its timer runs here and the state as its tooltip.
+tabs for X, YouTube and Bilibili, each with the platform's logo, a dot (or
+a lock) for whether its timer runs here and the state as its tooltip.
 The selected source opens with a summary: what it reads, its timer state,
 next run, last run and last successful read, the timer switch (which saves
 at once) and Run now. A source that `SKIP_*` turns off is locked. Below the
 summary the main column holds the timed reads, one form with one Save and
-Discard: the interval and, for X and YouTube, the sync setting; the
+Discard: the interval and, for X and YouTube, the sync setting; and the
 [method chain](workflows.md#method-chains), with every method's switch and
 up/down moves, a method the process cannot run greyed with the variable it
-needs, and Bilibili's one fixed method read-only; and for X the X API
-limits (gate and daily cap, with today's usage and each account's timeline
-failures shown as meters against them). Longer explanations sit in a
-dialog behind a question mark beside a title or label: the chain, the X API
-limits, YouTube's per-run limit, and its progressive confirmation and each
-of its steps.
-Save sends only the changed fields, and the timer switch keeps unsaved
-edits. YouTube adds its progressive confirmation (push, the
-live-status probe and the read-only
-[follow-up checks](sources.md#follow-up-checks-and-refresh-requests)), and
-X and YouTube end with a folded section of read limits, split into timed
-reads and manual fetches (and yt-dlp for YouTube). The manual fetch sits beside the main column: method, mode, count
-or dates, options, then the newest fetch's summary; Bilibili shows its
-account and single-video form there. On a narrower screen the side column
-follows the main one, and on a phone the tabs share the width and show only
-the source names.
+needs, and Bilibili's one fixed method read-only. Save sends only the
+changed fields, and the timer switch keeps unsaved edits.
+
+Settings below the timed reads are folded: a header row with the title,
+its state and any quick switch opens onto the settings and figures, and
+each fold saves on its own. X adds its X API limits (gate and daily cap,
+with the API's place in the chain and today's usage in the header, and
+today's usage and each account's timeline failures shown as meters against
+them). YouTube adds its progressive confirmation, where push and the
+live-status probe are folds with their switch in the header, followed by
+the read-only
+[follow-up checks](sources.md#follow-up-checks-and-refresh-requests), and
+yt-dlp, with its status in the header. X and YouTube fold their timed-read
+limits in the main column and the manual-fetch limits, which they share,
+under the manual fetch, one field per row with its label beside the input.
+Both limit folds edit the page's one read of the settings. Longer
+explanations sit in a dialog behind a question mark beside a title or
+label: the chain, the X API limits, YouTube's per-run limit, its
+progressive confirmation and each of its steps, and yt-dlp.
+
+The manual fetch sits beside the main column: method, mode, count or
+dates, options, then the newest fetch's summary; Bilibili shows its account
+and single-video form there. On a narrower screen the side column follows
+the main one, and on a phone the tabs share the width and show only the
+source names, and a fold's header controls move under its title.
 
 The console's post list (`src/admin/views/posts.tsx`) is a feed of posts
 separated by rules, one row of columns per post: the account over the Japan
