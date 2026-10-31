@@ -1401,6 +1401,15 @@
   border-bottom: 0;
 }
 
+/* The bottom corner days follow the grid's rounding, today's ring included. */
+.month-day:nth-last-child(7) {
+  border-bottom-left-radius: calc(var(--radius-lg) - 1px);
+}
+
+.month-day:last-child {
+  border-bottom-right-radius: calc(var(--radius-lg) - 1px);
+}
+
 .month-day.is-saturday,
 .month-day.is-sunday {
   background: color-mix(in oklab, hsl(var(--muted)) 35%, transparent);
@@ -1598,7 +1607,12 @@ a.month-event:hover {
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* The hide button points where the details sit: beside or below the grid. */
+/* The month row's day-details switch keeps to the row's end. */
+.month-detail-toggle {
+  margin-left: auto;
+}
+
+/* Its icon points where the details sit: beside or below the grid. */
 .month-detail-narrow {
   display: none;
 }
@@ -3345,6 +3359,17 @@ a.month-event:hover {
 
   .archive-tools {
     flex: 1 1 100%;
+  }
+
+  /* The month's day-details switch stays at the end of its last row. */
+  .archive-dialog-bar:has(> .month-detail-toggle) {
+    flex-wrap: nowrap;
+    align-items: flex-end;
+  }
+
+  .archive-dialog-bar:has(> .month-detail-toggle) .archive-month {
+    min-width: 0;
+    flex: 1 1 auto;
   }
 }
 

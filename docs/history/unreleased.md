@@ -273,7 +273,9 @@
 - Past videos shows the month as a grid of covers with the title below each,
   then its Japan date, time and kind.
 - In the month view, a click anywhere in a day's cell opens its details, and
-  a button hides them so the grid takes the full width. On phones, tapping a
+  a button at the end of the month row hides or shows them so the grid can
+  take the full width; the choice holds while you move between months, and
+  today's outline follows the grid's rounded corner. On phones, tapping a
   day with dots shows its entries instead of opening an entry's link, and the
   Month view button keeps its label.
 - Images on the board, the Journey page and the LINE BLOG show the same zoom

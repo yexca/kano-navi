@@ -40,7 +40,11 @@ import {
   PostWall,
 } from "./components/post-wall"
 import { VideoArchive, VideoShelf } from "./components/video-shelf"
-import { ScheduleMonth, WeekGuide } from "./components/week-guide"
+import {
+  ScheduleDayToggle,
+  ScheduleMonth,
+  WeekGuide,
+} from "./components/week-guide"
 import "./board.css"
 
 interface ViewerImage {
@@ -124,6 +128,7 @@ export function DashboardApp() {
   } = useDashboard(now)
   // One month dialog at a time: the schedule grid, past posts or past videos.
   const [archiveView, setArchiveView] = useState<ArchiveRequest | null>(null)
+  const [monthDetails, setMonthDetails] = useState(true)
   const archive = useArchive(
     archiveView,
     dashboard.meta.revision,
@@ -394,6 +399,13 @@ export function DashboardApp() {
                   t={t}
                 />
               </div>
+            ) : archiveView.kind === "schedule" ? (
+              <ScheduleDayToggle
+                open={monthDetails}
+                disabled={!archive.archive?.total}
+                onToggle={() => setMonthDetails((open) => !open)}
+                t={t}
+              />
             ) : null
           }
           onClose={closeArchive}
@@ -404,6 +416,8 @@ export function DashboardApp() {
             <ScheduleMonth
               key={archiveView.monthStart.getTime()}
               monthStart={archiveView.monthStart}
+              showDetails={monthDetails}
+              onShowDetails={setMonthDetails}
               archive={archive.archive as ArchiveSnapshot<ScheduleEvent> | null}
               isLoading={archive.isLoading}
               error={archive.error}

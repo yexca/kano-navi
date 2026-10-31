@@ -13,7 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   PanelBottomClose,
+  PanelBottomOpen,
   PanelRightClose,
+  PanelRightOpen,
   Radio,
   Sparkles,
 } from "lucide-react"
@@ -401,12 +403,48 @@ function ProvenanceLegend({ t }: { t: Translator }) {
 }
 
 /**
+ * The month row's switch for the day details. Its icon points where they
+ * sit: beside the grid on wide screens, below it on narrow ones.
+ */
+export function ScheduleDayToggle({
+  open,
+  disabled,
+  onToggle,
+  t,
+}: {
+  open: boolean
+  disabled: boolean
+  onToggle: () => void
+  t: Translator
+}) {
+  const label = t(open ? "schedule.hideDay" : "schedule.showDay")
+  const [Wide, Narrow] = open
+    ? [PanelRightClose, PanelBottomClose]
+    : [PanelRightOpen, PanelBottomOpen]
+  return (
+    <button
+      type="button"
+      className="round-button month-detail-toggle"
+      disabled={disabled}
+      onClick={onToggle}
+      aria-label={label}
+      title={label}
+    >
+      <Wide className="month-detail-wide" aria-hidden="true" />
+      <Narrow className="month-detail-narrow" aria-hidden="true" />
+    </button>
+  )
+}
+
+/**
  * The month dialog's body: the month grid and, beside it on wide screens
- * (below it on narrow ones), the selected day's full entries until they are
- * hidden. Remount it per month so the selection starts over.
+ * (below it on narrow ones), the selected day's full entries while the day
+ * details are shown. Remount it per month so the selection starts over.
  */
 export function ScheduleMonth({
   monthStart,
+  showDetails,
+  onShowDetails,
   archive,
   isLoading,
   error,
@@ -419,6 +457,8 @@ export function ScheduleMonth({
   t,
 }: {
   monthStart: Date
+  showDetails: boolean
+  onShowDetails: (show: boolean) => void
   archive: ArchiveSnapshot<ScheduleEvent> | null
   isLoading: boolean
   error: Error | null
@@ -451,6 +491,7 @@ export function ScheduleMonth({
 
   const pickDay = (day: Date) => {
     setSelectedKey(localDateKey(day))
+    onShowDetails(true)
     // On narrow screens the details sit below the grid.
     window.requestAnimationFrame?.(() =>
       detailRef.current?.scrollIntoView?.({
@@ -475,39 +516,28 @@ export function ScheduleMonth({
         t={t}
       />
       {archive ? (
-        <div className={`month-layout${selected ? "" : " is-collapsed"}`}>
+        <div className={`month-layout${showDetails ? "" : " is-collapsed"}`}>
           <MonthGrid
             monthStart={monthStart}
             byDay={byDay}
             dayCounts={dayCounts}
             todayKey={todayKey}
-            selectedKey={selectedKey}
+            selectedKey={showDetails ? selectedKey : null}
             onPickDay={pickDay}
             locale={locale}
             now={now}
             t={t}
           />
-          {selected ? (
+          {showDetails && !selected ? (
+            <div className="month-detail" aria-live="polite">
+              <p className="month-detail-empty">{t("schedule.pickDay")}</p>
+            </div>
+          ) : null}
+          {showDetails && selected ? (
             <div className="month-detail" ref={detailRef} aria-live="polite">
               <div className="month-detail-head">
                 <h3>{formatLongDate(selected, locale)}</h3>
                 <span>{t("schedule.weekCount", { count: selectedCount })}</span>
-                <button
-                  type="button"
-                  className="round-button"
-                  onClick={() => setSelectedKey(null)}
-                  aria-label={t("schedule.hideDay")}
-                  title={t("schedule.hideDay")}
-                >
-                  <PanelRightClose
-                    className="month-detail-wide"
-                    aria-hidden="true"
-                  />
-                  <PanelBottomClose
-                    className="month-detail-narrow"
-                    aria-hidden="true"
-                  />
-                </button>
               </div>
               {selectedItems.length ? (
                 <ol className="guide-day-events">

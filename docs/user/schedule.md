@@ -20,8 +20,9 @@ with a link to the original post.
 between months, click or tap a day to list its entries beside the grid (below
 it on phones), and show that date's week on the board. On wide screens an
 entry in the grid opens its link; on phones a tap always shows the day's
-entries. The hide button folds the day's entries away until you pick another
-day.
+entries. The button at the end of the month row folds the day details away
+and brings them back, and picking a day brings them back too; the choice holds
+while you move between months.
 
 ## Calendar Subscription
 
