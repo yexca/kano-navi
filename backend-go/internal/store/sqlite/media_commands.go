@@ -85,6 +85,20 @@ func (s *Store) PendingMedia(ctx context.Context, limit int) ([]PendingMedia, er
 	return out, nil
 }
 
+// RemainingMedia counts the assets PendingMedia would claim that were never
+// checked: images discovered but not yet downloaded. Due retries and
+// revalidations are not counted.
+func (s *Store) RemainingMedia(ctx context.Context) (int, error) {
+	if s == nil || !s.workflowWritable {
+		return 0, ErrSourceWrite
+	}
+	var count int
+	if s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_assets a WHERE a.source IN('x','youtube','bilibili') AND length(a.id)=64 AND a.id NOT GLOB '*[^a-f0-9]*' AND a.status='pending' AND a.last_checked_at IS NULL`).Scan(&count) != nil {
+		return 0, ErrSourceWrite
+	}
+	return count, nil
+}
+
 // Successful writes publish an immutable content-addressed file and metadata
 // under the same source lease. Failures retain a previously ready snapshot.
 func (s *Store) SaveMediaDownload(ctx context.Context, asset PendingMedia, content []byte, mime, etag, lastModified, status, code string) error {

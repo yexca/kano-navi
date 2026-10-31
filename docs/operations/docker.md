@@ -90,6 +90,9 @@ each release are in the [release history](../history/index.md).
 
 Version tags run the Release workflow, which builds once and publishes the
 same image to Docker Hub and GHCR with version, major/minor, and `latest` tags.
+Each tag is a multi-platform image for `linux/amd64` and `linux/arm64`, so
+Docker pulls the variant of the host. The frontend and Go stages run on the
+build machine and Go cross-compiles each platform; no emulation is involved.
 Configure the repository secret `DOCKERHUB_TOKEN` with push access. The Docker
 Hub username defaults to the GitHub repository owner; set the optional
 repository variable `DOCKERHUB_USERNAME` when those accounts differ. GHCR

@@ -106,10 +106,12 @@ jobs:
             org.opencontainers.image.description=Unofficial fan-made status board for Kano Mahoro
 
       # ./Dockerfile compiles the Go backend and the frontend into one image.
+      # Go cross-compiles each platform, so no QEMU emulation is needed.
       - name: Build and push production image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           cache-from: type=gha,scope=kano-release
           cache-to: type=gha,scope=kano-release,mode=max

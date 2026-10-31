@@ -41,7 +41,6 @@
 | `BILIBILI_SESSDATA`             | Empty                | Optional environment-only Bilibili login cookie                   |
 | `SYNC_TIMEOUT_MS`               | `7000`               | Timeout for a source network request                              |
 | `SYNC_REQUEST_DELAY_MS`         | `150`                | Delay between source detail requests                              |
-| `MEDIA_DOWNLOAD_LIMIT`          | `20`                 | Pending images attempted per run                                  |
 | `MEDIA_DOWNLOAD_TIMEOUT_MS`     | `10000`              | Timeout for an image request                                      |
 | `MEDIA_MAX_BYTES`               | `10485760`           | Maximum bytes accepted for one image                              |
 | `SKIP_X`, `SKIP_YOUTUBE`        | `0`                  | Set to `1` to skip that source's step and its timer               |

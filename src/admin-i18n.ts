@@ -908,6 +908,8 @@ export const adminMessages = {
     "admin.runs.problem.partialTitle": "This run finished with problems",
     "admin.runs.problem.someFailed": "{failed} of {attempted} items failed.",
     "admin.runs.problem.partial": "Some items did not finish.",
+    "admin.runs.problem.remaining": ({ remaining }: { remaining: number }) =>
+      `${plural(remaining, "image is", "images are")} still queued; the next run continues with them.`,
     "admin.runs.lastFinished": "Last finished {time}",
     "admin.metric.yes": "Yes",
     "admin.metric.no": "No",
@@ -932,6 +934,9 @@ export const adminMessages = {
     "admin.metric.requested": "Requested",
     "admin.metric.ready": "Ready",
     "admin.metric.unchanged": "Unchanged",
+    "admin.metric.measured": "Measured",
+    "admin.metric.remaining": "Remaining",
+    "admin.metric.stopped": "Stopped by",
     "admin.metric.inspected": "Inspected",
     "admin.metric.changed": "Changed",
     "admin.metric.dropped": "Dropped",
@@ -1022,6 +1027,8 @@ export const adminMessages = {
     "admin.code.youtube_timeout": "YouTube took too long to answer.",
     "admin.code.youtube_rate_limited": "YouTube is limiting requests.",
     "admin.code.youtube_unavailable": "YouTube could not be reached.",
+    "admin.code.youtube_watch_login_required":
+      "YouTube asked this server to sign in (its bot check), so the run read no more watch pages.",
     "admin.code.youtube_feed_http_error":
       "YouTube's RSS feed answered with an error; its 404s can last for hours.",
     "admin.code.youtube_feed_upstream_5xx":
@@ -1868,6 +1875,8 @@ export const adminMessages = {
     "admin.runs.problem.partialTitle": "此次运行已结束，但有问题",
     "admin.runs.problem.someFailed": "{attempted} 项中有 {failed} 项失败。",
     "admin.runs.problem.partial": "部分条目没有完成。",
+    "admin.runs.problem.remaining":
+      "还有 {remaining} 张图片在队列中，下次运行会继续下载。",
     "admin.runs.lastFinished": "上次完成于 {time}",
     "admin.metric.yes": "是",
     "admin.metric.no": "否",
@@ -1885,6 +1894,9 @@ export const adminMessages = {
     "admin.metric.requested": "请求",
     "admin.metric.ready": "就绪",
     "admin.metric.unchanged": "未变化",
+    "admin.metric.measured": "已测量",
+    "admin.metric.remaining": "剩余",
+    "admin.metric.stopped": "停止于",
     "admin.metric.inspected": "已检查",
     "admin.metric.changed": "有变化",
     "admin.metric.dropped": "已丢弃",
@@ -1952,6 +1964,8 @@ export const adminMessages = {
     "admin.code.youtube_timeout": "YouTube 响应超时。",
     "admin.code.youtube_rate_limited": "YouTube 正在限流。",
     "admin.code.youtube_unavailable": "无法访问 YouTube。",
+    "admin.code.youtube_watch_login_required":
+      "YouTube 要求此服务器登录（机器人验证），本次运行不再读取视频页面。",
     "admin.code.youtube_feed_http_error":
       "YouTube RSS 订阅源返回了错误；它的 404 可能持续数小时。",
     "admin.code.youtube_feed_upstream_5xx":

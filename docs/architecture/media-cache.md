@@ -91,14 +91,15 @@ served as active same-origin content.
    `internal/store/sqlite/source_write.go`).
 2. The candidate is deduplicated by normalized source URL, recorded as
    `pending`, and linked to its owner. Registration does not download bytes.
-3. The media step claims at most 20 assets during a synchronization.
-   Never-checked assets come first, ordered by their newest owner (a video's
-   scheduled or published time, or the publication time of the post or
-   schedule post that links it), so thumbnails the board shows first are not
-   left pending by a same-synchronization tie. Already checked assets and
-   assets without a dated owner follow by creation or last-check time. It
-   downloads within the [download bounds](#download-boundary), writes the
-   bytes through a root confined to `data/` into
+3. The media step works through the queue in [batches](#step-bounds) of 20
+   assets until it is empty. Never-checked assets come first, ordered by their
+   newest owner (a video's scheduled or published time, or the publication
+   time of the post or schedule post that links it), so thumbnails the board
+   shows first are not left pending by a same-synchronization tie. Already
+   checked assets and assets without a dated owner follow by creation or
+   last-check time. It downloads within the
+   [download bounds](#download-boundary), writes the bytes through a root
+   confined to `data/` into
    `<source>/sha256/<first-two>/<content-sha256>.<extension>`, reuses an
    existing file there only when its hash agrees, and records the row as
    `ready` with the width and height its header declares
@@ -132,6 +133,23 @@ served as active same-origin content.
    and every video linked to the asset records the replaced thumbnail in
    `video_revisions`. An operator can pin such a version, or the file of an
    earlier thumbnail URL, from the video's history.
+
+### Step Bounds
+
+One media step attempts at most 500 files and starts no new file after five
+minutes, which leaves the rest of the run's 20 minutes to the steps after it.
+Each asset is attempted at most once per step, so an asset that stays due
+after its check cannot repeat; a batch that holds no asset new to the step
+ends it. A `media_rate_limited` answer ends the step at once. The bounds are
+constants (`StepBounds` in `internal/mediadownload`).
+
+The step result records `attempted`, `ready`, `unchanged`, `failed`,
+`measured` and `remaining`: the never-checked assets still queued when the
+step ends. When a bound ends the step, `stopped` names it
+(`media_file_cap`, `media_time_budget`, `media_rate_limited` or
+`media_no_progress`). The step is `partial` while `remaining` is above zero or
+any file failed or was missing, and the next synchronization continues with
+the queue, so a history window's images arrive over a few runs.
 
 ### Download Boundary
 

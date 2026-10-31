@@ -5,17 +5,17 @@
 > Startup adds the `source_schedules.chain_json` and
 > `workflow_runs.source_chain_json` columns; nothing is migrated.
 >
-> - Each X and YouTube timer now reads through a method chain. Until you save
->   one on the Sources page, timers read as before: X tries the FxTwitter
->   timeline, then the profile page, and leaves the X API off; YouTube tries
->   the Data API (with a key), the RSS feed, then the uploads tab.
+> - Each X and YouTube timer reads through a method chain. Until one is saved
+>   on the Sources page, X tries the FxTwitter timeline, then the profile page,
+>   and leaves the X API off; YouTube tries the Data API (with a key), the RSS
+>   feed, then the uploads tab.
 > - To let X fall back to the official API during FxTwitter outages, enable
 >   `api` in the X chain. It needs `X_API_BEARER_TOKEN` and runs only after
 >   three consecutive timeline failures of an account, for at most 100 posts
 >   a Japan day; both are settings in the X API panel of the Sources page.
 > - `GET /api/admin/sources` adds `chain` to each schedule, and
 >   `PUT /api/admin/sources/{source}/schedule` accepts it.
-> - Manual X API fetches now read quoted statuses and skip reposts, and their
+> - Manual X API fetches read quoted statuses and skip reposts, and their
 >   posts count toward the X API daily usage.
 > - `POST /api/admin/runs` with `kind: "fetch"` requires a `method`
 >   (`timeline` or `api` for X, `api` or `rss` for YouTube) and accepts
@@ -28,8 +28,8 @@
 > - Runs stored with a fetch window from an earlier version keep reading in
 >   the run history; running one again fails its fetch step with "this fetch
 >   uses a retired selection; start a new fetch".
-> - A manual fetch whose method fails now fails the run, and the steps after
->   it do not run.
+> - A manual fetch whose method fails fails the run, and the steps after it do
+>   not run.
 
 <details>
 <summary><strong>Operator console</strong></summary>
@@ -61,6 +61,8 @@
   its progressive confirmation.
 - Run results name the method that served each X account or the YouTube
   channel and every method tried with its code.
+- A run whose media step left images queued explains how many remain, and the
+  step's counts list them as Remaining with the bound that stopped it.
 
 </details>
 
@@ -73,13 +75,19 @@
 - A YouTube Data API fetch checks the details of the videos it lists that are
   not stored yet (all of them with refresh) through `videos.list`, under the
   recent step's rules: length, stream or premiere verdict, broadcast times
-  and status, reservation events and localized titles. Older uploads beyond
-  the regular listing get them too: a whole-playlist fetch reads the
-  channel's live and long-form playlists to their end (up to 1,000 entries
-  each, once per run) to tell old streams from premieres. It spends about two
-  quota units per 50 new uploads, plus one per 50 entries of each of those
-  playlists when an ended broadcast needs them; a failed details call leaves
-  the fetch partial and keeps what it listed.
+  and status, reservation events and localized titles. The detail queue is
+  checked in batches of 50, at most five calls per run, so a 200-video count
+  window is classified in one run. A failed call records its controlled
+  `youtube_api_` code and ends the lookup; the IDs it would have covered fall
+  back to watch pages. Older uploads beyond the regular listing get them too:
+  a whole-playlist fetch reads the channel's live and long-form playlists to
+  their end (up to 1,000 entries each, once per run) to tell old streams from
+  premieres. It spends about two quota units per 50 new uploads, plus one per
+  50 entries of each format playlist when an ended broadcast needs them; a
+  failed details call leaves the fetch partial and keeps what it listed.
+- A watch page that asks the server to sign in (YouTube's bot check) records
+  `youtube_watch_login_required` once and stops further watch page requests
+  for that run, in recent sync and the live-status probe alike.
 - An X API fetch can read each account's newest posts, and leaves stored posts
   as they are, like a timeline fetch, so their extraction fingerprints stay.
 - Timed reads follow each source's method chain and fall to the next method
@@ -91,5 +99,20 @@
   expanded links, images, quotes and counters.
 - Turning the Data API off in the YouTube chain stops every Data API call of
   timed reads, the live-status probe included; watch pages take over.
+- The media step downloads the whole image queue in batches, up to 500 files
+  or five minutes per run. A 429 answer ends the step early. The step records
+  how many never-checked images remain and which bound stopped it, and finishes
+  partial while images remain. `MEDIA_DOWNLOAD_LIMIT` is removed from
+  `.env.example` and the configuration page.
+
+</details>
+
+<details>
+<summary><strong>Runtime and development</strong></summary>
+
+- Release images are published for `linux/arm64` as well as `linux/amd64`
+  under the same tags, so ARM hosts such as a Raspberry Pi 4/5 or an Apple
+  silicon Mac pull a native image. The Dockerfiles cross-compile the Go
+  backend for the target platform.
 
 </details>
