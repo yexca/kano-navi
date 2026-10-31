@@ -163,6 +163,9 @@
   remembering the choice; the month dialogs are larger on wide screens.
 - Posts on X always lists the eight newest posts of each account, so the
   account filter fills the wall for a quiet account too.
+- A quote of one of the board's own posts shows that post's translation in
+  the content language, with its own **AI** switch at the end of the quote's
+  header line.
 - Switching weeks in the weekly schedule keeps the current week dimmed until
   the next one is ready and then changes once, instead of passing through an
   empty grid and a loading bar; the schedule-image slot keeps its size on wide

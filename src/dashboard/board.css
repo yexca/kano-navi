@@ -2677,6 +2677,12 @@ a.month-event:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* The clamp may hide the quote's last word, so its switch ends the head. */
+.post-quote-head .translation-mark {
+  align-self: center;
+  margin: 0 0 0 auto;
+}
+
 .post-quote-text {
   margin: 0;
   font-size: 13.5px;

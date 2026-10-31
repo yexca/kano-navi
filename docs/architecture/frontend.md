@@ -154,7 +154,10 @@ anywhere except its thumbnails, which open the image viewer with the quote's
 images. Read more also appears when the clamp hides quoted wording; the full
 post dialog and the archive show the whole quote with larger thumbnails. An
 unavailable quote shows a localized "Quoted post unavailable" placeholder
-linking to x.com. Quoted wording is shown as written, without translations.
+linking to x.com. Quoted wording follows the content language like the
+post's own: a quote of a tracked account's post shows that post's
+translation with its own translation switch, and any other quote shows its
+wording as written.
 A quote an operator hid is absent from the snapshot, so the board shows the
 post without it.
 

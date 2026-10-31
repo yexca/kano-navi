@@ -142,7 +142,7 @@ func publicQuote(q *sqlite.PostQuote) any {
 		}
 		return s
 	}
-	return map[string]any{"id": q.ID, "authorHandle": text(q.AuthorHandle), "authorName": text(q.AuthorName), "text": text(q.Text), "publishedAt": text(q.PublishedAt), "url": q.URL, "unavailable": q.Unavailable, "media": publicMedia(q.Media)}
+	return map[string]any{"id": q.ID, "authorHandle": text(q.AuthorHandle), "authorName": text(q.AuthorName), "text": text(q.Text), "publishedAt": text(q.PublishedAt), "url": q.URL, "unavailable": q.Unavailable, "media": publicMedia(q.Media), "translations": publicTranslations(q.Translations), "sourceLanguage": value(q.Translations.SourceLanguage)}
 }
 func publicVideo(v sqlite.Video) map[string]any {
 	return map[string]any{"id": v.ID, "source": v.Source, "title": v.Title, "publishedAt": value(v.PublishedAt), "scheduledAt": value(v.ScheduledAt), "url": v.URL, "thumbnailUrl": value(v.ThumbnailURL), "kind": value(v.Kind), "isUpcoming": v.IsUpcoming, "endsAt": value(v.EndsAt), "thumbnailId": value(v.ThumbnailID), "thumbnailStatus": v.ThumbnailStatus, "thumbnailSourceUrl": value(v.ThumbnailSourceURL), "isCancelled": v.IsCancelled, "liveStatus": value(v.LiveStatus), "durationSeconds": valueInt(v.DurationSeconds), "isShort": valueBool(v.IsShort), "translations": publicTranslations(v.Translations), "sourceLanguage": value(v.Translations.SourceLanguage), "alternates": publicAlternates(v.Alternates)}

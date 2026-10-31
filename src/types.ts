@@ -71,9 +71,10 @@ export interface Post {
 }
 
 /**
- * A quoted X status. Its wording stays untranslated, and media lists only
- * ready local images. An unavailable quote (deleted or withheld) has only
- * its id and x.com url.
+ * A quoted X status. Its translations are those of the stored post with the
+ * same id, empty for any other status, and media lists only ready local
+ * images. An unavailable quote (deleted or withheld) has only its id and
+ * x.com url.
  */
 export interface PostQuote {
   id: string
@@ -84,6 +85,8 @@ export interface PostQuote {
   url: string
   unavailable: boolean
   media: MediaItem[]
+  translations?: Translations
+  sourceLanguage?: string | null
 }
 
 export interface ScheduleEvent {

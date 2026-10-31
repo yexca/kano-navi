@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react"
 
+import type { TranslatedTextState } from "@/components/translated-text"
 import {
   TranslationToggle,
   useTranslatedText,
@@ -98,10 +99,12 @@ const QUOTE_THUMBS = 3
 /**
  * The status a post quotes, nested in the note: author, time, wording and
  * small thumbnails. The card follows the quoted post's x.com link, while its
- * thumbnails open the image viewer. Quoted wording is shown as written.
+ * thumbnails and translation switch keep their own actions. A quote of a
+ * tracked account's post shows that post's translation.
  */
 function QuoteCard({
   quote,
+  wording,
   absoluteTime,
   clamp,
   textRef,
@@ -111,6 +114,8 @@ function QuoteCard({
   onOpenMedia,
 }: {
   quote: PostQuote
+  /** The note keeps the quote's switch, shared by the board and the dialog. */
+  wording: TranslatedTextState
   absoluteTime: boolean
   /** The board clamps the wording; the full post shows all of it. */
   clamp: boolean
@@ -163,13 +168,15 @@ function QuoteCard({
             </time>
           </>
         ) : null}
+        <TranslationToggle state={wording} t={t} />
       </p>
       {quote.text ? (
         <p
           ref={textRef}
           className={`post-quote-text${clamp ? " is-clamped" : ""}`}
+          lang={wording.lang}
         >
-          {quote.text}
+          {wording.text}
         </p>
       ) : null}
       {shown.length ? (
@@ -275,6 +282,11 @@ function PostNote({
     post.translations,
     post.sourceLanguage,
   )
+  const quoteWording = useTranslatedText(
+    post.quote?.text || "",
+    post.quote?.translations,
+    post.quote?.sourceLanguage,
+  )
   const textRef = useRef<HTMLParagraphElement>(null)
   const quoteRef = useRef<HTMLParagraphElement>(null)
   const [overflows, setOverflows] = useState(false)
@@ -298,11 +310,12 @@ function PostNote({
     const observer = new ResizeObserver(check)
     for (const element of elements) observer.observe(element)
     return () => observer.disconnect()
-  }, [clamp, wording.text, post.quote?.text])
+  }, [clamp, wording.text, quoteWording.text])
   const quote = (full: boolean) =>
     post.quote ? (
       <QuoteCard
         quote={post.quote}
+        wording={quoteWording}
         absoluteTime={absoluteTime}
         clamp={clamp && !full}
         textRef={full ? undefined : quoteRef}
