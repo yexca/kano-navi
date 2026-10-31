@@ -2,6 +2,7 @@
 // Every external host here is listed in scripts/privacy-allowlist.json.
 
 export const POST_WINDOW_DAYS = 3
+export const VIDEO_WINDOW_DAYS = 7
 
 export const fallbackProfile = {
   displayName: "鹿乃まほろ",

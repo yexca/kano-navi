@@ -13,7 +13,9 @@ profile, summary, posts, events, videos, focus, timeline, resources, schedule
 assets, media status, and metadata. Posts are the newest 100 published within
 the window plus, however old, the eight newest of each account; MCP
 `dashboard_read` and `posts_list` read the same list. `counts.posts` counts
-the window only.
+the window only. `counts.videos` counts public videos whose publication time is
+within the most recent seven days; it is independent of the bounded homepage
+video list.
 The summary contains `nextEvent`, `nextStream`, `latestVideo`, `latestPost`,
 and counts; `latestPost` survives an empty requested window. `latestVideo` is
 the stage's fallback: the newest non-upcoming video that is not a Short,

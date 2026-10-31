@@ -355,6 +355,10 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 	if err != nil {
 		return nil, err
 	}
+	videoCount, err := s.queryRecentVideoCount(ctx, now)
+	if err != nil {
+		return nil, err
+	}
 	probe, err := s.LiveProbeSettings(ctx)
 	if err != nil {
 		return nil, err
@@ -561,7 +565,7 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 	}
 	return &Dashboard{
 		Profile: profile,
-		Summary: DashboardSummary{NextEvent: nextEvent, NextStream: nextStream, LatestVideo: latestVideo, LatestPost: latest, Counts: DashboardCounts{Posts: postCount, Events: totalEvents, UpcomingEvents: upcomingEvents, Videos: int64(len(videos)), Resources: int64(len(resources))}},
+		Summary: DashboardSummary{NextEvent: nextEvent, NextStream: nextStream, LatestVideo: latestVideo, LatestPost: latest, Counts: DashboardCounts{Posts: postCount, Events: totalEvents, UpcomingEvents: upcomingEvents, Videos: videoCount, Resources: int64(len(resources))}},
 		Posts:   posts, Events: events, Videos: videos, Focus: focus, Timeline: timeline, Resources: resources, Assets: assets, ScheduleImages: filterReadyAssets(calendarAssets), ProfileMedia: profileMedia,
 		Meta: DashboardMeta{FetchedAt: fetchedAt, SourceFetchedAt: sourceFetchedAt, LastSync: lastSync, PostWindowDays: days, EventWindow: EventWindow{From: from, To: to, Paginated: true}, GeneratedAt: now.UTC().Format("2006-01-02T15:04:05.000Z"), MediaCache: mediaCache, Revision: revision, FeaturedVideoID: featuredID, XAccounts: xAccounts},
 	}, nil
@@ -630,6 +634,21 @@ func (s *Store) queryLatestPost(ctx context.Context) (*postRow, error) {
 func (s *Store) queryPostCount(ctx context.Context, since string) (int64, error) {
 	var count int64
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM posts WHERE julianday(published_at) >= julianday(?)`, since).Scan(&count); err != nil {
+		return 0, dbErr(err)
+	}
+	return count, nil
+}
+
+const dashboardVideoCountWindowDays = 7
+
+// queryRecentVideoCount counts public videos published in the profile card's
+// recent window. It stays separate from queryVideos, whose bounded result is
+// the homepage's display pool.
+func (s *Store) queryRecentVideoCount(ctx context.Context, now time.Time) (int64, error) {
+	since := now.Add(-time.Duration(dashboardVideoCountWindowDays) * 24 * time.Hour).UTC().Format(time.RFC3339Nano)
+	until := now.UTC().Format(time.RFC3339Nano)
+	var count int64
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM videos WHERE `+publicVideoScope+` AND published_at IS NOT NULL AND julianday(published_at) >= julianday(?) AND julianday(published_at) <= julianday(?)`, since, until).Scan(&count); err != nil {
 		return 0, dbErr(err)
 	}
 	return count, nil

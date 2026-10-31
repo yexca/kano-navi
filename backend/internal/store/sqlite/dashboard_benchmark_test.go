@@ -26,7 +26,7 @@ func TestDashboardSynthetic10kCollectionsStayBounded(t *testing.T) {
 	if len(dashboard.Videos) > 61 {
 		t.Fatalf("videos=%d, want at most 61", len(dashboard.Videos))
 	}
-	if dashboard.Summary.Counts.Posts != 10000 || dashboard.Summary.Counts.Events != 10000 || dashboard.Summary.Counts.Videos != int64(len(dashboard.Videos)) {
+	if dashboard.Summary.Counts.Posts != 10000 || dashboard.Summary.Counts.Events != 10000 || dashboard.Summary.Counts.Videos != 10000 {
 		t.Fatalf("counts=%+v payload posts=%d events=%d videos=%d", dashboard.Summary.Counts, len(dashboard.Posts), len(dashboard.Events), len(dashboard.Videos))
 	}
 }

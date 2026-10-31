@@ -17,7 +17,8 @@ go test ./internal/store/sqlite -run '^$' -bench BenchmarkDashboardSynthetic10k
 The fixture in
 `backend/internal/store/sqlite/dashboard_benchmark_test.go` writes 10,000
 synthetic posts, events and videos into a temporary snapshot and times the
-three-day dashboard projection. It uses no seed, provider or workflow
+dashboard projection with its three-day post window and seven-day video count
+window. It uses no seed, provider or workflow
 configuration, no source or model calls and no operator data, and writes
 nothing into the repository.
 
@@ -25,8 +26,9 @@ nothing into the repository.
 
 - `TestDashboardSynthetic10kCollectionsStayBounded`, on the same fixture,
   keeps the dashboard payload bounded (at most 100 posts, 130 events and 61
-  videos) while its post and event counts still report the full totals. Full
-  calendar and post history is available through bounded pages; see
+  videos) while its post and event counts report the full totals and its video
+  count reports the public videos published in the seven-day video window.
+  Full calendar, post and video history is available through bounded pages; see
   [Bounded public archives](../architecture/public-api.md#bounded-public-archives).
 - The latest source wording of a schedule image is read through the
   `posts_url_published_at_idx` index on `posts(url, published_at DESC)`,

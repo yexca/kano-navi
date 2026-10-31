@@ -13,7 +13,7 @@ import { useAppSettings } from "@/app-settings"
 import { MediaDialog, stepIndex } from "@/site/media-dialog"
 import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
 import { BilibiliLogo, XLogo, YouTubeLogo } from "@/site/links"
-import { POST_WINDOW_DAYS } from "./content"
+import { POST_WINDOW_DAYS, VIDEO_WINDOW_DAYS } from "./content"
 import { featuredVideoIdOf } from "./derive-dashboard"
 import { syncStateFor } from "./freshness"
 import {
@@ -288,6 +288,7 @@ export function DashboardApp() {
           resources={dashboard.resources}
           counts={counts}
           postWindowDays={windowDays}
+          videoWindowDays={VIDEO_WINDOW_DAYS}
           syncState={syncState}
           isLoading={isLoading}
           isRefreshing={isRefreshing}

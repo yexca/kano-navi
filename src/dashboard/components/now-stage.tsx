@@ -456,6 +456,7 @@ function ProfileCard({
   resources,
   counts,
   postWindowDays,
+  videoWindowDays,
   syncState,
   isRefreshing,
   onRefresh,
@@ -465,6 +466,7 @@ function ProfileCard({
   resources: Dashboard["resources"]
   counts: { posts: number; upcomingEvents: number; videos: number }
   postWindowDays: number
+  videoWindowDays: number
   syncState: SyncState
   isRefreshing: boolean
   onRefresh: () => void
@@ -534,7 +536,7 @@ function ProfileCard({
             <dd>{counts.posts}</dd>
           </div>
           <div>
-            <dt>{t("stats.videos")}</dt>
+            <dt>{t("stats.videos", { days: videoWindowDays })}</dt>
             <dd>{counts.videos}</dd>
           </div>
         </dl>
@@ -607,6 +609,7 @@ export function NowStage(props: {
   resources: Dashboard["resources"]
   counts: { posts: number; upcomingEvents: number; videos: number }
   postWindowDays: number
+  videoWindowDays: number
   syncState: SyncState
   isLoading: boolean
   isRefreshing: boolean

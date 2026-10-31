@@ -257,6 +257,24 @@ func TestDashboardPostsStayBoundedWhileCountsRemainAccurate(t *testing.T) {
 	}
 }
 
+func TestDashboardVideoCountUsesRecentSevenDayWindow(t *testing.T) {
+	handler := dashboardHandler(t, func(path string) {
+		testutil.Exec(t, path, `INSERT INTO videos (id,source,title,published_at,url,kind,is_upcoming) VALUES
+			('video-recent','youtube','Recent','2026-10-10T00:00:00Z','https://www.youtube.com/watch?v=video-recent','VIDEO',0),
+			('video-boundary','youtube','Boundary','2026-10-03T18:00:00Z','https://www.youtube.com/watch?v=video-boundary','VIDEO',0),
+			('video-old','youtube','Old','2026-10-03T17:59:59Z','https://www.youtube.com/watch?v=video-old','VIDEO',0),
+			('video-future','youtube','Future','2026-10-11T00:00:00Z','https://www.youtube.com/watch?v=video-future','VIDEO',0)`)
+	})
+	status, _, payload, body := dashboardPayload(t, handler, "/api/dashboard")
+	if status != http.StatusOK {
+		t.Fatalf("status=%d body=%s", status, body)
+	}
+	counts := payload["summary"].(map[string]any)["counts"].(map[string]any)
+	if counts["videos"] != float64(2) {
+		t.Fatalf("video count=%v, want 2", counts["videos"])
+	}
+}
+
 func TestDashboardUsesYouTubeStreamIdentityForAssociationAndCancellation(t *testing.T) {
 	handler := dashboardHandler(t, func(path string) {
 		testutil.Exec(t, path, `

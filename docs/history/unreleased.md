@@ -196,6 +196,8 @@
   empty grid and a loading bar.
 - The weekly schedule shows its schedule-image strip only for a week that
   has a schedule image, without a "No schedule image for this week" note.
+- The board's video count covers the last seven days, the same window as its
+  post count.
 - The weekly schedule, Posts on X and the month dialogs drop their one-line
   notes under the title, and the video archive names bilibili beside YouTube.
 - Past videos shows the month as a grid of covers with the title below each,
