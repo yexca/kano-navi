@@ -75,8 +75,14 @@
 - The Videos page lists videos as compact rows with a search field and All,
   Upcoming, Bilibili and Missing translation tabs; uploads merged into
   another video appear on that video's row. Clicking a title opens the
-  correction dialog, which previews the chosen thumbnail and keeps Save in
+  correction dialog, which previews the board's row as the draft leaves it,
+  puts the corrections beside the merge and the platform's history, marks
+  each corrected field with a reset to the platform value, and keeps Save in
   its footer.
+- The Review queue shows each schedule image and suspected cancellation as a
+  decision card: a state-coloured edge, the model's verdict with a confidence
+  bar and its reason or evidence, and the note and decision buttons along the
+  bottom.
 - `GET /api/admin/videos` accepts `search`, `merge` and `translation`, and
   `GET /api/admin/events` accepts `provenance=unconfirmed` and
   `deleted=only`.
@@ -176,6 +182,8 @@
   screens.
 - The weekly schedule, Posts on X and the month dialogs drop their one-line
   notes under the title, and the video archive names bilibili beside YouTube.
+- Past videos shows the month as a grid of covers with the title below each,
+  then its Japan date, time and kind.
 - In the month view, a click anywhere in a day's cell opens its details, and
   a button hides them so the grid takes the full width. On phones, tapping a
   day with dots shows its entries instead of opening an entry's link, and the

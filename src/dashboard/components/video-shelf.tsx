@@ -779,6 +779,60 @@ export function VideoShelf({
   )
 }
 
+/** An archive card: the cover above the title, then the Japan time and kind. */
+function ArchiveCard({
+  video,
+  locale,
+  now,
+  t,
+}: {
+  video: Video
+  locale: Locale
+  now: number
+  t: Translator
+}) {
+  const phase = videoPhase(video, now)
+  const time = videoTime(video)
+  const title = cleanVideoTitle(video.title)
+  const links = videoLinks(video, locale, now)
+  return (
+    <li className={`archive-card is-${phase}`}>
+      <div className="archive-card-link link-card" onClick={followCardLink}>
+        <Thumb
+          url={video.thumbnailUrl}
+          badge={phase === "upcoming" ? "upcoming" : null}
+          seconds={video.durationSeconds}
+          links={links}
+          t={t}
+        />
+        <TranslatedTitle
+          className="archive-card-title"
+          title={title}
+          translations={video.translations}
+          href={links[0].url}
+          t={t}
+        />
+      </div>
+      <p className="video-meta">
+        {time ? (
+          <time
+            dateTime={time}
+            title={`${formatStamp(time)} ${t("common.timezoneShort")}`}
+          >
+            {formatJapanDay(time, locale)} {formatJapanTime(time)}{" "}
+            {t("common.timezoneShort")}
+          </time>
+        ) : null}
+        <PhaseTag phase={phase} video={video} t={t} />
+        <LengthNote video={video} t={t} />
+        {links.length > 1 ? (
+          <PlatformLinks links={links} title={title} variant="chip" t={t} />
+        ) : null}
+      </p>
+    </li>
+  )
+}
+
 /** The video archive dialog's body: one month of stored videos, newest first. */
 export function VideoArchive({
   archive,
@@ -815,12 +869,11 @@ export function VideoArchive({
         t={t}
       />
       {archive?.items.length ? (
-        <ol className="video-list archive-videos">
+        <ol className="archive-videos">
           {archive.items.map((video) => (
-            <VideoRow
+            <ArchiveCard
               key={video.id}
               video={video}
-              absoluteTime
               locale={locale}
               now={now}
               t={t}

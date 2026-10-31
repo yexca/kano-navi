@@ -3256,14 +3256,83 @@ a.month-event:hover {
   padding-top: 8px;
 }
 
+/*
+ * The video archive: a grid of cards in the archive's newest-first order,
+ * each the cover above the title, then the Japan date, time and kind.
+ */
 .archive-videos {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
+  gap: 28px 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-@media (max-width: 900px) {
+.archive-card {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 8px;
+}
+
+.archive-card-link {
+  display: grid;
+  gap: 10px;
+}
+
+.archive-card .video-thumb {
+  box-shadow: var(--shadow-sm);
+}
+
+.archive-card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  transition: color 160ms ease;
+}
+
+/* A translatable title keeps the switch after its clamped wording. */
+.archive-card-title.translated-title {
+  display: flex;
+}
+
+.archive-card-link:hover .archive-card-title,
+.archive-card.is-upcoming .archive-card-title,
+.archive-card.is-live .archive-card-title {
+  color: var(--berry);
+}
+
+.archive-card.is-cancelled .video-thumb {
+  opacity: 0.55;
+}
+
+.archive-card.is-cancelled .archive-card-title {
+  color: var(--soft);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* Phones: two columns of smaller covers. */
+@media (max-width: 640px) {
   .archive-videos {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px 12px;
+  }
+
+  .archive-card-title {
+    font-size: 13px;
+  }
+
+  .archive-card .video-thumb-missing {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: 6px;
+    font-size: 10px;
+    text-align: center;
   }
 }
 

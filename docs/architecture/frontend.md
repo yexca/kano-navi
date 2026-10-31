@@ -189,8 +189,23 @@ tab lists them on their own. Each row shows the
 thumbnail, the title, which opens the correction dialog, the platform, time,
 kind, length and format, its badges and merge line, the translation chips,
 and the feature, correct and open actions. The correction dialog
-(`video-editor.tsx`) previews the chosen thumbnail beside the facts and
-fields and keeps refresh, cancel and save in its footer.
+(`video-editor.tsx`) opens with a preview of the board's row as the draft
+leaves it (the chosen thumbnail, title, source, kind, format and the number
+of corrections) and the page-read facts. Below, the corrections (title, kind,
+format and thumbnail files) sit beside the platform's record (the merge
+section and what the platform replaced); one column on narrow screens. A
+corrected field is marked and offers a reset to the platform value beside its
+label. Refresh, cancel and save stay in the footer.
+
+The Review queue (`src/admin/views/review.tsx`) has tabs for schedule images,
+suspected cancellations and failed posts. An image or a suspected
+cancellation is a decision card: its left edge takes the state colour (honey
+while it needs a decision, leaf once the image reaches the board, neutral
+when rejected), the image or the entry's date sits on the left, and the body
+shows the badges and source link, the model's verdict with a confidence bar
+and its reason or evidence, the facts, and a bottom bar with the note field
+and the decision buttons. A cancellation needs a reason before it can be
+confirmed.
 
 The console's Sources page (`src/admin/views/sources.tsx`) has a row of
 tabs for X, YouTube and Bilibili, each naming whether its timer runs here,
@@ -471,7 +486,10 @@ and places it, in order, under the column that ends highest
 while the cells stay in post order for keyboard and screen readers; it
 re-measures when the wall or a post resizes. A container query on the dialog
 head hides the layout switch while the wall is narrower than two masonry
-columns, where both layouts are one column. An image viewer opened from the
+columns, where both layouts are one column. The video archive lists the
+loaded videos in the API's newest-first order as a grid of cards, each the
+cover above the title, then the Japan date and time, the phase or kind tag
+and platform links; two columns on phones. An image viewer opened from the
 post archive stacks above it; Escape closes the topmost dialog and focus
 returns to its opener.
 Images match their applicable inclusive period, without an updated-at fallback.
