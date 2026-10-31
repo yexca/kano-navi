@@ -176,6 +176,7 @@ function QuoteCard({
         <div className="post-quote-media">
           {shown.map((item, index) => (
             <button
+              className="media-opener"
               type="button"
               key={item.id || item.url}
               onClick={() => onOpenMedia(media, index)}
@@ -348,6 +349,7 @@ function PostNote({
       {media.slice(0, 4).map((item, index) =>
         item.url ? (
           <button
+            className="media-opener"
             type="button"
             key={item.id || item.url}
             onClick={() => onOpenMedia(ready, ready.indexOf(item))}

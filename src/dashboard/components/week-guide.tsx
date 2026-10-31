@@ -755,7 +755,7 @@ export function WeekGuide({
               <>
                 <button
                   type="button"
-                  className="guide-image-thumb"
+                  className="guide-image-thumb media-opener"
                   onClick={() => onOpenImage(scheduleImage)}
                   aria-label={t("schedule.imageView")}
                 >

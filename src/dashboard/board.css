@@ -2709,7 +2709,6 @@ a.month-event:hover {
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--paper);
-  cursor: zoom-in;
 }
 
 .post-quote-media button:focus-visible {

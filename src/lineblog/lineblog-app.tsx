@@ -385,7 +385,7 @@ function ArchiveImage({
   return (
     <button
       type="button"
-      className="lb-picture"
+      className="lb-picture media-opener"
       onClick={() => context.openImage(image)}
       aria-label={alt ?? t("lineblog.openImage")}
     >

@@ -86,6 +86,7 @@ export function MilestoneMedia({
         <button
           key={item.id}
           type="button"
+          className="media-opener"
           onClick={() => onOpen(index)}
           aria-label={t("history.openImage", {
             title: localized(item.title, locale),
@@ -127,7 +128,7 @@ export function GalleryTile({
     <figure className="gallery-tile">
       <button
         type="button"
-        className="gallery-tile-image"
+        className="gallery-tile-image media-opener"
         onClick={onOpen}
         aria-label={t("history.openImage", {
           title: localized(item.title, locale),

@@ -4,9 +4,14 @@ import { ChevronLeft, ChevronRight, X } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 
+/** Parts of the viewer a click keeps open; a click anywhere else closes it. */
+const KEEP_OPEN =
+  "img, a, button, .media-dialog-bar, .media-dialog-details, .history-missing"
+
 /**
- * Native modal image viewer shared by the public pages. Escape closes it,
- * arrow keys page through a set, and focus returns to the opener.
+ * Native modal image viewer shared by the public pages. Escape, the close
+ * button in the screen corner and a click outside the image and its controls
+ * close it; arrow keys page through a set, and focus returns to the opener.
  */
 export function MediaDialog<T>({
   items,
@@ -51,14 +56,14 @@ export function MediaDialog<T>({
   return (
     <dialog
       ref={dialogRef}
-      className={`media-dialog${renderDetails ? " has-details" : ""}`}
+      className={`media-dialog${renderDetails ? " has-details" : ""}${many ? " has-steps" : ""}`}
       aria-label={label}
       onCancel={(event) => {
         event.preventDefault()
         onClose()
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose()
+        if (!(event.target as Element).closest(KEEP_OPEN)) onClose()
       }}
       onKeyDown={(event) => {
         if (!many) return
@@ -76,41 +81,40 @@ export function MediaDialog<T>({
         {renderDetails ? (
           <div className="media-dialog-details">{renderDetails(item)}</div>
         ) : null}
-        <div className="media-dialog-bar">
-          {many ? (
-            <>
-              <button
-                type="button"
-                className="round-button"
-                onClick={() => onStep(-1)}
-                aria-label={t("feed.previousImage")}
-              >
-                <ChevronLeft aria-hidden="true" />
-              </button>
-              <span className="media-dialog-count" aria-live="polite">
-                {index + 1} / {items.length}
-              </span>
-              <button
-                type="button"
-                className="round-button"
-                onClick={() => onStep(1)}
-                aria-label={t("feed.nextImage")}
-              >
-                <ChevronRight aria-hidden="true" />
-              </button>
-            </>
-          ) : null}
-          <button
-            ref={closeRef}
-            type="button"
-            className="round-button media-dialog-close"
-            onClick={onClose}
-            aria-label={t("common.close")}
-          >
-            <X aria-hidden="true" />
-          </button>
-        </div>
+        {many ? (
+          <div className="media-dialog-bar">
+            <button
+              type="button"
+              className="round-button"
+              onClick={() => onStep(-1)}
+              aria-label={t("feed.previousImage")}
+            >
+              <ChevronLeft aria-hidden="true" />
+            </button>
+            <span className="media-dialog-count" aria-live="polite">
+              {index + 1} / {items.length}
+            </span>
+            <button
+              type="button"
+              className="round-button"
+              onClick={() => onStep(1)}
+              aria-label={t("feed.nextImage")}
+            >
+              <ChevronRight aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </div>
+      <button
+        ref={closeRef}
+        type="button"
+        className="round-button media-dialog-close"
+        onClick={onClose}
+        aria-label={t("common.close")}
+        title={t("common.close")}
+      >
+        <X aria-hidden="true" />
+      </button>
     </dialog>
   )
 }

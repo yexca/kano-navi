@@ -138,6 +138,10 @@
   a button hides them so the grid takes the full width. On phones, tapping a
   day with dots shows its entries instead of opening an entry's link, and the
   Month view button keeps its label.
+- Images on the board, the Journey page and the LINE BLOG show the same zoom
+  cursor, and the image viewer keeps its close button in the top-right corner
+  of the screen and closes on a click anywhere outside the image, its arrows
+  and its details.
 
 </details>
 

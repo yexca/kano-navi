@@ -35,7 +35,10 @@ public pages share `src/site/`: `site-shell.tsx` (header with page navigation an
 Japan clock, footer, skip link, section title, empty and loading states;
 narrow screens show the site name and fold the page links into a menu behind
 the `kano-seal.tsx` deer seal),
-`media-dialog.tsx` (the native modal image viewer), `links.tsx` (external
+`media-dialog.tsx` (the native modal image viewer: its close button stays in
+the screen's top-right corner, and a click anywhere outside the image, its
+arrows and its details closes it; every control that opens it carries
+`media-opener`, which shows the zoom cursor), `links.tsx` (external
 links and platform marks), and `site.css` (shell, controls, tone classes and
 the dialog). A `pill-button is-collapsible` shows only its icon at 560px and
 below, so it keeps its label as `aria-label`. The board lives in

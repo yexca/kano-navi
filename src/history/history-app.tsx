@@ -476,6 +476,7 @@ export function HistoryApp() {
             <figure className="history-portrait">
               <button
                 type="button"
+                className="media-opener"
                 onClick={() => openMedia([portrait], 0)}
                 aria-label={t("history.openImage", {
                   title: localized(portrait.title, locale),
