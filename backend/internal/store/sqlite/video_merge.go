@@ -28,7 +28,7 @@ const (
 	videoMergeReasonManual = "manual"
 	// videoMergeReasonSeparate marks an upload an operator kept apart.
 	videoMergeReasonSeparate = "kept_separate"
-	videoMergeWindow       = 6 * time.Hour
+	videoMergeWindow         = 6 * time.Hour
 	// videoMergeTolerance is the largest length difference, in seconds.
 	videoMergeTolerance = 3
 
