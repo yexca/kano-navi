@@ -112,6 +112,9 @@ func (s *Store) GetCalendarPage(ctx context.Context, from, to string, page, page
 	if err := s.attachLiveStatus(ctx, items, now); err != nil {
 		return nil, err
 	}
+	if err := s.attachVideoTags(ctx, items); err != nil {
+		return nil, err
+	}
 	if err := s.attachEventTranslations(ctx, items); err != nil {
 		return nil, err
 	}
@@ -206,6 +209,54 @@ func (s *Store) attachLiveStatus(ctx context.Context, events []DashboardEvent, n
 	for i := range events {
 		if events[i].URL != nil {
 			events[i].LiveStatus = live[streamIdentity(*events[i].URL)]
+		}
+	}
+	return nil
+}
+
+// attachVideoTags copies an operator's calendar label from the video an event
+// points at, matched on the watch URL. Events without a labelled video keep a
+// nil tag, and the reader falls back to its own reading of the wording.
+func (s *Store) attachVideoTags(ctx context.Context, events []DashboardEvent) error {
+	identities := []any{}
+	seen := map[string]bool{}
+	for _, event := range events {
+		if event.URL == nil {
+			continue
+		}
+		identity := streamIdentity(*event.URL)
+		if identity == "" || seen[identity] {
+			continue
+		}
+		seen[identity] = true
+		identities = append(identities, identity)
+	}
+	if len(identities) == 0 {
+		return nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT url,manual_tag FROM videos WHERE trim(COALESCE(manual_tag,'')) <> '' AND stream_identity(url) IN (?`+strings.Repeat(",?", len(identities)-1)+`)`, identities...)
+	if err != nil {
+		return dbErr(err)
+	}
+	defer rows.Close()
+	tags := map[string]*string{}
+	for rows.Next() {
+		var url string
+		var tag sql.NullString
+		if err := rows.Scan(&url, &tag); err != nil {
+			return dbErr(err)
+		}
+		if tag.Valid {
+			value := tag.String
+			tags[streamIdentity(url)] = &value
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return dbErr(err)
+	}
+	for i := range events {
+		if events[i].URL != nil {
+			events[i].Tag = tags[streamIdentity(*events[i].URL)]
 		}
 	}
 	return nil

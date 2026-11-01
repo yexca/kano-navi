@@ -492,15 +492,18 @@ snapshots without rewriting events.
 Synchronization owns a video's platform fields (`title`, `kind`,
 `thumbnail_url` and its media link) and keeps rewriting them on every
 successful page read. An operator correction lives beside them in
-`manual_title`, `manual_kind`, `manual_is_short` and
+`manual_title`, `manual_kind`, `manual_tag`, `manual_is_short` and
 `manual_thumbnail_media_id` / `manual_thumbnail_sha256` with
 `manual_updated_at`; synchronization never
 writes these columns, and clearing one shows the platform value again. Every
 public reader (dashboard, video archive, MCP) and the console show
 `COALESCE(manual, platform)`, and a pinned thumbnail is served while its file
 is still cached, otherwise the platform thumbnail. Machine translations
-follow the corrected title. A correction is not an event lock:
-reservation events keep their own provenance and manual edits.
+follow the corrected title. `manual_tag` is the calendar label an operator
+pins on a video (`live`, `game`, `talk`, `song` or `video`); the calendar read
+copies it onto the event that carries the video's URL, so the App shows the
+operator's label instead of reading the title. A correction is not an event
+lock: reservation events keep their own provenance and manual edits.
 
 Nothing the platform replaces is discarded. A page read that reports a new
 title or thumbnail image inserts the previous `title`, `thumbnail_url`, `kind`

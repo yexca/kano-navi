@@ -452,9 +452,9 @@ func TestDashboardReadIsAPublicProjection(t *testing.T) {
 				t.Fatalf("event exposes %s: %v", field, event)
 			}
 		}
-		// 18 schedule facts plus the linked video's translations and
+		// 19 schedule facts plus the linked video's translations and
 		// sourceLanguage.
-		if len(event) != 20 {
+		if len(event) != 21 {
 			t.Fatalf("event field count = %d: %v", len(event), keys(event))
 		}
 	}

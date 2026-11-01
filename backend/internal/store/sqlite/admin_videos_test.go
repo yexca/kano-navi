@@ -2,11 +2,13 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yexca/kano-navi/backend/internal/testutil"
 )
@@ -180,5 +182,43 @@ func TestAdminEventFiltersUnconfirmedAndDeleted(t *testing.T) {
 		if strings.Join(got, ",") != c.want {
 			t.Errorf("%+v listed %v, want %q", c.filter, got, c.want)
 		}
+	}
+}
+
+func TestAdminVideoTagRoundTrip(t *testing.T) {
+	p := testutil.NewSnapshot(t)
+	testutil.Exec(t, p, `INSERT INTO videos(id,source,title,published_at,url) VALUES('AAAAAAAAAAA','youtube','Song cover','2026-10-01T00:00:00.000Z','https://www.youtube.com/watch?v=AAAAAAAAAAA')`)
+	s, err := OpenAdminWrites(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	tag := "song"
+	video, err := s.SetVideoOverrides(ctx, "AAAAAAAAAAA", VideoOverrides{SetTag: true, Tag: &tag}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if video.Tag == nil || *video.Tag != "song" || video.ManualTag == nil {
+		t.Fatalf("tag=%v manual=%v", video.Tag, video.ManualTag)
+	}
+	// Every label the console offers has to round-trip, including the upload
+	// one that keeps an ordinary video out of the live and song guesses.
+	for _, allowed := range VideoTags {
+		value := allowed
+		if _, err := s.SetVideoOverrides(ctx, "AAAAAAAAAAA", VideoOverrides{SetTag: true, Tag: &value}, time.Now()); err != nil {
+			t.Fatalf("tag %q rejected: %v", allowed, err)
+		}
+	}
+	unknown := "karaoke"
+	if _, err = s.SetVideoOverrides(ctx, "AAAAAAAAAAA", VideoOverrides{SetTag: true, Tag: &unknown}, time.Now()); !errors.Is(err, ErrVideoInvalid) {
+		t.Fatalf("unknown tag err=%v", err)
+	}
+	cleared, err := s.SetVideoOverrides(ctx, "AAAAAAAAAAA", VideoOverrides{SetTag: true}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Tag != nil || cleared.ManualTag != nil {
+		t.Fatalf("cleared tag=%v manual=%v", cleared.Tag, cleared.ManualTag)
 	}
 }

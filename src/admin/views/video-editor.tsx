@@ -30,6 +30,9 @@ import { MergeSection } from "@/admin/views/merge-parts"
 /** The kinds the board labels; an empty choice follows the platform. */
 export const videoKinds = ["VIDEO", "MUSIC", "LIVE ARCHIVE", "GAMEPLAY", "TALK"]
 
+/** The calendar labels an operator can pin; an empty choice reads the title. */
+const videoTags = ["live", "game", "talk", "song", "video"]
+
 /** A format choice: empty follows the feed, otherwise Short or not. */
 const formatChoice = (isShort: boolean | null) =>
   isShort === null ? "" : isShort ? "short" : "regular"
@@ -165,6 +168,7 @@ export function VideoEditor({
   const [draft, setDraft] = useState<{
     title: string
     kind: string
+    tag: string
     thumbnail: string
     format: string
   } | null>(null)
@@ -179,6 +183,7 @@ export function VideoEditor({
       setDraft({
         title: data.video.manualTitle ?? "",
         kind: data.video.manualKind ?? "",
+        tag: data.video.manualTag ?? "",
         thumbnail: pinKey(data.video.manualThumbnail),
         format: formatChoice(data.video.manualIsShort),
       })
@@ -193,6 +198,7 @@ export function VideoEditor({
     const correction: VideoCorrection = {
       title: draft.title.trim() || null,
       kind: draft.kind || null,
+      tag: draft.tag || null,
       thumbnail: file ? { mediaId: file.mediaId, sha256: file.sha256 } : null,
       isShort: draft.format ? draft.format === "short" : null,
     }
@@ -387,7 +393,11 @@ export function VideoEditor({
                   }
                 />
               </CorrectionField>
-              <div className="adm-form-row is-top">
+              <div
+                className={`adm-form-row is-top${
+                  video.source === "youtube" ? " is-three" : ""
+                }`}
+              >
                 <CorrectionField
                   id={`${fieldId}-kind`}
                   label={t("admin.videos.field.kind")}
@@ -442,6 +452,28 @@ export function VideoEditor({
                     </select>
                   </CorrectionField>
                 ) : null}
+                <CorrectionField
+                  id={`${fieldId}-tag`}
+                  label={t("admin.videos.field.tag")}
+                  corrected={Boolean(draft.tag)}
+                  onReset={() => setDraft({ ...draft, tag: "" })}
+                  hint={t("admin.videos.tag.hint")}
+                >
+                  <select
+                    id={`${fieldId}-tag`}
+                    value={draft.tag}
+                    onChange={(e) =>
+                      setDraft({ ...draft, tag: e.target.value })
+                    }
+                  >
+                    <option value="">{t("admin.videos.tag.none")}</option>
+                    {videoTags.map((tag) => (
+                      <option key={tag} value={tag}>
+                        {t(`admin.videos.tag.${tag}`)}
+                      </option>
+                    ))}
+                  </select>
+                </CorrectionField>
               </div>
               <fieldset className="adm-field adm-thumb-picker">
                 <legend className="adm-correction-head">

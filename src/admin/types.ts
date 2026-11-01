@@ -622,6 +622,9 @@ export interface AdminVideo {
   thumbnailStatus: string
   kind: string | null
   isUpcoming: boolean
+  /** The App calendar label an operator pinned; null lets it read the title. */
+  tag: string | null
+  manualTag: string | null
   /** title and kind show an operator correction; these keep the platform's. */
   sourceTitle: string
   sourceKind: string | null
@@ -718,6 +721,7 @@ export interface VideoHistory {
 export interface VideoCorrection {
   title?: string | null
   kind?: string | null
+  tag?: string | null
   thumbnail?: VideoThumbnailPin | null
   isShort?: boolean | null
 }

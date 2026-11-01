@@ -26,8 +26,8 @@ func (a *api) videoHistory(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, history)
 }
 
-// updateVideo accepts { title?, kind?, thumbnail?, isShort? }. A string, a
-// { mediaId, sha256 } file from the history or a boolean sets a correction,
+// updateVideo accepts { title?, kind?, tag?, thumbnail?, isShort? }. A string,
+// a { mediaId, sha256 } file from the history or a boolean sets a correction,
 // null clears it, and an omitted field keeps it.
 func (a *api) updateVideo(w http.ResponseWriter, r *http.Request) {
 	body, err := httpx.Body(w, r)
@@ -38,7 +38,7 @@ func (a *api) updateVideo(w http.ResponseWriter, r *http.Request) {
 	var in sqlite.VideoOverrides
 	for key, raw := range body {
 		switch key {
-		case "title", "kind":
+		case "title", "kind", "tag":
 			var value *string
 			if !jsonNull(raw) {
 				var text string
@@ -48,10 +48,13 @@ func (a *api) updateVideo(w http.ResponseWriter, r *http.Request) {
 				}
 				value = &text
 			}
-			if key == "title" {
+			switch key {
+			case "title":
 				in.SetTitle, in.Title = true, value
-			} else {
+			case "kind":
 				in.SetKind, in.Kind = true, value
+			default:
+				in.SetTag, in.Tag = true, value
 			}
 		case "thumbnail":
 			in.SetThumbnail = true

@@ -148,6 +148,7 @@ function VideoMarks({
   const corrected =
     video.manualTitle !== null ||
     video.manualKind !== null ||
+    video.manualTag !== null ||
     video.manualThumbnail !== null ||
     video.manualIsShort !== null
   if (!featured && !corrected && !video.revisions && !video.refreshRequestedAt)
@@ -163,6 +164,9 @@ function VideoMarks({
         <Badge tone="sky" icon={Pencil}>
           {t("admin.videos.corrected")}
         </Badge>
+      ) : null}
+      {video.tag ? (
+        <Badge tone="leaf">{t(`admin.videos.tag.${video.tag}`)}</Badge>
       ) : null}
       {video.revisions ? (
         <Badge icon={History}>

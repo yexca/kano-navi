@@ -100,6 +100,11 @@ type AdminVideo struct {
 	ThumbnailStatus string  `json:"thumbnailStatus"`
 	Kind            *string `json:"kind"`
 	IsUpcoming      bool    `json:"isUpcoming"`
+	// Tag is the operator's label for the App calendar: live, game, talk,
+	// song or video. A nil tag leaves the calendar its own guess from the
+	// wording.
+	Tag       *string `json:"tag"`
+	ManualTag *string `json:"manualTag"`
 	// Title, Kind and ThumbnailURL show an operator's correction when one is
 	// set; SourceTitle and SourceKind keep what the platform reported.
 	SourceTitle     string             `json:"sourceTitle"`
@@ -657,19 +662,19 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 }
 
 const adminVideoColumns = `v.id,v.source,v.title,v.published_at,v.scheduled_at,v.url,v.thumbnail_url,v.kind,COALESCE(v.is_upcoming,0),
- v.manual_title,v.manual_kind,v.manual_thumbnail_media_id,v.manual_thumbnail_sha256,v.duration_seconds,v.live_checked_at,v.refresh_requested_at,
+ v.manual_title,v.manual_kind,v.manual_tag,v.manual_thumbnail_media_id,v.manual_thumbnail_sha256,v.duration_seconds,v.live_checked_at,v.refresh_requested_at,
  (SELECT COUNT(*) FROM video_revisions r WHERE r.video_id=v.id),
  v.merged_into,(SELECT COALESCE(t.manual_title,t.title) FROM videos t WHERE t.id=v.merged_into),v.merge_source,v.merge_reason,v.merged_at,v.is_short,v.manual_is_short`
 
 func scanAdminVideo(row scanner) (AdminVideo, error) {
 	var v AdminVideo
-	var published, scheduled, thumbnail, kind, manualTitle, manualKind, pinMedia, pinHash, checked, requested sql.NullString
+	var published, scheduled, thumbnail, kind, manualTitle, manualKind, manualTag, pinMedia, pinHash, checked, requested sql.NullString
 	var mergedInto, mergedTitle, mergeSource, mergeReason, mergedAt sql.NullString
 	var duration sql.NullInt64
 	var short, manualShort sql.NullBool
 	var upcoming int
 	if err := row.Scan(&v.ID, &v.Source, &v.SourceTitle, &published, &scheduled, &v.URL, &thumbnail, &kind, &upcoming,
-		&manualTitle, &manualKind, &pinMedia, &pinHash, &duration, &checked, &requested, &v.Revisions,
+		&manualTitle, &manualKind, &manualTag, &pinMedia, &pinHash, &duration, &checked, &requested, &v.Revisions,
 		&mergedInto, &mergedTitle, &mergeSource, &mergeReason, &mergedAt, &short, &manualShort); err != nil {
 		return AdminVideo{}, err
 	}
@@ -683,6 +688,9 @@ func scanAdminVideo(row scanner) (AdminVideo, error) {
 	v.SourceKind = nullString(kind)
 	v.ManualTitle = nullString(manualTitle)
 	v.ManualKind = nullString(manualKind)
+	v.ManualTag = nullString(manualTag)
+	// There is no platform tag: the label only exists once an operator sets it.
+	v.Tag = v.ManualTag
 	v.Title, v.Kind = v.SourceTitle, v.SourceKind
 	if v.ManualTitle != nil {
 		v.Title = *v.ManualTitle

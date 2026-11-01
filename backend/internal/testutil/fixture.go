@@ -53,7 +53,7 @@ func NewSnapshot(t testing.TB) string {
 		CREATE TABLE videos (
 			id TEXT PRIMARY KEY, source TEXT NOT NULL, title TEXT NOT NULL, published_at TEXT, scheduled_at TEXT,
 			url TEXT NOT NULL, thumbnail_url TEXT, kind TEXT, is_upcoming INTEGER DEFAULT 0, raw_json TEXT,
-			live_status TEXT, live_checked_at TEXT, duration_seconds INTEGER, manual_title TEXT, manual_kind TEXT,
+			live_status TEXT, live_checked_at TEXT, duration_seconds INTEGER, manual_title TEXT, manual_kind TEXT, manual_tag TEXT,
 			manual_thumbnail_media_id TEXT, manual_thumbnail_sha256 TEXT, manual_updated_at TEXT, refresh_requested_at TEXT,
 			merged_into TEXT, merge_source TEXT, merge_reason TEXT, merged_at TEXT, is_short INTEGER, manual_is_short INTEGER,
 			is_premiere INTEGER

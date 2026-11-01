@@ -133,6 +133,9 @@ type DashboardEvent struct {
 	UpdatedAt string
 	// LiveStatus is the linked video's trusted broadcast state, or nil.
 	LiveStatus *string
+	// Tag is the calendar kind an operator pinned on the linked video, or
+	// nil to let the App read the wording instead.
+	Tag *string
 	// Translations are the linked video's title translations while the
 	// event shows that video's title.
 	Translations TranslationSet
