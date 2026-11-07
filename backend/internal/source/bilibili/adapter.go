@@ -13,6 +13,9 @@ type State struct {
 	Session                     Session
 	SessionAt, LastAttemptAt    time.Time
 	LastSuccessAt, BlockedUntil time.Time
+	// LastPostsAt is when the dynamics were last read, apart from the uploads
+	// read: the two lists are refreshed on their own schedule.
+	LastPostsAt time.Time
 	// Failures counts consecutive risk-control or rate-limit answers; each
 	// doubles the wait before the next request.
 	Failures  int
@@ -34,6 +37,15 @@ type Result struct {
 	Videos []Video
 	State  State
 	// Skipped is "blocked" or "interval" when no request was made.
+	Skipped   string
+	Requested int
+}
+
+// DynamicsResult is what one dynamics read learned.
+type DynamicsResult struct {
+	Dynamics []Dynamic
+	State    State
+	// Skipped is "blocked", "interval" or "login" when no request was made.
 	Skipped   string
 	Requested int
 }
@@ -74,6 +86,44 @@ func (a *Adapter) FetchRecent(ctx context.Context, state State) (Result, error) 
 	if err != nil {
 		result.State = failed(result.State, err, now)
 		result.Videos = []Video{}
+		return result, err
+	}
+	result.State = succeeded(result.State, now)
+	return result, nil
+}
+
+// FetchDynamics reads the account's newest dynamics at most once per
+// MinInterval and never while a block lasts. It needs the operator's login
+// cookie, so without one it skips instead of asking. A failure is returned
+// together with the state to persist, which records the attempt and any
+// backoff shared with the uploads read.
+func (a *Adapter) FetchDynamics(ctx context.Context, state State) (DynamicsResult, error) {
+	now := a.Now()
+	result := DynamicsResult{Dynamics: []Dynamic{}, State: state}
+	switch {
+	case !a.Options.SignedIn():
+		result.Skipped = "login"
+		return result, nil
+	case now.Before(state.BlockedUntil):
+		result.Skipped = "blocked"
+		return result, nil
+	case !state.LastPostsAt.IsZero() && now.Sub(state.LastPostsAt) < a.Options.MinInterval:
+		result.Skipped = "interval"
+		return result, nil
+	}
+	result.State.LastPostsAt = now
+	session, err := a.session(ctx, &result.State, &result.Requested, now)
+	if err == nil {
+		result.Requested++
+		// The signing key read is a request of its own, made once per key.
+		if a.Client.keysStale() {
+			result.Requested++
+		}
+		result.Dynamics, err = a.Client.Dynamics(ctx, a.Options.Account, a.Options.PageSize, session)
+	}
+	if err != nil {
+		result.State = failed(result.State, err, now)
+		result.Dynamics = []Dynamic{}
 		return result, err
 	}
 	result.State = succeeded(result.State, now)

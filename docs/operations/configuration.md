@@ -28,7 +28,7 @@
 | `YTDLP_BINARY`                  | `/app/yt-dlp` in production Compose | yt-dlp executable path; empty disables the method                 |
 | `BILIBILI_UID`                  | Kano's account                      | Bilibili account (numeric mid) whose uploads are read             |
 | `BILIBILI_MIN_INTERVAL_MINUTES` | `180`                               | Minimum minutes between Bilibili reads and timer runs (60–1440)   |
-| `BILIBILI_SESSDATA`             | Empty                               | Optional environment-only Bilibili login cookie                   |
+| `BILIBILI_SESSDATA`             | Empty                               | Optional Bilibili login cookie; also what dynamics need           |
 | `SKIP_X`, `SKIP_YOUTUBE`        | `0`                                 | Set to `1` to skip that source's step and its timer               |
 | `SKIP_BILIBILI`                 | `0`                                 | Set to `1` to skip the Bilibili step, timer and console reads     |
 | `SKIP_MEDIA`, `SKIP_LLM`        | `0`                                 | Set a post-processing stage flag to `1` to skip it                |
@@ -78,7 +78,9 @@ Docker Compose also uses `KANO_IMAGE` (default
 Bilibili (developer tools → Application → Cookies → `.bilibili.com`). With
 it, the `bilibili` step and the console's reads are sent as that account,
 which Bilibili's captcha blocks far less often than anonymous reads. It is
-sent only to `api.bilibili.com`, never stored in SQLite, logged, or returned;
+also required for the account's dynamics: Bilibili refuses an anonymous read
+of that list, so without the cookie the step stores uploads only and records
+`postsSkipped: "login"`. It is sent only to `api.bilibili.com`, never stored in SQLite, logged, or returned;
 the console shows only whether one is configured. Prefer a secondary account,
 and replace the value when it expires or the account signs out.
 

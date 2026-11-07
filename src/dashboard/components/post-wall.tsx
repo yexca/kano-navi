@@ -285,7 +285,13 @@ function PostNote({
   const head = (close?: ReactNode) => (
     <header className="post-note-head">
       <img src={avatarUrl || undefined} alt="" />
-      {post.accountHandle ? (
+      {post.source === "bilibili" ? (
+        // A Bilibili account is a display name, not a handle: it has no
+        // profile page to open and no @ to carry.
+        <span className="post-note-handle">
+          {post.accountHandle || "Bilibili"}
+        </span>
+      ) : post.accountHandle ? (
         <ExternalLink
           className="post-note-handle"
           href={post.accountUrl || `https://x.com/${post.accountHandle}`}

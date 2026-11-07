@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -55,7 +56,13 @@ var (
 	sessdata = regexp.MustCompile(`^[A-Za-z0-9%*,._-]{16,512}$`)
 )
 
-type Client struct{ http *http.Client }
+type Client struct {
+	http *http.Client
+	// mu guards the cached signing key, which a read fetches and a refused
+	// signature drops.
+	mu  sync.Mutex
+	wbi wbiKey
+}
 
 func NewClient(client *http.Client) *Client {
 	if client == nil {
@@ -69,7 +76,13 @@ func NewClient(client *http.Client) *Client {
 
 // get requests one api.bilibili.com path and returns the envelope's data.
 func (c *Client) get(ctx context.Context, path string, query url.Values, referer string, session *Session) (json.RawMessage, error) {
-	u := url.URL{Scheme: "https", Host: apiHost, Path: path, RawQuery: query.Encode()}
+	return c.getRaw(ctx, path, query.Encode(), referer, session)
+}
+
+// getRaw is get with the query already encoded, which a signed query must be:
+// the signature covers the exact parameter string that is sent.
+func (c *Client) getRaw(ctx context.Context, path, rawQuery, referer string, session *Session) (json.RawMessage, error) {
+	u := url.URL{Scheme: "https", Host: apiHost, Path: path, RawQuery: rawQuery}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, &Error{"bilibili_invalid_request"}
@@ -194,6 +207,49 @@ func (c *Client) Video(ctx context.Context, bvid string, session Session) (Video
 		return Video{}, err
 	}
 	return ParseView(data, bvid)
+}
+
+// Dynamics lists an account's newest dynamics, newest first. Unlike the
+// uploads list it answers only with an operator's login cookie: anonymous
+// reads of the space feed are refused outright.
+func (c *Client) Dynamics(ctx context.Context, account string, pageSize int, session Session) ([]Dynamic, error) {
+	if !mid.MatchString(account) {
+		return nil, &Error{"bilibili_invalid_account"}
+	}
+	if !session.valid() {
+		return nil, &Error{"bilibili_invalid_session"}
+	}
+	if !sessdata.MatchString(session.Login) {
+		return nil, &Error{"bilibili_login_required"}
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	query := url.Values{
+		"host_mid":        {account},
+		"page":            {strconv.Itoa(max(pageSize/10, 1))},
+		"offset":          {""},
+		"timezone_offset": {"-540"},
+		// The opus form carries the text and pictures of a newer dynamic;
+		// without it they are left out of the answer.
+		"features": {"itemOpusStyle,opusBigCover,onlyfansVote"},
+		"platform": {"web"},
+	}
+	mixin, err := c.mixinKey(ctx)
+	if err != nil {
+		return nil, err
+	}
+	signed := signWBI(query, mixin, time.Now())
+	data, err := c.getRaw(ctx, "/x/polymer/web-dynamic/v1/feed/space", signed, "https://space.bilibili.com/"+account+"/dynamic", &session)
+	if err != nil {
+		if code := ErrorCode(err); code == "bilibili_api_error" || code == "bilibili_risk_control" {
+			// A stale signing key is answered with an API error, so the next
+			// read asks for a new one.
+			c.forgetMixinKey()
+		}
+		return nil, err
+	}
+	return ParseDynamics(data, account)
 }
 
 type Options struct {

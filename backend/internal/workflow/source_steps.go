@@ -370,7 +370,9 @@ func tallyCodes(codes []string) []string {
 // bilibiliRecent reads the account's newest uploads at most once per
 // interval and never during a backoff, so no timer or manual run can drive
 // Bilibili's captcha. A failed read is recorded, not retried: the next run
-// after the interval or backoff asks again.
+// after the interval or backoff asks again. The account's dynamics are read
+// in the same step, on their own interval and only when an operator's login
+// cookie is configured: Bilibili refuses anonymous reads of them.
 func (s *SourceSteps) bilibiliRecent(ctx context.Context) (AttemptResult, error) {
 	account := s.Bilibili.Options.Account
 	state, err := s.Store.BilibiliState(ctx, account)
@@ -381,7 +383,13 @@ func (s *SourceSteps) bilibiliRecent(ctx context.Context) (AttemptResult, error)
 	if ctx.Err() != nil {
 		return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
 	}
-	if result.Skipped != "" {
+	posts, postsErr := s.Bilibili.FetchDynamics(ctx, result.State)
+	if ctx.Err() != nil {
+		return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
+	}
+	if result.Skipped != "" && posts.Skipped != "" {
+		// The uploads read decides why the step asked nothing; its reason is
+		// the one the console has always shown.
 		return AttemptResult{Status: "succeeded", Result: map[string]any{"skipped": true, "reason": result.Skipped, "requested": 0}}, nil
 	}
 	changed, err := s.Store.WriteBilibiliRecent(ctx, account, result)
@@ -389,8 +397,28 @@ func (s *SourceSteps) bilibiliRecent(ctx context.Context) (AttemptResult, error)
 		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 	}
 	counts := map[string]any{"count": len(result.Videos), "videos": len(result.Videos), "requested": result.Requested, "changed": changed}
+	// The dynamics write commits after the uploads write, so the state it
+	// carries includes both attempts.
+	switch {
+	case posts.Skipped != "":
+		counts["postsSkipped"] = posts.Skipped
+	case postsErr == nil:
+		fresh, writeErr := s.Store.WriteBilibiliDynamics(ctx, account, posts)
+		if writeErr != nil {
+			return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
+		}
+		counts["posts"], counts["newPosts"] = len(posts.Dynamics), fresh
+		counts["requested"] = result.Requested + posts.Requested
+	}
+	errs := []string{}
 	if fetchErr != nil {
-		counts["errors"] = []string{bilisource.ErrorCode(fetchErr)}
+		errs = append(errs, bilisource.ErrorCode(fetchErr))
+	}
+	if postsErr != nil {
+		errs = append(errs, bilisource.ErrorCode(postsErr))
+	}
+	if len(errs) > 0 {
+		counts["errors"] = errs
 		return AttemptResult{Status: "failed", Result: counts}, nil
 	}
 	return AttemptResult{Status: "succeeded", Result: counts}, nil

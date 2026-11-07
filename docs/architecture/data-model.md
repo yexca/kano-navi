@@ -27,7 +27,7 @@ own transaction, and the selected profile media is reconciled with its files
 | ------------------------ | ------------------------------------------------------------------------------------------------------ |
 | `profiles`               | Name, bio, avatar, banner, and official entry points                                                   |
 | `profile_media`          | Avatar and banner candidates, their downloads, and the operator's selected file                        |
-| `posts`                  | X posts, account source, publication time, engagement counts, media, and the quoted status             |
+| `posts`                  | X posts and Bilibili dynamics, account source, engagement counts, media, and the quoted status         |
 | `events`                 | Unified schedules, provenance, confidence, manual locks, tombstones, and duplicate merges              |
 | `event_sources`          | Source post/reservation identities attached to each event                                              |
 | `videos`                 | YouTube videos and streams, Bilibili uploads and their merges, corrections, and refresh requests       |

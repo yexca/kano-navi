@@ -12,7 +12,10 @@ import (
 // ErrInvalidAccount rejects a post archive filter that is not an X handle.
 var ErrInvalidAccount = errors.New("invalid account")
 
-var accountPattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,30}$`)
+// accountPattern accepts a stored account handle. X handles are letters,
+// digits and underscores; a Bilibili post's handle is the uploader's display
+// name, which may be any script and contain spaces.
+var accountPattern = regexp.MustCompile(`^[\p{L}\p{N}_ .·-]{1,64}$`)
 
 // ErrInvalidVideoCategory rejects a video archive filter outside
 // VideoCategories.

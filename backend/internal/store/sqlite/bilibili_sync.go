@@ -19,6 +19,7 @@ type bilibiliMetadata struct {
 	Session       bilisource.Session `json:"session"`
 	SessionAt     string             `json:"sessionAt,omitempty"`
 	LastAttemptAt string             `json:"lastAttemptAt,omitempty"`
+	LastPostsAt   string             `json:"lastPostsAt,omitempty"`
 	BlockedUntil  string             `json:"blockedUntil,omitempty"`
 	Failures      int                `json:"failures,omitempty"`
 	LastError     string             `json:"lastError,omitempty"`
@@ -52,6 +53,7 @@ func (s *Store) BilibiliState(ctx context.Context, account string) (bilisource.S
 	return bilisource.State{
 		Session: data.Session, SessionAt: parseInstant(data.SessionAt),
 		LastAttemptAt: parseInstant(data.LastAttemptAt), LastSuccessAt: parseInstant(lastSuccess),
+		LastPostsAt:  parseInstant(data.LastPostsAt),
 		BlockedUntil: parseInstant(data.BlockedUntil), Failures: data.Failures, LastError: data.LastError,
 	}, nil
 }
@@ -139,6 +141,7 @@ func (s *Store) writeBilibili(ctx context.Context, account string, videos []bili
 	_ = json.Unmarshal([]byte(storedMeta), &stored)
 	meta, _ := json.Marshal(mergeBilibiliMetadata(stored, bilibiliMetadata{
 		Session: state.Session, SessionAt: formatInstant(state.SessionAt), LastAttemptAt: formatInstant(state.LastAttemptAt),
+		LastPostsAt:  formatInstant(state.LastPostsAt),
 		BlockedUntil: formatInstant(state.BlockedUntil), Failures: state.Failures, LastError: state.LastError,
 	}, time.Now()))
 	// The cursor only names the newest upload seen; reads are not incremental.
@@ -173,6 +176,11 @@ func mergeBilibiliMetadata(stored, incoming bilibiliMetadata, now time.Time) bil
 	}
 	if parseInstant(stored.LastAttemptAt).After(parseInstant(incoming.LastAttemptAt)) {
 		incoming.LastAttemptAt = stored.LastAttemptAt
+	}
+	// The dynamics read keeps its own clock, so one write never moves the
+	// other's next due time backwards.
+	if parseInstant(stored.LastPostsAt).After(parseInstant(incoming.LastPostsAt)) {
+		incoming.LastPostsAt = stored.LastPostsAt
 	}
 	return incoming
 }

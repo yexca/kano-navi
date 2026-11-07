@@ -713,6 +713,9 @@ endpoints that need no request signature:
   another uploader are skipped.
 - `/x/web-interface/view` reads one upload for an operator.
 
+The same step reads the account's dynamics, which do need a signature and a
+login (below), so they are read only when `BILIBILI_SESSDATA` is configured.
+
 Bilibili answers a few anonymous requests and then puts the server's address
 behind a captcha for hours: HTTP 412, an HTML page, or the JSON codes `-352`
 and `-412`. The client never retries and reports these as
@@ -754,6 +757,47 @@ block that a concurrent read stored meanwhile (one still active and later
 than the writer's), with its failure count and code: a captcha backoff is
 never lost. A read that changes a merged upload's title rewrites the
 translation in the same transaction.
+
+#### Dynamics
+
+The same step reads the account's dynamics (its posts and forwards) when
+`BILIBILI_SESSDATA` is set. This list is signed and signed-in only: Bilibili
+refuses an anonymous read of it outright, so without the cookie the step
+records `{ postsSkipped: "login" }` and asks nothing.
+
+- `/x/web-interface/nav` publishes two image names that the signature is
+  derived from. They rotate a few times a day, so the derived key is cached
+  for six hours, and a read the API refuses drops it so the next one fetches
+  a new key.
+- `/x/polymer/web-dynamic/v1/feed/space` lists the newest dynamics of
+  `host_mid` with `features=itemOpusStyle`, which is what carries the text
+  and the pictures of a newer dynamic. The query is signed the way Bilibili's
+  own pages sign it: parameters sorted by name, the punctuation `!'()*`
+  removed from their values, `wts` added, and `md5(query + key)` sent as
+  `w_rid`.
+
+A dynamic is a `posts` row with `source = 'bilibili'` and the numeric dynamic
+ID as its ID, linked to `https://t.bilibili.com/<id>`; `type` is `post` for
+one the account published and `repost` for a forward, whose original stays in
+`raw_json`. A post's `account_handle` is the uploader's display name, because
+Bilibili addresses nobody by handle, and its `accountUrl` is `NULL`: nothing
+links a display name to a profile. The pictures of an opus or an album become
+`post-image` media links in the order the dynamic shows them, so the media
+step caches them like the pictures of an X post. Text and title are HTML
+unescaped, a longer text is cut at 4000 runes, and pictures come only from
+`*.hdslb.com`, upgraded to HTTPS.
+
+An upload published as a video dynamic is skipped: the uploads list already
+stores it as a video, and storing it again as a post would list the same work
+twice. Dynamics of another account and entries that carry neither text nor a
+picture are skipped as well.
+
+The dynamics read has its own interval clock (`lastPostsAt` in the account's
+state) but shares the captcha backoff and the device identity of the uploads
+read, so the step never asks Bilibili more often than
+`BILIBILI_MIN_INTERVAL_MINUTES` and never during a block. Plan extraction,
+translation and refresh stay X-only: a Bilibili post is stored and shown,
+not analyzed.
 
 ### Source Request Limits
 

@@ -17,6 +17,19 @@ Posts are laid out in whole rows; a long post shows its first lines and
 - A quoted post from one of these accounts is translated too, with its own
   **AI** mark at the end of the quoted card's top line.
 
+## Bilibili Dynamics
+
+When the server is configured with a Bilibili login cookie, the account's
+dynamics appear on the same wall as the X posts: its own posts and its
+forwards, with their text and pictures in the order Bilibili shows them. They
+keep their place in the newest-first order and in the per-account fill.
+
+A Bilibili post shows the uploader's display name without an **@**, because
+Bilibili addresses nobody by handle; select the arrow on the card to open the
+dynamic on `t.bilibili.com`. Uploads published as video dynamics are not
+repeated here: they are videos. Bilibili posts are not translated and carry
+no like or repost counts.
+
 ## Past Posts
 
 **Past posts** (a clock icon on phones) browses every post the board has
