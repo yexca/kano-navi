@@ -189,13 +189,13 @@ func writeShopSale(ctx context.Context, tx *sql.Tx, sale shopsource.Sale, now st
 	}
 	// The close time is not in the product JSON, so ends_at stays null and an
 	// operator's close time is kept by the lock that saving it sets.
-	result, err := tx.ExecContext(ctx, `INSERT INTO events(id,source,source_item_id,source_key,title,detail,starts_on,starts_at,ends_at,ends_on,timezone,time_precision,status,event_type,url,is_upcoming,provenance,manual_locked,created_at,updated_at,raw_json,platform)
- VALUES(?,?,?,?,?,NULL,?,?,NULL,?,'Asia/Tokyo',?,NULL,'sale',?,0,'automatic',0,?,?,?,'other')
+	result, err := tx.ExecContext(ctx, `INSERT INTO events(id,source,source_item_id,source_key,title,detail,starts_on,starts_at,ends_at,ends_on,timezone,time_precision,status,event_type,url,is_upcoming,provenance,manual_locked,created_at,updated_at,raw_json,platform,platforms,platforms_inferred)
+ VALUES(?,?,?,?,?,NULL,?,?,NULL,?,'Asia/Tokyo',?,NULL,'sale',?,0,'automatic',0,?,?,?,'other','["other"]',0)
  ON CONFLICT(id) DO UPDATE SET title=excluded.title,starts_on=excluded.starts_on,starts_at=excluded.starts_at,ends_on=excluded.ends_on,time_precision=excluded.time_precision,
- event_type=excluded.event_type,url=excluded.url,platform=excluded.platform,raw_json=excluded.raw_json,deleted_at=NULL,updated_at=excluded.updated_at
+ event_type=excluded.event_type,url=excluded.url,platform=excluded.platform,platforms=excluded.platforms,platforms_inferred=excluded.platforms_inferred,raw_json=excluded.raw_json,deleted_at=NULL,updated_at=excluded.updated_at
  WHERE events.manual_locked=0 AND (events.deleted_at IS NULL OR `+restorableEventSQL("events")+`) AND (events.deleted_at IS NOT NULL OR events.title IS NOT excluded.title
  OR events.starts_on IS NOT excluded.starts_on OR events.starts_at IS NOT excluded.starts_at OR events.ends_on IS NOT excluded.ends_on
- OR events.time_precision IS NOT excluded.time_precision OR events.event_type IS NOT excluded.event_type OR events.url IS NOT excluded.url OR events.platform IS NOT excluded.platform)`,
+ OR events.time_precision IS NOT excluded.time_precision OR events.event_type IS NOT excluded.event_type OR events.url IS NOT excluded.url OR events.platform IS NOT excluded.platform OR events.platforms IS NOT excluded.platforms OR events.platforms_inferred IS NOT excluded.platforms_inferred)`,
 		eventID, ShopSource, sale.Key, period, sale.Title, sale.Period.Opens, startsAt, sale.Period.Closes, precision, sale.URL, now, now, string(raw))
 	if err != nil {
 		return false, ErrSourceWrite

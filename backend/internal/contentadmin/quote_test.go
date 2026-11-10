@@ -1,9 +1,12 @@
 package contentadmin
 
 import (
+	"context"
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/yexca/kano-navi/backend/internal/store/sqlite"
 )
 
 const quotingID = "1900000000000000100"
@@ -98,4 +101,49 @@ func TestPostHiddenDecision(t *testing.T) {
 	}
 	f.put("/posts/1900000000000000101/hidden", map[string]any{"hidden": 1}).expectInvalid(t, "hidden must be true or false")
 	f.put("/posts/unknown/hidden", map[string]any{"hidden": true}).expect(t, http.StatusNotFound, "post_not_found")
+}
+
+// Showing a promoted post the rules demoted is the operator's promotion: a
+// later reconcile under rules that no longer match keeps it shown, and hiding
+// it again withdraws that promotion.
+func TestPostShownKeepsItsPromotion(t *testing.T) {
+	f := newFixture(t, true)
+	const id = "1900000000000000301"
+	f.exec(`INSERT INTO posts(id,source,account_handle,text,published_at,url,hidden_at,promoted_at) VALUES(?,'x','agency_synthetic','notice','2026-10-01T00:00:00.000Z','https://x.com/agency_synthetic/status/1900000000000000301','2026-10-02T00:00:00.000Z','2026-10-01T00:00:00.000Z')`, id)
+	f.exec(`INSERT INTO x_statuses(id,author_handle,text,url,demoted_at,first_seen_at,updated_at) VALUES(?,'agency_synthetic','notice','https://x.com/agency_synthetic/status/1900000000000000301','2026-10-02T00:00:00.000Z','2026-10-01T00:00:00.000Z','2026-10-02T00:00:00.000Z')`, id)
+	f.put("/posts/"+id+"/hidden", map[string]any{"hidden": false}).expect(t, http.StatusOK, "")
+	if got := f.text(`SELECT COALESCE(manual_decision,'')||'|'||COALESCE(demoted_at,'') FROM x_statuses WHERE id=?`, id); got != "promote|" {
+		t.Fatalf("decision after show = %s", got)
+	}
+	if _, err := f.store.SetXRelatedAccounts(context.Background(), []sqlite.XRelatedAccount{{Handle: "agency_synthetic", Keywords: []string{"unrelated"}}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.text(`SELECT CASE WHEN hidden_at IS NULL THEN 'shown' ELSE 'hidden' END FROM posts WHERE id=?`, id); got != "shown" {
+		t.Fatalf("the rules hid a post the operator showed: %s", got)
+	}
+	f.put("/posts/"+id+"/hidden", map[string]any{"hidden": true}).expect(t, http.StatusOK, "")
+	if got := f.text(`SELECT COALESCE(manual_decision,'none') FROM x_statuses WHERE id=?`, id); got != "none" {
+		t.Fatalf("decision after hide = %s", got)
+	}
+}
+
+// A promoted post the pool hid becomes the operator's to hide once they show
+// or hide it in Posts: the pool's mark goes, so a later automatic promotion
+// never undoes the operator's hide.
+func TestPostHiddenDecisionTakesThePoolsHide(t *testing.T) {
+	f := newFixture(t, true)
+	const id = "1900000000000000201"
+	f.exec(`INSERT INTO posts(id,source,account_handle,text,published_at,url,hidden_at,promoted_at) VALUES(?,'x','agency_synthetic','notice','2026-10-01T00:00:00.000Z','https://x.com/agency_synthetic/status/1900000000000000201','2026-10-02T00:00:00.000Z','2026-10-01T00:00:00.000Z')`, id)
+	f.exec(`INSERT INTO x_statuses(id,author_handle,text,url,demoted_at,first_seen_at,updated_at) VALUES(?,'agency_synthetic','notice','https://x.com/agency_synthetic/status/1900000000000000201','2026-10-02T00:00:00.000Z','2026-10-01T00:00:00.000Z','2026-10-02T00:00:00.000Z')`, id)
+	f.put("/posts/"+id+"/hidden", map[string]any{"hidden": false}).expect(t, http.StatusOK, "")
+	f.put("/posts/"+id+"/hidden", map[string]any{"hidden": true}).expect(t, http.StatusOK, "")
+	if got := f.text(`SELECT demoted_at FROM x_statuses WHERE id=?`, id); got != "<null>" {
+		t.Fatalf("demoted_at=%s", got)
+	}
+	if _, err := f.store.SetXRelatedAccounts(context.Background(), []sqlite.XRelatedAccount{{Handle: "agency_synthetic", Keywords: []string{"notice"}}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.text(`SELECT CASE WHEN hidden_at IS NULL THEN 'shown' ELSE 'hidden' END FROM posts WHERE id=?`, id); got != "hidden" {
+		t.Fatalf("an automatic promotion undid the operator's hide: %s", got)
+	}
 }

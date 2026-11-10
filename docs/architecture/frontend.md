@@ -104,8 +104,14 @@ shows `members`, `private` or `removed`. Schedule entries consume the event
 `view`: `eventKinds`, `scheduleEntries` and `eventStatus` translate its type,
 activity, calendar entries and state. The sale period's opening and closing
 dates come from `view.calendarEntries`, and the status codes are
-`upcoming`, `open` and `done`. A response without the view uses the stored
-fields as a compatibility fallback. The filter offers All plus Streams, Works and Shorts for each kind
+`upcoming`, `open` and `done`. The canonical enum contract is in the [Public
+API](public-api.md#public-snapshot-contract): `event.view.state` has seven
+values (`upcoming`, `live`, `open`, `done`, `pending`, `cancelled`,
+`cancellation_review`), `video.view.phase` has five (`upcoming`, `live`,
+`started`, `past`, `cancelled`), and `formCode` has six non-null values
+(`short`, `upcoming`, `stream`, `archive`, `premiere`, `video`). A response
+without the view uses the stored fields as a compatibility fallback. The
+filter offers All plus Streams, Works and Shorts for each kind
 present, and only when two are. Shorts render as 9:16 cards cropped from the
 centre of the 1280×720 cover (the vertical frame between YouTube's blurred
 pillarbox): one row of up to six in the All view, fewer as columns narrow and
@@ -384,8 +390,9 @@ or a suspected cancellation is a decision
 card: its left edge takes the state colour (honey
 while it needs a decision, leaf once the image reaches the board, neutral
 when rejected), the image or the entry's date sits on the left, and the body
-shows the badges and source link, the model's verdict with a confidence bar
-and its reason or evidence, the facts, and a bottom bar with the note field
+shows the badges and source link, the model's verdict with a confidence bar,
+the extracted schedule text when present, and its reason or evidence, the facts,
+and a bottom bar with the note field
 and the decision buttons. A cancellation needs a reason before it can be
 confirmed, and its Source posts button opens the same evidence timeline in
 the card. The video merges tab (`merge-parts.tsx`) lists each Bilibili
@@ -755,8 +762,9 @@ they never require a browser CDN request. The license ships in
 name, or stable ID to identify a mark; unknown custom providers retain their
 initial. Removing a preset does not delete saved providers.
 
-The Detection view shows the detection mode and keywords, then the
-extraction, schedule-image check and translation queues side by side, then
+The Detection view shows the detection mode and keywords, then the text
+schedule extraction, image extraction and translation/light-task queues side
+by side, then
 the providers as a list beside the selected provider's detail
 (`#detection/<provider>`), the model limits, and the recent failures. Recent failures
 lists each stored failure's stage, relative time (the Japan time on hover),

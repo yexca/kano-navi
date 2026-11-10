@@ -47,8 +47,8 @@ export function TagChips({
 
 /**
  * Each queue's catalog field and the stages it serves: the routing tag each
- * stage needs. The extraction queue serves text and image posts; the other
- * queues serve one stage and accept only models with its tag.
+ * stage needs. Schedule extraction is text-only; image extraction handles
+ * image inputs and the translation queue handles short text tasks.
  */
 export const queueRoutes: Record<
   QueueRoute,
@@ -58,7 +58,7 @@ export const queueRoutes: Record<
     needs?: "text" | "image"
   }
 > = {
-  schedule: { key: "queue", stages: ["text", "image"] },
+  schedule: { key: "queue", stages: ["text"], needs: "text" },
   verify: { key: "verificationQueue", stages: ["image"], needs: "image" },
   translate: { key: "translationQueue", stages: ["text"], needs: "text" },
 }

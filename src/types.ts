@@ -124,17 +124,24 @@ export interface EventLink {
   liveStatus?: LiveStatus | null
 }
 
+export type EventViewState =
+  | "upcoming"
+  | "live"
+  | "open"
+  | "done"
+  | "pending"
+  | "cancelled"
+  | "cancellation_review"
+
+export type EventViewTypeCode =
+  "stream" | "member" | "event" | "release" | "video" | "sale"
+
+export type EventViewActivityCode = "live" | "game" | "talk" | "song" | "video"
+
 export interface EventView {
-  state:
-    | "upcoming"
-    | "live"
-    | "open"
-    | "done"
-    | "pending"
-    | "cancelled"
-    | "cancellation_review"
-  typeCode: string | null
-  activityCode: string | null
+  state: EventViewState
+  typeCode: EventViewTypeCode | null
+  activityCode: EventViewActivityCode | null
   activityContext: "stream" | "work" | ""
   isWork: boolean
   calendarEntries: CalendarEntryView[]
@@ -144,7 +151,7 @@ export interface CalendarEntryView {
   saleMark: "opens" | "closes" | null
   startsOn: string
   startsAt: string | null
-  timePrecision: string
+  timePrecision: "exact" | "approximate" | "unknown"
 }
 
 export interface ScheduleEvent {

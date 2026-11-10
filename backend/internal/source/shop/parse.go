@@ -38,12 +38,16 @@ var (
 	// periodPattern is a labelled period with a dated opening and close on
 	// one line: ＜受注期間＞ 2026年10月24日 〜 2026年11月24日. The close may omit
 	// its year; a weekday or time may follow the opening.
-	periodPattern = regexp.MustCompile(`(抽選受付期間|受注期間|販売期間|受付期間)[^0-9]{0,8}?(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日[^〜～~年\n]{0,24}?[〜～~][ \t　]*(?:(\d{4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日`)
+	periodPattern = regexp.MustCompile(`(抽選受付期間|受注期間|販売期間|受付期間)[^0-9]{0,8}?(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日[^〜～~年\n]{0,24}?[〜～~][ \t]*(?:(\d{4})\s*年\s*)?(\d{1,2})\s*月\s*(\d{1,2})\s*日`)
 	// openedPattern is a labelled opening without a close, such as a
 	// permanent item's 販売期間 2026年10月1日～.
 	openedPattern = regexp.MustCompile(`(抽選受付期間|受注期間|販売期間|受付期間)[^0-9]{0,8}?\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日`)
-	wideDigits    = strings.NewReplacer("０", "0", "１", "1", "２", "2", "３", "3", "４", "4", "５", "5", "６", "6", "７", "7", "８", "8", "９", "9", "：", ":")
-	japan         = time.FixedZone("JST", 9*3600)
+	// spaceSeparators are the Unicode spaces, such as the U+00A0 that &nbsp;
+	// decodes to and the ideographic U+3000; a description reads each as a
+	// plain space.
+	spaceSeparators = regexp.MustCompile(`\p{Zs}`)
+	wideDigits      = strings.NewReplacer("０", "0", "１", "1", "２", "2", "３", "3", "４", "4", "５", "5", "６", "6", "７", "7", "８", "8", "９", "9", "：", ":")
+	japan           = time.FixedZone("JST", 9*3600)
 )
 
 type productJSON struct {
@@ -58,14 +62,21 @@ type productJSON struct {
 // ParseProducts reads a products.json answer. A product without a usable ID,
 // handle, title or publication time is left out.
 func ParseProducts(body []byte) ([]Product, error) {
+	products, _, err := parseProductPage(body)
+	return products, err
+}
+
+// parseProductPage reads a products.json answer as ParseProducts does, with
+// the number of products the answer lists before unusable ones are left out.
+func parseProductPage(body []byte) ([]Product, int, error) {
 	var out struct {
 		Products *[]productJSON `json:"products"`
 	}
 	if err := decode(body, &out); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if out.Products == nil {
-		return nil, &Error{Code: "shop_invalid_json"}
+		return nil, 0, &Error{Code: "shop_invalid_json"}
 	}
 	products := []Product{}
 	for _, p := range *out.Products {
@@ -76,7 +87,7 @@ func ParseProducts(body []byte) ([]Product, error) {
 		}
 		products = append(products, Product{ID: p.ID, Handle: p.Handle, Title: title, Tags: parseTags(p.Tags), PublishedAt: published, Body: p.Body})
 	}
-	return products, nil
+	return products, len(*out.Products), nil
 }
 
 // parseTags reads tags as an array, or as the comma-separated string some
@@ -166,14 +177,19 @@ func ParsePeriod(body string) (Period, string) {
 	if !ok {
 		return Period{}, SkipInvalid
 	}
+	// A close without a year falls on or after the opening: in the opening's
+	// year, or the next one when its month and day come earlier.
 	closeYear := match[5]
 	if closeYear == "" {
-		closeYear = match[2]
+		year := opens.Year()
+		month, _ := strconv.Atoi(match[6])
+		day, _ := strconv.Atoi(match[7])
+		if month < int(opens.Month()) || month == int(opens.Month()) && day < opens.Day() {
+			year++
+		}
+		closeYear = strconv.Itoa(year)
 	}
 	closes, ok := date(closeYear, match[6], match[7])
-	if ok && match[5] == "" && closes.Before(opens) {
-		closes = closes.AddDate(1, 0, 0)
-	}
 	if !ok || closes.Before(opens) || closes.After(opens.AddDate(2, 0, 0)) {
 		return Period{}, SkipInvalid
 	}
@@ -192,9 +208,11 @@ func date(year, month, day string) (time.Time, bool) {
 }
 
 // descriptionText is the description as lines of text: tags become line
-// breaks, entities are decoded and full-width digits read as digits.
+// breaks, entities are decoded, every Unicode space reads as a plain space
+// and full-width digits read as digits.
 func descriptionText(body string) string {
-	return wideDigits.Replace(html.UnescapeString(htmlTag.ReplaceAllString(body, "\n")))
+	text := html.UnescapeString(htmlTag.ReplaceAllString(body, "\n"))
+	return wideDigits.Replace(spaceSeparators.ReplaceAllString(text, " "))
 }
 
 // cleanText decodes entities, composes decomposed kana, collapses whitespace

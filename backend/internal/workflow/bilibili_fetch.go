@@ -45,6 +45,13 @@ func (s *SourceSteps) bilibiliFetch(ctx context.Context, source string, window h
 		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 	}
 	cursor, previous := checkpoint.CursorID, 0
+	if source == history.SourceBilibili {
+		// An upload continuation is a later page number; any other stored
+		// value is no continuation.
+		if number, err := strconv.Atoi(cursor); err != nil || number < 2 {
+			cursor = ""
+		}
+	}
 	if cursor != "" {
 		if count, ok := checkpoint.Metadata["discovered"].(float64); ok && count > 0 {
 			previous = int(count)
@@ -72,15 +79,16 @@ func (s *SourceSteps) bilibiliFetch(ctx context.Context, source string, window h
 			}
 			code := bilisource.ErrorCode(fetchErr)
 			// A continuation that no longer answers must not pin the fetch:
-			// begin again at the newest page. A captcha, a block or a login
+			// it is cleared at once, and a fetch with no page committed yet
+			// begins again at the newest page. A captcha, a block or a login
 			// problem says nothing about the continuation.
-			if cursor != "" && committed == 0 && !restarted && made > 0 && retryableBilibiliPage(code) {
+			if cursor != "" && !restarted && made > 0 && retryableBilibiliPage(code) {
 				restarted = true
 				cursor, previous = "", 0
 				if s.Store.ClearBilibiliFetchCheckpoint(ctx, source, key) != nil {
 					return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 				}
-				if total.Requested < maxPages {
+				if committed == 0 && total.Requested < maxPages {
 					if s.bilibiliWait(ctx) != nil {
 						return AttemptResult{}, NewStepError("cancelled", ErrCancelled)
 					}
@@ -137,7 +145,7 @@ func (s *SourceSteps) bilibiliFetch(ctx context.Context, source string, window h
 	if cursor != "" && !stopped {
 		total.Errors = append(total.Errors, history.BudgetMessage)
 	}
-	out := counts(history.Result{Listed: total.Listed, New: total.New, Stored: total.Stored, Failed: total.Failed, Requested: total.Requested, HasMore: cursor != ""})
+	out := counts(history.Result{Listed: total.Listed, New: total.New, Stored: total.Stored, Failed: total.Failed, Requested: total.Requested, HasMore: cursor != "" || stopped})
 	out["items"], out["errors"], out["requested"] = total.Items, total.Errors, requested
 	return AttemptResult{Status: stepStatus(total.Errors), Result: out}, nil
 }
@@ -150,12 +158,7 @@ func (s *SourceSteps) bilibiliPage(ctx context.Context, source string, state bil
 	if source == history.SourceBilibili {
 		number := 1
 		if cursor != "" {
-			parsed, err := strconv.Atoi(cursor)
-			if err != nil || parsed < 1 {
-				// A stored continuation this version cannot read begins again.
-				parsed = 1
-			}
-			number = parsed
+			number, _ = strconv.Atoi(cursor)
 		}
 		page, next, made, err := s.Bilibili.FetchUploadsPage(ctx, state, number)
 		if err != nil {

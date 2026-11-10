@@ -183,6 +183,7 @@ func TestPreviewMatchesTheRun(t *testing.T) {
 	f := newFixture(t)
 	f.addProvider("p-main", protocolChat, "https://provider.example.test/v1", "model-a", `["text","image"]`)
 	f.queue("p-main")
+	f.queueVerify("p-main")
 	reply := chatReply(scheduleReply(songTitle, songDate, songClock, "scheduled"))
 	f.provider.respond = func(request recordedRequest) (int, string) {
 		if strings.Contains(request.body, "失敗") {

@@ -323,3 +323,48 @@ func TestExternalListLinksEachStatusOnThePage(t *testing.T) {
 		t.Fatalf("links:\n got  %v\n want %v", got, want)
 	}
 }
+
+// An account that joins X_HANDLES leaves the related list at the next start,
+// and the posts the pool promoted for it become own posts: a post the rules
+// hid is shown again, an operator's demote stays hidden.
+func TestSettleXRelatedRolesMakesAnOwnAccountOwn(t *testing.T) {
+	f := newRelatedFixture(t)
+	ctx := context.Background()
+	if _, err := f.s.WriteXRelated(ctx, "agency_synthetic", xsource.Result{Posts: []xsource.Post{
+		relatedStatus(relatedMatch, "#鹿乃まほろ 出演決定"),
+		relatedStatus(relatedOther, "鹿乃まほろ 告知"),
+	}}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.SetXStatusDecision(ctx, relatedOther, "demote", "synthetic reason"); err != nil {
+		t.Fatal(err)
+	}
+	f.rules("no match")
+	if f.state(relatedMatch) != "hidden" || f.state(relatedOther) != "hidden" {
+		t.Fatalf("before=%s,%s", f.state(relatedMatch), f.state(relatedOther))
+	}
+	before := f.text(`SELECT COALESCE((SELECT value FROM app_settings WHERE key='dashboard_revision'),'0')`)
+	if err := f.s.SettleXRelatedRoles(ctx, []string{"kano_2525", "@Agency_Synthetic"}); err != nil {
+		t.Fatal(err)
+	}
+	if accounts, err := f.s.XRelatedAccounts(ctx); err != nil || len(accounts) != 0 {
+		t.Fatalf("accounts=%+v err=%v", accounts, err)
+	}
+	if f.state(relatedMatch) != "shown" || f.state(relatedOther) != "hidden" {
+		t.Fatalf("after=%s,%s", f.state(relatedMatch), f.state(relatedOther))
+	}
+	if got := f.text(`SELECT COUNT(*) FROM posts WHERE promoted_at IS NOT NULL`); got != "0" {
+		t.Fatalf("promoted=%s", got)
+	}
+	if got := f.text(`SELECT COUNT(*) FROM x_statuses WHERE demoted_at IS NOT NULL OR manual_decision IS NOT NULL`); got != "0" {
+		t.Fatalf("pool marks=%s", got)
+	}
+	if f.text(`SELECT COALESCE((SELECT value FROM app_settings WHERE key='dashboard_revision'),'0')`) == before {
+		t.Fatal("revision unchanged")
+	}
+	// A second start changes nothing.
+	again := f.text(`SELECT COALESCE((SELECT value FROM app_settings WHERE key='dashboard_revision'),'0')`)
+	if err := f.s.SettleXRelatedRoles(ctx, []string{"agency_synthetic"}); err != nil || f.text(`SELECT COALESCE((SELECT value FROM app_settings WHERE key='dashboard_revision'),'0')`) != again {
+		t.Fatalf("second settle err=%v", err)
+	}
+}

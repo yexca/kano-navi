@@ -233,9 +233,9 @@ func contentLengthString(value int) string { return strconv.Itoa(value) }
 func TestCalendarCarriesTheBilibiliLiveURL(t *testing.T) {
 	path := testutil.NewSnapshot(t)
 	testutil.Exec(t, path, `
-		INSERT INTO events (id,source,title,starts_on,starts_at,timezone,time_precision,status,event_type,url,platform,provenance,manual_locked,cancellation_status,created_at,updated_at) VALUES
-		 ('bilibili-stream','bilibili','杂谈','2026-10-10','2026-10-10T12:00:00Z','Asia/Tokyo','exact','scheduled','stream','https://www.bilibili.com/opus/1','bilibili','automatic',0,'none','',''),
-		 ('youtube-stream','youtube','雑談','2026-10-10','2026-10-10T13:00:00Z','Asia/Tokyo','exact','scheduled','stream','https://www.youtube.com/watch?v=AAAAAAAAAAA','youtube','automatic',0,'none','','');
+		INSERT INTO events (id,source,title,starts_on,starts_at,timezone,time_precision,status,event_type,url,platform,platforms,provenance,manual_locked,cancellation_status,created_at,updated_at) VALUES
+		 ('bilibili-stream','bilibili','杂谈','2026-10-10','2026-10-10T12:00:00Z','Asia/Tokyo','exact','scheduled','stream','https://www.bilibili.com/opus/1','bilibili','["bilibili"]','automatic',0,'none','',''),
+		 ('youtube-stream','youtube','雑談','2026-10-10','2026-10-10T13:00:00Z','Asia/Tokyo','exact','scheduled','stream','https://www.youtube.com/watch?v=AAAAAAAAAAA','youtube','["youtube"]','automatic',0,'none','','');
 		INSERT INTO sync_state (source,account_id,metadata_json) VALUES ('bilibili-live','316381099','{"roomId":"1000001","liveStatus":0}');`)
 	store, err := sqlite.OpenReadOnly(path)
 	if err != nil {

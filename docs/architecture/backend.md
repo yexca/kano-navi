@@ -69,8 +69,8 @@ is occupied.
    indexes are added from the embedded schema, followed by the backfills
    (schedule periods, post account handles, focus video IDs, provider
    capabilities and retries, the route-target copy, default catalog models,
-   the merge of per-stage routes into the extraction queue, and the one-time
-   seed of the schedule-image check queue). An `events`
+   the merge of per-stage routes into the text schedule queue, and the one-time
+   seed of the image extraction queue). An `events`
    table without event sources is rebuilt in place: every row keeps its ID,
    gains its Japan calendar date and becomes its own source evidence, and
    events curated from X are locked. Nothing else is dropped or cleared. A
@@ -84,9 +84,9 @@ is occupied.
    for public projections. Read-only mode opens its own four-connection pool
    without enabling WAL or creating sidecars.
 7. Interrupted workflow runs are recovered, a stored interval of either
-   Bilibili timer below `BILIBILI_MIN_INTERVAL_MINUTES` is raised to it, and a
-   saved Bilibili timer without a dynamics timer gets one beside it (see
-   [Source schedules](workflows.md#the-workflows-table)). No other timers are
+   Bilibili timer below `BILIBILI_MIN_INTERVAL_MINUTES` is raised to it (see
+   [Source schedules](workflows.md#the-workflows-table)), and the accounts
+   named in `X_HANDLES` are settled as own accounts only. No timers are
    seeded; [source schedules](workflows.md#source-schedules) hold them.
 8. The timer starts unless `WORKFLOW_SCHEDULER_ENABLED=0`. It submits due
    source schedules, earliest first.

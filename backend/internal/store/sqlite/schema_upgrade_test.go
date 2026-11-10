@@ -388,6 +388,77 @@ func TestStandaloneSeedsVerifyQueueOnce(t *testing.T) {
 	}
 }
 
+func TestStandaloneSeedsEmptyImageQueueAfterFirstSeed(t *testing.T) {
+	const stamp = "2026-03-01T00:00:00.000Z"
+	setup := func(t *testing.T, extra ...string) string {
+		t.Helper()
+		p := filepath.Join(t.TempDir(), "snapshot.sqlite")
+		s, err := OpenStandalone(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// An install that ran the first seed while image posts still used the
+		// schedule queue: its marker is set, the image marker is not, and the
+		// image queue is empty.
+		statements := append([]string{
+			`DELETE FROM app_settings WHERE key='llm_image_queue_seeded'`,
+			`INSERT INTO llm_providers(id,name,base_url,model,created_at,updated_at) VALUES('alpha','Alpha','https://alpha.example.test/v1','','` + stamp + `','` + stamp + `')`,
+			`INSERT INTO llm_models(provider_id,model_id,tags_json,enabled,origin,created_at,updated_at) VALUES
+				('alpha','a-text','["text"]',1,'manual','` + stamp + `','` + stamp + `'),
+				('alpha','a-both','["text","image"]',1,'manual','` + stamp + `','` + stamp + `')`,
+			`INSERT INTO llm_route_targets(route,provider_id,model_id,priority,created_at,updated_at) VALUES
+				('schedule','alpha','a-text',0,'` + stamp + `','` + stamp + `'),
+				('schedule','alpha','a-both',1,'` + stamp + `','` + stamp + `')`,
+		}, extra...)
+		for _, statement := range statements {
+			if _, err = s.db.Exec(statement); err != nil {
+				t.Fatalf("%s: %v", statement, err)
+			}
+		}
+		s.Close()
+		return p
+	}
+	queues := func(t *testing.T, p string) string {
+		t.Helper()
+		s, err := OpenStandalone(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		var got sql.NullString
+		if err = s.db.QueryRow(`SELECT group_concat(route||':'||model_id||':'||priority,',') FROM
+			(SELECT * FROM llm_route_targets ORDER BY route,priority)`).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		return got.String
+	}
+	t.Run("empty image queue", func(t *testing.T) {
+		p := setup(t)
+		want := "schedule:a-text:0,schedule:a-both:1,verify:a-both:0"
+		if got := queues(t, p); got != want {
+			t.Fatalf("queues = %q, want %q", got, want)
+		}
+		db, err := sql.Open("sqlite", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = db.Exec(`DELETE FROM llm_route_targets WHERE route='verify'`); err != nil {
+			t.Fatal(err)
+		}
+		db.Close()
+		if got := queues(t, p); got != "schedule:a-text:0,schedule:a-both:1" {
+			t.Fatalf("second start reseeded: %q", got)
+		}
+	})
+	t.Run("configured image queue", func(t *testing.T) {
+		p := setup(t, `INSERT INTO llm_route_targets(route,provider_id,model_id,priority,created_at,updated_at) VALUES('verify','alpha','a-text',0,'`+stamp+`','`+stamp+`')`)
+		want := "schedule:a-text:0,schedule:a-both:1,verify:a-text:0"
+		if got := queues(t, p); got != want {
+			t.Fatalf("queues = %q, want %q", got, want)
+		}
+	})
+}
+
 func TestStandaloneRefusesUnrecognizedSchemaUnchanged(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "snapshot.sqlite")
 	db, _ := sql.Open("sqlite", p)

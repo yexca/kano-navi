@@ -410,8 +410,8 @@ func (d decision) result() postResult {
 	return postResult{status: d.disposition}
 }
 
-// targetLookup returns the usable extraction queue targets of an input mode,
-// or none with the reason (configuredProviders).
+// targetLookup returns the usable text or image extraction queue targets of an
+// input mode, or none with the reason (configuredProviders).
 type targetLookup func(inputMode string) ([]provider, string, error)
 
 // liveTargets reads the queue each time it is asked, as the run does for

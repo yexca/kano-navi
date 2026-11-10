@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 type roundTrip func(*http.Request) (*http.Response, error)
@@ -27,6 +28,7 @@ func TestParseThumbnailAsksForTheLargeSizeOnItsHost(t *testing.T) {
 		"deleted":   {answer("fail", `<error><code>DELETED</code></error>`), "", CodeNotFound},
 		"missing":   {answer("fail", `<error><code>NOT_FOUND</code></error>`), "", CodeNotFound},
 		"busy":      {answer("fail", `<error><code>BUSY</code></error>`), "", CodeUnavailable},
+		"other one": {answer("ok", `<thumb><video_id>sm9</video_id><thumbnail_url>https://nicovideo.cdn.nimg.jp/thumbnails/8/8</thumbnail_url></thumb>`), "", CodeInvalidAnswer},
 		"other id":  {answer("ok", `<thumb><video_id>sm8</video_id><thumbnail_url>https://nicovideo.cdn.nimg.jp/thumbnails/9/9</thumbnail_url></thumb>`), "", CodeInvalidAnswer},
 		"elsewhere": {answer("ok", `<thumb><video_id>sm9</video_id><thumbnail_url>https://example.com/thumbnails/9/9</thumbnail_url></thumb>`), "", CodeInvalidAnswer},
 		"plain":     {answer("ok", `<thumb><video_id>sm9</video_id><thumbnail_url>http://nicovideo.cdn.nimg.jp/thumbnails/9/9</thumbnail_url></thumb>`), "", CodeInvalidAnswer},
@@ -64,5 +66,33 @@ func TestThumbnailBoundsTheRequest(t *testing.T) {
 		if code != CodeInvalidVideo && asked != "https://"+APIHost+"/api/getthumbinfo/"+id {
 			t.Fatalf("%s asked %q", id, asked)
 		}
+	}
+}
+
+// stalledBody sends its first bytes and then waits until the request ends.
+type stalledBody struct {
+	ctx  context.Context
+	sent bool
+}
+
+func (b *stalledBody) Read(p []byte) (int, error) {
+	if !b.sent {
+		b.sent = true
+		return copy(p, "<a>"), nil
+	}
+	<-b.ctx.Done()
+	return 0, b.ctx.Err()
+}
+
+func (b *stalledBody) Close() error { return nil }
+
+func TestThumbnailBodyStalledPastTheDeadlineIsATimeout(t *testing.T) {
+	client := NewClient(&http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: &stalledBody{ctx: r.Context()}}, nil
+	})})
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := client.Thumbnail(ctx, "sm9"); ErrorCode(err) != CodeTimeout {
+		t.Fatalf("err %v", err)
 	}
 }

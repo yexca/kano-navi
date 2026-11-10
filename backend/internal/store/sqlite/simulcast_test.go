@@ -342,8 +342,9 @@ func TestManualEventPlatforms(t *testing.T) {
 	}
 }
 
-// Startup adds the platforms columns to an older snapshot without rewriting
-// rows: a row without the array reads as its single platform.
+// Startup adds the platform columns to an older snapshot without rewriting
+// the array: a YouTube writer's row gets its single platform and reads as
+// youtube, every other row as no platform.
 func TestStandaloneAddsTheEventPlatformsColumns(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "snapshot.sqlite")
 	s, err := OpenStandalone(p)
@@ -352,10 +353,11 @@ func TestStandaloneAddsTheEventPlatformsColumns(t *testing.T) {
 	}
 	const stamp = "2026-03-01T00:00:00.000Z"
 	for _, statement := range []string{
+		`ALTER TABLE events DROP COLUMN platform`,
 		`ALTER TABLE events DROP COLUMN platforms`,
 		`ALTER TABLE events DROP COLUMN platforms_inferred`,
-		`INSERT INTO events(id,source,title,starts_on,provenance,manual_locked,platform,created_at,updated_at) VALUES('bilibili-a','bilibili','a','2026-03-02','automatic',0,'bilibili','` + stamp + `','` + stamp + `')`,
-		`INSERT INTO events(id,source,title,starts_on,provenance,manual_locked,platform,created_at,updated_at) VALUES('x-a','x','a','2026-03-02','automatic',0,'unknown','` + stamp + `','` + stamp + `')`,
+		`INSERT INTO events(id,source,title,starts_on,provenance,manual_locked,created_at,updated_at) VALUES('youtube-a','youtube','a','2026-03-02','automatic',0,'` + stamp + `','` + stamp + `')`,
+		`INSERT INTO events(id,source,title,starts_on,provenance,manual_locked,created_at,updated_at) VALUES('x-a','x','a','2026-03-02','automatic',0,'` + stamp + `','` + stamp + `')`,
 	} {
 		if _, err = s.db.Exec(statement); err != nil {
 			t.Fatal(err)
@@ -366,7 +368,7 @@ func TestStandaloneAddsTheEventPlatformsColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	for id, want := range map[string][]string{"bilibili-a": {"bilibili"}, "x-a": {}} {
+	for id, want := range map[string][]string{"youtube-a": {"youtube"}, "x-a": {}} {
 		var platform, platforms sql.NullString
 		var inferred int
 		var updated string

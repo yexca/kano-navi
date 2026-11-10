@@ -318,6 +318,12 @@ export function ImageCard({
           ) : image.llmReason ? (
             <p className="adm-verdict-reason">{image.llmReason}</p>
           ) : null}
+          {image.llmText ? (
+            <div className="adm-verdict-text">
+              <strong>{t("admin.review.extractedText")}</strong>
+              <pre>{image.llmText}</pre>
+            </div>
+          ) : null}
           {image.manualReason ? (
             <p className="adm-quote is-manual">{image.manualReason}</p>
           ) : null}

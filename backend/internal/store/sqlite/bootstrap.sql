@@ -284,6 +284,7 @@ CREATE TABLE schedule_asset_reviews (
     asset_id TEXT PRIMARY KEY REFERENCES assets (id) ON DELETE CASCADE,
     llm_status TEXT NOT NULL DEFAULT 'pending',
     llm_confidence REAL,
+    llm_text TEXT,
     llm_reason TEXT,
     llm_evidence TEXT,
     llm_model TEXT,

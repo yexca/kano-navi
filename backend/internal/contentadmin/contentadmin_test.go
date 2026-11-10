@@ -812,7 +812,7 @@ func seedScheduleAssets(f *fixture) (boardURL, thumbURL, thumbHash string) {
 		boardURL, "https://x.com/synthetic/status/1", "weekly board", "2026-10-05", stamp, "2026-10-05", "2026-10-11")
 	f.exec(`INSERT INTO assets(id,kind,url,source_url,week_start,updated_at) VALUES('thumb','schedule',?,?,?,?)`, thumbURL, "https://x.com/synthetic/status/2", "2026-09-28", stamp)
 	f.exec(`INSERT INTO assets(id,kind,url,updated_at) VALUES('logo','brand','/assets/logo.png',?)`, stamp)
-	f.exec(`INSERT INTO schedule_asset_reviews(asset_id,llm_status,llm_confidence,llm_reason,updated_at) VALUES('board','schedule',0.9,'weekly grid',?)`, stamp)
+	f.exec(`INSERT INTO schedule_asset_reviews(asset_id,llm_status,llm_confidence,llm_text,llm_reason,updated_at) VALUES('board','schedule',0.9,'月曜 20:00 配信','weekly grid',?)`, stamp)
 	f.exec(`INSERT INTO schedule_asset_reviews(asset_id,llm_status,llm_confidence,updated_at) VALUES('thumb','schedule',0.7,?)`, stamp)
 
 	image := syntheticPNG(40)
@@ -841,7 +841,7 @@ func TestScheduleAssetListAndManualReview(t *testing.T) {
 	}
 	board, thumb := object(t, assets[0]), object(t, assets[1])
 	if board["id"] != "board" || board["approved"] != true || board["sourceMatchesBoard"] != true || board["effectiveStatus"] != "schedule" ||
-		board["llmConfidence"] != 0.9 || board["manualStatus"] != "unreviewed" || board["periodBasis"] != "inferred" || board["weekStart"] != "2026-10-05" {
+		board["llmConfidence"] != 0.9 || board["llmText"] != "月曜 20:00 配信" || board["manualStatus"] != "unreviewed" || board["periodBasis"] != "inferred" || board["weekStart"] != "2026-10-05" {
 		t.Fatalf("unexpected board review: %#v", board)
 	}
 	if board["mediaStatus"] != "pending" || board["mediaId"] != sha256Hex([]byte(boardURL)) || board["mediaSourceUrl"] != boardURL || board["previewUrl"] != nil {

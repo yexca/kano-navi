@@ -40,19 +40,23 @@ func TestReminderOfASaleMergesIntoTheAnnouncedPeriod(t *testing.T) {
 
 func TestASaleWithoutAShopLinkMatchesOnlyByWhatItSells(t *testing.T) {
 	f := newMergeFixture(t)
-	f.add("x-period", "x", "コラボグッズ受注期間", "2026-10-20", "", "sale", shop, "ends_on='2026-11-03'")
-	// Reminders that link the post rather than a shop: one names the goods,
-	// the others only words and counts every sale uses.
+	f.add("x-period", "x", "鹿乃まほろ コラボグッズ受注期間", "2026-10-20", "", "sale", shop, "ends_on='2026-11-03'")
+	// Entries that link the post rather than a shop: one names the goods,
+	// the others only words and counts every sale uses, or Kano's name,
+	// which names no goods.
 	f.add("x-goods", "x", "コラボグッズ 残り2日", "2026-11-03", "", "sale",
 		"url='https://x.com/synthetic_handle/status/1'", "ends_on='2026-11-03'")
 	f.add("x-generic", "x", "受注 本日まで", "2026-11-03", "", "sale",
 		"url='https://x.com/synthetic_handle/status/2'", "ends_on='2026-11-03'")
 	f.add("x-count", "x", "受付終了まで残り2日", "2026-11-03", "", "sale", "ends_on='2026-11-03'")
+	f.add("x-named", "x", "鹿乃まほろ 誕生日ボイス 販売", "2026-10-25", "", "sale",
+		"url='https://x.com/synthetic_handle/status/3'", "ends_on='2026-11-01'")
 	f.reconcile()
 	for id, want := range map[string]string{
 		"x-goods":   "x-period|rule|rule_c:sale_period",
 		"x-generic": "||",
 		"x-count":   "||",
+		"x-named":   "||",
 		"x-period":  "||",
 	} {
 		if got := f.state(id); got != want {

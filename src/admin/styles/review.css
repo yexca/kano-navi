@@ -126,6 +126,24 @@
   overflow-wrap: anywhere;
 }
 
+.adm-verdict-text {
+  margin-top: 0.75rem;
+  color: var(--adm-muted);
+  font-size: 0.9rem;
+}
+
+.adm-verdict-text strong {
+  display: block;
+  color: var(--adm-text);
+  font-size: 0.8rem;
+}
+
+.adm-verdict-text pre {
+  margin: 0.3rem 0 0;
+  white-space: pre-wrap;
+  font: inherit;
+}
+
 blockquote.adm-verdict-reason {
   padding-left: 12px;
   border-left: 3px solid var(--tone-line, var(--adm-line-strong));

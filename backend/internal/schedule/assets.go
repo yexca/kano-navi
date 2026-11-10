@@ -51,9 +51,10 @@ func (e *Extractor) assetImage(ctx context.Context, review *assetReview) (*cache
 }
 
 // verifyAsset asks an image-capable provider whether one schedule asset
-// really is a schedule board. The source-text gate runs first, so an image
-// whose post does not read as a board notice never reaches a model and can
-// only be published by a manual label.
+// really is a schedule board and, when it is, transcribes the visible text.
+// The source-text gate runs first, so an image whose post does not read as a
+// board notice never reaches a model and can only be published by a manual
+// label.
 func (e *Extractor) verifyAsset(ctx context.Context, assetID string, force bool) (assetResult, error) {
 	review, err := getAssetReview(ctx, e.db, assetID)
 	if err != nil {
@@ -174,6 +175,7 @@ func (e *Extractor) attemptVerification(ctx context.Context, target provider, ca
 	}
 	update.llmStatus = result.classification
 	update.llmConfidence = &result.confidence
+	update.llmText = result.extractedText
 	update.llmReason = result.reason
 	update.llmEvidence = result.evidence
 	update.llmModel = target.model
@@ -276,6 +278,7 @@ func (e *Extractor) verifyPendingAssets(ctx context.Context, limit int, force bo
 				llmConfidence: result.confidence,
 			}
 			if verified != nil {
+				copied.llmText = verified.llmText
 				copied.llmReason = verified.llmReason
 				copied.llmEvidence = verified.llmEvidence
 				copied.llmModel = verified.llmModel

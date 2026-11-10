@@ -291,10 +291,10 @@ func PublicSyncRun(run *sqlite.SyncRun) *PublicSyncRunResponse {
 		return nil
 	}
 	message, ok := map[string]string{
-		"success": "同步完成",
-		"partial": "部分数据源不可用或存在警告，保留已有快照",
-		"failed":  "同步失败，保留已有快照",
-		"running": "同步进行中",
+		"success": "Sync completed",
+		"partial": "Some data sources are unavailable or reported warnings; the existing snapshot remains",
+		"failed":  "Sync failed; the existing snapshot remains",
+		"running": "Sync in progress",
 	}[run.Status]
 	var publicMessage *string
 	if ok {

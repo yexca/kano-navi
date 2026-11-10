@@ -118,12 +118,14 @@ func (a *Adapter) Read(ctx context.Context, state State, stored []Sale, all bool
 			}
 			out.Requested++
 			out.Pages++
-			listed, err := a.Client.CatalogPage(ctx, page)
+			listed, size, err := a.Client.CatalogPage(ctx, page)
 			if err != nil {
 				return fail(err)
 			}
 			add(listed)
-			if len(listed) < CatalogPageSize {
+			// The page's own size ends the catalog, so a product left out
+			// as unusable does not cut a full page short.
+			if size < CatalogPageSize {
 				out.ReachedEnd = true
 				break
 			}

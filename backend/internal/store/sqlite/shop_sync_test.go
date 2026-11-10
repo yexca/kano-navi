@@ -78,6 +78,12 @@ func TestShopReadWritesOneSaleAndKeepsItWhileTheShopMovesOn(t *testing.T) {
 	if !strings.Contains(row.raw, `"collection":"synthetic_goods"`) || !strings.Contains(row.raw, `"id":2`) {
 		t.Fatalf("raw=%s", row.raw)
 	}
+	// The shop states its platform as the announced array, not by default.
+	var platforms string
+	var inferred int
+	if err = s.DB().QueryRow(`SELECT platforms,platforms_inferred FROM events WHERE id=?`, row.id).Scan(&platforms, &inferred); err != nil || platforms != `["other"]` || inferred != 0 {
+		t.Fatalf("platforms=%q inferred=%d err=%v", platforms, inferred, err)
+	}
 	var key, period string
 	if err = s.DB().QueryRow(`SELECT source_item_id,source_key FROM event_sources WHERE source='shop' AND event_id=?`, row.id).Scan(&key, &period); err != nil || key != "サンプル加入記念グッズ" || period != "2026-10-24/2026-11-24" {
 		t.Fatalf("evidence=%q %q err=%v", key, period, err)

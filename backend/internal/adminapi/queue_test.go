@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -110,11 +111,26 @@ func TestXRefreshQueueFollowsTheStep(t *testing.T) {
 	if first["postId"] != "200" || first["status"] != "notRead" || second["postId"] != "121" || second["status"] != "next" {
 		t.Fatalf("order = %v, %v", first, second)
 	}
-	if statuses["next"] != 20 || statuses["later"] != 2 || statuses["notRead"] != 1 {
+	// One run reads as many refreshes as its detail budget (12 by default)
+	// gives the account, at most perAccount.
+	if statuses["next"] != 12 || statuses["later"] != 10 || statuses["notRead"] != 1 {
 		t.Fatalf("statuses = %v", statuses)
 	}
 	if last := entries[22].(map[string]any); last["postId"] != "100" || last["status"] != "later" {
 		t.Fatalf("last = %v", last)
+	}
+	settings := sqlite.DefaultSyncSettings()
+	settings.XMaxStatusRequests = 50
+	if err := c.store.SaveSyncSettings(context.Background(), settings); err != nil {
+		t.Fatal(err)
+	}
+	_, payload = c.call(t, http.MethodGet, "/api/admin/queue/x-refresh", "")
+	statuses = map[string]int{}
+	for _, item := range payload["queue"].(map[string]any)["entries"].([]any) {
+		statuses[item.(map[string]any)["status"].(string)]++
+	}
+	if statuses["next"] != 20 || statuses["later"] != 2 {
+		t.Fatalf("statuses with a budget of 50 = %v", statuses)
 	}
 }
 

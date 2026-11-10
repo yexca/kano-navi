@@ -164,3 +164,50 @@ func TestWorksCoverLookupsKeepBilibilisBackoff(t *testing.T) {
 		t.Fatalf("a blocked source was asked again: %#v", platforms.requests)
 	}
 }
+
+func TestWorksCoverLookupsStopNiconicoAtItsFirstRateLimit(t *testing.T) {
+	s, err := sqlite.OpenInitialized(filepath.Join(t.TempDir(), "data", "database", "snapshot.sqlite"), true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var mu sync.Mutex
+	asked := 0
+	client := &http.Client{Transport: rateLimited(func(r *http.Request) (*http.Response, error) {
+		mu.Lock()
+		asked++
+		mu.Unlock()
+		return &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(""))}, nil
+	})}
+	index := works.Index{UpdatedAt: "2026-01-03", Uploads: []works.Upload{
+		{ID: "2026-01-01-aaaaaa", Date: "2026-01-01", Videos: []works.Video{{Platform: works.Niconico, ID: "sm1"}}},
+		{ID: "2026-01-02-bbbbbb", Date: "2026-01-02", Videos: []works.Video{{Platform: works.Niconico, ID: "sm2"}}},
+		{ID: "2026-01-03-cccccc", Date: "2026-01-03", Videos: []works.Video{{Platform: works.Niconico, ID: "sm3"}}},
+	}}
+	steps := &SourceSteps{Store: s, Niconico: niconico.NewClient(client), Works: &index}
+	out, err := steps.workCovers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The 429 is recorded as a failed lookup and the rest wait for a later run.
+	if asked != 1 || out.Lookups != 1 || out.Failed != 1 {
+		t.Fatalf("asked=%d out=%+v", asked, out)
+	}
+	report, err := s.WorkCoverReport(context.Background(), index, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiting := 0
+	for _, upload := range report.Uploads {
+		if video := upload.Videos[0]; video.Code != nil && *video.Code == niconico.CodeRateLimited {
+			waiting++
+		}
+	}
+	if waiting != 1 {
+		t.Fatalf("report=%#v", report)
+	}
+}
+
+type rateLimited func(*http.Request) (*http.Response, error)
+
+func (f rateLimited) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

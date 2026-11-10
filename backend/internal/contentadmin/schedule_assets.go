@@ -42,6 +42,7 @@ type scheduleAsset struct {
 	AssetVersion        int64    `json:"assetVersion"`
 	LLMStatus           string   `json:"llmStatus"`
 	LLMConfidence       *float64 `json:"llmConfidence"`
+	LLMText             *string  `json:"llmText"`
 	LLMReason           *string  `json:"llmReason"`
 	LLMEvidence         *string  `json:"llmEvidence"`
 	LLMModel            *string  `json:"llmModel"`
@@ -84,7 +85,7 @@ var scheduleAssetColumns = `
      ORDER BY p.published_at DESC LIMIT 1),
   (SELECT p.published_at FROM posts p WHERE p.url = a.source_url
      ORDER BY p.published_at DESC LIMIT 1),
-  r.llm_status, r.llm_confidence,
+  r.llm_status, r.llm_confidence, r.llm_text,
   r.llm_reason, r.llm_evidence,
   r.llm_model, r.llm_checked_at,
   r.llm_input_fingerprint,
@@ -115,13 +116,13 @@ func scanScheduleAsset(row rowScanner) (*scheduleAsset, error) {
 	var asset scheduleAsset
 	var sourceURL, alt, weekStart, periodStart, periodEnd, periodBasis, inferredStart, inferredEnd, periodReason sql.NullString
 	var postText, postPublishedAt sql.NullString
-	var sourceAccount, assetUpdatedAt, sourceText, llmStatus, llmReason, llmEvidence, llmModel, llmCheckedAt, fingerprint sql.NullString
+	var sourceAccount, assetUpdatedAt, sourceText, llmStatus, llmText, llmReason, llmEvidence, llmModel, llmCheckedAt, fingerprint sql.NullString
 	var manualStatus, manualReason, manualCheckedAt, reviewUpdatedAt sql.NullString
 	var confidence sql.NullFloat64
 	var version sql.NullInt64
 	err := row.Scan(&asset.ID, &asset.Kind, &asset.URL, &sourceURL, &alt, &weekStart, &periodStart, &periodEnd, &periodBasis,
 		&inferredStart, &inferredEnd, &periodReason, &sourceAccount, &assetUpdatedAt, &version, &sourceText,
-		&postText, &postPublishedAt, &llmStatus, &confidence, &llmReason, &llmEvidence, &llmModel, &llmCheckedAt, &fingerprint,
+		&postText, &postPublishedAt, &llmStatus, &confidence, &llmText, &llmReason, &llmEvidence, &llmModel, &llmCheckedAt, &fingerprint,
 		&manualStatus, &manualReason, &manualCheckedAt, &reviewUpdatedAt)
 	if err != nil {
 		return nil, err
@@ -134,7 +135,7 @@ func scanScheduleAsset(row rowScanner) (*scheduleAsset, error) {
 	asset.InferredPeriodStart, asset.InferredPeriodEnd, asset.PeriodReason = textPointer(inferredStart), textPointer(inferredEnd), textPointer(periodReason)
 	asset.SourceAccount, asset.AssetUpdatedAt = textPointer(sourceAccount), textPointer(assetUpdatedAt)
 	asset.AssetVersion = version.Int64
-	asset.LLMReason, asset.LLMEvidence, asset.LLMModel = textPointer(llmReason), textPointer(llmEvidence), textPointer(llmModel)
+	asset.LLMText, asset.LLMReason, asset.LLMEvidence, asset.LLMModel = textPointer(llmText), textPointer(llmReason), textPointer(llmEvidence), textPointer(llmModel)
 	asset.LLMCheckedAt, asset.LLMInputFingerprint = textPointer(llmCheckedAt), textPointer(fingerprint)
 	asset.ManualReason, asset.ManualCheckedAt, asset.ReviewUpdatedAt = textPointer(manualReason), textPointer(manualCheckedAt), textPointer(reviewUpdatedAt)
 	if confidence.Valid && !math.IsNaN(confidence.Float64) && !math.IsInf(confidence.Float64, 0) {

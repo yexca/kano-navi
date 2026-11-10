@@ -6,29 +6,30 @@ import "strings"
 // server/schedule-extractor.ts. extractorVersion is part of stored extraction
 // identities, so changing it reprocesses every known post.
 const (
-	extractorVersion     = "openai-schedule-v6"
+	extractorVersion     = "openai-schedule-v7"
 	defaultOpenAIBaseURL = "https://api.openai.com/v1"
 
 	protocolResponses = "openai-responses"
 	protocolChat      = "openai-chat-completions"
 	protocolAnthropic = "anthropic-messages"
 
-	// routeMessage and routeBoard record a post's detection path; both paths
-	// draw their models from the extraction queue stored as routeQueue.
+	// routeMessage and routeBoard record a post's detection path. Text-only
+	// inputs use routeQueue; inputs with images use routeVerify.
 	routeMessage = "schedule_message"
 	routeBoard   = "schedule_board"
 	routeQueue   = "schedule"
-	// routeVerify is the separate schedule-image check queue; it never falls
-	// back to the extraction queue.
+	// routeVerify is the image schedule extraction queue; it never falls back
+	// to the text extraction queue.
 	routeVerify = "verify"
 	// routeTranslate is the separate translation queue; it never falls back
 	// to the schedule queue.
 	routeTranslate = "translate"
 
-	extractionToolName   = "kano_schedule_extraction"
-	verificationToolName = "kano_schedule_asset_verification"
-	translationToolName  = "kano_text_translation"
-	eventTagToolName     = "kano_event_tag"
+	extractionToolName      = "kano_schedule_extraction"
+	imageExtractionToolName = "kano_schedule_image_extraction"
+	verificationToolName    = "kano_schedule_asset_verification"
+	translationToolName     = "kano_text_translation"
+	eventTagToolName        = "kano_event_tag"
 
 	// eventTagInstructions classifies one YouTube or Bilibili title for the
 	// calendar and the video archive. It is a short-text judgement like
@@ -86,13 +87,18 @@ const (
 	// status codes and shows titles in their original wording.
 	scheduleLanguageInstruction = "Keep each title and the cited evidence in the post's original wording. Write detail and reason in English, and give status as one short lowercase English word such as scheduled, tentative or released."
 
-	scheduleAssetVerificationInstructions = "Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the image is unreadable or the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly."
+	scheduleAssetVerificationInstructions = "Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. When it is a schedule, copy the visible schedule wording into text, preserving line breaks and the original language. Return an empty text string when it is not a schedule or the image is unreadable. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly."
+
+	// Image posts use the image queue. The structured events keep the calendar
+	// working while text is the faithful transcription that the image queue is
+	// responsible for producing.
+	imageScheduleInstructions = "Read the attached schedule image as the image extraction stage. First decide whether it contains a concrete schedule. When it is a schedule, copy the visible schedule wording into text, preserving line breaks and the original language, and extract only entries supported by that image. Return an empty text string for not_schedule or uncertain. "
 
 	// JSON.stringify(scheduleSchema) and
 	// JSON.stringify(scheduleAssetVerificationSchema), byte-exact.
 	scheduleSchema rawJSON = `{"type":"object","additionalProperties":false,"properties":{"classification":{"type":"string","enum":["schedule","not_schedule","uncertain"]},"events":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string"},"detail":{"anyOf":[{"type":"string"},{"type":"null"}]},"date":{"type":"string"},"time":{"anyOf":[{"type":"string"},{"type":"null"}]},"endTime":{"anyOf":[{"type":"string"},{"type":"null"}]},"endDate":{"anyOf":[{"type":"string"},{"type":"null"}]},"timePrecision":{"type":"string","enum":["exact","approximate","unknown"]},"status":{"type":"string"},"eventType":{"type":"string","enum":["event","stream","member","release","appearance","sale"]},"tag":{"anyOf":[{"type":"string","enum":["live","game","talk","song","video"]},{"type":"null"}]},"url":{"anyOf":[{"type":"string"},{"type":"null"}]},"platform":{"type":"string","enum":["youtube","bilibili","other","unknown"]},"confidence":{"type":"number","minimum":0,"maximum":1},"evidence":{"type":"string"}},"required":["title","detail","date","time","endTime","endDate","timePrecision","status","eventType","tag","url","platform","confidence","evidence"]}},"confidence":{"type":"number","minimum":0,"maximum":1},"evidence":{"type":"string"},"reason":{"anyOf":[{"type":"string"},{"type":"null"}]},"action":{"type":"string","enum":["add","update","cancel","none"]}},"required":["classification","events","confidence","evidence","reason","action"]}`
 
-	scheduleAssetVerificationSchema rawJSON = `{"type":"object","additionalProperties":false,"properties":{"classification":{"type":"string","enum":["schedule","not_schedule","uncertain"]},"confidence":{"type":"number","minimum":0,"maximum":1},"evidence":{"type":"string"},"reason":{"type":"string"}},"required":["classification","confidence","evidence","reason"]}`
+	scheduleAssetVerificationSchema rawJSON = `{"type":"object","additionalProperties":false,"properties":{"classification":{"type":"string","enum":["schedule","not_schedule","uncertain"]},"text":{"type":"string"},"confidence":{"type":"number","minimum":0,"maximum":1},"evidence":{"type":"string"},"reason":{"type":"string"}},"required":["classification","text","confidence","evidence","reason"]}`
 )
 
 // The Bilibili variant of the extraction prompt. A dynamic is written in
@@ -120,6 +126,14 @@ var bilibiliScheduleSchema = rawJSON(strings.NewReplacer(
 	`"url":{"anyOf":[{"type":"string"},{"type":"null"}]},"timeZone":{"type":"string","enum":["Asia/Tokyo","Asia/Shanghai"]},"platforms":{"type":"array","items":{"type":"string","enum":["youtube","bilibili","other"]}},`,
 	`"tag","url","platform","confidence","evidence"]`, `"tag","url","platforms","timeZone","confidence","evidence"]`,
 ).Replace(string(scheduleSchema)))
+
+// imageScheduleSchema adds the faithful transcription returned by the image
+// queue without changing the text queue's established request schema.
+func imageScheduleSchema(base rawJSON) rawJSON {
+	value := strings.Replace(string(base), `"events":`, `"text":{"type":"string"},"events":`, 1)
+	value = strings.Replace(value, `"classification","events"`, `"classification","text","events"`, 1)
+	return rawJSON(value)
+}
 
 var defaultScheduleKeywords = []string{
 	"schedule",

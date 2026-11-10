@@ -61,6 +61,12 @@ func (i EventInput) validate(create bool) error {
 	if i.EndsAt != "" && i.EventType == "sale" && i.EndsOn == "" {
 		return ErrEventInvalid
 	}
+	// A close time falls on its close date in Japan.
+	if i.EndsAt != "" && i.EndsOn != "" {
+		if end, err := time.Parse(time.RFC3339Nano, i.EndsAt); err != nil || dateInJapan(end) != i.EndsOn {
+			return ErrEventInvalid
+		}
+	}
 	if i.CancellationStatus == "manual_confirmed" && strings.TrimSpace(i.CancellationReason) == "" {
 		return ErrEventInvalid
 	}

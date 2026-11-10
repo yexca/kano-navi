@@ -16,12 +16,11 @@ import (
 )
 
 const (
-	// QueueRoute names the post extraction priority queue in
-	// llm_route_targets. Both detection paths walk it in order and skip
-	// targets whose capabilities do not fit the request.
+	// QueueRoute names the text schedule extraction priority queue in
+	// llm_route_targets. Text posts walk it in order.
 	QueueRoute = "schedule"
-	// VerifyRoute is the separate schedule-image check queue. Its targets
-	// need the image tag, and the check never falls back to QueueRoute.
+	// VerifyRoute is the image schedule extraction priority queue. Its targets
+	// need the image tag, and image inputs never fall back to QueueRoute.
 	VerifyRoute = "verify"
 	// TranslationRoute is the separate translation queue. Its targets need
 	// the text tag, and the translate step never falls back to QueueRoute.
@@ -46,8 +45,8 @@ var (
 	llmModelTags    = []string{"text", "image", "reasoning", "tools", "embedding"}
 	llmProtocols    = []string{protocolResponses, protocolChat, protocolAnthropic}
 	queueRoutes     = []queueRouteSpec{
-		{QueueRoute, "", "extraction"},
-		{VerifyRoute, "image", "schedule image check"},
+		{QueueRoute, "text", "schedule extraction"},
+		{VerifyRoute, "image", "image extraction"},
 		{TranslationRoute, "text", "translation"},
 	}
 	defaultScheduleKeywords = []string{"schedule", "スケジュール", "配信予定", "週間予定", "今週の予定", "予定"}
@@ -56,8 +55,7 @@ var (
 	providerIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 )
 
-// queueRouteSpec is one stored queue and the routing tag its targets need;
-// the extraction queue accepts any catalog model.
+// queueRouteSpec is one stored queue and the routing tag its targets need.
 type queueRouteSpec struct{ route, needs, label string }
 
 func queueRoute(name string) *queueRouteSpec {

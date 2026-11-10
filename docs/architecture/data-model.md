@@ -167,8 +167,8 @@ rows.
 `backend/internal/store/sqlite/static-seed.json` holds the static profile,
 milestone timeline, and resource directory. Every open inserts the static IDs
 that are missing, plus the `dashboard_revision`, the default `x_accounts`
-and the `llm_route_targets_migrated` and `llm_verify_queue_seeded` markers when
-absent. `x_related_accounts` starts empty, and seeding leaves it as it is. New environments have no X posts, events, YouTube videos, Featured item, schedule assets, or
+and the `llm_route_targets_migrated`, `llm_verify_queue_seeded` and
+`llm_image_queue_seeded` markers when absent. `x_related_accounts` starts empty, and seeding leaves it as it is. New environments have no X posts, events, YouTube videos, Featured item, schedule assets, or
 LLM providers/models/routes.
 `kano-go seed` (`npm run seed`) creates or upgrades the database and fills
 missing static IDs; `-overwrite` restores the shipped profile, timeline and
@@ -295,7 +295,8 @@ A sale is stored as one period and shown at its opening and closing dates. This 
 apply for goods, media or tickets, and is the only type that stores a close:
 the nullable `ends_on` holds its Japan close date and `ends_at` its close
 instant when the time is known. A sale's `ends_at` always has its `ends_on`,
-the Japan date it falls on. Every other row has a null `ends_on`; the admin
+the Japan date it falls on; the store rejects a manual entry whose close
+time falls on another date. Every other row has a null `ends_on`; the admin
 API rejects one and the extraction ignores it. Sales come from post
 extraction and from the [official shop](sources.md#official-shop), whose
 entries are periods with the opening time when known and the close date
@@ -731,8 +732,9 @@ so no merge points at a merged event.
   query; a link to an X post names no shop), or, when either has no shop
   link, when their titles overlap as in Rule A once the words and counts
   every sale title uses (such as 受注, 受付, 締切, グッズ, 本日まで or 残り2日)
-  are removed as well, so a title naming no goods or event matches no other
-  sale. A period covers another that
+  and Kano's own name (鹿乃まほろ, its parts 鹿乃 and まほろ, and its
+  romanization) are removed as well, so a title naming no goods or event
+  matches no other sale. A period covers another that
   opens no earlier and closes no later, and a sale whose close is not known
   when its opening date falls inside; a deadline is covered only by a period
   that closes on its date, or by the same deadline. Of two sales covering
@@ -785,8 +787,12 @@ account's Bilibili uploads. A release and an upload pair when each is the
 other's only match within 30 minutes: the entry's link becomes the upload's
 page and an active `bilibili-video` event source (`source_key` `upload`)
 names it. A pairing that no longer holds (the release moved, or a second
-release or upload made it ambiguous) is released: its source row is retired
-and the link goes back to the dynamic's. An unchanged run writes nothing; an
+release or upload made it ambiguous) is released first: its source row is
+retired and the link goes back to the dynamic's. An upload another entry
+still holds is not paired: a locked or manual entry keeps its upload row
+whatever its state, and so does any other entry that is not deleted and
+whose row is active, so a locked entry's row is never rewritten. An
+unchanged run writes nothing; an
 extraction that rewrites the link restores the dynamic's link until the next
 run pairs it again. The upload source is evidence of the work, not an
 announcement, so it keeps no entry alive that its dynamic no longer lists.
@@ -816,16 +822,16 @@ and `events.platforms_inferred` is 1 when the array came from a source's
 default rather than from the wording or an operator; a Bilibili-only entry
 is one whose array is `["bilibili"]`, stated. `events.platform` is
 the first announced platform, or `unknown`, for readers of the single
-value. A row whose array is null (written before the column existed) reads
-as its single platform when that is `youtube`, `bilibili` or `other`, and
-as none otherwise, stated; `platform` itself is null on rows written before
-that column existed, and the startup that adds it sets `youtube` on the
-YouTube writers' events. Startup adds both columns without rewriting a row.
+value. Startup adds the columns without rewriting the array: `platform` is
+null on rows written before it existed, and the startup that adds it sets
+`youtube` on the YouTube writers' events. A row whose array is null reads as
+`["youtube"]`, stated, when its `platform` is `youtube`, and as no platform
+otherwise.
 
 Extraction writes the announced platforms with the other fields of an
 automatic entry, under the same manual locks and tombstones (see
 [Source time zones](sources.md#source-time-zones)); the YouTube writers
-write `["youtube"]`. An operator's entry carries the operator's platforms,
+write `["youtube"]` and the shop step `["other"]`, both stated. An operator's entry carries the operator's platforms,
 which are part of its manual lock.
 
 `events.url` is the announcement's link (a post, an operator's link, a
@@ -1156,16 +1162,18 @@ protocols.
 `vision_capable` (API `visionCapable`) is derived from the `image`
 capability; a provider write without `capabilities` may send `visionCapable`
 instead. `llm_providers.model` is written empty and never read: providers have
-no default model. Both detection paths share the extraction queue
-(`schedule`); the schedule-image check reads only `verify`, and translation
-only `translate`. Startup folds any per-stage `schedule_message`,
-`schedule_board`, and `schedule_vision` targets into the extraction queue in
+no default model. Text schedule extraction reads `schedule`; image schedule
+extraction and schedule-image review read `verify`, and translation/light tasks
+read `translate`. Startup folds any per-stage `schedule_message`,
+`schedule_board`, and `schedule_vision` targets into the text schedule queue in
 that order, keeping the first position of a repeated provider + model pair,
 and once (marker `llm_default_model_retired`) turns a target that followed a
-provider's default model into a target naming that model. Once more (marker
-`llm_verify_queue_seeded`, which new databases start with), it copies the
-extraction queue's image-tagged targets in their order into an empty `verify`
-queue.
+provider's default model into a target naming that model. Once under each of
+the markers `llm_verify_queue_seeded` and `llm_image_queue_seeded`, which new
+databases start with, it copies the `schedule` queue's image-tagged targets in
+their order into an empty `verify` queue, so an install whose image posts
+read the text queue gets an image extraction queue; a `verify` queue with
+targets is kept as it is.
 
 `internal/httpapi/media.go` and `internal/store/sqlite/media.go` own cache-root
 path validation and serving; `internal/store/sqlite/source_write.go` owns

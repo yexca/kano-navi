@@ -54,6 +54,8 @@ func TestParsePeriodReadsTheShopsForms(t *testing.T) {
 		{"lottery with weekday and time, ASCII tilde", "抽選受付期間：2026年10月3日(土) 19:00 ~ 2026年11月3日(火)", "2026-10-03", "2026-11-03", ""},
 		{"application window in full-width digits", "受付期間 ２０２６年１２月２０日 〜 ２０２７年１月５日", "2026-12-20", "2027-01-05", ""},
 		{"close without a year runs into the next one", "＜受注期間＞2026年12月20日 〜 1月5日", "2026-12-20", "2027-01-05", ""},
+		{"close without a year on the next year's leap day", "＜受注期間＞2027年12月1日 〜 2月29日", "2027-12-01", "2028-02-29", ""},
+		{"no-break spaces around the wave dash and inside a date", "<p>受注期間 2026年10月24日&nbsp;〜&nbsp;2026年&nbsp;11月24日</p>", "2026-10-24", "2026-11-24", ""},
 		{"permanent item", permanent, "", "", SkipOpenEnded},
 		{"no period", "<p>常設商品です</p>", "", "", SkipNoPeriod},
 		{"impossible date", "＜受注期間＞2026年2月30日 〜 2026年3月5日", "", "", SkipInvalid},
@@ -105,14 +107,14 @@ func TestClientRequestsFixedPathsWithAnHonestAgent(t *testing.T) {
 	if _, err := client.NewArrivals(ctx, ArrivalsLimit); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.CatalogPage(ctx, 2); err != nil {
+	if _, _, err := client.CatalogPage(ctx, 2); err != nil {
 		t.Fatal(err)
 	}
 	collections, err := client.Collections(ctx)
 	if err != nil || len(collections) != 1 || collections[0].Handle != "sample_2026" {
 		t.Fatalf("collections=%+v err=%v", collections, err)
 	}
-	if _, err := client.CatalogPage(ctx, MaxCatalogPages+1); ErrorCode(err) != "shop_invalid_request" {
+	if _, _, err := client.CatalogPage(ctx, MaxCatalogPages+1); ErrorCode(err) != "shop_invalid_request" {
 		t.Fatalf("page beyond the bound: %v", err)
 	}
 	want := []string{
@@ -303,6 +305,32 @@ func TestReadListsOnceReadsCollectionsOnlyForNewProductsAndHonorsRetryAfter(t *t
 	now, limited = now.Add(2*time.Minute), false
 	if after, err := adapter.Read(ctx, failed.State, all.Sales, false); err != nil || after.Skipped != "" || !after.State.BlockedUntil.IsZero() || after.State.LastError != "" {
 		t.Fatalf("after=%+v err=%v", after, err)
+	}
+}
+
+// A full catalog page ends the read by what it lists: a product left out as
+// unusable does not make a full page look like the last one.
+func TestFullReadCountsAFullPageWithAnUnusableProduct(t *testing.T) {
+	requested := 0
+	client := NewClient(&http.Client{Transport: fakeTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/products.json" {
+			return answer(200, `{"collections":[]}`), nil
+		}
+		requested++
+		items := []map[string]any{}
+		if r.URL.Query().Get("page") == "1" {
+			items = append(items, product(1, "bad handle", "サンプルグッズ", "2026-10-01T12:00:00+09:00", period, Tag))
+			for i := 1; i < CatalogPageSize; i++ {
+				items = append(items, product(int64(1+i), fmt.Sprintf("filler-%d", i), "サンプル他社グッズ", "2026-10-01T12:00:00+09:00", period))
+			}
+		}
+		return answer(200, products(items...)), nil
+	})})
+	adapter := NewAdapter(client)
+	adapter.Options = Options{}
+	all, err := adapter.Read(context.Background(), State{}, nil, true)
+	if err != nil || all.Pages != 2 || requested != 2 || !all.ReachedEnd || all.Listed != CatalogPageSize-1 {
+		t.Fatalf("all=%+v requested=%d err=%v", all, requested, err)
 	}
 }
 

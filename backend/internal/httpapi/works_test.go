@@ -153,6 +153,34 @@ func TestWorksMediaServesSmallerCopiesAndImmutableOnlyUnderTheirOwnHash(t *testi
 	}
 }
 
+func TestWorksMediaRevalidationSeesASameSizeCorrection(t *testing.T) {
+	store, dir := worksStore(t)
+	art := syntheticPNG(t, 12, 12)
+	name := sha256Of(art)[:12] + ".png"
+	corrupt := bytes.Clone(art)
+	corrupt[len(corrupt)/2] ^= 0xff
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, corrupt, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(store)
+	etag := request(t, handler, http.MethodGet, "/media/works/"+name).Header().Get("ETag")
+	if err := os.WriteFile(path, art, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Minute)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	revalidate := httptest.NewRequest(http.MethodGet, "/media/works/"+name, nil)
+	revalidate.Header.Set("If-None-Match", etag)
+	handler.ServeHTTP(recorder, revalidate)
+	if recorder.Code != http.StatusOK || !bytes.Equal(recorder.Body.Bytes(), art) || recorder.Header().Get("ETag") == etag {
+		t.Fatalf("status=%d etag=%q old=%q", recorder.Code, recorder.Header().Get("ETag"), etag)
+	}
+}
+
 func TestWorksMediaRejectsOtherPaths(t *testing.T) {
 	store, dir := worksStore(t)
 	// A LINE BLOG file is not a cover, nor is a file beside the archive.

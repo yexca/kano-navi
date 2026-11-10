@@ -114,6 +114,35 @@ func TestForwardsOfADeletedDynamicAreKept(t *testing.T) {
 	}
 }
 
+// A forwarded dynamic of an unexpected shape never fails the page: its quote
+// is unavailable, with its ID when that still reads.
+func TestAnUnreadableForwardedDynamicIsAnUnavailableQuote(t *testing.T) {
+	origs := map[string]string{
+		`{"id_str":"900000000000000213","type":"DYNAMIC_TYPE_WORD","visible":"yes","modules":{}}`:                                                                  "900000000000000213",
+		`{"id_str":"900000000000000213","type":"DYNAMIC_TYPE_WORD","modules":{"module_author":{"mid":42,"pub_ts":1794020000,"name":7}}}`:                           "900000000000000213",
+		`{"id_str":"900000000000000213","type":"DYNAMIC_TYPE_DRAW","modules":{"module_dynamic":{"major":{"type":"MAJOR_TYPE_OPUS","opus":{"pics":{"url":"x"}}}}}}`: "900000000000000213",
+		`{"id_str":900000000000000213,"type":"DYNAMIC_TYPE_WORD","modules":{}}`:                                                                                    "",
+		`{"id_str":"900000000000000213","modules":{"module_dynamic":[]}}`:                                                                                          "900000000000000213",
+		`"deleted"`: "",
+	}
+	for orig, id := range origs {
+		feed := `{"items":[{"id_str":"900000000000000113","type":"DYNAMIC_TYPE_FORWARD","modules":{"module_author":{"mid":316381099,"pub_ts":1794030000},"module_dynamic":{"desc":{"rich_text_nodes":[{"type":"RICH_TEXT_NODE_TYPE_TEXT","text":"转发"}]}}},"orig":` + orig + `},
+		 {"id_str":"900000000000000114","type":"DYNAMIC_TYPE_WORD","modules":{"module_author":{"mid":316381099,"pub_ts":1794030000},"module_dynamic":{"desc":{"rich_text_nodes":[{"type":"RICH_TEXT_NODE_TYPE_TEXT","text":"另一条"}]}}}}]}`
+		page, err := ParseSpaceFeed(json.RawMessage(feed), DefaultAccount)
+		if err != nil || len(page.Dynamics) != 2 {
+			t.Fatalf("%s: page=%#v err=%v", orig, page, err)
+		}
+		d := page.Dynamics[0]
+		want := &Quote{URL: d.URL(), Unavailable: true}
+		if id != "" {
+			want = &Quote{ID: PostPrefix + id, URL: "https://www.bilibili.com/opus/" + id, Unavailable: true}
+		}
+		if d.Text != "转发" || fmt.Sprint(*d.Quote) != fmt.Sprint(*want) {
+			t.Fatalf("%s: forward=%#v quote=%#v", orig, d, d.Quote)
+		}
+	}
+}
+
 // An upload the listing can no longer show keeps the opus page, so the
 // board shows the unavailable card rather than dropping it.
 func TestAnUnavailableUploadQuoteLinksToItsOpusPage(t *testing.T) {

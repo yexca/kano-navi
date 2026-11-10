@@ -169,3 +169,43 @@ func TestWorkCoverReportListsUploadsWithoutCoversAndNeverWrites(t *testing.T) {
 		t.Fatalf("rows before=%d after=%d err=%v", before, after, err)
 	}
 }
+
+func TestWorksImageWhoseCachedFileIsGoneIsPassedOver(t *testing.T) {
+	s := worksTestStore(t)
+	ctx := context.Background()
+	index := works.Index{Uploads: []works.Upload{
+		{ID: "2026-01-01-aaaaaa", Date: "2026-01-01", Videos: []works.Video{{Platform: works.YouTube, ID: "aaaaaaaaaaa"}, {Platform: works.Niconico, ID: "sm9"}}},
+	}}
+	if _, err := s.PlanWorkCovers(ctx, index, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := s.PendingMedia(ctx, 10)
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("pending=%#v err=%v", pending, err)
+	}
+	if err = s.SaveMediaDownload(ctx, pending[0], syntheticImage(t, "image/png", 8, 6, false), "image/png", "", "", "ready", ""); err != nil {
+		t.Fatal(err)
+	}
+	if plan, err := s.PlanWorkCovers(ctx, index, time.Now()); err != nil || plan.Covered != 1 {
+		t.Fatalf("plan=%#v err=%v", plan, err)
+	}
+	var rel string
+	if err = s.db.QueryRowContext(ctx, `SELECT cache_path FROM media_assets WHERE id=?`, pending[0].ID).Scan(&rel); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Remove(filepath.Join(s.DataRoot(), filepath.FromSlash(rel))); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := s.PlanWorkCovers(ctx, index, time.Now())
+	if err != nil || plan.Waiting != 1 || len(plan.Lookups) != 1 || plan.Lookups[0].ID != "sm9" {
+		t.Fatalf("plan=%#v err=%v", plan, err)
+	}
+	report, err := s.WorkCoverReport(ctx, index, time.Now())
+	if err != nil || len(report.Uploads) != 1 || report.Uploads[0].Videos[0].State != WorkCoverGone {
+		t.Fatalf("report=%#v err=%v", report, err)
+	}
+	var status string
+	if err = s.db.QueryRowContext(ctx, `SELECT status FROM media_assets WHERE id=?`, pending[0].ID).Scan(&status); err != nil || status != "ready" {
+		t.Fatalf("asset status=%q err=%v", status, err)
+	}
+}

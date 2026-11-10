@@ -98,6 +98,26 @@ func (m *Module) setPostHidden(ctx context.Context, postID string, hidden bool) 
 			if _, err := tx.ExecContext(ctx, `UPDATE posts SET hidden_at = ? WHERE id = ?`, value, postID); err != nil {
 				return err
 			}
+			// The hide is the operator's now: an automatic promotion of
+			// the pool shows again only a post the pool hid itself.
+			if _, err := tx.ExecContext(ctx, `UPDATE x_statuses SET demoted_at = NULL, updated_at = ? WHERE id = ? AND demoted_at IS NOT NULL`, now, postID); err != nil {
+				return err
+			}
+			// Showing a promoted post is the operator's promotion, so the
+			// keyword rules never hide it again; hiding it withdraws that
+			// promotion and leaves the hide.
+			promote := `UPDATE x_statuses SET manual_decision = 'promote', manual_reason = NULL, manual_at = ?, updated_at = ?
+				WHERE id = ? AND COALESCE(manual_decision, '') <> 'promote'
+				AND EXISTS (SELECT 1 FROM posts p WHERE p.id = x_statuses.id AND p.promoted_at IS NOT NULL)`
+			args := []any{now, now, postID}
+			if hidden {
+				promote = `UPDATE x_statuses SET manual_decision = NULL, manual_reason = NULL, manual_at = NULL, updated_at = ?
+					WHERE id = ? AND manual_decision = 'promote'`
+				args = []any{now, postID}
+			}
+			if _, err := tx.ExecContext(ctx, promote, args...); err != nil {
+				return err
+			}
 			if err := sqlite.BumpRevisionTx(ctx, tx, now); err != nil {
 				return err
 			}

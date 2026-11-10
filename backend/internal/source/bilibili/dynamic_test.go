@@ -50,6 +50,28 @@ func TestSpaceFeedKeepsOwnPostsAndDropsEmoji(t *testing.T) {
 	}
 }
 
+// A supporters-only dynamic never becomes a post, and a forward of one quotes
+// it as unavailable, even when a supporter's listing carries it in full.
+func TestSpaceFeedDropsSupportersOnlyDynamics(t *testing.T) {
+	const feed = `{"code":0,"message":"0","data":{"has_more":false,"offset":"","items":[
+ {"id_str":"900000000000000020","type":"DYNAMIC_TYPE_WORD","basic":{"is_only_fans":true},"modules":{"module_author":{"mid":316381099,"pub_ts":1794024288},"module_dynamic":{"desc":{"rich_text_nodes":[{"type":"RICH_TEXT_NODE_TYPE_TEXT","text":"supporters only"}]}}}},
+ {"id_str":"900000000000000019","type":"DYNAMIC_TYPE_FORWARD","modules":{"module_author":{"mid":316381099,"pub_ts":1794020000},"module_dynamic":{"desc":{"rich_text_nodes":[{"type":"RICH_TEXT_NODE_TYPE_TEXT","text":"forward"}]}}},
+  "orig":{"id_str":"900000000000000018","type":"DYNAMIC_TYPE_WORD","basic":{"is_only_fans":true},"modules":{"module_author":{"mid":43,"pub_ts":1794010000},"module_dynamic":{"desc":{"rich_text_nodes":[{"type":"RICH_TEXT_NODE_TYPE_TEXT","text":"paid wording"}]}}}}}
+]}}`
+	data, err := envelope([]byte(feed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := ParseSpaceFeed(data, DefaultAccount)
+	if err != nil || len(page.Dynamics) != 1 {
+		t.Fatalf("page=%#v err=%v", page, err)
+	}
+	forward := page.Dynamics[0]
+	if forward.Quote == nil || !forward.Quote.Unavailable || strings.Contains(forward.Quote.Text, "paid") {
+		t.Fatalf("quote=%#v", forward.Quote)
+	}
+}
+
 func TestSpaceFeedReportsVoucherAndLogin(t *testing.T) {
 	if _, err := ParseSpaceFeed([]byte(`{"v_voucher":"voucher_synthetic"}`), DefaultAccount); ErrorCode(err) != "bilibili_risk_control_voucher" {
 		t.Fatalf("voucher err=%v", err)

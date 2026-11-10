@@ -275,15 +275,13 @@ func TestModelCatalog(t *testing.T) {
 
 	// Removing models also drops their queue targets and compacts priorities.
 	h.ok(http.MethodPut, "/llm/queue", map[string]any{"targets": []any{
-		map[string]any{"providerId": "gamma", "modelId": "text-embedding-3-small"},
 		map[string]any{"providerId": "gamma", "modelId": "gpt-4o-mini"},
-		map[string]any{"providerId": "gamma", "modelId": "plain-chat"},
 	}}, http.StatusOK)
 	removed := h.ok(http.MethodPost, "/llm/providers/gamma/models/remove", map[string]any{"ids": []string{"text-embedding-3-small", "gpt-4o-mini", "gpt-4o-mini", "absent"}}, http.StatusOK)
 	equal(t, "removed", removed.JSON["removed"], float64(2))
 	equal(t, "remaining", len(list(t, removed.JSON["models"])), 1)
 	equal(t, "compacted priorities", h.scalar(`SELECT group_concat(model_id || ':' || priority, ',') FROM
-		(SELECT model_id, priority FROM llm_route_targets WHERE route = 'schedule' ORDER BY priority)`), "plain-chat:0")
+		(SELECT model_id, priority FROM llm_route_targets WHERE route = 'schedule' ORDER BY priority)`), "")
 	h.invalid(http.MethodPost, "/llm/providers/gamma/models/remove", map[string]any{"ids": []string{}}, "ids must be a non-empty array")
 	h.invalid(http.MethodPost, "/llm/providers/gamma/models/remove", map[string]any{"ids": []any{nil}}, "model id is required")
 	h.assertNoSecret(added, updated, removed, all)
@@ -354,7 +352,8 @@ func TestSeparateQueues(t *testing.T) {
 	equal(t, "verification queue", catalog.JSON["verificationQueue"], targets("alpha-ocr", "alpha-vision"))
 	equal(t, "translation queue", catalog.JSON["translationQueue"], targets("alpha-vision", "alpha-chat"))
 
-	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"route": "verify", "targets": targets("alpha-chat")}, "schedule image check models need the image tag: alpha/alpha-chat")
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"route": "verify", "targets": targets("alpha-chat")}, "image extraction models need the image tag: alpha/alpha-chat")
+	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"route": "schedule", "targets": targets("alpha-ocr")}, "schedule extraction models need the text tag: alpha/alpha-ocr")
 	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"route": "translate", "targets": targets("alpha-ocr")}, "translation models need the text tag: alpha/alpha-ocr")
 	h.invalid(http.MethodPut, "/llm/queue", map[string]any{"route": "schedule_vision", "targets": []any{}}, "route must be schedule, verify or translate")
 

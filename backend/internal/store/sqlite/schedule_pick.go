@@ -77,35 +77,64 @@ func postImageSources(ctx context.Context, q rowQueryer, postID string) ([]strin
 	return sources, nil
 }
 
-// attachAdminPostSchedule fills the post's schedule image record, if any.
-func (s *Store) attachAdminPostSchedule(ctx context.Context, p *AdminPost) error {
-	var url string
-	var picked sql.NullString
-	var item AdminPostSchedule
-	err := s.db.QueryRowContext(ctx, `SELECT a.id, a.url, a.manual_image_at, COALESCE(r.llm_status,'pending'), COALESCE(r.manual_status,'unreviewed')
-	 FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id=a.id WHERE a.id=? AND a.kind='schedule'`, scheduleAssetID(p.ID)).
-		Scan(&item.ID, &url, &picked, &item.LLMStatus, &item.ManualStatus)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
+// attachAdminPostSchedules fills each post's schedule image record, if any.
+// The records of the page are read in batches; only a post that has one reads
+// its image sources to find which image it shows.
+func (s *Store) attachAdminPostSchedules(ctx context.Context, posts []AdminPost) error {
+	byAsset := make(map[string]int, len(posts))
+	ids := make([]string, 0, len(posts))
+	for i := range posts {
+		id := scheduleAssetID(posts[i].ID)
+		if _, seen := byAsset[id]; !seen {
+			byAsset[id] = i
+			ids = append(ids, id)
+		}
 	}
-	if err != nil {
-		return err
+	type record struct {
+		item AdminPostSchedule
+		url  string
 	}
-	item.Picked = picked.Valid
-	if shown, _, identityErr := mediaIdentity(url); identityErr == nil {
-		sources, err := postImageSources(ctx, s.db, p.ID)
+	found := map[int]record{}
+	for _, chunk := range translationChunks(ids) {
+		rows, err := s.db.QueryContext(ctx, `SELECT a.id, a.url, a.manual_image_at, COALESCE(r.llm_status,'pending'), COALESCE(r.manual_status,'unreviewed')
+	 FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id=a.id WHERE a.kind='schedule' AND a.id IN (`+placeholders(len(chunk))+`)`, idArgs(chunk)...)
 		if err != nil {
 			return err
 		}
-		for i, source := range sources {
-			if id, _, sourceErr := mediaIdentity(source); sourceErr == nil && id == shown {
-				index := i
-				item.Index = &index
-				break
+		for rows.Next() {
+			var r record
+			var picked sql.NullString
+			if err = rows.Scan(&r.item.ID, &r.url, &picked, &r.item.LLMStatus, &r.item.ManualStatus); err != nil {
+				rows.Close()
+				return err
 			}
+			r.item.Picked = picked.Valid
+			found[byAsset[r.item.ID]] = r
+		}
+		if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+			return err
 		}
 	}
-	p.ScheduleImage = &item
+	for i := range posts {
+		r, ok := found[i]
+		if !ok {
+			continue
+		}
+		item := r.item
+		if shown, _, identityErr := mediaIdentity(r.url); identityErr == nil {
+			sources, err := postImageSources(ctx, s.db, posts[i].ID)
+			if err != nil {
+				return err
+			}
+			for index, source := range sources {
+				if id, _, sourceErr := mediaIdentity(source); sourceErr == nil && id == shown {
+					item.Index = &index
+					break
+				}
+			}
+		}
+		posts[i].ScheduleImage = &item
+	}
 	return nil
 }
 

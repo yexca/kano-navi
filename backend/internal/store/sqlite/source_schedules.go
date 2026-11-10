@@ -449,12 +449,7 @@ func (s *Store) planSourceSchedule(ctx context.Context, tx *sql.Tx, source strin
 
 // PrepareSourceSchedules runs at every start of the process that owns the
 // timers. floor is BILIBILI_MIN_INTERVAL_MINUTES: a stored interval of either
-// Bilibili timer below a raised floor is raised to it. A saved Bilibili timer
-// without a dynamics timer beside it gets one, as enabled and with the same
-// interval, planned half an interval after the upload read so the two never
-// fall due together. A saved X timer without a related-accounts timer beside
-// it gets one, as enabled, with the default interval and sync, planned half
-// the X interval after the X timer's next run. Timers live only in
+// Bilibili timer below a raised floor is raised to it. Timers live only in
 // source_schedules, so nothing else is moved.
 func (s *Store) PrepareSourceSchedules(ctx context.Context, floor int, now time.Time) error {
 	tx, err := s.workflowTx(ctx)
@@ -466,84 +461,7 @@ func (s *Store) PrepareSourceSchedules(ctx context.Context, floor int, now time.
 	if _, err = tx.ExecContext(ctx, `UPDATE source_schedules SET interval_minutes=?,updated_at=? WHERE source IN ('bilibili',?) AND interval_minutes<?`, low, workflowTime(now), BilibiliDynamicsSource, low); err != nil {
 		return ErrWorkflowStorage
 	}
-	if err = splitBilibiliDynamics(ctx, tx, now); err != nil {
-		return err
-	}
-	if err = splitXRelated(ctx, tx, now); err != nil {
-		return err
-	}
 	if tx.Commit() != nil {
-		return ErrWorkflowStorage
-	}
-	return nil
-}
-
-// splitBilibiliDynamics adds the dynamics timer beside a saved Bilibili timer
-// that has none, keeping its switch and interval: the dynamics were read by
-// the upload timer's runs before they had a timer of their own.
-func splitBilibiliDynamics(ctx context.Context, tx *sql.Tx, now time.Time) error {
-	var present int
-	if tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_schedules WHERE source=?`, BilibiliDynamicsSource).Scan(&present) != nil {
-		return ErrWorkflowStorage
-	}
-	if present > 0 {
-		return nil
-	}
-	var enabled, interval int
-	var next sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT enabled,interval_minutes,next_run_at FROM source_schedules WHERE source='bilibili'`).Scan(&enabled, &interval, &next)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return ErrWorkflowStorage
-	}
-	var planned any
-	if enabled != 0 {
-		base := now
-		if parsed, parseErr := time.Parse(time.RFC3339Nano, next.String); next.Valid && parseErr == nil {
-			base = parsed
-		}
-		planned = workflowTime(base.Add(time.Duration(interval) * time.Minute / 2))
-	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO source_schedules(source,enabled,interval_minutes,sync_json,chain_json,next_run_at,updated_at) VALUES(?,?,?,'{}','{}',?,?)`,
-		BilibiliDynamicsSource, enabled, interval, planned, workflowTime(now)); err != nil {
-		return ErrWorkflowStorage
-	}
-	return nil
-}
-
-// splitXRelated adds the related-accounts timer beside a saved X timer that
-// has none, keeping its switch: the related accounts were read by the X
-// timer's runs before they had a timer of their own. The interval and sync
-// are the defaults; the row's '{}' sync reads as the incremental default.
-func splitXRelated(ctx context.Context, tx *sql.Tx, now time.Time) error {
-	var present int
-	if tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_schedules WHERE source=?`, XRelatedStep).Scan(&present) != nil {
-		return ErrWorkflowStorage
-	}
-	if present > 0 {
-		return nil
-	}
-	var enabled, interval int
-	var next sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT enabled,interval_minutes,next_run_at FROM source_schedules WHERE source='x'`).Scan(&enabled, &interval, &next)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return ErrWorkflowStorage
-	}
-	var planned any
-	if enabled != 0 {
-		base := now
-		if parsed, parseErr := time.Parse(time.RFC3339Nano, next.String); next.Valid && parseErr == nil {
-			base = parsed
-		}
-		planned = workflowTime(base.Add(time.Duration(interval) * time.Minute / 2))
-	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO source_schedules(source,enabled,interval_minutes,sync_json,chain_json,next_run_at,updated_at) VALUES(?,?,?,'{}','{}',?,?)`,
-		XRelatedStep, enabled, defaultScheduleInterval(XRelatedStep), planned, workflowTime(now)); err != nil {
 		return ErrWorkflowStorage
 	}
 	return nil

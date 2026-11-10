@@ -150,10 +150,10 @@ func TestDashboardProjectionKeepsOperatorColumnsOut(t *testing.T) {
 func TestPublicSyncRunReplacesTheStoredMessage(t *testing.T) {
 	finished := "2026-01-02T00:01:00.000Z"
 	for status, message := range map[string]string{
-		"success": "同步完成",
-		"partial": "部分数据源不可用或存在警告，保留已有快照",
-		"failed":  "同步失败，保留已有快照",
-		"running": "同步进行中",
+		"success": "Sync completed",
+		"partial": "Some data sources are unavailable or reported warnings; the existing snapshot remains",
+		"failed":  "Sync failed; the existing snapshot remains",
+		"running": "Sync in progress",
 	} {
 		got := PublicSyncRun(&sqlite.SyncRun{ID: 3, Source: "workflow", StartedAt: "2026-01-02T00:00:00.000Z", FinishedAt: &finished, Status: status})
 		if got.Message == nil || *got.Message != message || got.ID != 3 || got.Source != "workflow" || got.FinishedAt != &finished || got.Status != status {

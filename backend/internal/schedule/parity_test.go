@@ -58,6 +58,8 @@ var (
 		`"endTime","endDate","timePrecision"`, `"endTime","timePrecision"`,
 		`"appearance","sale"]`, `"appearance"]`,
 	).Replace(string(scheduleSchema))
+	recordedVerificationSchema = `{"type":"object","additionalProperties":false,"properties":{"classification":{"type":"string","enum":["schedule","not_schedule","uncertain"]},"confidence":{"type":"number","minimum":0,"maximum":1},"evidence":{"type":"string"},"reason":{"type":"string"}},"required":["classification","confidence","evidence","reason"]}`
+	recordedAssetInstructions  = "Inspect the attached image only and decide whether it is a weekly or multi-day schedule board for the creator. Return schedule only when the image itself visibly contains a structured calendar or schedule table with days or dates and planned items. Return not_schedule for a stream thumbnail, promotional art, character art, a single video card, or any ordinary post image. Return uncertain when the image is unreadable or the evidence is insufficient. Do not infer a schedule from the source post wording. Cite visible image evidence briefly."
 )
 
 // withPendingCode rewrites the recorded Chinese pending status in stored rows.
@@ -92,7 +94,14 @@ func withExtractorVersion(tables ...map[string][]map[string]any) {
 
 func withLocalPublishedAt(body string) string {
 	body = strings.ReplaceAll(body, recordedInstructions, scheduleInstructions)
+	body = strings.ReplaceAll(body, recordedAssetInstructions, scheduleAssetVerificationInstructions)
 	body = strings.ReplaceAll(body, recordedScheduleSchema, string(scheduleSchema))
+	body = strings.ReplaceAll(body, recordedVerificationSchema, string(scheduleAssetVerificationSchema))
+	if strings.Contains(body, `"input_image"`) && !strings.Contains(body, verificationToolName) {
+		body = strings.ReplaceAll(body, scheduleInstructions, imageScheduleInstructions+" "+scheduleInstructions)
+		body = strings.ReplaceAll(body, `"name":"kano_schedule_extraction"`, `"name":"`+imageExtractionToolName+`"`)
+		body = strings.ReplaceAll(body, string(scheduleSchema), string(imageScheduleSchema(scheduleSchema)))
+	}
 	body = recordedPublishedAt.ReplaceAllStringFunc(body, func(match string) string {
 		value := recordedPublishedAt.FindStringSubmatch(match)[1]
 		return "Source post published at " + publishedAtText(value) + ". Source URL"

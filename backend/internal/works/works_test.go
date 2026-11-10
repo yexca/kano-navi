@@ -30,3 +30,13 @@ func TestPackagedIndexIsReadable(t *testing.T) {
 		t.Fatalf("packaged index is empty: %q, %d uploads", index.UpdatedAt, len(index.Uploads))
 	}
 }
+
+func TestParseKeepsCalendarDatesOnly(t *testing.T) {
+	index := Parse([]byte(`{"updatedAt":"2026-13-45","uploads":[
+		{"id":"2020-02-29-abcdef","date":"2020-02-29","videos":[]},
+		{"id":"2020-02-30-abcdef","date":"2020-02-30","videos":[]},
+		{"id":"2026-13-45-abcdef","date":"2026-13-45","videos":[]}]}`))
+	if index.UpdatedAt != "" || len(index.Uploads) != 1 || index.Uploads[0].Date != "2020-02-29" {
+		t.Fatalf("index=%#v", index)
+	}
+}

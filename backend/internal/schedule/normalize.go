@@ -367,20 +367,15 @@ func namesSimulcast(wording string) bool {
 }
 
 // modelPlatforms reads a Bilibili entry's platforms array; a value outside
-// the enum is dropped. A stray scalar platform counts as a one-item array.
+// the enum is dropped.
 func modelPlatforms(event *object) []string {
 	values := []string{}
-	if list, ok := event.get("platforms"); ok {
-		items, _ := list.([]any)
-		for _, item := range items {
-			if text, isString := item.(string); isString {
-				values = append(values, text)
-			}
+	list, _ := event.get("platforms")
+	items, _ := list.([]any)
+	for _, item := range items {
+		if text, isString := item.(string); isString {
+			values = append(values, text)
 		}
-		return sqlite.NormalizePlatforms(values)
-	}
-	if value, _ := event.get("platform"); value != nil {
-		values = append(values, jsString(value))
 	}
 	return sqlite.NormalizePlatforms(values)
 }
@@ -641,6 +636,7 @@ func inferredClassification(result any) (string, error) {
 type normalizedExtraction struct {
 	classification string
 	events         []normalizedEvent
+	extractedText  string
 	confidence     float64
 	evidence       string
 	reason         string
@@ -702,9 +698,11 @@ func (p sourceProfile) normalizeResult(result any, postID, postURL, text string,
 	}
 	evidence, _ := root.get("evidence")
 	reason, _ := root.get("reason")
+	extractedText, _ := root.get("text")
 	return normalizedExtraction{
 		classification: classification,
 		events:         events,
+		extractedText:  sliceUTF16(jsTrim(stringOr(extractedText, "")), 12000),
 		confidence:     confidence,
 		evidence:       sliceUTF16(jsTrim(stringOr(evidence, "")), 1000),
 		reason:         sliceUTF16(jsTrim(stringOr(reason, "")), 500),
@@ -714,6 +712,7 @@ func (p sourceProfile) normalizeResult(result any, postID, postURL, text string,
 
 type assetVerification struct {
 	classification string
+	extractedText  string
 	confidence     float64
 	evidence       string
 	reason         string
@@ -733,8 +732,10 @@ func normalizeAssetVerification(result any) (assetVerification, error) {
 	}
 	evidence, _ := root.get("evidence")
 	reason, _ := root.get("reason")
+	extractedText, _ := root.get("text")
 	return assetVerification{
 		classification: classification,
+		extractedText:  sliceUTF16(jsTrim(stringOr(extractedText, "")), 12000),
 		confidence:     confidence,
 		evidence:       sliceUTF16(jsTrim(stringOr(evidence, "")), 1000),
 		reason:         sliceUTF16(jsTrim(stringOr(reason, "")), 500),

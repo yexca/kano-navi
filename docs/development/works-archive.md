@@ -264,7 +264,10 @@ name a listed release and edition, every store listing must have a known
 platform and a canonical address, every video ID must have its platform's
 shape, and every image must be listed in the manifest and be a JPEG or PNG
 inside the collection within the size limit. An image in another format
-(such as a GIF) is left out and named in packaging's output. Covers already in `data/works/` whose size and hash match are
+(such as a GIF) is left out and named in packaging's output. An upload row
+whose optional `format` column is `Shorts` is a YouTube Short, which the page
+does not list, so packaging leaves it out; any other non-empty `format` stops
+packaging. Covers already in `data/works/` whose size and hash match are
 left alone. Packaging also writes `backend/internal/works/videos.json`; a run
 with another content directory must name its own index file. Packaging performs no network requests and does not change the
 collection.

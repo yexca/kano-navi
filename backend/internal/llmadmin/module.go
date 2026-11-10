@@ -294,7 +294,7 @@ type llmResponse struct {
 	Providers []Provider    `json:"providers"`
 	Models    []Model       `json:"models"`
 	Queue     []RouteTarget `json:"queue"`
-	// VerificationQueue is the separate schedule-image check route.
+	// VerificationQueue is the image schedule extraction route.
 	VerificationQueue []RouteTarget `json:"verificationQueue"`
 	// TranslationQueue is the separate translation route.
 	TranslationQueue []RouteTarget `json:"translationQueue"`
@@ -727,8 +727,8 @@ func (m *Module) putQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	// route selects the extraction queue (the default), the schedule-image
-	// check queue or the translation queue.
+	// route selects the text schedule extraction queue (the default), the image
+	// extraction queue or the translation/light-task queue.
 	route := QueueRoute
 	if value, present := body["route"]; present {
 		name, _ := value.(string)

@@ -124,7 +124,10 @@ func calendarEntries(e sqlite.DashboardEvent) []calendarEntry {
 	if !sqlite.SaleEvent(e.EventType) {
 		return []calendarEntry{opening}
 	}
-	if e.EndsOn == nil || *e.EndsOn < e.StartsOn || *e.EndsOn == e.StartsOn && opening.timed {
+	// A stored start time makes a same-day sale an opening whatever its
+	// precision, as on the board; an unknown precision keeps it all-day.
+	started := e.StartsAt != nil && strings.TrimSpace(*e.StartsAt) != ""
+	if e.EndsOn == nil || *e.EndsOn < e.StartsOn || *e.EndsOn == e.StartsOn && started {
 		opening.mark = saleOpens
 		return []calendarEntry{opening}
 	}

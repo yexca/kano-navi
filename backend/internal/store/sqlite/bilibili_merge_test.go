@@ -121,3 +121,42 @@ func TestBilibiliReleasesPairWithTheirUpload(t *testing.T) {
 		t.Fatalf("ambiguous url=%q err=%v", url, err)
 	}
 }
+
+// A locked release keeps its pairing: a new automatic release of the same
+// upload is not paired, and the locked entry's source row is not rewritten.
+func TestALockedReleaseKeepsItsUpload(t *testing.T) {
+	s := biliStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	opus := "https://www.bilibili.com/opus/1"
+	video := "https://www.bilibili.com/video/BV1AAAAAAAAA"
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := s.DB().Exec(query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec(`INSERT INTO events (id, source, source_item_id, source_key, title, starts_on, starts_at, event_type, url, platform, provenance, created_at, updated_at) VALUES
+		('bilibili-schedule-l', 'bilibili', 'bilibili-1', 'k1', '限定歌曲', '2026-11-07', '2026-11-07T09:00:00.000Z', 'release', ?1, 'bilibili', 'automatic', ?2, ?2)`, opus, workflowTime(now))
+	exec(`INSERT INTO videos (id, source, title, published_at, url, kind) VALUES ('BV1AAAAAAAAA', 'bilibili', '限定歌曲', '2026-11-07T09:12:00Z', ?, 'upload')`, video)
+	if counts, err := s.ReconcileEventMerges(ctx, now); err != nil || counts.ReleasesPaired != 1 {
+		t.Fatalf("counts=%#v err=%v", counts, err)
+	}
+	exec(`UPDATE events SET manual_locked = 1 WHERE id = 'bilibili-schedule-l'`)
+	exec(`INSERT INTO events (id, source, source_item_id, source_key, title, starts_on, starts_at, event_type, url, platform, provenance, created_at, updated_at) VALUES
+		('bilibili-schedule-n', 'bilibili', 'bilibili-2', 'k2', '限定歌曲', '2026-11-07', '2026-11-07T09:10:00.000Z', 'release', ?1, 'bilibili', 'automatic', ?2, ?2)`, opus, workflowTime(now))
+	before := workflowTime(now)
+	if counts, err := s.ReconcileEventMerges(ctx, now.Add(time.Hour)); err != nil || counts.ReleasesPaired != 0 {
+		t.Fatalf("counts=%#v err=%v", counts, err)
+	}
+	var owner, updated string
+	if err := s.DB().QueryRow(`SELECT event_id, updated_at FROM event_sources WHERE source = 'bilibili-video' AND source_item_id = 'BV1AAAAAAAAA' AND deleted_at IS NULL`).Scan(&owner, &updated); err != nil ||
+		owner != "bilibili-schedule-l" || updated != before {
+		t.Fatalf("owner=%q updated=%q err=%v", owner, updated, err)
+	}
+	var locked, fresh string
+	if err := s.DB().QueryRow(`SELECT (SELECT url FROM events WHERE id = 'bilibili-schedule-l'), (SELECT url FROM events WHERE id = 'bilibili-schedule-n')`).Scan(&locked, &fresh); err != nil ||
+		locked != video || fresh != opus {
+		t.Fatalf("locked=%q new=%q err=%v", locked, fresh, err)
+	}
+}

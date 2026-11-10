@@ -94,6 +94,10 @@ func runStandalone(cfg config.Config) int {
 	if err = store.PrepareSourceSchedules(context.Background(), floor, time.Now()); err != nil {
 		return fail("source schedules unavailable", 1)
 	}
+	// An account named in X_HANDLES is an own account only.
+	if err = store.SettleXRelatedRoles(context.Background(), run.xOptions.Handles); err != nil {
+		return fail("related accounts unavailable", 1)
+	}
 	// Source schedules are started by this process only.
 	scheduler := &workflow.Scheduler{
 		Store: store, Queue: queue, Enabled: os.Getenv("WORKFLOW_SCHEDULER_ENABLED") != "0",

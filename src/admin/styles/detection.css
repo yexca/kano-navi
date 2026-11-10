@@ -1,4 +1,4 @@
-/* Queues: extraction, schedule-image check and translation side by side,
+/* Queues: text extraction, image extraction and translation/light tasks side by side,
    wrapping when a column would get too narrow for its model rows. */
 .adm-queues {
   display: grid;

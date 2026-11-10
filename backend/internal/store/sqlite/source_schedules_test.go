@@ -403,99 +403,40 @@ func TestStartingATimerNowMakesItDueInOrder(t *testing.T) {
 	}
 }
 
-func TestPrepareSourceSchedulesSplitsTheDynamicsTimerOffASavedBilibiliTimer(t *testing.T) {
+// The dynamics and related-accounts timers are their own: a saved, enabled
+// Bilibili or X timer leaves them off until the operator turns them on, and
+// a later start only raises a saved dynamics interval to a raised floor.
+func TestPrepareSourceSchedulesLeavesTheNewTimersToTheOperator(t *testing.T) {
 	s := openScheduleStore(t)
 	ctx := context.Background()
 	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
-	s.SetScheduleOffset(func(int64) int64 { return 0 })
-	bilibili := scheduleOf(t, s, "bilibili", 180)
-	bilibili.Enabled, bilibili.IntervalMinutes = true, 240
-	if _, err := s.SaveSourceSchedule(ctx, bilibili, 180, now); err != nil {
-		t.Fatal(err)
+	for _, source := range []string{"bilibili", "x"} {
+		saved := scheduleOf(t, s, source, 180)
+		saved.Enabled = true
+		if _, err := s.SaveSourceSchedule(ctx, saved, 180, now); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := s.PrepareSourceSchedules(ctx, 180, now); err != nil {
-		t.Fatal(err)
+	for range 2 {
+		if err := s.PrepareSourceSchedules(ctx, 180, now); err != nil {
+			t.Fatal(err)
+		}
 	}
-	// It keeps the upload timer's switch and interval and falls due half an
-	// interval after it: the upload read is planned at 07:00.
+	for _, source := range []string{BilibiliDynamicsSource, XRelatedStep} {
+		if got := scheduleOf(t, s, source, 180); got.Enabled || got.NextRunAt != nil || got.UpdatedAt != nil {
+			t.Fatalf("%s=%+v", source, got)
+		}
+	}
 	dynamics := scheduleOf(t, s, BilibiliDynamicsSource, 180)
-	if !dynamics.Enabled || dynamics.IntervalMinutes != 240 || dynamics.NextRunAt == nil || *dynamics.NextRunAt != "2026-03-02T09:00:00.000Z" {
-		t.Fatalf("dynamics=%+v next=%v", dynamics, dynamics.NextRunAt)
-	}
-	// Once saved, the operator's dynamics timer is its own: a later start
-	// leaves it alone, apart from raising it to a raised floor.
-	dynamics.Enabled = false
+	dynamics.Enabled = true
 	if _, err := s.SaveSourceSchedule(ctx, dynamics, 180, now); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.PrepareSourceSchedules(ctx, 300, now); err != nil {
 		t.Fatal(err)
 	}
-	if got := scheduleOf(t, s, BilibiliDynamicsSource, 300); got.Enabled || got.IntervalMinutes != 300 {
-		t.Fatalf("after restart=%+v", got)
-	}
-}
-
-func TestPrepareSourceSchedulesSplitsADisabledBilibiliTimerDisabled(t *testing.T) {
-	s := openScheduleStore(t)
-	ctx := context.Background()
-	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
-	if _, err := s.SaveSourceSchedule(ctx, scheduleOf(t, s, "bilibili", 180), 180, now); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.PrepareSourceSchedules(ctx, 180, now); err != nil {
-		t.Fatal(err)
-	}
-	if got := scheduleOf(t, s, BilibiliDynamicsSource, 180); got.Enabled || got.NextRunAt != nil || got.UpdatedAt == nil {
-		t.Fatalf("dynamics=%+v", got)
-	}
-}
-
-func TestPrepareSourceSchedulesAddsTheRelatedTimerBesideASavedXTimer(t *testing.T) {
-	s := openScheduleStore(t)
-	ctx := context.Background()
-	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
-	x := scheduleOf(t, s, "x", 180)
-	x.Enabled, x.IntervalMinutes = true, 60
-	x.Sync = &SourceSync{Mode: SyncCount, Count: 30}
-	if _, err := s.SaveSourceSchedule(ctx, x, 180, now); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.PrepareSourceSchedules(ctx, 180, now); err != nil {
-		t.Fatal(err)
-	}
-	// It keeps the X timer's switch with the default interval and sync, and
-	// falls due half the X interval after X's next run at 04:00.
-	related := scheduleOf(t, s, XRelatedStep, 180)
-	if !related.Enabled || related.IntervalMinutes != 180 || related.Sync == nil || *related.Sync != (SourceSync{Mode: SyncIncremental, Max: DefaultSyncMax}) ||
-		related.NextRunAt == nil || *related.NextRunAt != "2026-03-02T04:30:00.000Z" || related.Chain.Problem(XRelatedStep) != ChainFixed || related.Chain.Enabled()[0] != "timeline" {
-		t.Fatalf("related=%+v next=%v", related, related.NextRunAt)
-	}
-	// Once the row exists the operator's settings are its own.
-	related.Enabled, related.IntervalMinutes = false, 720
-	if _, err := s.SaveSourceSchedule(ctx, related, 180, now); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.PrepareSourceSchedules(ctx, 180, now); err != nil {
-		t.Fatal(err)
-	}
-	if got := scheduleOf(t, s, XRelatedStep, 180); got.Enabled || got.IntervalMinutes != 720 || got.NextRunAt != nil {
-		t.Fatalf("after restart=%+v", got)
-	}
-}
-
-func TestPrepareSourceSchedulesAddsADisabledRelatedTimerBesideADisabledXTimer(t *testing.T) {
-	s := openScheduleStore(t)
-	ctx := context.Background()
-	now := time.Date(2026, 3, 2, 3, 0, 0, 0, time.UTC)
-	if _, err := s.SaveSourceSchedule(ctx, scheduleOf(t, s, "x", 180), 180, now); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.PrepareSourceSchedules(ctx, 180, now); err != nil {
-		t.Fatal(err)
-	}
-	if got := scheduleOf(t, s, XRelatedStep, 180); got.Enabled || got.NextRunAt != nil || got.UpdatedAt == nil || got.IntervalMinutes != 180 {
-		t.Fatalf("related=%+v", got)
+	if got := scheduleOf(t, s, BilibiliDynamicsSource, 300); !got.Enabled || got.IntervalMinutes != 300 {
+		t.Fatalf("after a raised floor=%+v", got)
 	}
 }
 

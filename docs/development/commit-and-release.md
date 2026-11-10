@@ -71,16 +71,19 @@ A release note shows its area titles and folds the changes under them, so a
 reader sees what the release touches before expanding any detail. Its parts
 appear in this order:
 
-1. Upgrade notes as GitHub alerts (`> [!IMPORTANT]`, `> [!NOTE]`,
-   `> [!WARNING]`) when the release changes configuration, public or admin API
-   behavior, or the upgrade path.
+1. Upgrade notes when the release changes configuration, public or admin API
+   behavior, or the upgrade path: first every note an operator must act on
+   or must not miss, in full, as `> [!IMPORTANT]` or `> [!WARNING]` alerts;
+   then the remaining notes, such as added API fields, new columns and
+   model-call changes, as bullets in one folded block titled Upgrade notes.
 2. A short summary paragraph.
 3. One folded block per user-facing area.
 4. A `## Known Issue` section, when the release has one.
 
-Only the area blocks are folded; upgrade notes, the summary and known issues
-stay expanded because a reader must not miss them. Each area is a `<details>`
-block whose summary is the area title, in place of a `##` heading:
+The important and warning alerts, the summary and known issues stay expanded
+because a reader must not miss them; the Upgrade notes block and the area
+blocks are folded. Each folded block is a `<details>` block whose summary is
+its title, in place of a `##` heading:
 
 ```markdown
 <details>

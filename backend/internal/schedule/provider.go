@@ -125,15 +125,19 @@ func routeForDetectionType(detectionType string) string {
 	return routeBoard
 }
 
-// configuredProviders returns the usable extraction queue targets for an input
-// mode in priority order; targets whose capabilities do not fit are skipped.
-// An empty list comes with the reason recorded on the skipped post or image.
+// configuredProviders returns the usable queue targets for an input mode in
+// priority order. Text-only posts use the schedule extraction queue; posts
+// with images use the image extraction queue. Targets whose
+// capabilities do not fit are skipped.
 func (e *Extractor) configuredProviders(ctx context.Context, inputMode string) ([]provider, string, error) {
+	if inputMode != "text" {
+		return e.routeProviders(ctx, routeVerify, "image")
+	}
 	return e.routeProviders(ctx, routeQueue, inputMode)
 }
 
-// routeProviders resolves the targets of one queue: the extraction queue or
-// the separate schedule-image check or translation queue.
+// routeProviders resolves the targets of one queue: text schedule extraction,
+// image schedule extraction, or translation/light tasks.
 func (e *Extractor) routeProviders(ctx context.Context, route, inputMode string) ([]provider, string, error) {
 	targets, err := queueTargets(ctx, e.db, route)
 	if err != nil {

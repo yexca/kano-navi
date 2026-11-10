@@ -31,12 +31,13 @@ type pairingUpload struct {
 // pairBilibiliReleases recomputes the pairing of the automatic, unlocked
 // releases that Bilibili dynamics announced in the window with the account's
 // uploads, as the merge rules recompute theirs. A release and an upload pair
-// when each is the other's only match within bilibiliReleaseWindow: the
-// release's link becomes the upload's page and an active bilibili-video
-// event source names the upload. A pairing that no longer holds is released:
-// its source row is retired and the link goes back to the announcement's.
-// Locked and manual events are never touched, and an unchanged run writes
-// nothing. It reports how many releases changed.
+// when each is the other's only match within bilibiliReleaseWindow and no
+// other entry holds the upload: the release's link becomes the upload's page
+// and an active bilibili-video event source names the upload. A pairing that
+// no longer holds is released: its source row is retired and the link goes
+// back to the announcement's. Locked and manual events and their source rows
+// are never touched, and an unchanged run writes nothing. It reports how many
+// releases changed.
 func pairBilibiliReleases(ctx context.Context, tx *sql.Tx, from, to, now string) (int, error) {
 	releases, err := loadPairingReleases(ctx, tx, from, to)
 	if err != nil {
@@ -63,20 +64,36 @@ func pairBilibiliReleases(ctx context.Context, tx *sql.Tx, from, to, now string)
 	for _, u := range uploads {
 		uploadURL[u.id] = u.url
 	}
-	changed := 0
-	for _, r := range releases {
-		target := ""
+	targets := make([]string, len(releases))
+	for i, r := range releases {
 		if ids := byRelease[r.id]; len(ids) == 1 && len(byUpload[ids[0]]) == 1 {
-			target = ids[0]
+			targets[i] = ids[0]
 		}
-		if target == r.paired && (target == "" || r.url == uploadURL[target]) {
-			continue
-		}
-		if r.paired != "" && r.paired != target {
+	}
+	// Released pairings are retired first, so an upload one release lets go
+	// is free for another in the same run.
+	for i, r := range releases {
+		if r.paired != "" && r.paired != targets[i] {
 			if _, err = tx.ExecContext(ctx, `UPDATE event_sources SET deleted_at=?,updated_at=? WHERE event_id=? AND source=? AND source_item_id=? AND deleted_at IS NULL`,
 				now, now, r.id, bilibiliVideoSource, r.paired); err != nil {
 				return 0, err
 			}
+		}
+	}
+	changed := 0
+	for i, r := range releases {
+		target := targets[i]
+		if target != "" && target != r.paired {
+			held, heldErr := uploadHeld(ctx, tx, r.id, target)
+			if heldErr != nil {
+				return 0, heldErr
+			}
+			if held {
+				target = ""
+			}
+		}
+		if target == r.paired && (target == "" || r.url == uploadURL[target]) {
+			continue
 		}
 		link := r.announcement
 		if target != "" {
@@ -96,6 +113,19 @@ func pairBilibiliReleases(ctx context.Context, tx *sql.Tx, from, to, now string)
 		changed++
 	}
 	return changed, nil
+}
+
+// uploadHeld reports whether an entry other than release holds the upload's
+// bilibili-video row: a locked or manual entry whatever the row's state, or
+// a live entry whose row is active. The row of a retired automatic entry, or
+// one it released, is free.
+func uploadHeld(ctx context.Context, tx *sql.Tx, release, upload string) (bool, error) {
+	var held int
+	err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM event_sources s JOIN events e ON e.id=s.event_id
+ WHERE s.source=? AND s.source_item_id=? AND s.source_key='upload' AND s.event_id<>?
+ AND (e.manual_locked<>0 OR e.provenance<>'automatic' OR s.deleted_at IS NULL AND e.deleted_at IS NULL)`,
+		bilibiliVideoSource, upload, release).Scan(&held)
+	return held > 0, err
 }
 
 // loadPairingReleases reads the releases the pairing owns, with the link of

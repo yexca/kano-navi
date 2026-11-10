@@ -375,6 +375,7 @@ export const adminMessages = {
     "admin.review.periodEvents": "from its events",
     "admin.review.showWeek": "Show its week",
     "admin.review.model": "Image model",
+    "admin.review.extractedText": "Extracted schedule text",
     "admin.review.notChecked": "Not checked yet",
     "admin.review.checked": "Checked",
     "admin.review.reason": "Reason",
@@ -1427,9 +1428,9 @@ export const adminMessages = {
     "admin.route.translationNeedsText":
       "No usable text model is queued, so nothing is translated.",
     "admin.route.verifyEmptyHint":
-      "Without a model, schedule images stay unchecked; a manual label still publishes them.",
+      "Without a model, image posts and schedule images stay unprocessed; a manual label still publishes schedule images.",
     "admin.route.verifyNeedsImage":
-      "No usable image model is queued, so schedule images are not checked.",
+      "No usable image model is queued, so image posts and schedule images are not processed.",
     "admin.translation.title": "Translations",
     "admin.translation.edit": "Edit translations",
     "admin.translation.original": "Original",
@@ -1769,10 +1770,10 @@ export const adminMessages = {
       "The saved stages match neither mode. Pick one to replace them.",
     "admin.llm.queues": "Model queues",
     "admin.llm.queue.schedule": "Schedule extraction",
-    "admin.llm.queue.verify": "Schedule image check",
+    "admin.llm.queue.verify": "Image extraction",
     "admin.llm.failures.title": "Recent failures",
     "admin.llm.failures.hint":
-      "The newest failed model results of schedule extraction, the schedule image check and translation, with the stored message.",
+      "The newest failed model results of schedule extraction, image extraction and translation/light tasks, with the stored message.",
     "admin.llm.failures.reload": "Reload recent failures",
     "admin.llm.failures.translate": "Translation",
     "admin.llm.failures.post": "Post",
@@ -1789,13 +1790,13 @@ export const adminMessages = {
     "admin.route.fallback": "Fallback",
     "admin.route.dragHint": "Drag to reorder. Changes save at once.",
     "admin.provider.tags": "Tags",
-    "admin.provider.queueName.schedule": "Extraction",
-    "admin.provider.queueName.verify": "Image check",
-    "admin.provider.queueName.translate": "Translation",
+    "admin.provider.queueName.schedule": "Text extraction",
+    "admin.provider.queueName.verify": "Image extraction",
+    "admin.provider.queueName.translate": "Translation / light tasks",
     "admin.provider.queueHint.schedule":
-      "Add to or remove from the schedule extraction queue",
+      "Add to or remove from the text schedule extraction queue (needs the Text tag)",
     "admin.provider.queueHint.verify":
-      "Add to or remove from the schedule image check queue (needs the Image tag)",
+      "Add to or remove from the image schedule extraction queue (needs the Image tag)",
     "admin.provider.queueHint.translate":
       "Add to or remove from the translation queue (needs the Text tag)",
     "admin.provider.addModels": "Add models",
@@ -2004,6 +2005,7 @@ export const adminMessages = {
     "admin.review.period": "覆盖日期",
     "admin.review.periodManual": "已修正",
     "admin.review.model": "图片模型",
+    "admin.review.extractedText": "提取出的日程文字",
     "admin.review.notChecked": "尚未检查",
     "admin.review.checked": "检查时间",
     "admin.review.reason": "理由",
@@ -2600,11 +2602,15 @@ export const adminMessages = {
     "admin.notice.secretRotated": "签名密钥已轮换",
     "admin.notice.extractionSaved": "识别设置已保存",
     "admin.notice.queueSaved": "队列已保存",
-    "admin.models.translation": "翻译队列",
+    "admin.models.translation": "翻译/轻任务队列",
     "admin.route.translationEmptyHint":
       "没有模型时，翻译步骤会安全跳过，并保留人工发起的请求。",
     "admin.route.translationNeedsText":
       "队列中没有可用的“文本”模型，不会进行任何翻译。",
+    "admin.route.verifyEmptyHint":
+      "没有模型时，带图片的贴文和日程图不会处理；人工标记仍可发布日程图。",
+    "admin.route.verifyNeedsImage":
+      "队列中没有可用的“图片”模型，不会处理带图片的贴文和日程图。",
     "admin.translation.title": "翻译",
     "admin.translation.edit": "编辑翻译",
     "admin.translation.original": "原文",
@@ -2841,9 +2847,10 @@ export const adminMessages = {
       "已保存的阶段设置不属于任一方式，选择一种即可替换。",
     "admin.llm.queues": "模型队列",
     "admin.llm.queue.schedule": "日程提取",
+    "admin.llm.queue.verify": "图片提取",
     "admin.llm.failures.title": "最近失败",
     "admin.llm.failures.hint":
-      "日程提取、日程图片检查和翻译最近失败的模型结果，以及记录的错误信息。",
+      "日程提取、图片提取和翻译/轻任务最近失败的模型结果，以及记录的错误信息。",
     "admin.llm.failures.reload": "重新载入最近失败",
     "admin.llm.failures.translate": "翻译",
     "admin.llm.failures.post": "推文",
@@ -2859,9 +2866,13 @@ export const adminMessages = {
     "admin.route.fallback": "备用",
     "admin.route.dragHint": "拖动可调整顺序，修改会立即保存。",
     "admin.provider.tags": "标签",
-    "admin.provider.queueName.schedule": "提取",
-    "admin.provider.queueName.translate": "翻译",
-    "admin.provider.queueHint.schedule": "加入或移出日程提取队列",
+    "admin.provider.queueName.schedule": "文本提取",
+    "admin.provider.queueName.verify": "图片提取",
+    "admin.provider.queueName.translate": "翻译/轻任务",
+    "admin.provider.queueHint.schedule":
+      "加入或移出文本日程提取队列（需要“文本”标签）",
+    "admin.provider.queueHint.verify":
+      "加入或移出图片日程提取队列（需要“图片”标签）",
     "admin.provider.queueHint.translate":
       "加入或移出翻译队列（需要“文本”标签）",
     "admin.provider.addModels": "添加模型",

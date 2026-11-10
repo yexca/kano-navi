@@ -605,7 +605,7 @@ func TestHealthReadReportsSanitizedSyncSummary(t *testing.T) {
 	if got := keys(lastSync); !reflect.DeepEqual(got, []string{"finishedAt", "id", "message", "source", "startedAt", "status"}) {
 		t.Fatalf("lastSync keys = %v", got)
 	}
-	if lastSync["source"] != "schedule" || lastSync["status"] != "success" || lastSync["message"] != "同步完成" {
+	if lastSync["source"] != "schedule" || lastSync["status"] != "success" || lastSync["message"] != "Sync completed" {
 		t.Fatalf("lastSync = %v", lastSync)
 	}
 	assertNoOperatorData(t, "health_read", response.body)

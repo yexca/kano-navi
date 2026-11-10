@@ -704,6 +704,7 @@ export interface ScheduleImage {
   sourceAccount: string | null
   llmStatus: string
   llmConfidence: number | null
+  llmText: string | null
   llmReason: string | null
   llmModel: string | null
   llmCheckedAt: string | null
@@ -1245,9 +1246,9 @@ export interface LlmFailure {
 export interface LlmCatalog {
   providers: Provider[]
   models: Model[]
-  /** The post extraction queue both detection paths draw from. */
+  /** The text schedule extraction queue. */
   queue: RouteTarget[]
-  /** The separate schedule-image check queue; it never falls back. */
+  /** The image schedule extraction queue; it never falls back. */
   verificationQueue?: RouteTarget[]
   /** The separate queue of the translate step; it never falls back. */
   translationQueue?: RouteTarget[]

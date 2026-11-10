@@ -171,6 +171,11 @@ type spaceItem struct {
 	IDStr   string `json:"id_str"`
 	Type    string `json:"type"`
 	Visible *bool  `json:"visible"`
+	// Basic.IsOnlyFans marks a dynamic only the account's paying supporters
+	// (充电专属) may read; a signed-in supporter's listing carries it in full.
+	Basic struct {
+		IsOnlyFans bool `json:"is_only_fans"`
+	} `json:"basic"`
 	Modules struct {
 		Author struct {
 			Mid   flexInt `json:"mid"`
@@ -214,16 +219,38 @@ type spaceItem struct {
 		} `json:"module_tag"`
 	} `json:"modules"`
 	// Orig is the dynamic a forward forwards, carried in full by the listing.
-	Orig *spaceItem `json:"orig"`
+	// It is decoded on its own (see original) so a bad one never fails the
+	// page.
+	Orig json.RawMessage `json:"orig"`
+}
+
+// original is the forwarded dynamic, or nil when the forward has none. One
+// that does not decode is read for its ID alone, so its quote is
+// unavailable.
+func (it spaceItem) original() *spaceItem {
+	if len(it.Orig) == 0 || string(it.Orig) == "null" {
+		return nil
+	}
+	var orig spaceItem
+	if json.Unmarshal(it.Orig, &orig) == nil {
+		return &orig
+	}
+	var id struct {
+		IDStr string `json:"id_str"`
+	}
+	if json.Unmarshal(it.Orig, &id) != nil {
+		return nil
+	}
+	return &spaceItem{IDStr: id.IDStr}
 }
 
 // dynamic validates one listing item of the account; it reports false for a
-// kind that is not a post or an incomplete item. A forward keeps its own
+// kind that is not a post, a supporters-only dynamic or an incomplete item. A forward keeps its own
 // wording and quotes the dynamic it forwards, whether or not that dynamic can
 // still be shown.
 func (it spaceItem) dynamic(owner int64) (Dynamic, bool) {
 	if !keptDynamicTypes[it.Type] || !dynamicIDPattern.MatchString(it.IDStr) || it.Modules.Author.PubTS <= 0 ||
-		int64(it.Modules.Author.Mid) != owner || it.Visible != nil && !*it.Visible {
+		int64(it.Modules.Author.Mid) != owner || it.Visible != nil && !*it.Visible || it.Basic.IsOnlyFans {
 		return Dynamic{}, false
 	}
 	m := it.Modules.Dynamic
@@ -239,10 +266,11 @@ func (it spaceItem) dynamic(owner int64) (Dynamic, bool) {
 		d := Dynamic{IDStr: it.IDStr, OwnerMid: owner, Text: boundText(joinNodes(nodes)), PublishedAt: published, Images: []string{}}
 		// A forward without wording of its own whose dynamic is gone is still
 		// kept: the store rewrites a stored one and leaves out a new one.
-		d.Quote = it.Orig.quote(d.URL())
+		forwarded := it.original()
+		d.Quote = forwarded.quote(d.URL())
 		orig := map[string]any{"type": "", "id": strings.TrimPrefix(d.Quote.ID, PostPrefix)}
-		if it.Orig != nil && len(it.Orig.Type) <= 64 {
-			orig["type"] = it.Orig.Type
+		if forwarded != nil && len(forwarded.Type) <= 64 {
+			orig["type"] = forwarded.Type
 		}
 		d.Raw = map[string]any{"type": it.Type, "nodes": nodes, "orig": orig}
 		return d, true
@@ -313,7 +341,7 @@ func (it *spaceItem) quote(selfURL string) *Quote {
 	if m.Major != nil {
 		major = m.Major.Type
 	}
-	if it.Modules.Author.Mid <= 0 || it.Modules.Author.PubTS <= 0 || it.Visible != nil && !*it.Visible || major == "MAJOR_TYPE_NONE" {
+	if it.Modules.Author.Mid <= 0 || it.Modules.Author.PubTS <= 0 || it.Visible != nil && !*it.Visible || it.Basic.IsOnlyFans || major == "MAJOR_TYPE_NONE" {
 		return q
 	}
 	text, pics, link := "", []string{}, q.URL

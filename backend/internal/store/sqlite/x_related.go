@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -172,6 +173,76 @@ func (s *Store) SetXRelatedAccounts(ctx context.Context, accounts []XRelatedAcco
 		return nil, ErrUnavailable
 	}
 	return normalized, nil
+}
+
+// SettleXRelatedRoles keeps a handle in one role when X_HANDLES changes: at
+// every start, an own account leaves the related list, and the posts the pool
+// promoted for it become own posts, shown again when only the pool hid them.
+func (s *Store) SettleXRelatedRoles(ctx context.Context, own []string) error {
+	if !s.Writable() || len(own) == 0 {
+		return nil
+	}
+	owned := map[string]bool{}
+	args := []any{}
+	for _, handle := range own {
+		key := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(handle), "@"))
+		if key != "" && !owned[key] {
+			owned[key] = true
+			args = append(args, key)
+		}
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ErrUnavailable
+	}
+	defer tx.Rollback()
+	accounts, err := readXRelatedAccounts(ctx, tx)
+	if err != nil {
+		return dbErr(err)
+	}
+	kept := slices.DeleteFunc(slices.Clone(accounts), func(account XRelatedAccount) bool {
+		return owned[strings.ToLower(account.Handle)]
+	})
+	now := ISOTime(time.Now())
+	changed := false
+	if len(kept) != len(accounts) {
+		body, _ := json.Marshal(kept)
+		if _, err = tx.ExecContext(ctx, `UPDATE app_settings SET value=?,updated_at=? WHERE key=?`, string(body), now, XRelatedSetting); err != nil {
+			return dbErr(err)
+		}
+	}
+	in := `lower(account_handle) IN (` + placeholders(len(args)) + `) AND promoted_at IS NOT NULL`
+	shown, err := tx.ExecContext(ctx, `UPDATE posts SET hidden_at=NULL WHERE `+in+`
+		AND hidden_at IS NOT NULL AND id IN (SELECT id FROM x_statuses WHERE demoted_at IS NOT NULL AND manual_decision IS NULL)`, args...)
+	if err != nil {
+		return dbErr(err)
+	}
+	adopted, err := tx.ExecContext(ctx, `UPDATE posts SET promoted_at=NULL WHERE `+in, args...)
+	if err != nil {
+		return dbErr(err)
+	}
+	if n, _ := shown.RowsAffected(); n > 0 {
+		changed = true
+	}
+	if n, _ := adopted.RowsAffected(); n > 0 {
+		changed = true
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE x_statuses SET demoted_at=NULL,manual_decision=NULL,manual_reason=NULL,manual_at=NULL,updated_at=?
+		WHERE lower(author_handle) IN (`+placeholders(len(args))+`) AND (demoted_at IS NOT NULL OR manual_decision IS NOT NULL)`, append([]any{now}, args...)...); err != nil {
+		return dbErr(err)
+	}
+	if changed {
+		if err = bumpRevision(ctx, tx, now); err != nil {
+			return dbErr(err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return ErrUnavailable
+	}
+	return nil
 }
 
 // relatedKeywords maps each related account's lower-case handle to its
@@ -376,7 +447,7 @@ func reconcileXStatuses(ctx context.Context, tx *sql.Tx, accounts []XRelatedAcco
 //   - demotion sets posts.hidden_at and keeps the row, its media and events.
 //     An automatic demotion records demoted_at, so only a hide the pool made
 //     is undone by a later automatic promotion; an operator's hide in Posts
-//     stays.
+//     stays. Showing a promoted post in Posts records a manual promote.
 //
 // A pooled status that is an own post is never touched.
 func reconcileXStatusChanges(ctx context.Context, tx *sql.Tx, accounts []XRelatedAccount, ids []string, now string) (xStatusChanges, error) {

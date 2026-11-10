@@ -100,7 +100,7 @@ func TestHealthProjectsSuccessfulSyncWithoutInternalFields(t *testing.T) {
 	if !ok {
 		t.Fatalf("lastSync is not an object: %#v", payload["lastSync"])
 	}
-	if len(run) != 6 || run["id"] != float64(1) || run["source"] != "x" || run["status"] != "success" || run["message"] != "同步完成" {
+	if len(run) != 6 || run["id"] != float64(1) || run["source"] != "x" || run["status"] != "success" || run["message"] != "Sync completed" {
 		t.Fatalf("unexpected public sync run: %#v", run)
 	}
 	for _, forbidden := range []string{"counts", "jobId", "triggeredBy", "raw diagnostic", "internal-job"} {

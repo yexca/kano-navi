@@ -124,6 +124,39 @@ func TestStartupFillsThePoolFromStoredQuotes(t *testing.T) {
 	}
 }
 
+// A quoting post whose time does not read is filled once, not rewritten on
+// every later startup.
+func TestStartupFillsAnUnreadableQuoteTimeOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "database", "kano.sqlite")
+	s, err := OpenStandalone(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qrt := `{"tweetID":"` + agencyID + `","text":"quoted wording","date_epoch":1760054400,"user_screen_name":"agency_synthetic","user_name":"Agency","tweetURL":"https://x.com/agency_synthetic/status/` + agencyID + `","mediaURLs":[],"media_extended":[]}`
+	if _, err = s.DB().Exec(`INSERT INTO posts(id,source,account_handle,text,published_at,url,raw_json,quote_json) VALUES('1900000000000000130','x','kano','look','not a time','https://x.com/kano/status/1900000000000000130','{"tweetID":"1900000000000000130","mediaURLs":[],"qrt":` + qrt + `}','{"id":"` + agencyID + `","authorHandle":"agency_synthetic","text":"quoted wording","url":"https://x.com/agency_synthetic/status/` + agencyID + `"}')`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	const pinned = "2000-01-01T00:00:00.000Z"
+	for i := range 2 {
+		if s, err = OpenStandalone(path); err != nil {
+			t.Fatal(err)
+		}
+		var updated string
+		err = s.DB().QueryRow(`SELECT updated_at FROM x_statuses WHERE id=?`, agencyID).Scan(&updated)
+		if err == nil {
+			_, err = s.DB().Exec(`UPDATE x_statuses SET updated_at=? WHERE id=?`, pinned, agencyID)
+		}
+		s.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 1 && updated != pinned {
+			t.Fatalf("startup rewrote the pool row: updated_at=%s", updated)
+		}
+	}
+}
+
 func TestTranslationTakesPooledQuotesAfterPosts(t *testing.T) {
 	s, err := OpenStandalone(filepath.Join(t.TempDir(), "database", "kano.sqlite"))
 	if err != nil {

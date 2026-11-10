@@ -43,6 +43,7 @@ func newTwin(t *testing.T) *twin {
 		f.addProvider("p-main", protocolChat, "https://provider.example.test/v1", "model-a", `["text","image"]`)
 		f.addProvider("p-alt", protocolChat, "https://alternate.example.test/v1", "model-b", `["text","image"]`)
 		f.queue("p-main")
+		f.queueVerify("p-main")
 		f.addPost("text-1", "", "明日 21時から配信", "2026-04-30T01:00:00.000Z", "")
 		f.addPost("text-2", "", "今日 20時から雑談配信", "2026-04-30T02:00:00.000Z", "")
 		f.addPost("board-1", "", "今週のスケジュール", "2026-04-30T03:00:00.000Z", stringify(obj("media_urls", []any{twinImageURL})))
@@ -293,7 +294,10 @@ func TestSettledPostsMatchJudgedPosts(t *testing.T) {
 			tw.expect("failed", 1, 4)
 			tw.scan("backoff over, failed again")
 			tw.exec(`DELETE FROM llm_route_targets WHERE route = ?`, routeQueue)
-			tw.do(func(f *fixture) { f.queue("p-alt") })
+			tw.do(func(f *fixture) {
+				f.queue("p-alt")
+				f.queueVerify("p-alt")
+			})
 			// Stored results stand; the failure starts over on the new queue.
 			tw.scan("new queue")
 			tw.expect("new queue", 1, 4)

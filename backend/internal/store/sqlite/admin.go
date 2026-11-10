@@ -599,11 +599,17 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 	}
 	// Release the single connection before resolving each cached image.
 	rows.Close()
+	// The page's images, quote images and schedule records are read in
+	// batches; each post then resolves from the read's memo.
+	ctx = withReadMemo(ctx)
+	if err := s.prefetchAdminPostMedia(ctx, items); err != nil {
+		return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
+	}
+	if err := s.attachAdminPostSchedules(ctx, items); err != nil {
+		return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
+	}
 	for i := range items {
 		if err := s.resolveAdminPostMedia(ctx, &items[i]); err != nil {
-			return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
-		}
-		if err := s.attachAdminPostSchedule(ctx, &items[i]); err != nil {
 			return AdminPage[AdminPost]{}, fmt.Errorf("%w: admin posts unavailable", ErrUnavailable)
 		}
 		quote, err := s.mapQuote(ctx, items[i].Source, items[i].ID, quotes[items[i].ID])
@@ -628,6 +634,21 @@ func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPag
 		}
 	}
 	return AdminPage[AdminPost]{Items: items, Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages}, nil
+}
+
+// prefetchAdminPostMedia loads the media links of these posts and the media
+// rows of their stored media URLs into the read's memo.
+func (s *Store) prefetchAdminPostMedia(ctx context.Context, posts []AdminPost) error {
+	ids := make([]string, 0, len(posts))
+	sources := make([]*string, 0, len(posts))
+	for i := range posts {
+		ids = append(ids, posts[i].ID)
+		sources = append(sources, posts[i].MediaURL)
+	}
+	if err := s.prefetchMedia(ctx, sources...); err != nil {
+		return err
+	}
+	return s.prefetchPostMedia(ctx, ids...)
 }
 
 // resolveAdminPostMedia lists a post's images as the board does: linked post
@@ -736,10 +757,8 @@ func (s *Store) ListAdminVideos(ctx context.Context, f AdminVideoFilter) (AdminV
 	}
 	// Release the single connection before resolving each cached thumbnail.
 	rows.Close()
-	for i := range items {
-		if err := s.resolveAdminThumbnail(ctx, &items[i]); err != nil {
-			return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
-		}
+	if err := s.resolveAdminThumbnails(ctx, items); err != nil {
+		return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
 	}
 	if err := s.attachAdminVideoTranslations(ctx, items); err != nil {
 		return AdminVideosPage{}, fmt.Errorf("%w: admin videos unavailable", ErrUnavailable)
@@ -850,6 +869,25 @@ func (s *Store) resolveAdminThumbnail(ctx context.Context, v *AdminVideo) error 
 	return nil
 }
 
+// resolveAdminThumbnails resolves the thumbnails of a listed page. Their media
+// rows are read in batches and their files checked through one read's memo.
+func (s *Store) resolveAdminThumbnails(ctx context.Context, videos []AdminVideo) error {
+	ctx = withReadMemo(ctx)
+	sources := make([]*string, len(videos))
+	for i := range videos {
+		sources[i] = videos[i].sourceThumbnail
+	}
+	if err := s.prefetchMedia(ctx, sources...); err != nil {
+		return err
+	}
+	for i := range videos {
+		if err := s.resolveAdminThumbnail(ctx, &videos[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // AdminVideoByID reads one video as the console lists it. It returns
 // ErrVideoNotFound for an unknown ID.
 func (s *Store) AdminVideoByID(ctx context.Context, id string) (AdminVideo, error) {
@@ -902,10 +940,8 @@ func (s *Store) adminVideosByID(ctx context.Context, ids []string) (map[string]A
 			return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)
 		}
 	}
-	for i := range items {
-		if err := s.resolveAdminThumbnail(ctx, &items[i]); err != nil {
-			return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)
-		}
+	if err := s.resolveAdminThumbnails(ctx, items); err != nil {
+		return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)
 	}
 	if err := s.attachAdminVideoTranslations(ctx, items); err != nil {
 		return nil, fmt.Errorf("%w: videos unavailable", ErrUnavailable)

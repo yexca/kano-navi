@@ -214,7 +214,8 @@ keeps the row, its media and its events, whose automatic ones then leave the
 public pages (see [Events of hidden posts](data-model.md#events-of-hidden-posts)).
 An automatic demotion records `x_statuses.demoted_at`, so an automatic
 promotion shows again only a post the rules hid; an operator's hide in Posts
-stays. An operator's promote or demote (`manual_decision`, with its reason
+stays. Showing a promoted post in Posts records a manual promote, and hiding
+it withdraws that promote. An operator's promote or demote (`manual_decision`, with its reason
 and time) is a durable lock that the rules never override; a manual promote
 shows a hidden promoted post, and returning a status to the rules lets them
 decide again. Only a related account's status can be promoted by hand, and a
@@ -1010,7 +1011,9 @@ A listing keeps the account's own `DYNAMIC_TYPE_WORD` and `DYNAMIC_TYPE_DRAW`
 items (the opus and picture cards), `DYNAMIC_TYPE_ARTICLE` items only in
 their `MAJOR_TYPE_OPUS` form, whose text comes from the opus summary, and
 forwards (`DYNAMIC_TYPE_FORWARD`, see [Forwards](#forwards)); a live-start
-notice and a collection update are not posts. An upload's dynamic
+notice and a collection update are not posts. A supporters-only dynamic
+(`basic.is_only_fans`, 充电专属) is never a post, even when a supporter's
+login carries it in full. An upload's dynamic
 (`DYNAMIC_TYPE_AV` with a `MAJOR_TYPE_ARCHIVE` card) of the account is not a
 post either: the read stores it as the upload it publishes (BV ID, title,
 cover, description, length from `duration_text`, published at the dynamic's
@@ -1083,11 +1086,12 @@ Its pictures (HTTPS on `*.hdslb.com`, at most nine) are `quote-image` links
 of the forward and never schedule candidates; `quote_json` holds no image
 address. A deleted dynamic (`DYNAMIC_TYPE_NONE`, `MAJOR_TYPE_NONE`), a
 missing `orig`, a dynamic of any other kind (a live room, a collection,
-goods, a vote, an article in its old form) or one with neither wording nor
-pictures is unavailable, with only its ID and its opus page as URL (an
+goods, a vote, an article in its old form), a supporters-only dynamic or one
+with neither wording nor pictures is unavailable, with only its ID and its opus page as URL (an
 upload too); when even its ID is unknown, `id` is empty and `url` is the
-forward's own opus page. A bad `orig` never fails the page. An unavailable
-quote leaves the dynamic's pool row as it was.
+forward's own opus page. An `orig` of an unexpected shape is unavailable
+as well, keeping its ID when `id_str` still reads, and never fails the page.
+An unavailable quote leaves the dynamic's pool row as it was.
 
 Every available forwarded dynamic also enters the Bilibili status pool,
 `bilibili_statuses`, in the forward's transaction, whatever its author. The
@@ -1170,7 +1174,8 @@ nothing else; no address comes from data:
   products, read by every timed run, Run now and full sync;
 - `/products.json?limit=250&page=<n>`, the whole catalog, read only by the
   operator's [read-all fetch](workflows.md#manual-fetches-and-historical-backfill):
-  at most six pages, three seconds apart, until a page lists fewer than 250;
+  at most six pages, three seconds apart, until a page lists fewer than 250
+  products, counting those left out as unusable;
 - `/collections.json?limit=250`, the collection list, read at most once per
   run, three seconds after the listing, and only when a listed product is in
   no stored sale of its period.
@@ -1190,8 +1195,11 @@ code, since the board is Kano's, and when its description states a dated
 period: a label (受注期間, 販売期間, 受付期間 or 抽選受付期間), a dated
 opening, and on the same line `〜`, `～` or `~` and a dated close, such as
 `＜受注期間＞ 2026年10月24日 〜 2026年11月24日`. Full-width digits read as
-digits, a weekday or time may follow the opening, and a close without a
-year falls on or after the opening. A permanent item (`販売期間 2026年10月1日～`
+digits, every Unicode space (such as the no-break space of `&nbsp;`) reads
+as a plain space, a weekday or time may follow the opening, and a close
+without a year falls on or after the opening: in the opening's year, or the
+next one when its month and day come earlier, and only then is the date
+checked, so `2027年12月1日 〜 2月29日` closes on 2028-02-29. A permanent item (`販売期間 2026年10月1日～`
 with no close), a product without a period and a period with impossible
 dates are skipped and counted by reason (`open_ended`, `no_period`,
 `invalid_period`, `untagged`). Stock (`variants[].available`) is not the
@@ -1233,7 +1241,7 @@ Each group is an automatic `sale` event (see
 | `time_precision`          | `exact` with `starts_at`, otherwise `unknown`                                                                                              |
 | `url`                     | the collection page, or the first product's page                                                                                           |
 | `detail`                  | null                                                                                                                                       |
-| `platform`                | `other`                                                                                                                                    |
+| `platform` / `platforms`  | `other` / `["other"]`, stated (`platforms_inferred` 0)                                                                                     |
 
 `raw_json`, on the event and its source row, holds only the group's title,
 link and collection handle, the matched period line, and each product's ID,
@@ -1262,8 +1270,12 @@ lookups, none started after two minutes, newest upload first.
   request per video through the media
   [outbound proxy](outbound-proxy.md) area, with a 10-second timeout, a
   256 KiB body limit and no redirects. Only the answer's video ID and a
-  thumbnail URL on `https://nicovideo.cdn.nimg.jp/thumbnails/<n>/<n>[.<hash>]`
-  are read; `DELETED`, `NOT_FOUND` and `COMMUNITY` mean the video is gone.
+  thumbnail URL on `https://nicovideo.cdn.nimg.jp/thumbnails/<n>/<n>[.<hash>]`,
+  where both `<n>` are the requested video's number, are read; `DELETED`,
+  `NOT_FOUND` and `COMMUNITY` mean the video is gone. A deadline before or
+  during the body is `niconico_timeout`. The first 429
+  (`niconico_rate_limited`) is recorded as a failed lookup and ends the
+  step's niconico lookups.
 - Bilibili: the view endpoint above, for any uploader, with the account's
   device identity and backoff. A blocked source makes no request, and the
   first captcha or rate-limit answer starts the shared backoff and ends the
@@ -1487,8 +1499,8 @@ short provider outage, the 24-hour wait a daily quota reset, and a post that
 still fails after about 31 hours most likely fails on its content.
 
 The backoff starts over when the input changes (edited text, publication
-time, URL or cached images), when the extraction queue's targets or models
-change, and when an operator requests a reprocess, which also clears it immediately. A
+time, URL or cached images), when the text or image extraction queue's targets
+or models change, and when an operator requests a reprocess, which also clears it immediately. A
 queued reprocess request always runs, whatever the backoff, and a forced pass
 that fails counts as the first failure. A success or `uncertain` result,
 including a cache hit, clears the backoff. A cancelled run is not a failure.
@@ -1502,9 +1514,10 @@ An operator can dismiss a failed post. It becomes `dismissed`, leaves the
 console's failed list, and is held back like a post whose retries stopped
 until its input or targets change or an operator requests a reprocess.
 
-Both paths draw from the extraction queue: an ordered list of targets, each
-a provider plus one of its catalog models, and a target's capabilities are
-its model's `text`/`image` tags.
+Text-only posts draw from the schedule extraction queue and posts with images
+draw from the image extraction queue. Each queue is an ordered list of targets, a
+provider plus one of its catalog models, and a target's capabilities are its
+model's `text`/`image` tags.
 Providers have no default model, and nothing reads the
 `llm_providers.model` column. A one-time startup upgrade, recorded as
 `llm_default_model_retired`, rewrites each queue target without a model
@@ -1513,7 +1526,8 @@ Where that pair is already queued, the earlier position stays, and a target
 whose provider has no stored model is dropped because it could never be
 called. Target selection follows
 the original post modality. Text-only input requires `text`; image-only input
-requires `image`; mixed input requires a model with both tags. Only ready cached images are sent to the model. A post that
+requires `image`; mixed input uses the image extraction queue and requires an
+image-capable model. Only ready cached images are sent to the model. A post that
 declares an image but whose cache is not ready is recorded as `media_pending`
 and is not silently reduced to text-only input. Each provider uses OpenAI
 Responses, Chat Completions, or Anthropic Messages, receives at most the
@@ -1571,7 +1585,8 @@ classification nor an events list, and a `schedule` result without entries
 unless its action is `cancel`; a rejected result is a failed attempt and
 leaves existing events untouched. So is a reply the provider reports as cut
 off at the token limit (`max_tokens`, `max_output_tokens`, `length`), refused,
-or incomplete, even when its tool call parses; schedule-image checks follow
+or incomplete, even when its tool call parses; image extraction and
+schedule-image reviews follow
 the same rule, and a refusal stores the fixed `LLM refused the request`. `schedule` results update automatic
 events. A model never deletes or definitively cancels an event: `action=cancel`
 matches the clearest existing event and writes an `llm_suspected` cancellation
@@ -1779,10 +1794,11 @@ A schedule image (`assets.kind = schedule`) is public only after two gates:
    its text) reads as a weekly or multi-day board notice. The stored post `label` is not part of that input, because the
    looser post classifier labels any `配信予定` post as `SCHEDULE / 日程`.
 2. The automatic scan sends each unreviewed candidate's ready cached image,
-   without the post text, to the separate schedule-image check queue
+   without the post text, to the image extraction queue
    (`llm_route_targets.route = 'verify'`), whose targets need the `image` tag
-   and which never falls back to the extraction queue, and records
-   `schedule`, `not_schedule`, or `uncertain` in `schedule_asset_reviews`. A candidate whose source post does not pass
+   and which never falls back to the text extraction queue. The model records
+   `schedule`, `not_schedule`, or `uncertain` plus the visible schedule text in
+   `schedule_asset_reviews`. A candidate whose source post does not pass
    gate 1 is recorded as `skipped` / `source_not_board` without a model
    call. A pending cache, or no queued, keyed Image model, is also `skipped`
    and retried. An asset without an image URL, such as a `weekly-schedule`
@@ -1827,7 +1843,7 @@ model call it settles [Bilibili forms](data-model.md#bilibili-form) by rule,
 whether or not a queue is configured, and the same queue then asks the
 unsettled uploads for form and tag. Its models come only from the separate
 translation queue (`llm_route_targets.route = 'translate'`), configured in
-`/admin` → Models; it never falls back to the extraction queue. Targets need
+`/admin` → Models; it never falls back to the schedule extraction queue. Targets need
 the `text` tag. Each target gets at most three calls before moving to the
 next configured target, in queue order.
 Without a usable target the step records `disabled` with the reason and

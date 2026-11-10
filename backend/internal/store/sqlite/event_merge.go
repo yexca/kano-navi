@@ -706,8 +706,10 @@ var (
 	// Words that describe the medium rather than the activity.
 	mergeGenericWords = []string{"生配信", "配信", "生放送", "放送", "予定", "youtube", "live", "stream"}
 	// Words and counts that every sale title uses, such as 受注, 締切 or
-	// 残り2日, so that only what names the goods or the event is compared.
-	saleGenericWords = []string{"本日まで", "今日まで", "明日まで", "まで", "受け付け", "受注", "受付", "予約", "通販", "販売", "発売", "抽選", "申し込み", "申込", "先行", "一般", "期間", "締め切り", "締切", "開始", "終了", "延長", "残り", "再販", "グッズ", "チケット", "pre", "order", "sale", "goods", "merch", "shop", "ticket"}
+	// 残り2日, and Kano's own name, which nearly every sale title carries, so
+	// that only what names the goods or the event is compared. Her full name
+	// comes before its parts.
+	saleGenericWords = []string{"鹿乃まほろ", "かのまほろ", "kanomahoro", "鹿乃", "まほろ", "mahoro", "kano", "本日まで", "今日まで", "明日まで", "まで", "受け付け", "受注", "受付", "予約", "通販", "販売", "発売", "抽選", "申し込み", "申込", "先行", "一般", "期間", "締め切り", "締切", "開始", "終了", "延長", "残り", "再販", "グッズ", "チケット", "pre", "order", "sale", "goods", "merch", "shop", "ticket"}
 	saleTitleCounts  = regexp.MustCompile(`[0-9０-９]+[月日時分]?`)
 )
 

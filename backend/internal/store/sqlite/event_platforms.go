@@ -12,8 +12,7 @@ import (
 // array) are where the wording, the source or an operator says it happens;
 // events.platforms_inferred is 1 when they came from a source default rather
 // than from the wording or an operator. events.platform is the first
-// announced platform, or unknown, for readers of the single value. A row
-// written before the array existed reads as its single platform.
+// announced platform, or unknown, for readers of the single value.
 const (
 	PlatformYouTube  = "youtube"
 	PlatformBilibili = "bilibili"
@@ -55,8 +54,9 @@ func EncodePlatforms(platforms []string) string {
 	return string(encoded)
 }
 
-// storedPlatforms reads the announced platforms of a row: its array, or its
-// single platform when the array is null.
+// storedPlatforms reads the announced platforms of a row: its array, or, when
+// the array is null, youtube for a row whose single platform is youtube (the
+// schema upgrade sets only that one on the YouTube writers' events).
 func storedPlatforms(platforms, platform sql.NullString) []string {
 	if platforms.Valid {
 		var values []string
@@ -64,8 +64,8 @@ func storedPlatforms(platforms, platform sql.NullString) []string {
 			return NormalizePlatforms(values)
 		}
 	}
-	if platform.Valid {
-		return NormalizePlatforms([]string{platform.String})
+	if platform.Valid && platform.String == PlatformYouTube {
+		return []string{PlatformYouTube}
 	}
 	return []string{}
 }

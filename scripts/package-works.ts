@@ -95,8 +95,15 @@ function requireColumns(rows: Record<string, string>[], columns: string[]) {
 
 const isoDate = /^\d{4}-\d{2}-\d{2}$/u
 
+/** A calendar date in YYYY-MM-DD form, such as 2020-02-29 but not 2020-02-30. */
 function checkDate(value: string) {
-  if (!isoDate.test(value)) throw new Error(`Not a Japan date: ${value}`)
+  const parsed = isoDate.test(value) ? new Date(`${value}T00:00:00Z`) : null
+  if (
+    !parsed ||
+    Number.isNaN(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== value
+  )
+    throw new Error(`Not a Japan date: ${value}`)
   return value
 }
 
@@ -1054,6 +1061,11 @@ async function uploads(root: string) {
   ])
   const items: Upload[] = []
   for (const row of rows) {
+    // The collection marks YouTube Shorts in the optional format column; the
+    // page lists full uploads only.
+    const format = row.format ?? ""
+    if (format === "Shorts") continue
+    if (format) throw new Error(`Unknown upload format: ${format}`)
     const kind = uploadKinds[row.kind]
     if (!kind) throw new Error(`Unknown upload kind: ${row.kind}`)
     const date = checkDate(row.date)
@@ -1226,7 +1238,23 @@ export async function packageWorks(
   const catalog = [...byName.values()]
     .map((cover) => cover.media)
     .sort((a, b) => a.name.localeCompare(b.name))
+  const dates = [...personal, ...participation, ...uploaded]
+    .map((item) => item.date)
+    .sort()
+  if (!dates.length) throw new Error("The collection lists no works.")
+  const newestUpload = uploaded
+    .map((item) => item.date)
+    .sort()
+    .at(-1)
+  const updatedAt = through
+    ? checkDate(through)
+    : (newestUpload ?? dates.at(-1)!)
+  if (newestUpload && updatedAt < newestUpload)
+    throw new Error(
+      `The upload list is checked through ${updatedAt}, before its newest upload`,
+    )
 
+  // Every check above passed; only now does anything change.
   await fs.mkdir(mediaDir, { recursive: true })
   for (const { file, media } of byName.values()) {
     const target = path.join(mediaDir, media.name)
@@ -1240,20 +1268,6 @@ export async function packageWorks(
   await writeJson(path.join(contentDir, "participation.json"), participation)
   await writeJson(path.join(contentDir, "uploads.json"), uploaded)
   await writeJson(path.join(contentDir, "media-catalog.json"), catalog)
-  const dates = [...personal, ...participation, ...uploaded]
-    .map((item) => item.date)
-    .sort()
-  const newestUpload = uploaded
-    .map((item) => item.date)
-    .sort()
-    .at(-1)
-  const updatedAt = through
-    ? checkDate(through)
-    : (newestUpload ?? dates.at(-1))
-  if (newestUpload && updatedAt! < newestUpload)
-    throw new Error(
-      `The upload list is checked through ${updatedAt}, before its newest upload`,
-    )
   await writeJson(path.join(contentDir, "summary.json"), {
     personal: personal.length,
     participation: participation.length,
@@ -1263,7 +1277,7 @@ export async function packageWorks(
     updatedAt,
   })
   await fs.mkdir(path.dirname(index), { recursive: true })
-  await writeJson(index, worksVideoIndex(uploaded, updatedAt!))
+  await writeJson(index, worksVideoIndex(uploaded, updatedAt))
   return {
     personal: personal.length,
     participation: participation.length,

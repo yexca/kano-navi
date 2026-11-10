@@ -138,7 +138,7 @@ func seedStatic(ctx context.Context, tx *sql.Tx, overwrite bool) error {
 		}
 	}
 	now := workflowTime(time.Now())
-	settings := map[string]string{"dashboard_revision": "0", "x_accounts": `["kano_2525","_Kanotic"]`, "llm_route_targets_migrated": "1", "llm_verify_queue_seeded": "1"}
+	settings := map[string]string{"dashboard_revision": "0", "x_accounts": `["kano_2525","_Kanotic"]`, "llm_route_targets_migrated": "1", "llm_verify_queue_seeded": "1", "llm_image_queue_seeded": "1"}
 	for key, value := range settings {
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES(?,?,?)`, key, value, now); err != nil {
 			return err

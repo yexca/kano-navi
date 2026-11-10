@@ -443,7 +443,7 @@ func boardFixture(t *testing.T) (*fixture, string) {
 	f.addCachedImage(imageURL, []byte(pngHeader))
 	f.exec(`INSERT INTO assets (id, kind, url, source_url, week_start) VALUES ('schedule-2026-04-27', 'schedule', ?, ?, '2026-04-27')`, imageURL, sourceURL)
 	f.provider.respond = func(recordedRequest) (int, string) {
-		return http.StatusOK, stringify(obj("output_text", `{"classification":"schedule","confidence":0.91,"evidence":"weekly grid","reason":"table of days"}`))
+		return http.StatusOK, stringify(obj("output_text", `{"classification":"schedule","text":"月曜 20:00 配信","confidence":0.91,"evidence":"weekly grid","reason":"table of days"}`))
 	}
 	return f, imageURL
 }
@@ -472,12 +472,12 @@ func TestScheduleImageVerificationApprovesAsset(t *testing.T) {
 	if result.Status != "success" || countOf(assets, "success") != 1 || countOf(assets, "schedule") != 1 || countOf(assets, "skipped") != 1 || countOf(assets, "attempted") != 2 {
 		t.Errorf("result = %q %v", result.Status, result.Counts)
 	}
-	review := `SELECT llm_status || '|' || COALESCE(llm_confidence,'') || '|' || COALESCE(llm_reason,'') || '|' || COALESCE(llm_evidence,'') || '|' ||
+	review := `SELECT llm_status || '|' || COALESCE(llm_confidence,'') || '|' || COALESCE(llm_text,'') || '|' || COALESCE(llm_reason,'') || '|' || COALESCE(llm_evidence,'') || '|' ||
 		COALESCE(llm_model,'') || '|' || manual_status || '|' || (llm_input_fingerprint IS NOT NULL) || '|' || (llm_checked_at IS NOT NULL) FROM schedule_asset_reviews WHERE asset_id=?`
-	if got := f.text(review, "schedule-2026-04-27"); got != "schedule|0.91|table of days|weekly grid|model-v|unreviewed|1|1" {
+	if got := f.text(review, "schedule-2026-04-27"); got != "schedule|0.91|月曜 20:00 配信|table of days|weekly grid|model-v|unreviewed|1|1" {
 		t.Errorf("approved review = %q", got)
 	}
-	if got := f.text(review, "schedule-2026-04-20"); got != "skipped||source_not_board|||unreviewed|0|0" {
+	if got := f.text(review, "schedule-2026-04-20"); got != "skipped|||source_not_board|||unreviewed|0|0" {
 		t.Errorf("gated review = %q", got)
 	}
 	if got := f.text(`SELECT llm_status || '|' || manual_status || '|' || manual_reason FROM schedule_asset_reviews WHERE asset_id='schedule-2026-04-13'`); got != "pending|not_schedule|operator" {
@@ -746,7 +746,7 @@ func TestPostsWithoutUsableInputAreSkipped(t *testing.T) {
 		f.exec(`INSERT INTO media_links (media_id, owner_type, owner_id, role, position, created_at, updated_at) VALUES (?, 'post', 'post-img', 'post-image', 0, ?, ?)`,
 			mediaIDForSourceURL(imageURL), testTimestamp, testTimestamp)
 		f.scan()
-		if f.provider.count() != 0 || f.text(state) != "skipped|no_compatible_provider" {
+		if f.provider.count() != 0 || f.text(state) != "skipped|no_route_target" {
 			t.Errorf("state = %q, requests = %d", f.text(state), f.provider.count())
 		}
 	})

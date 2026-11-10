@@ -449,13 +449,10 @@ not a reserved `@` ID keeps that identifier in history without joining
 `workflows`.
 
 Every start of `kano-go serve` raises a stored interval of either Bilibili
-timer below `BILIBILI_MIN_INTERVAL_MINUTES` to that floor. When a Bilibili
-upload timer has no dynamics timer beside it, the server creates the dynamics
-timer with the same switch and interval, planned half an interval after the
-upload read. When an X timer has no `x_related` timer beside it, the server
-creates that timer with the same switch, the 180-minute default interval and
-the default sync, planned half the X interval after the X timer's next run.
-Once either row exists, the operator's settings are independent.
+timer below `BILIBILI_MIN_INTERVAL_MINUTES` to that floor. The
+`bilibili_dynamics` and `x_related` timers are timers of their own: each
+stays off until the operator turns it on, whatever the switch of the Bilibili
+or X timer.
 
 ## Modular Steps and Timers
 

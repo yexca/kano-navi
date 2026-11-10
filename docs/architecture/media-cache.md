@@ -59,8 +59,8 @@ have no database rows: the tracked `src/lineblog/media-catalog.json` lists
 them. `GET /media/lineblog/<name>` (and `HEAD`) opens the directory as a root
 and serves only a regular file directly inside it whose name is 12 lowercase
 hex digits and `.jpg`, `.png` or `.mp4`; the type comes from the extension.
-Responses carry `nosniff`, `default-src 'none'; sandbox`, an ETag of the name
-and size, byte ranges, conditional requests and the
+Responses carry `nosniff`, `default-src 'none'; sandbox`, an ETag of the name,
+size and modification time, byte ranges, conditional requests and the
 [media body time limits](#http-contract); images whose bytes match
 their name are immutable and everything else revalidates
 ([Immutable Fixed Files](#immutable-fixed-files)). Any
@@ -115,8 +115,9 @@ media step, before its download, walks each upload's videos in cover order
   (the large `.L` size is asked for, stepping down to the plain one, which is
   all older videos have), and Bilibili's view answer names its cover on
   `*.hdslb.com` (see [Sources](sources.md#works-cover-lookups));
-- a video whose image is missing, or whose lookup found it deleted, is
-  passed over for the upload's next video, and an upload with none left
+- a video whose image is missing, at its source or as a ready row whose
+  cached file is gone, or whose lookup found it deleted, is passed over for
+  the upload's next video (the media row stays), and an upload with none left
   shows a printed sleeve.
 
 A found image is an ordinary asset linked as `work-video /

@@ -161,7 +161,7 @@ func (f *fixture) queue(providerIDs ...string) {
 }
 
 // queueVerify appends each provider's first catalog model to the
-// schedule-image check queue.
+// image extraction queue.
 func (f *fixture) queueVerify(providerIDs ...string) {
 	f.t.Helper()
 	f.queueOn(routeVerify, providerIDs...)

@@ -42,3 +42,24 @@ func TestReadOnlyEventCommandsFailWithoutMutation(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+// A sale's close time falls on its close date in Japan, whichever caller
+// writes it.
+func TestManualSaleCloseTimeFallsOnItsCloseDate(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	store, err := OpenAdminWrites(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	for _, endsAt := range []string{"2026-11-20T10:00:00.000Z", "2026-11-06T15:00:00.000Z", "not-an-instant"} {
+		if _, err = store.CreateManualEvent(ctx, EventInput{Title: "Synthetic goods", StartsOn: "2026-11-05", EndsOn: "2026-11-06", EndsAt: endsAt, EventType: "sale"}); err != ErrEventInvalid {
+			t.Fatalf("endsAt %s: err=%v", endsAt, err)
+		}
+	}
+	// 23:59 in Japan on 6 November.
+	if _, err = store.CreateManualEvent(ctx, EventInput{Title: "Synthetic goods", StartsOn: "2026-11-05", EndsOn: "2026-11-06", EndsAt: "2026-11-06T14:59:00.000Z", EventType: "sale"}); err != nil {
+		t.Fatal(err)
+	}
+}

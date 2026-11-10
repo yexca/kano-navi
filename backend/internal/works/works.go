@@ -9,6 +9,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"regexp"
+	"time"
 )
 
 // Platforms of an upload's videos.
@@ -54,6 +55,15 @@ var (
 	isoDate  = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
 )
 
+// validDate reports whether value is a calendar date in YYYY-MM-DD form.
+func validDate(value string) bool {
+	if !isoDate.MatchString(value) {
+		return false
+	}
+	_, err := time.Parse(time.DateOnly, value)
+	return err == nil
+}
+
 // ValidVideo reports whether id has its platform's shape.
 func ValidVideo(platform, id string) bool {
 	pattern, ok := idPatterns[platform]
@@ -67,12 +77,12 @@ func Parse(content []byte) Index {
 		return Index{Uploads: []Upload{}}
 	}
 	out := Index{Uploads: []Upload{}}
-	if isoDate.MatchString(raw.UpdatedAt) {
+	if validDate(raw.UpdatedAt) {
 		out.UpdatedAt = raw.UpdatedAt
 	}
 	seen := map[string]bool{}
 	for _, upload := range raw.Uploads {
-		if !uploadID.MatchString(upload.ID) || !isoDate.MatchString(upload.Date) || seen[upload.ID] {
+		if !uploadID.MatchString(upload.ID) || !validDate(upload.Date) || seen[upload.ID] {
 			continue
 		}
 		seen[upload.ID] = true

@@ -301,11 +301,13 @@ func (x *XRecentExecutor) ReadRelated(ctx context.Context, base xsource.Options,
 	if err != nil {
 		return read, NewStepError("schema_failure", ErrSchema)
 	}
-	if only != "" {
-		accounts = slices.DeleteFunc(accounts, func(account sqlite.XRelatedAccount) bool {
-			return !strings.EqualFold(account.Handle, only)
+	// A handle is in one role at a time: an own account is never read as a
+	// related one.
+	accounts = slices.DeleteFunc(accounts, func(account sqlite.XRelatedAccount) bool {
+		return (only != "" && !strings.EqualFold(account.Handle, only)) || slices.ContainsFunc(x.Options.Handles, func(own string) bool {
+			return strings.EqualFold(strings.TrimPrefix(own, "@"), account.Handle)
 		})
-	}
+	})
 	read.Accounts = len(accounts)
 	for _, account := range accounts {
 		if ctx.Err() != nil {

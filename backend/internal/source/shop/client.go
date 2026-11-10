@@ -97,16 +97,17 @@ func (c *Client) NewArrivals(ctx context.Context, limit int) ([]Product, error) 
 	return ParseProducts(body)
 }
 
-// CatalogPage lists one page of the whole catalog, from 1.
-func (c *Client) CatalogPage(ctx context.Context, page int) ([]Product, error) {
+// CatalogPage lists one page of the whole catalog, from 1, with the number
+// of products the page lists before unusable ones are left out.
+func (c *Client) CatalogPage(ctx context.Context, page int) ([]Product, int, error) {
 	if page < 1 || page > MaxCatalogPages {
-		return nil, &Error{Code: "shop_invalid_request"}
+		return nil, 0, &Error{Code: "shop_invalid_request"}
 	}
 	body, err := c.get(ctx, "/products.json", url.Values{"limit": {strconv.Itoa(CatalogPageSize)}, "page": {strconv.Itoa(page)}})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return ParseProducts(body)
+	return parseProductPage(body)
 }
 
 // Collections lists the shop's collections.

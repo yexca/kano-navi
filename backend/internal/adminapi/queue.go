@@ -168,18 +168,19 @@ func (a *api) xRefreshQueue(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
 		return
 	}
-	watched := map[string]bool{}
-	for _, handle := range a.XHandles {
-		watched[strings.ToLower(handle)] = true
+	reads, err := a.refreshReads(ctx, items, settings.XMaxStatusRequests)
+	if err != nil {
+		httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+		return
 	}
 	taken := map[string]int{}
 	entries := make([]refreshQueueEntry, 0, len(items))
 	for _, item := range items {
 		account := strings.ToLower(item.AccountHandle)
 		status := "notRead"
-		if watched[account] {
+		if read, watched := reads[account]; watched {
 			status = "later"
-			if taken[account] < sqlite.XRefreshPerAccount {
+			if taken[account] < read {
 				status = "next"
 			}
 			taken[account]++
@@ -201,6 +202,37 @@ func (a *api) xRefreshQueue(w http.ResponseWriter, r *http.Request) {
 		"limit":        refreshQueueLimit,
 		"entries":      entries,
 	}})
+}
+
+// refreshReads is how many refresh requests the next X run reads for each
+// watched account. The run takes the accounts from its rotation's start and
+// gives each an even share of the detail budget left, and an account's
+// refreshes go ahead of its other detail requests, at most XRefreshPerAccount
+// of them; the share an account leaves unused passes to the next.
+func (a *api) refreshReads(ctx context.Context, items []sqlite.RefreshRequest, budget int) (map[string]int, error) {
+	out := map[string]int{}
+	if len(a.XHandles) == 0 {
+		return out, nil
+	}
+	start, err := a.Store.XAccountStart(ctx, a.XHandles)
+	if err != nil {
+		return nil, err
+	}
+	queued := map[string]int{}
+	for _, item := range items {
+		queued[strings.ToLower(item.AccountHandle)]++
+	}
+	handles := append(append([]string{}, a.XHandles[start:]...), a.XHandles[:start]...)
+	remaining := max(budget, 0)
+	for i, handle := range handles {
+		account := strings.ToLower(handle)
+		left := len(handles) - i
+		share := (remaining + left - 1) / left
+		read := min(queued[account], sqlite.XRefreshPerAccount, share)
+		out[account] = read
+		remaining -= read
+	}
+	return out, nil
 }
 
 // shortText is a one-line excerpt of a post.

@@ -8,7 +8,12 @@ described in [Backend](backend.md).
 
 `GET /api/health` returns service status, the current ISO timestamp, and a
 whitelisted synchronization summary; it does not return a database path or
-label. `GET /api/dashboard?days=3` clamps days to 1 through 30 and returns
+label. `lastSync.message` is fixed English base text, not localized copy: it
+is `Sync completed`, `Some data sources are unavailable or reported warnings;
+the existing snapshot remains`, `Sync failed; the existing snapshot remains`,
+or `Sync in progress` for the corresponding `success`, `partial`, `failed`,
+and `running` statuses. It is `null` for any other status. `GET /api/dashboard?days=3`
+clamps days to 1 through 30 and returns
 profile, summary, posts, events, videos, focus, timeline, resources, schedule
 assets, media status, and metadata. Posts are the newest 100 published within
 the window plus, however old, the eight newest of each own account; MCP
@@ -48,12 +53,40 @@ the returned records; it does not infer their order from localized text.
 
 Each event has a `view` with the canonical `state`, `typeCode`,
 `activityCode`, `activityContext`, `isWork`, and sale-expanded
-`calendarEntries`. Each video has a `view` with its `phase`, `formCode`,
-`shelfGroup`, `latestEligible`, `focusEligible`, and `tagContext`. These values
-are codes and booleans, never localized copy. Calendar, archive and MCP
-`schedule_list` reads carry the same event and video `view` objects. Clients keep an additive fallback for
-responses without `projection` or `view` so a retained snapshot remains
-readable while a deployment serves mixed versions.
+`calendarEntries`. `state` has exactly seven values: `upcoming` means the
+entry has not started, `live` means a linked broadcast is on air, `open` means
+a sale period is open, `done` means a non-pending entry or sale has ended,
+`pending` means the time or status still needs confirmation, `cancelled` means
+the entry is cancelled, and `cancellation_review` means cancellation evidence
+is awaiting confirmation. `typeCode` is one of `stream`, `member`, `event`,
+`release`, `video` or `sale`, or null when the stored type is outside the
+public set. `activityCode` is one of `live`, `game`, `talk`, `song` or `video`,
+or null. `activityContext` is `stream` or `work` when an activity code is
+present, otherwise the empty string. `isWork` is true only for `release` and
+`video` types. `calendarEntries` keeps the stored `timePrecision` code
+(`exact`, `approximate` or `unknown`); `saleMark` is null for ordinary events,
+`opens` for a sale opening and `closes` for a sale closing. A sale deadline
+has only its closing entry.
+
+Each video has a `view` with its `phase`, `formCode`, `shelfGroup`,
+`latestEligible`, `focusEligible`, and `tagContext`. `phase` is one of
+`upcoming`, `live`, `started`, `past` or `cancelled`. `formCode` is one of
+`short`, `upcoming`, `stream`, `archive`, `premiere` or `video`, or null when
+no public form applies. `shelfGroup` is one of `reservation`, `work`,
+`archive` or `short`, or the empty string for a video omitted from the shelf.
+`tagContext` is `stream` or `work`; the two eligibility fields are booleans.
+These values are codes and booleans, never localized copy. Calendar, archive
+and MCP `schedule_list` reads carry the same event and video `view` objects.
+Clients keep an additive fallback for responses without `projection` or
+`view` so a retained snapshot remains readable while a deployment serves
+mixed versions.
+
+The remaining projection fields use these fixed values. `spotlight.mode` is
+`next` when a current or upcoming candidate exists and `latest` when the
+latest eligible video is the fallback; `spotlight` is null when neither
+exists. `shelf.leadId` is null when there is no work lead, and
+`leadIsFeatured` distinguishes the operator featured video from the derived
+lead. `nextTransitionAt` is null when no scheduled transition is known.
 
 A post's `source` is `x` or `bilibili`. A Bilibili dynamic has the ID
 `bilibili-<dynamic ID>`, its opus page as `url`, the account's mid as
@@ -320,7 +353,9 @@ stream (the `stream` and `member` types the board treats as streams) and half
 an hour otherwise, since RFC 5545 would make it zero-length. A sale period
 is written at its ends, as the board shows it: its opening (titled "Sales
 open:" in the feed's language) and, when it closes on a later date, its close
-("Sales close:"), or the close alone for a deadline. A closing entry with a
+("Sales close:"), or the close alone for a deadline (a close on the opening
+date without a stored opening time; a stored time of `unknown` precision
+makes an all-day opening, as on the board). A closing entry with a
 time ends at that time and starts half an hour earlier. A UID is the
 public event ID with `@kano-navi`; the closing entry of a period adds
 `-close` to the ID. `LAST-MODIFIED` is the event's stored

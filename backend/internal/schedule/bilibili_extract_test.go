@@ -155,11 +155,16 @@ func TestEntryPlatformsDefaultAndNeverStoreTheRoomLink(t *testing.T) {
 	result := func(entries ...any) *object {
 		return obj("classification", "schedule", "events", entries, "confidence", 0.9, "evidence", "e", "reason", nil, "action", "add")
 	}
+	dynamicEntry := func(eventType string, url any, platform string) *object {
+		e := bilibiliEntry("杂谈", "2026-11-07", "20:00", eventType, url, nil)
+		e.set("platforms", []any{platform})
+		return e
+	}
 	opus := "https://www.bilibili.com/opus/1"
 	got, err := bilibiliProfile.normalizeResult(result(
-		entry("stream", "https://live.bilibili.com/1000001", "bilibili"),
-		entry("member", nil, "made-up"),
-		entry("stream", "https://live.bilibili.com/2000002", "other"),
+		dynamicEntry("stream", "https://live.bilibili.com/1000001", "bilibili"),
+		dynamicEntry("member", nil, "made-up"),
+		dynamicEntry("stream", "https://live.bilibili.com/2000002", "other"),
 	), "bilibili-1", opus, "", published, published)
 	if err != nil || len(got.events) != 3 {
 		t.Fatalf("got=%#v err=%v", got, err)
@@ -181,6 +186,21 @@ func TestEntryPlatformsDefaultAndNeverStoreTheRoomLink(t *testing.T) {
 	plain, err := xProfile.normalizeResult(result(entry("stream", nil, nil)), "1", xPost, "今夜20時から配信", published, published)
 	if err != nil || plain.events[0].platform != "unknown" {
 		t.Fatalf("plain=%#v err=%v", plain.events, err)
+	}
+}
+
+// A Bilibili entry's platforms come from its platforms array only: a
+// scalar platform, which the Bilibili schema does not ask for, is not read.
+func TestBilibiliEntriesReadOnlyThePlatformsArray(t *testing.T) {
+	published, _ := time.Parse(time.RFC3339, "2026-11-07T04:04:48Z")
+	scalar := bilibiliEntry("合唱", "2026-11-07", "20:00", "release", nil, nil)
+	scalar.set("platform", "youtube")
+	listed := bilibiliEntry("合唱", "2026-11-08", "20:00", "release", nil, nil)
+	listed.set("platforms", []any{"youtube"})
+	got, err := bilibiliProfile.normalizeResult(obj("classification", "schedule", "events", []any{scalar, listed}, "confidence", 0.9, "evidence", "e", "reason", nil, "action", "add"),
+		"bilibili-1", "https://www.bilibili.com/opus/1", "", published, published)
+	if err != nil || len(got.events) != 2 || len(got.events[0].platforms) != 0 || strings.Join(got.events[1].platforms, ",") != "youtube" {
+		t.Fatalf("events=%#v err=%v", got.events, err)
 	}
 }
 

@@ -3,6 +3,8 @@ package history
 import (
 	"slices"
 	"strings"
+
+	xsource "github.com/yexca/kano-navi/backend/internal/source/x"
 )
 
 // Listing methods. The IDs are stable: runs freeze them, and the console and
@@ -53,7 +55,7 @@ const feedLimit = 15
 
 var methods = map[string][]Method{
 	SourceX: {
-		{ID: MethodTimeline, Modes: []string{ModeCount, ModeAll}, MaxCount: MaxCount, PageSize: 100, Extract: true},
+		{ID: MethodTimeline, Modes: []string{ModeCount, ModeAll}, MaxCount: MaxCount, PageSize: xsource.TimelinePageSize, Extract: true},
 		{ID: MethodAPI, Modes: []string{ModeCount, ModeRange, ModeBefore}, MaxCount: MaxCount, PageSize: 100, Requires: "X_API_BEARER_TOKEN", Extract: true},
 	},
 	SourceYoutube: {
@@ -69,7 +71,7 @@ var methods = map[string][]Method{
 	// A related account reads its FxTwitter timeline from its own cursor,
 	// bounded as the x_related timer reads it.
 	SourceXRelated: {
-		{ID: MethodTimeline, Modes: []string{ModeIncremental}, PageSize: 100, Extract: true},
+		{ID: MethodTimeline, Modes: []string{ModeIncremental}, PageSize: xsource.TimelinePageSize, Extract: true},
 	},
 	// Every Bilibili read rewrites the records it lists, as the timed reads
 	// do, so these fetches have no refresh option either.

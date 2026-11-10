@@ -119,7 +119,9 @@ func (a fixedArchive) serve(w http.ResponseWriter, r *http.Request, h *Handler, 
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", mediaCacheControl(immutable))
-	w.Header().Set("ETag", `"`+match[1]+`-`+strconv.FormatInt(info.Size(), 10)+`"`)
+	// The size and modification time change with any repackaged file, so a
+	// corrected file of the same size is not answered 304.
+	w.Header().Set("ETag", `"`+match[1]+`-`+strconv.FormatInt(info.Size(), 10)+`-`+strconv.FormatInt(info.ModTime().UnixNano(), 36)+`"`)
 	// ServeContent answers ranges, HEAD and both conditional validators.
 	serveContent(w, r, name, info.ModTime(), file)
 }

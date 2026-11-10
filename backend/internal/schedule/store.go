@@ -946,6 +946,7 @@ type assetReview struct {
 	assetVersion        int64
 	llmStatus           string
 	llmConfidence       sql.NullFloat64
+	llmText             string
 	llmReason           string
 	llmEvidence         string
 	llmModel            string
@@ -963,7 +964,7 @@ const assetReviewColumns = `a.id, a.url, a.source_url, a.asset_version,
 	(SELECT COALESCE(CASE WHEN json_valid(p.raw_json) THEN json_extract(p.raw_json, '$.search_text') END, p.text)
 		FROM posts p WHERE p.url = a.source_url
 		ORDER BY p.published_at DESC LIMIT 1),
-	r.llm_status, r.llm_confidence, r.llm_reason, r.llm_evidence, r.llm_model,
+	r.llm_status, r.llm_confidence, r.llm_text, r.llm_reason, r.llm_evidence, r.llm_model,
 	r.llm_checked_at, r.llm_input_fingerprint,
 	COALESCE(r.manual_status, 'unreviewed'), r.updated_at`
 
@@ -990,9 +991,9 @@ type rowScanner interface{ Scan(dest ...any) error }
 
 func scanAssetReview(row rowScanner) (*assetReview, error) {
 	var review assetReview
-	var sourceText, llmStatus, reason, evidence, model, checkedAt, fingerprint, manual, updatedAt sql.NullString
+	var sourceText, llmStatus, llmText, reason, evidence, model, checkedAt, fingerprint, manual, updatedAt sql.NullString
 	err := row.Scan(&review.id, &review.url, &review.sourceURL, &review.assetVersion, &sourceText,
-		&llmStatus, &review.llmConfidence, &reason, &evidence, &model, &checkedAt, &fingerprint,
+		&llmStatus, &review.llmConfidence, &llmText, &reason, &evidence, &model, &checkedAt, &fingerprint,
 		&manual, &updatedAt)
 	if err != nil {
 		return nil, err
@@ -1002,7 +1003,7 @@ func scanAssetReview(row rowScanner) (*assetReview, error) {
 	if !assetManualStatuses[review.manualStatus] {
 		review.manualStatus = "unreviewed"
 	}
-	review.llmReason, review.llmEvidence, review.llmModel = reason.String, evidence.String, model.String
+	review.llmText, review.llmReason, review.llmEvidence, review.llmModel = llmText.String, reason.String, evidence.String, model.String
 	review.llmCheckedAt, review.llmInputFingerprint = checkedAt.String, fingerprint.String
 	review.reviewUpdatedAt = updatedAt.String
 	review.sourceMatchesBoard = !sourceText.Valid || isLikelyScheduleBoardText(sourceText.String)
@@ -1047,6 +1048,7 @@ type reviewUpdate struct {
 	expectSHA           string
 	llmStatus           string
 	llmConfidence       *float64
+	llmText             string
 	llmReason           string
 	llmEvidence         string
 	llmModel            string
@@ -1088,20 +1090,21 @@ func (e *Extractor) upsertAssetReview(ctx context.Context, update reviewUpdate) 
 		confidence = min(1, max(0, *update.llmConfidence))
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO schedule_asset_reviews (
-			asset_id, llm_status, llm_confidence, llm_reason, llm_evidence,
+			asset_id, llm_status, llm_confidence, llm_text, llm_reason, llm_evidence,
 			llm_model, llm_checked_at, llm_input_fingerprint, manual_status, manual_reason,
 			manual_checked_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'unreviewed', NULL, NULL, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'unreviewed', NULL, NULL, ?)
 		ON CONFLICT(asset_id) DO UPDATE SET
 			llm_status=excluded.llm_status,
 			llm_confidence=excluded.llm_confidence,
+			llm_text=excluded.llm_text,
 			llm_reason=excluded.llm_reason,
 			llm_evidence=excluded.llm_evidence,
 			llm_model=excluded.llm_model,
 			llm_checked_at=excluded.llm_checked_at,
 			llm_input_fingerprint=excluded.llm_input_fingerprint,
 			updated_at=excluded.updated_at`,
-		assetID, normalizedAssetLLMStatus(update.llmStatus), confidence, nullable(update.llmReason),
+		assetID, normalizedAssetLLMStatus(update.llmStatus), confidence, nullable(update.llmText), nullable(update.llmReason),
 		nullable(update.llmEvidence), nullable(update.llmModel), nullable(update.llmCheckedAt),
 		nullable(update.llmInputFingerprint), e.nowISO())
 	if err != nil {

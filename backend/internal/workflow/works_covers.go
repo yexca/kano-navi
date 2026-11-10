@@ -11,8 +11,9 @@ import (
 )
 
 // WorkCoverBounds limit the lookups one media step makes for the Works
-// page's covers. Bilibili's few are spent only while its backoff allows and
-// end at the first captcha or rate-limit answer.
+// page's covers. niconico's end at its first 429 answer. Bilibili's few are
+// spent only while its backoff allows and end at the first captcha or
+// rate-limit answer.
 type WorkCoverBounds struct {
 	Niconico, Bilibili int
 	Budget             time.Duration
@@ -67,6 +68,7 @@ func (s *SourceSteps) workCovers(ctx context.Context) (workCoverCounts, error) {
 	nico, bili := 0, 0
 	var biliState *bilisource.State
 	biliAccount := ""
+	nicoOpen := s.Niconico != nil
 	biliOpen := s.Bilibili != nil && !s.Skip["bilibili"]
 	for _, ref := range plan.Lookups {
 		if ctx.Err() != nil {
@@ -79,7 +81,7 @@ func (s *SourceSteps) workCovers(ctx context.Context) (workCoverCounts, error) {
 		var lookupErr error
 		switch ref.Platform {
 		case works.Niconico:
-			if s.Niconico == nil || nico >= bounds.Niconico {
+			if !nicoOpen || nico >= bounds.Niconico {
 				continue
 			}
 			nico++
@@ -87,6 +89,9 @@ func (s *SourceSteps) workCovers(ctx context.Context) (workCoverCounts, error) {
 			if lookupErr != nil {
 				code = niconico.ErrorCode(lookupErr)
 			}
+			// A 429 is recorded like any failure and ends this run's niconico
+			// lookups.
+			nicoOpen = code != niconico.CodeRateLimited
 		case works.Bilibili:
 			if !biliOpen {
 				if out.Bilibili == "" {

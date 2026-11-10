@@ -142,9 +142,9 @@ function ModelPicker({
 }
 
 /**
- * One ordered queue: the extraction queue both detection paths walk, or the
- * separate schedule-image check or translation queue, whose models need the
- * image or text tag. Every change is saved at once.
+ * One ordered queue: text schedule extraction, image schedule extraction, or
+ * translation/light tasks, whose models need the image or text tag. Every
+ * change is saved at once.
  */
 export function QueueEditor({
   catalog,

@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -48,8 +49,8 @@ const (
 
 var (
 	videoID = regexp.MustCompile(`^(?:sm|nm|so)[0-9]{1,10}$`)
-	// thumbnailPath is a thumbnail of the video's number, with the hash newer
-	// videos carry.
+	// thumbnailPath is a thumbnail of a video's number, with the hash newer
+	// videos carry; ParseThumbnail requires the requested video's number.
 	thumbnailPath = regexp.MustCompile(`^/thumbnails/([0-9]+)/([0-9]+)(?:\.[0-9]+)?$`)
 )
 
@@ -97,13 +98,7 @@ func (c *Client) Thumbnail(ctx context.Context, id string) (string, error) {
 	req.Header.Set("Accept", "*/*")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return "", &Error{CodeTimeout}
-		}
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
-		return "", &Error{CodeUnavailable}
+		return "", requestError(ctx, err)
 	}
 	defer resp.Body.Close()
 	switch {
@@ -118,7 +113,7 @@ func (c *Client) Thumbnail(ctx context.Context, id string) (string, error) {
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBytes+1))
 	if err != nil {
-		return "", &Error{CodeUnavailable}
+		return "", requestError(ctx, err)
 	}
 	if len(body) > MaxResponseBytes {
 		return "", &Error{CodeOversized}
@@ -126,8 +121,25 @@ func (c *Client) Thumbnail(ctx context.Context, id string) (string, error) {
 	return ParseThumbnail(body, id)
 }
 
+// requestError classifies a failed request or body read: a deadline, before
+// or after the headers, is a timeout, and a cancelled lookup returns the
+// context's error.
+func requestError(ctx context.Context, err error) error {
+	var netErr net.Error
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) || errors.As(err, &netErr) && netErr.Timeout() {
+		return &Error{CodeTimeout}
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return &Error{CodeUnavailable}
+}
+
 // ParseThumbnail reads a getthumbinfo answer for id.
 func ParseThumbnail(body []byte, id string) (string, error) {
+	if !videoID.MatchString(id) {
+		return "", &Error{CodeInvalidVideo}
+	}
 	var out thumbResponse
 	if xml.Unmarshal(body, &out) != nil {
 		return "", &Error{CodeInvalidAnswer}
@@ -150,8 +162,9 @@ func ParseThumbnail(body []byte, id string) (string, error) {
 	if err != nil || thumb.Scheme != "https" || strings.ToLower(thumb.Host) != ThumbnailHost || thumb.RawQuery != "" || thumb.User != nil {
 		return "", &Error{CodeInvalidAnswer}
 	}
+	// Both numbers in the path are the requested video's.
 	m := thumbnailPath.FindStringSubmatch(thumb.Path)
-	if m == nil || m[1] != m[2] {
+	if number := id[2:]; m == nil || m[1] != number || m[2] != number {
 		return "", &Error{CodeInvalidAnswer}
 	}
 	return "https://" + ThumbnailHost + thumb.Path + ".L", nil

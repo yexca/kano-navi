@@ -102,12 +102,14 @@ func writeXReposts(ctx context.Context, tx *sql.Tx, account string, reposts []xs
 }
 
 // quotedStatusesSQL selects the own X posts (not promoted ones) with an
-// available quote that the pool does not hold as quoted yet.
+// available quote that the pool does not hold as quoted yet. A time either
+// side cannot read counts as held, so such a post is not written again on
+// every startup.
 const quotedStatusesSQL = `SELECT p.raw_json,p.published_at FROM posts p
  WHERE p.source='x' AND p.promoted_at IS NULL AND json_valid(p.quote_json) AND json_type(p.quote_json,'$.unavailable') IS NOT 'true'
   AND json_valid(p.raw_json)
   AND NOT EXISTS (SELECT 1 FROM x_statuses s WHERE s.id=json_extract(p.quote_json,'$.id') AND s.quoted_at IS NOT NULL
-   AND julianday(s.quoted_at)>=julianday(p.published_at))`
+   AND (julianday(s.quoted_at)>=julianday(p.published_at) OR julianday(s.quoted_at) IS NULL OR julianday(p.published_at) IS NULL))`
 
 // backfillQuotedStatuses fills the pool from the quotes stored posts already
 // hold, mapping each post's raw_json as the source writers do, with no

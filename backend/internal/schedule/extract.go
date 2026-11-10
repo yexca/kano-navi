@@ -512,10 +512,16 @@ func (p post) extractionSource() string { return profileFor(p.source).source }
 
 func (e *Extractor) attemptExtraction(ctx context.Context, item post, images []cachedImage, fingerprint, version string, target provider, inputMode, route string, extractionID int64) (string, error) {
 	profile := profileFor(item.source)
+	instructions, name, schema := profile.instructions, extractionToolName, profile.schema
+	if inputMode != "text" {
+		instructions = imageScheduleInstructions + " " + profile.instructions
+		name = imageExtractionToolName
+		schema = imageScheduleSchema(profile.schema)
+	}
 	call := modelCall{
-		instructions: profile.instructions,
-		name:         extractionToolName,
-		schema:       profile.schema,
+		instructions: instructions,
+		name:         name,
+		schema:       schema,
 		maxTokens:    4000,
 		text:         "Source post published at " + profile.publishedAtText(item.publishedAt) + ". Source URL: " + item.url + "\n\n" + item.text + quotedInput(item.quote),
 		includeText:  inputMode != "image",

@@ -83,8 +83,8 @@ extractions,
 schedule curation with durable locks, posts, videos and the featured video,
 profile images, the run history and one-off step runs, sources with their
 timers, manual fetches and YouTube push, schedule detection settings, and the
-LLM provider catalog with its ordered extraction, schedule-image check and
-translation queues. See the
+LLM provider catalog with its ordered text extraction, image extraction and
+translation/light-task queues. See the
 [Admin API](architecture/admin-api.md).
 
 `/mcp` offers sanitized read tools without a key and narrowly scoped

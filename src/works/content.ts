@@ -67,8 +67,8 @@ export function byDate<T extends { date: string }>(
   items: T[],
   order: "newest" | "oldest",
 ) {
-  const sorted = [...items].sort((a, b) => a.date.localeCompare(b.date))
-  return order === "newest" ? sorted.reverse() : sorted
+  const sign = order === "newest" ? -1 : 1
+  return [...items].sort((a, b) => sign * a.date.localeCompare(b.date))
 }
 
 /**

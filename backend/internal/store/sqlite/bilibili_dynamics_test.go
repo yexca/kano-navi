@@ -112,8 +112,8 @@ func TestBilibiliLiveMatchesStreamsByPlatformAndTime(t *testing.T) {
 		{"bilibili-schedule-b", "bilibili", "release", at(-10 * time.Minute), "https://www.bilibili.com/opus/2", "bilibili"},
 		{"x-schedule-o", "x", "stream", at(-10 * time.Minute), "https://x.com/synthetic_handle/status/2", "other"},
 	} {
-		if _, err := s.DB().Exec(`INSERT INTO events (id, source, title, starts_on, starts_at, event_type, url, platform, provenance, created_at, updated_at) VALUES (?, ?, '杂谈', ?, ?, ?, ?, ?, 'automatic', ?, ?)`,
-			row.id, row.source, day, row.start, row.kind, row.url, row.platform, row.start, row.start); err != nil {
+		if _, err := s.DB().Exec(`INSERT INTO events (id, source, title, starts_on, starts_at, event_type, url, platform, platforms, provenance, created_at, updated_at) VALUES (?, ?, '杂谈', ?, ?, ?, ?, ?, ?, 'automatic', ?, ?)`,
+			row.id, row.source, day, row.start, row.kind, row.url, row.platform, EncodePlatforms([]string{row.platform}), row.start, row.start); err != nil {
 			t.Fatal(err)
 		}
 	}

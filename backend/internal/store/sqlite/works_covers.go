@@ -237,7 +237,9 @@ func (s *Store) workVideoCover(ctx context.Context, state *workCoverState, video
 		switch {
 		case ref != nil && ref.Status == "ready":
 			return workCover{ready: ref}
-		case link.asset.Status == "missing":
+		case link.asset.Status == "missing", ref != nil && ref.Status == "missing":
+			// The image is gone at its source, or it was ready and its cached
+			// file is gone; its row stays and the upload's next video is tried.
 			return workCover{exhausted: !storedWaiting, waiting: storedWaiting}
 		case link.asset.Status == "failed" && !link.retryAt.Valid && link.err.Valid && mediaRetryDelay(link.err.String, 1) == 0:
 			// A rejected destination, an invalid image or an oversized body is

@@ -156,6 +156,30 @@ func TestBilibiliFetchRespectsTheBackoffAndKeepsPagesBeforeACaptcha(t *testing.T
 	}
 }
 
+func TestBilibiliFetchClearsARejectedContinuationAfterCommittedPages(t *testing.T) {
+	steps, s, _ := bilibiliFetchSteps(t, func(r *http.Request) (int, string) {
+		if r.URL.Query().Get("pn") == "1" {
+			return 200, syntheticUploads(r)
+		}
+		return 200, `{"code":-400,"message":"synthetic bad request"}`
+	})
+	ctx := context.Background()
+	window := history.Window{Method: history.MethodSpace, Mode: history.ModeAll}
+	// The first page commits continuation 2, which Bilibili rejects: the
+	// first page stays and the continuation is cleared at once.
+	partial := fetchStep(t, steps, "bilibili", window)
+	if partial.Status != "partial" || partial.Result["new"] != 2 || partial.Result["pages"] != 2 || partial.Result["reachedEnd"] != false {
+		t.Fatalf("partial=%#v", partial.Result)
+	}
+	if errs, _ := partial.Result["errors"].([]string); len(errs) != 1 || errs[0] != "bilibili_api_error" {
+		t.Fatalf("partial errors=%#v", partial.Result["errors"])
+	}
+	checkpoint, err := s.SyncState(ctx, "bilibili-window", window.CheckpointKey(bilisource.DefaultAccount))
+	if err != nil || checkpoint.CursorID != "" {
+		t.Fatalf("checkpoint=%#v err=%v", checkpoint, err)
+	}
+}
+
 func TestBilibiliDynamicsFetchNeedsTheLoginAndFollowsTheOffset(t *testing.T) {
 	steps, s, paths := bilibiliFetchSteps(t, func(r *http.Request) (int, string) {
 		if r.URL.Path != "/x/polymer/web-dynamic/v1/feed/space" {

@@ -502,10 +502,8 @@ func (s *SourceSteps) shopSales(ctx context.Context, in StepInput) (AttemptResul
 	if err != nil {
 		return AttemptResult{}, NewStepError("schema_failure", ErrSchema)
 	}
+	// The shop's only window is the whole catalog (history.MethodCatalog).
 	all := in.Window != nil
-	if all && (in.Window.Method != history.MethodCatalog || in.Window.Mode != history.ModeAll) {
-		return AttemptResult{}, NewStepError("retired_window", ErrPermanent)
-	}
 	result, fetchErr := s.Shop.Read(ctx, state, stored, all)
 	if ctx.Err() != nil {
 		return AttemptResult{}, NewStepError("cancelled", ErrCancelled)

@@ -578,8 +578,9 @@ func (m *Module) writeQueue(ctx context.Context, db Querier, route string, targe
 }
 
 // setQueue replaces one route's ordered queue. Every target names a model in
-// its provider's catalog; schedule-image check targets also need the image
-// tag and translation targets the text tag. It must run inside a transaction.
+// its provider's catalog; text schedule extraction targets need the text tag,
+// image extraction targets need the image tag and translation targets the text
+// tag. It must run inside a transaction.
 func (m *Module) setQueue(ctx context.Context, db Querier, route string, targets []RouteTarget) error {
 	spec := queueRoute(route)
 	seen := map[RouteTarget]bool{}
