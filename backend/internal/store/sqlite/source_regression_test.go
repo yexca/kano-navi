@@ -48,7 +48,7 @@ func TestExpiredSourceLeaseCannotCommitPostsOrRevision(t *testing.T) {
 func TestLegacyMediaIdentityRepairKeepsBytesLinksAndUniqueSource(t *testing.T) {
 	p := testutil.NewSnapshot(t)
 	testutil.Exec(t, p, `DROP TABLE media_links`)
-	testutil.Exec(t, p, `CREATE TABLE media_links(id INTEGER PRIMARY KEY,media_id TEXT NOT NULL REFERENCES media_assets(id),owner_type TEXT NOT NULL,owner_id TEXT NOT NULL,role TEXT NOT NULL,position INTEGER NOT NULL DEFAULT 0,alt TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)`)
+	testutil.Exec(t, p, `CREATE TABLE media_links(id INTEGER PRIMARY KEY,media_id TEXT NOT NULL REFERENCES media_assets(id),owner_type TEXT NOT NULL,owner_id TEXT NOT NULL,role TEXT NOT NULL,position INTEGER NOT NULL DEFAULT 0,alt TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,kind TEXT)`)
 	testutil.Exec(t, p, `CREATE UNIQUE INDEX IF NOT EXISTS media_assets_source_url_idx ON media_assets(source_url)`)
 	s, err := OpenWorkflowCore(p, true)
 	if err != nil {

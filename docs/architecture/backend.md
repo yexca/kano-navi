@@ -184,7 +184,9 @@ row. The step catalog, queue, timers and manual fetches are described in
 
 Run with flags only and no command, the binary opens an existing snapshot in
 SQLite `mode=ro` on `:7658` and serves the public reads without migrations,
-seeds or writes. `backend/Dockerfile` packages this mode, and
+seeds or writes. It refuses a snapshot that lacks a column the public reads
+need, so a snapshot from an earlier release is first upgraded by a writable
+start. `backend/Dockerfile` packages this mode, and
 `scripts/go-docker-smoke.mjs` (part of `make go-check`) mounts a synthetic
 `data/` tree read-only and verifies that no database sidecar, WAL, journal or
 directory is created. Its `-enable-*` and `-initialize` flags are

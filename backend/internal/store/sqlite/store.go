@@ -152,7 +152,7 @@ type schemaQuerier interface {
 func verifySchema(ctx context.Context, db schemaQuerier) error {
 	required := map[string][]string{
 		"profiles":               {"id", "display_name", "romanized_name", "bio", "avatar_url", "banner_url", "x_url", "youtube_url", "updated_at"},
-		"posts":                  {"id", "source", "account_handle", "type", "label", "text", "published_at", "url", "likes", "reposts", "replies", "media_url", "media_alt", "raw_json", "quote_json", "quote_hidden_at", "refresh_requested_at", "hidden_at", "promoted_at"},
+		"posts":                  {"id", "source", "account_handle", "type", "label", "text", "published_at", "url", "likes", "reposts", "replies", "media_url", "media_alt", "raw_json", "quote_json", "quote_hidden_at", "refresh_requested_at", "hidden_at", "promoted_at", "deleted_at"},
 		"x_repost_ids":           {"retweet_id", "status_id", "account_handle", "first_seen_at"},
 		"post_llm_states":        {"post_id", "status", "route", "last_attempt_at", "last_processed_at", "last_error", "last_extraction_id", "reprocess_requested", "failure_count", "failure_fingerprint", "next_attempt_at", "settled_stamp"},
 		"events":                 {"id", "source", "source_item_id", "source_key", "title", "detail", "starts_on", "starts_at", "ends_at", "timezone", "time_precision", "status", "event_type", "url", "provenance", "manual_locked", "cancellation_status", "cancellation_source", "cancellation_reason", "cancellation_evidence", "cancellation_source_item_id", "cancellation_confidence", "cancellation_at", "deleted_at", "created_at", "updated_at", "merged_into", "merge_source", "merge_reason", "merged_at", "ends_on", "platform", "platforms", "platforms_inferred"},
@@ -167,7 +167,7 @@ func verifySchema(ctx context.Context, db schemaQuerier) error {
 		"schedule_asset_reviews": {"asset_id", "llm_status", "manual_status", "updated_at"},
 		"profile_media":          {"id", "slot", "source", "source_url", "active_cache_path", "active_sha256", "active_mime_type", "status", "is_active"},
 		"media_assets":           {"id", "source", "source_url", "cache_path", "mime_type", "byte_size", "sha256", "width", "height", "status", "fetched_at", "retry_attempts", "next_retry_at"},
-		"media_links":            {"media_id", "owner_type", "owner_id", "role", "position", "alt"},
+		"media_links":            {"media_id", "owner_type", "owner_id", "role", "position", "alt", "kind"},
 		"sync_runs":              {"id", "source", "started_at", "finished_at", "status"},
 		"app_settings":           {"key", "value"},
 		"translations":           {"owner_type", "owner_id", "field", "locale", "origin", "platform", "text", "source_hash"},
