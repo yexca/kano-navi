@@ -37,7 +37,7 @@ var spaPages = map[string]*pageTags{
 	"admin": nil,
 	"about": {
 		title:       "About · What’s Kano Up To?",
-		description: "Project overview, AI development credits, technology stack, and license for What’s Kano Up To?",
+		description: "Project overview, mobile apps and other sites, credits, technology stack, and license for What’s Kano Up To?",
 	},
 	"journey": {
 		title:       "Journey · What’s Kano Up To?",

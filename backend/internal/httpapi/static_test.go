@@ -239,7 +239,7 @@ func TestStaticSiteGivesPagesTheirOwnShareTags(t *testing.T) {
 		{"https://kano.example.invalid", "/about/", []string{
 			"<title>About · What’s Kano Up To?</title>",
 			`property="og:url" content="https://kano.example.invalid/about"`,
-			`content="Project overview, AI development credits`,
+			`content="Project overview, mobile apps and other sites`,
 			`property="og:image" content="https://kano.example.invalid/assets/kano-banner.jpg"`,
 		}},
 		{"https://kano.example.invalid", "/works", []string{

@@ -97,6 +97,11 @@
 - A reposted post the operator picks shows on the wall and in Past posts as
   its author's post, marked Reposted by and the account of Kano's that
   reposted it, under All only.
+- About opens with a one-line introduction and lists the apps and sites that
+  show the board: 小鹿包们的宝物 for Android, iOS and HarmonyOS, Kano Navi
+  for iOS (in development) and the mainland China server site. Credits and
+  the technologies, AI models included, each take one section, and the
+  project links, version and author share one row.
 
 </details>
 

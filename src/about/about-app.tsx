@@ -1,6 +1,14 @@
 import type { ReactNode } from "react"
 import { useEffect } from "react"
-import { ArrowRight, ArrowUpRight, CodeXml, Scale } from "lucide-react"
+import {
+  ArrowRight,
+  ArrowUpRight,
+  CodeXml,
+  Globe,
+  Scale,
+  Smartphone,
+} from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 import { version } from "../../package.json"
 import { useAppSettings } from "@/app-settings"
@@ -23,14 +31,53 @@ const ZHFUWE = "ZhFuwe"
 const ZHFUWE_URL = "https://github.com/ZhFuwe"
 const MAINLAND_PROVIDER = "鹿可可"
 const MAINLAND_PROVIDER_URL = "https://space.bilibili.com/426276698"
-const MAINLAND_SITE_URL = "https://xiaolubao.com"
-const developmentModels = [
-  "Claude Opus 5.5",
-  "GPT-6-Astra",
-  "GPT-6.1-Sol",
-  "GPT-5.6-Sol",
+
+type Place = {
+  key: string
+  /** A proper name shown as written; otherwise `about.place.<key>`. */
+  name?: string
+  /** The language of `name`, so the browser picks matching glyphs. */
+  nameLang?: string
+  icon: LucideIcon
+  maker: string
+  /** Message keys of the platform labels. */
+  platforms: string[]
+  /** Omitted while the place is still in development. */
+  link?: { href: string; label: "download" | "visit" }
+}
+
+/** Other apps and sites that show the board, by Kano Navi or by others. */
+const places: Place[] = [
+  {
+    key: "xiaolubao",
+    name: "小鹿包们的宝物",
+    nameLang: "zh-CN",
+    icon: Smartphone,
+    maker: MAINLAND_PROVIDER,
+    platforms: ["android", "ios", "harmonyos"],
+    link: { href: "https://dl.xiaolubao.com", label: "download" },
+  },
+  {
+    key: "ios",
+    icon: Smartphone,
+    maker: AUTHOR,
+    platforms: ["iphone", "ios26"],
+  },
+  {
+    key: "mainland",
+    icon: Globe,
+    maker: MAINLAND_PROVIDER,
+    platforms: ["web"],
+    link: { href: "https://xiaolubao.com", label: "visit" },
+  },
 ]
+
 const technologyGroups = [
+  {
+    key: "ai",
+    mono: true,
+    items: ["Claude Opus 5.5", "GPT-6-Astra", "GPT-6.1-Sol", "GPT-5.6-Sol"],
+  },
   {
     key: "frontend",
     items: [
@@ -52,10 +99,12 @@ const technologyGroups = [
 function Chapter({
   number,
   title,
+  wide = false,
   children,
 }: {
   number: number
   title: ReactNode
+  wide?: boolean
   children?: ReactNode
 }) {
   const id = `about-chapter-${number}`
@@ -67,7 +116,9 @@ function Chapter({
         </span>
         {title}
       </h2>
-      <div className="chapter-body">{children}</div>
+      <div className={wide ? "chapter-body is-wide" : "chapter-body"}>
+        {children}
+      </div>
     </section>
   )
 }
@@ -98,41 +149,53 @@ function CreditText({
   )
 }
 
-/** Thanks the person who helped build the Works page. */
-function WorksCredit() {
+function PlaceRow({ place }: { place: Place }) {
   const { t } = useAppSettings()
+  const { icon: Icon, link } = place
   return (
-    <>
-      <CreditText
-        message="about.creditsWorks"
-        param="name"
-        name={ZHFUWE}
-        href={ZHFUWE_URL}
-      />
-      <a className="text-link" href="/works">
-        {t("about.creditsWorksPage")}
-        <ArrowRight aria-hidden="true" />
-      </a>
-    </>
+    <li className="about-place">
+      <span className="about-place-icon" aria-hidden="true">
+        <Icon />
+      </span>
+      <div className="about-place-name">
+        <h3 lang={place.nameLang}>
+          {place.name ?? t(`about.place.${place.key}`)}
+        </h3>
+        <p>{t("about.by", { author: place.maker })}</p>
+      </div>
+      <ul className="about-place-platforms" aria-label={t("about.platforms")}>
+        {place.platforms.map((platform) => (
+          <li key={platform} className="tag">
+            {t(`about.platform.${platform}`)}
+          </li>
+        ))}
+      </ul>
+      <div className="about-place-action">
+        {link ? (
+          <ExternalLink className="pill-button" href={link.href}>
+            {t(`about.${link.label}`)}
+            <ArrowUpRight aria-hidden="true" />
+          </ExternalLink>
+        ) : (
+          <span className="about-place-status">{t("about.inDevelopment")}</span>
+        )}
+      </div>
+    </li>
   )
 }
 
-/** Credits the provider of the mainland China server site. */
-function MainlandSiteCredit() {
-  const { t } = useAppSettings()
+function CreditItem({
+  label,
+  children,
+}: {
+  label: ReactNode
+  children: ReactNode
+}) {
   return (
-    <>
-      <CreditText
-        message="about.creditsMainland"
-        param="provider"
-        name={MAINLAND_PROVIDER}
-        href={MAINLAND_PROVIDER_URL}
-      />
-      <ExternalLink className="text-link" href={MAINLAND_SITE_URL}>
-        {t("about.creditsMainlandSite")}
-        <ArrowUpRight aria-hidden="true" />
-      </ExternalLink>
-    </>
+    <li className="about-credit">
+      <h3>{label}</h3>
+      <div>{children}</div>
+    </li>
   )
 }
 
@@ -158,89 +221,119 @@ export function AboutApp() {
             {t("site.name")}
             <span aria-hidden="true">🍓🦌</span>
           </h1>
-          <p className="about-edition">
-            <span className="tag">Kano Navi v{version}</span>
-            <span className="tag">{t("about.tagline")}</span>
-            <span className="tag">{t("about.by", { author: AUTHOR })}</span>
-          </p>
-          <nav className="about-links" aria-label={t("about.projectLinks")}>
-            <ExternalLink
-              className="pill-button is-solid"
-              href={REPOSITORY_URL}
-            >
-              <CodeXml aria-hidden="true" />
-              {t("about.sourceCode")}
-              <ArrowUpRight aria-hidden="true" />
-            </ExternalLink>
-            <ExternalLink className="pill-button" href={LICENSE_URL}>
-              <Scale aria-hidden="true" />
-              {t("about.license")} · AGPL-3.0
-              <ArrowUpRight aria-hidden="true" />
-            </ExternalLink>
-          </nav>
+          <p className="about-lead">{t("about.overviewText")}</p>
+          <div className="about-meta">
+            <nav className="about-links" aria-label={t("about.projectLinks")}>
+              <ExternalLink
+                className="pill-button is-solid"
+                href={REPOSITORY_URL}
+              >
+                <CodeXml aria-hidden="true" />
+                {t("about.sourceCode")}
+                <ArrowUpRight aria-hidden="true" />
+              </ExternalLink>
+              <ExternalLink
+                className="pill-button"
+                href={LICENSE_URL}
+                aria-label={`${t("about.license")}: AGPL-3.0`}
+              >
+                <Scale aria-hidden="true" />
+                AGPL-3.0
+                <ArrowUpRight aria-hidden="true" />
+              </ExternalLink>
+            </nav>
+            <p className="about-edition">
+              <span>Kano Navi v{version}</span>
+              <span>{t("about.by", { author: AUTHOR })}</span>
+            </p>
+          </div>
         </section>
 
         <div className="chapters">
-          <Chapter number={1} title={t("about.overview")}>
-            <p>{t("about.overviewText")}</p>
+          <Chapter number={1} title={t("about.places")} wide>
+            <ul className="about-places">
+              {places.map((place) => (
+                <PlaceRow key={place.key} place={place} />
+              ))}
+            </ul>
           </Chapter>
-          <Chapter number={2} title={t("about.builtWithAi")}>
+
+          <Chapter number={2} title={t("about.credits")} wide>
+            <ul className="about-credits">
+              <CreditItem label={t("about.contributors")}>
+                <p>{t("about.contributorsText")}</p>
+                <ul
+                  className="about-contributors"
+                  aria-label={t("about.contributorList")}
+                >
+                  {contributors.map((login) => (
+                    <li key={login}>
+                      <ExternalLink href={`https://github.com/${login}`}>
+                        <img
+                          src={`https://avatars.githubusercontent.com/${login}?size=128`}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          width={48}
+                          height={48}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                        <span>{login}</span>
+                      </ExternalLink>
+                    </li>
+                  ))}
+                </ul>
+                <ExternalLink className="text-link" href={CONTRIBUTORS_URL}>
+                  {t("about.contributorsAll")}
+                  <ArrowUpRight aria-hidden="true" />
+                </ExternalLink>
+              </CreditItem>
+              <CreditItem label="LINE BLOG">
+                <CreditText
+                  message="about.creditsLineblog"
+                  param="name"
+                  name={ZHFUWE}
+                  href={ZHFUWE_URL}
+                />
+                <ExternalLink
+                  className="text-link"
+                  href={LINEBLOG_RECOVERY_URL}
+                >
+                  {t("about.creditsRecovery")}
+                  <ArrowUpRight aria-hidden="true" />
+                </ExternalLink>
+              </CreditItem>
+              <CreditItem label={t("works.label")}>
+                <CreditText
+                  message="about.creditsWorks"
+                  param="name"
+                  name={ZHFUWE}
+                  href={ZHFUWE_URL}
+                />
+                <a className="text-link" href="/works">
+                  {t("about.creditsWorksPage")}
+                  <ArrowRight aria-hidden="true" />
+                </a>
+              </CreditItem>
+              <CreditItem label={t("about.place.mainland")}>
+                <CreditText
+                  message="about.creditsMainland"
+                  param="provider"
+                  name={MAINLAND_PROVIDER}
+                  href={MAINLAND_PROVIDER_URL}
+                />
+              </CreditItem>
+            </ul>
+          </Chapter>
+
+          <Chapter number={3} title={t("about.builtWith")} wide>
             <p>{t("about.aiCredit", { author: AUTHOR })}</p>
-            <ul className="about-models" aria-label={t("about.models")}>
-              {developmentModels.map((model) => (
-                <li key={model}>{model}</li>
-              ))}
-            </ul>
-          </Chapter>
-          <Chapter number={3} title={t("about.contributors")}>
-            <p>{t("about.contributorsText")}</p>
-            <ul
-              className="about-contributors"
-              aria-label={t("about.contributorList")}
-            >
-              {contributors.map((login) => (
-                <li key={login}>
-                  <ExternalLink href={`https://github.com/${login}`}>
-                    <img
-                      src={`https://avatars.githubusercontent.com/${login}?size=128`}
-                      alt=""
-                      referrerPolicy="no-referrer"
-                      width={64}
-                      height={64}
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <span>{login}</span>
-                  </ExternalLink>
-                </li>
-              ))}
-            </ul>
-            <ExternalLink className="text-link" href={CONTRIBUTORS_URL}>
-              {t("about.contributorsAll")}
-              <ArrowUpRight aria-hidden="true" />
-            </ExternalLink>
-          </Chapter>
-          <Chapter number={4} title={t("about.credits")}>
-            <CreditText
-              message="about.creditsLineblog"
-              param="name"
-              name={ZHFUWE}
-              href={ZHFUWE_URL}
-            />
-            <ExternalLink className="text-link" href={LINEBLOG_RECOVERY_URL}>
-              {t("about.creditsRecovery")}
-              <ArrowUpRight aria-hidden="true" />
-            </ExternalLink>
-            <WorksCredit />
-            <MainlandSiteCredit />
-          </Chapter>
-          <Chapter number={5} title={t("about.technologies")}>
             <dl className="about-stack">
-              {technologyGroups.map(({ key, items }) => (
+              {technologyGroups.map(({ key, items, mono }) => (
                 <div key={key}>
                   <dt>{t(`about.group.${key}`)}</dt>
                   <dd>
-                    <ul>
+                    <ul className={mono ? "is-mono" : undefined}>
                       {items.map((item) => (
                         <li key={item}>{item}</li>
                       ))}
@@ -250,17 +343,20 @@ export function AboutApp() {
               ))}
             </dl>
           </Chapter>
-          <Chapter number={6} title={t("about.notice")}>
-            <p>{t("about.unofficial")}</p>
-            <p>{t("about.accuracy")}</p>
-            <p>{t("about.rights")}</p>
-            <p>
-              {t("about.licenseText")}{" "}
-              <ExternalLink className="text-link" href={LICENSE_URL}>
-                {t("about.fullLicense")}
-                <ArrowUpRight aria-hidden="true" />
-              </ExternalLink>
-            </p>
+
+          <Chapter number={4} title={t("about.notice")}>
+            <div className="about-notice">
+              <p>{t("about.unofficial")}</p>
+              <p>{t("about.accuracy")}</p>
+              <p>{t("about.rights")}</p>
+              <p>
+                {t("about.licenseText")}{" "}
+                <ExternalLink className="text-link" href={LICENSE_URL}>
+                  {t("about.fullLicense")}
+                  <ArrowUpRight aria-hidden="true" />
+                </ExternalLink>
+              </p>
+            </div>
           </Chapter>
         </div>
       </main>

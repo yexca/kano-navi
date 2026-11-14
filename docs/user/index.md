@@ -43,11 +43,16 @@ it.
   footer keeps a link to it while the interface is in Simplified Chinese. The
   site is deployed independently by its provider.
 
-The About page introduces the project, names its author and the developers
-who have contributed code (with a link to the full contributor list), credits
-the sources of the LINE BLOG archive, the help behind the Works page, the
-provider of the mainland China server site (with a link to it), and the AI
-models that helped build the site, and states the license.
+The About page introduces the project and its author, then lists the apps
+and sites that show the board: 小鹿包们的宝物, a mobile app for Android, iOS
+and HarmonyOS by the provider of the mainland China server site (with a link
+to its download page); Kano Navi for iOS, an iPhone app for iOS 26 and later
+that is still in development; and the mainland China server site (with a link
+to it). It credits the developers who have contributed code (with a link to
+the full contributor list), the sources of the LINE BLOG archive, the help
+behind the Works page, and the provider of the mainland China server site,
+lists the AI models and technologies that built the site, and states the
+license.
 
 ## Freshness and Sources
 
