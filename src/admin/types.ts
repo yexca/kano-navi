@@ -14,6 +14,8 @@ export interface Session {
   authenticated: boolean
   mode: "production" | "development"
   requiresPassword: boolean
+  /** Production login also asks for the one-time code (ADMIN_TOTP_SECRET). */
+  requiresCode: boolean
 }
 
 export type StepProgress =

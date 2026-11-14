@@ -36,11 +36,11 @@ these routes. See [Public API](public-api.md#mcp-boundary-mcp).
 
 ## Session
 
-| Method and path   | Body / query | Result                                            |
-| ----------------- | ------------ | ------------------------------------------------- |
-| `GET /session`    |              | `{authenticated, mode, requiresPassword}`         |
-| `POST /session`   | `{password}` | session payload; `401 invalid_credentials`, `429` |
-| `DELETE /session` |              | `204`; the HttpOnly cookie is cleared             |
+| Method and path   | Body / query       | Result                                                  |
+| ----------------- | ------------------ | ------------------------------------------------------- |
+| `GET /session`    |                    | `{authenticated, mode, requiresPassword, requiresCode}` |
+| `POST /session`   | `{password, code}` | session payload; `401 invalid_credentials`, `429`       |
+| `DELETE /session` |                    | `204`; the HttpOnly cookie is cleared                   |
 
 ## Overview
 

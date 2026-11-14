@@ -12,6 +12,10 @@
 <details>
 <summary><strong>Upgrade notes</strong></summary>
 
+- The optional `ADMIN_TOTP_SECRET` adds a one-time code (TOTP) to
+  production admin login; empty keeps password-only login. `GET /session`
+  adds `requiresCode` and `POST /session` accepts `{password, code}`.
+  `kano-go totp-secret` prints a value. A malformed value refuses startup.
 - Admin adds `POST /posts/refresh` with `{ids}` (1–200 post IDs), which
   queues a refresh from the source for each own X post in one transaction
   and answers `{queued}`; unknown IDs, other sources and promoted statuses
@@ -96,6 +100,8 @@
 <details>
 <summary><strong>Operator console</strong></summary>
 
+- The login page asks for a one-time code beside the password when the
+  deployment sets one, which password managers such as 1Password fill in.
 - Every own X post in Posts has Refresh from source in its actions, with a
   Refresh queued badge, whether or not it quotes a status; the quote card
   keeps only its hide and open actions.

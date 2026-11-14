@@ -7,6 +7,7 @@
 | `APP_MODE`                                | `production`                        | Explicit `development` bypasses login; production requires it         |
 | `ADMIN_PASSWORD`                          | Empty                               | Production startup requires at least 12 non-padding characters        |
 | `ADMIN_ORIGIN`                            | Empty                               | Optional explicit origin accepted for admin mutations                 |
+| `ADMIN_TOTP_SECRET`                       | Empty                               | Optional one-time code secret; empty keeps password-only login        |
 | `PUBLIC_ORIGIN`                           | Empty                               | Optional public origin for absolute share-tag and feed links          |
 | `CDN_PUBLIC_BASE`                         | Empty                               | Optional CDN base for the build's assets and cached media             |
 | `LLM_SECRETS_KEY`                         | Empty                               | Required non-blank encryption master key at startup in every mode     |
@@ -79,6 +80,32 @@ Atom feed's site and self links (see
 `https` and no signing origin is set, names the Web Bot Auth signing agent
 (see [Web Bot Auth](#web-bot-auth)); it grants no access and is not an admin
 origin.
+
+### Admin one-time code
+
+`ADMIN_TOTP_SECRET` adds a one-time code to production admin login: the
+six-digit RFC 6238 code (HMAC-SHA1, 30-second step) that password managers
+such as 1Password and authenticator apps generate. It is off while the
+variable is empty or whitespace, and `APP_MODE=development` never asks for
+it. The value is base32 of at least 16 bytes, in either case, with spaces,
+hyphens and padding ignored; any other value, including one of only those
+characters, is malformed and stops `kano-go serve` in every mode before
+SQLite opens. Make a value with:
+
+```bash
+kano-go totp-secret
+```
+
+It prints the `ADMIN_TOTP_SECRET=` line and, as a comment, the
+`otpauth://totp/...` address. Import the address (or paste the secret) into
+the password manager's one-time password field for the console's login, then
+restart; the login page asks for the code once the service runs with it.
+Losing the authenticator is recovered by replacing or clearing the variable
+and restarting. The secret is a credential like the others below.
+
+Setting it is recommended for any deployment whose `/admin` is reachable
+from the internet; see
+[Deployment security](security.md#admin-authentication).
 
 ### Web Bot Auth
 
@@ -158,8 +185,8 @@ checked yet, and an expired cookie is no longer sent until a check accepts a
 renewed one. Prefer a secondary account,
 and replace the value when it expires or the account signs out.
 
-`.env.example` is the complete non-secret inventory. `ADMIN_PASSWORD` and
-`LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, `BILIBILI_COOKIE`, `BILIBILI_SESSDATA`, `BILIBILI_APP_SECRET`, `WEB_BOT_AUTH_KEY`, and provider API keys are credentials;
+`.env.example` is the complete non-secret inventory. `ADMIN_PASSWORD`,
+`ADMIN_TOTP_SECRET`, `LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, `BILIBILI_COOKIE`, `BILIBILI_SESSDATA`, `BILIBILI_APP_SECRET`, `WEB_BOT_AUTH_KEY`, and provider API keys are credentials;
 never place real values in source code, SQLite plaintext, URLs, API responses,
 or logs. `OPENAI_API_KEY` is accepted only by the one-time
 `kano-go migrate-llm` command.

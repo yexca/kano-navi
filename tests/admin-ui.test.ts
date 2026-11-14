@@ -185,6 +185,7 @@ test("the real admin Site route saves visitor-region settings, makes image copie
               authenticated: true,
               mode: "development",
               requiresPassword: false,
+              requiresCode: false,
             }
           : path === "/overview"
             ? overview
@@ -289,6 +290,123 @@ test("the real admin Site route saves visitor-region settings, makes image copie
       (request) => request.method === "POST" && request.path === "/runs",
     )
     assert.deepEqual(runs.at(-1)?.body, { kind: "workflow", steps: ["media"] })
+  } finally {
+    await act(async () => root?.unmount())
+    restoreBrowser(installed.previous)
+    await vite.close()
+  }
+})
+
+test("the admin login asks for the one-time code only when it is configured, after a failed session read too", async () => {
+  const vite = await createServer({
+    configFile: false,
+    envDir: false,
+    server: { middlewareMode: true, watch: null, ws: false },
+    optimizeDeps: { noDiscovery: true, include: [] },
+    resolve: { alias: { "@": path.resolve("src") } },
+  })
+  const installed = installBrowser("")
+  const logins: unknown[] = []
+  let requiresCode = true
+  let sessionFailures = 1
+  globalThis.fetch = async (input, options: RequestInit = {}) => {
+    const route = String(input).replace(/^\/api\/admin/, "")
+    if (
+      route === "/session" &&
+      options.method !== "POST" &&
+      sessionFailures > 0
+    ) {
+      sessionFailures--
+      return new Response(
+        JSON.stringify({ error: "unavailable", message: "unavailable" }),
+        { status: 503, headers: { "content-type": "application/json" } },
+      )
+    }
+    const session = {
+      authenticated: false,
+      mode: "production",
+      requiresPassword: true,
+      requiresCode,
+    }
+    if (route === "/session" && options.method === "POST") {
+      logins.push(JSON.parse(String(options.body)))
+      return new Response(
+        JSON.stringify({
+          error: "invalid_credentials",
+          message: "invalid_credentials",
+        }),
+        { status: 401, headers: { "content-type": "application/json" } },
+      )
+    }
+    return new Response(JSON.stringify(route === "/session" ? session : {}), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+  }
+  let root: Rendered | undefined
+  try {
+    const [{ AdminApp }, { AppSettingsProvider, PageMessagesProvider }, copy] =
+      await Promise.all([
+        vite.ssrLoadModule("/src/admin/index.tsx"),
+        vite.ssrLoadModule("/src/app-settings.tsx"),
+        vite.ssrLoadModule("/src/admin-i18n.ts"),
+      ])
+    const mount = async () => {
+      await act(async () => {
+        root = render(
+          createElement(
+            AppSettingsProvider,
+            null,
+            createElement(
+              PageMessagesProvider,
+              { messages: copy.adminMessages },
+              createElement(AdminApp),
+            ),
+          ),
+        )
+        await new Promise((resolve) => setImmediate(resolve))
+      })
+    }
+    await mount()
+    // The first read failed, so the requirements are unknown: no password
+    // form, a reason and a retry, which finds the code required.
+    assert.equal(root!.container.querySelector('input[type="password"]'), null)
+    assert.match(
+      root!.container.textContent,
+      /unavailable on this server\.Retry$/,
+    )
+    await act(async () => {
+      await submit(root!.container.querySelector("form"))
+      await new Promise((resolve) => setImmediate(resolve))
+    })
+    const code = root!.container.querySelector<HTMLInputElement>(
+      'input[autocomplete="one-time-code"]',
+    )
+    assert.ok(code)
+    assert.equal(code.inputMode, "numeric")
+    await enter(
+      root!.container.querySelector('input[type="password"]')!,
+      "synthetic-password",
+    )
+    await enter(code, "123456")
+    await act(async () => {
+      await submit(root!.container.querySelector("form"))
+      await new Promise((resolve) => setImmediate(resolve))
+    })
+    assert.deepEqual(logins, [
+      { password: "synthetic-password", code: "123456" },
+    ])
+    // A refused login names both factors and clears the spent code.
+    assert.match(root!.container.textContent, /Wrong password or code\./)
+    assert.equal(code.value, "")
+    await act(async () => root?.unmount())
+
+    requiresCode = false
+    await mount()
+    assert.equal(
+      root!.container.querySelector('input[autocomplete="one-time-code"]'),
+      null,
+    )
   } finally {
     await act(async () => root?.unmount())
     restoreBrowser(installed.previous)

@@ -66,7 +66,7 @@ no ignore rule matches. Ignored local state such as `.env`, `data/`, and tool
 indexes like `.codegraph/` is skipped. A tracked file stays in the scan even
 when an ignore rule matches it, so a force-added secret is still reported.
 
-`LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, `ADMIN_PASSWORD`, and provider API keys
+`LLM_SECRETS_KEY`, `MCP_CONTROL_TOKEN`, `ADMIN_PASSWORD`, `ADMIN_TOTP_SECRET`, and provider API keys
 must remain in the ignored runtime environment. Example values are intentionally
 empty; never copy a production token into documentation or tests.
 

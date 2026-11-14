@@ -50,11 +50,28 @@ operator actions, and share the bounded single-flight synchronization queue.
   `ADMIN_PASSWORD` must contain at least 12 characters after trimming surrounding
   whitespace; missing, whitespace-only, and shorter passwords refuse startup.
   The configured password itself is preserved for login comparison.
+- An optional one-time code
+  ([`ADMIN_TOTP_SECRET`](configuration.md#admin-one-time-code)) joins the
+  password at production login. It is off by default; setting it is
+  recommended whenever `/admin` is reachable from the internet, so a leaked
+  password alone does not open the console. Login sends both in one request
+  and a failure names neither, so it never confirms the password. A code from
+  the step before or after the server's is accepted for clock skew, and each
+  accepted code's step is spent: a later login needs a later code. Keep the
+  server clock synchronized. The secret stays in the environment and process
+  memory, is never stored or returned, and a malformed value refuses
+  startup.
 - Successful production login creates a random in-memory session with an
   HttpOnly, SameSite=Strict cookie scoped to `/api/admin`. HTTPS requests also
   receive the `Secure` attribute.
-- Failed logins are rate-limited per observed client address. Server restarts
-  clear all sessions.
+- Failed logins are rate-limited per observed client address. With the
+  one-time code on, logins with the right password and a wrong code are also
+  limited across every address (10 per 5 minutes), after which every login
+  waits for the window to reset; such failures mean the password has leaked,
+  so replace it. A wrong password counts only toward its address. The limit
+  check, the verification and the counters are one atomic step, so
+  concurrent logins cannot exceed either limit or sign in after it is
+  reached. Server restarts clear all sessions.
 - Admin mutations reject `Sec-Fetch-Site: cross-site`. Browser-provided
   `same-origin` metadata survives reverse-proxy Host rewriting and HTTPS
   termination, so it is accepted without comparing the public origin to the

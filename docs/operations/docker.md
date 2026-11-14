@@ -4,7 +4,10 @@ The root `docker-compose.yml` deploys the published production image. Copy
 `.env.example` to `.env`, keep `APP_MODE=production`, and configure
 `ADMIN_PASSWORD` with at least 12 characters after trimming surrounding
 whitespace, plus a non-blank `LLM_SECRETS_KEY`. Both Compose configurations
-require the master key; development bypasses login only. Then run:
+require the master key; development bypasses login only. For a console
+reachable from the internet, also set the optional
+[admin one-time code](configuration.md#admin-one-time-code)
+(`docker compose run --rm kano totp-secret` prints a value). Then run:
 
 ```bash
 docker compose up -d

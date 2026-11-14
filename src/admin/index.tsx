@@ -21,7 +21,9 @@ import {
   Network,
   Newspaper,
   Radio,
+  RefreshCw,
   ScanText,
+  ShieldCheck,
   UserRound,
   Workflow,
 } from "lucide-react"
@@ -138,9 +140,16 @@ function readHash() {
     : { view: "overview", tab: "" }
 }
 
-function Login({ onLogin }: { onLogin: (password: string) => Promise<void> }) {
+function Login({
+  requiresCode,
+  onLogin,
+}: {
+  requiresCode: boolean
+  onLogin: (password: string, code?: string) => Promise<void>
+}) {
   const { t } = useAppSettings()
   const [password, setPassword] = useState("")
+  const [code, setCode] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Message | null>(null)
 
@@ -149,9 +158,18 @@ function Login({ onLogin }: { onLogin: (password: string) => Promise<void> }) {
     setBusy(true)
     setError(null)
     try {
-      await onLogin(password)
+      await onLogin(password, requiresCode ? code : undefined)
     } catch (failure) {
-      setError(errorMessage(failure))
+      const next = errorMessage(failure)
+      setError(
+        requiresCode &&
+          "key" in next &&
+          next.key === "admin.error.invalidCredentials"
+          ? { key: "admin.error.invalidCredentialsOrCode" }
+          : next,
+      )
+      // A code is accepted once, so a failed one is never retried as is.
+      if (requiresCode) setCode("")
     } finally {
       setBusy(false)
     }
@@ -182,6 +200,25 @@ function Login({ onLogin }: { onLogin: (password: string) => Promise<void> }) {
             />
           </span>
         </label>
+        {requiresCode ? (
+          <label className="adm-field">
+            <span className="adm-field-label">{t("admin.login.code")}</span>
+            <span className="adm-input-icon">
+              <ShieldCheck aria-hidden />
+              <input
+                type="text"
+                name="one-time-code"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                pattern="[0-9 ]{6,7}"
+                maxLength={7}
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                required
+              />
+            </span>
+          </label>
+        ) : null}
         {error ? (
           <p className="adm-inline-error" role="alert">
             {renderMessage(error, t)}
@@ -189,6 +226,45 @@ function Login({ onLogin }: { onLogin: (password: string) => Promise<void> }) {
         ) : null}
         <Button type="submit" variant="primary" icon={KeyRound} busy={busy}>
           {t("admin.login.submit")}
+        </Button>
+      </form>
+    </main>
+  )
+}
+
+/**
+ * The console could not read the session, so it does not know whether login
+ * needs the one-time code. It shows why and reads the session again.
+ */
+function SessionUnavailable({
+  error,
+  onRetry,
+}: {
+  error: Message
+  onRetry: () => void
+}) {
+  const { t } = useAppSettings()
+  return (
+    <main className="adm-login">
+      <div className="adm-login-tools">
+        <PreferenceControls content={false} />
+      </div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          onRetry()
+        }}
+      >
+        <span className="adm-mark is-large" aria-hidden>
+          K
+        </span>
+        <p className="adm-eyebrow">{t("admin.brand.board")}</p>
+        <h1>{t("admin.login.title")}</h1>
+        <p className="adm-inline-error" role="alert">
+          {renderMessage(error, t)}
+        </p>
+        <Button type="submit" variant="primary" icon={RefreshCw}>
+          {t("admin.login.retry")}
         </Button>
       </form>
     </main>
@@ -278,6 +354,17 @@ export function AdminApp() {
     if (!sameView) window.scrollTo({ top: 0 })
   }, [])
 
+  if (!data.session && data.sessionError) {
+    return (
+      <>
+        <SessionUnavailable
+          error={data.sessionError}
+          onRetry={data.retrySession}
+        />
+        <Toasts toasts={data.toasts} onDismiss={data.dismissToast} />
+      </>
+    )
+  }
   if (!data.session) {
     return (
       <main className="adm-boot" role="status">
@@ -290,7 +377,10 @@ export function AdminApp() {
   if (!data.session.authenticated) {
     return (
       <>
-        <Login onLogin={data.login} />
+        <Login
+          requiresCode={Boolean(data.session.requiresCode)}
+          onLogin={data.login}
+        />
         <Toasts toasts={data.toasts} onDismiss={data.dismissToast} />
       </>
     )

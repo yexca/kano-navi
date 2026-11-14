@@ -159,8 +159,12 @@ function createClient(run: Runner, slow: Runner) {
     slow<T>(`slow:${++writes}`, path, { method, body })
   return {
     session: () => get<Session>("/session"),
-    login: (password: string) =>
-      send<Session>("POST", "/session", { password }),
+    login: (password: string, code?: string) =>
+      send<Session>(
+        "POST",
+        "/session",
+        code === undefined ? { password } : { password, code },
+      ),
     logout: () => send<null>("DELETE", "/session"),
 
     overview: () => get<Overview>("/overview"),
@@ -509,6 +513,10 @@ export interface Toast {
  */
 export function useAdminData() {
   const [session, setSession] = useState<Session | null>(null)
+  // Why the session could not be read. The login requirements are unknown
+  // until a read succeeds, so the console offers a retry instead of guessing.
+  const [sessionError, setSessionError] = useState<Message | null>(null)
+  const [discovery, setDiscovery] = useState(0)
   const [overview, setOverview] = useState<Overview | null>(null)
   const [revision, setRevision] = useState(0)
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -596,25 +604,30 @@ export function useAdminData() {
     return next
   }, [api])
 
-  // Session first; the overview poll starts once authenticated.
+  // Session first; the overview poll starts once authenticated. A failed
+  // read leaves the session unknown, never password-only, until a retry.
   useEffect(() => {
     let cancelled = false
     api
       .session()
-      .then((next) => !cancelled && setSession(next))
+      .then((next) => {
+        if (cancelled) return
+        setSessionError(null)
+        setSession(next)
+      })
       .catch((error) => {
         if (cancelled || error?.name === "AbortError") return
-        fail(error)
-        setSession({
-          authenticated: false,
-          mode: "production",
-          requiresPassword: true,
-        })
+        setSessionError(errorMessage(error))
       })
     return () => {
       cancelled = true
     }
-  }, [api, fail])
+  }, [api, discovery])
+
+  const retrySession = useCallback(() => {
+    setSessionError(null)
+    setDiscovery((count) => count + 1)
+  }, [])
 
   const authenticated = Boolean(session?.authenticated)
   // The overview poll runs while the console is visible; a hidden page stops
@@ -643,8 +656,20 @@ export function useAdminData() {
   }, [authenticated, refreshOverview, fail])
 
   const login = useCallback(
-    async (password: string) => {
-      setSession(await api.login(password))
+    async (password: string, code?: string) => {
+      try {
+        setSession(await api.login(password, code))
+      } catch (error) {
+        // A refused login reads the requirements again, so a deployment that
+        // turned the one-time code on or off since the page loaded shows the
+        // right form for the next attempt.
+        if (error instanceof ApiError && error.status === 401)
+          await api
+            .session()
+            .then(setSession)
+            .catch(() => {})
+        throw error
+      }
     },
     [api],
   )
@@ -706,6 +731,8 @@ export function useAdminData() {
 
   return {
     session,
+    sessionError,
+    retrySession,
     overview,
     revision,
     toasts,

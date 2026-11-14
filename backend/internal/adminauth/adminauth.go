@@ -25,8 +25,10 @@ var (
 )
 
 type Config struct {
-	Mode          string
-	Password      string
+	Mode     string
+	Password string
+	// TOTPSecret turns on the one-time code at production login when set.
+	TOTPSecret    []byte
 	SessionTTL    time.Duration
 	AllowedOrigin string
 	Now           func() time.Time
@@ -37,7 +39,16 @@ func ResolveConfig(environment map[string]string) (Config, error) {
 	if mode == "" {
 		mode = "production"
 	}
-	return NewConfig(mode, environment["ADMIN_PASSWORD"], environment["ADMIN_ORIGIN"])
+	cfg, err := NewConfig(mode, environment["ADMIN_PASSWORD"], environment["ADMIN_ORIGIN"])
+	if err != nil {
+		return Config{}, err
+	}
+	// A malformed secret refuses startup in every mode rather than leaving
+	// production without the code its operator configured.
+	if cfg.TOTPSecret, err = ParseTOTPSecret(environment["ADMIN_TOTP_SECRET"]); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 // ResolveEnv reads the admin environment with production as the default mode.
@@ -45,9 +56,10 @@ func ResolveConfig(environment map[string]string) (Config, error) {
 // supplied at all.
 func ResolveEnv() (Config, error) {
 	values := map[string]string{
-		"APP_MODE":       os.Getenv("APP_MODE"),
-		"ADMIN_PASSWORD": os.Getenv("ADMIN_PASSWORD"),
-		"ADMIN_ORIGIN":   os.Getenv("ADMIN_ORIGIN"),
+		"APP_MODE":          os.Getenv("APP_MODE"),
+		"ADMIN_PASSWORD":    os.Getenv("ADMIN_PASSWORD"),
+		"ADMIN_ORIGIN":      os.Getenv("ADMIN_ORIGIN"),
+		"ADMIN_TOTP_SECRET": os.Getenv("ADMIN_TOTP_SECRET"),
 	}
 	return ResolveConfig(values)
 }
@@ -80,11 +92,21 @@ type attempt struct {
 	resetAt time.Time
 }
 
+// codeFailureLimit bounds logins with the right password and a wrong code
+// across every address, so spreading guesses over many addresses does not
+// widen the six-digit search.
+const codeFailureLimit = 10
+
 type Auth struct {
 	cfg      Config
 	mu       sync.Mutex
 	sessions map[string]session
 	attempts map[string]attempt
+	// codeFailures counts right-password, wrong-code logins from any address.
+	codeFailures attempt
+	// lastStep is the time step of the latest accepted code; a code is
+	// accepted once.
+	lastStep int64
 }
 
 func New(cfg Config) (*Auth, error) {
@@ -100,6 +122,10 @@ func New(cfg Config) (*Auth, error) {
 	}
 	checked.SessionTTL = cfg.SessionTTL
 	checked.Now = cfg.Now
+	if len(cfg.TOTPSecret) > 0 && len(cfg.TOTPSecret) < totpMinBytes {
+		return nil, ErrTOTPSecret
+	}
+	checked.TOTPSecret = append([]byte(nil), cfg.TOTPSecret...)
 	return &Auth{cfg: checked, sessions: make(map[string]session), attempts: make(map[string]attempt)}, nil
 }
 
@@ -114,6 +140,10 @@ func MustNew(cfg Config) *Auth {
 func (a *Auth) Mode() string           { return a.cfg.Mode }
 func (a *Auth) RequiresPassword() bool { return a.cfg.Mode == "production" }
 
+// RequiresCode reports whether production login also asks for the one-time
+// code.
+func (a *Auth) RequiresCode() bool { return a.RequiresPassword() && len(a.cfg.TOTPSecret) > 0 }
+
 func (a *Auth) purgeLocked(now time.Time) {
 	for token, item := range a.sessions {
 		if !item.expiresAt.After(now) {
@@ -124,6 +154,9 @@ func (a *Auth) purgeLocked(now time.Time) {
 		if !item.resetAt.After(now) {
 			delete(a.attempts, key)
 		}
+	}
+	if !a.codeFailures.resetAt.After(now) {
+		a.codeFailures = attempt{}
 	}
 }
 
@@ -150,6 +183,7 @@ func (a *Auth) SessionPayload(r *http.Request) map[string]any {
 	return map[string]any{
 		"mode":             a.cfg.Mode,
 		"requiresPassword": a.RequiresPassword(),
+		"requiresCode":     a.RequiresCode(),
 		"authenticated":    a.authenticated(r),
 	}
 }
@@ -168,39 +202,15 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
-	var password string
-	if raw, ok := object["password"]; ok && (string(raw) == "null" || json.Unmarshal(raw, &password) != nil) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
-		return
+	var password, code string
+	for name, target := range map[string]*string{"password": &password, "code": &code} {
+		if raw, ok := object[name]; ok && (string(raw) == "null" || json.Unmarshal(raw, target) != nil) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+			return
+		}
 	}
 	if a.cfg.Mode == "development" {
 		writeJSON(w, http.StatusOK, a.SessionPayload(r))
-		return
-	}
-	now := a.cfg.Now()
-	address := remoteAddress(r)
-	a.mu.Lock()
-	a.purgeLocked(now)
-	current := a.attempts[address]
-	limited := current.count >= 5 && current.resetAt.After(now)
-	a.mu.Unlock()
-	if limited {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too_many_attempts"})
-		return
-	}
-	actual := []byte(password)
-	expected := []byte(a.cfg.Password)
-	matches := len(actual) == len(expected) && subtle.ConstantTimeCompare(actual, expected) == 1
-	if !matches {
-		a.mu.Lock()
-		current = a.attempts[address]
-		if current.resetAt.IsZero() || !current.resetAt.After(now) {
-			current = attempt{resetAt: now.Add(5 * time.Minute)}
-		}
-		current.count++
-		a.attempts[address] = current
-		a.mu.Unlock()
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_credentials"})
 		return
 	}
 	tokenBytes := make([]byte, 32)
@@ -208,13 +218,58 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
 		return
 	}
-	token := encodeToken(tokenBytes)
+	now := a.cfg.Now()
+	address := remoteAddress(r)
+	// The limit check, both comparisons, the failure counters, the spent
+	// code and the new session form one critical section, so concurrent
+	// logins cannot all pass the check before any failure is counted, and a
+	// login already in flight cannot sign in once the limit is reached. The
+	// comparisons are a constant-time compare and three HMACs.
 	a.mu.Lock()
+	a.purgeLocked(now)
+	current := a.attempts[address]
+	if current.count >= 5 && current.resetAt.After(now) || a.codeFailures.count >= codeFailureLimit {
+		a.mu.Unlock()
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too_many_attempts"})
+		return
+	}
+	actual := []byte(password)
+	expected := []byte(a.cfg.Password)
+	matches := len(actual) == len(expected) && subtle.ConstantTimeCompare(actual, expected) == 1
+	step, codeMatches := int64(0), true
+	if a.RequiresCode() {
+		step, codeMatches = matchTOTP(a.cfg.TOTPSecret, code, now)
+		// A code is accepted once: a later login needs a later step.
+		codeMatches = codeMatches && step > a.lastStep
+	}
+	if !matches || !codeMatches {
+		if current.resetAt.IsZero() || !current.resetAt.After(now) {
+			current = attempt{resetAt: now.Add(5 * time.Minute)}
+		}
+		current.count++
+		a.attempts[address] = current
+		// Only the right password with a wrong code spends the shared
+		// allowance; a wrong password is limited per address alone.
+		if matches {
+			if a.codeFailures.resetAt.IsZero() {
+				a.codeFailures.resetAt = now.Add(5 * time.Minute)
+			}
+			a.codeFailures.count++
+		}
+		a.mu.Unlock()
+		// Neither factor is named, so a failure never confirms the password.
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_credentials"})
+		return
+	}
+	if a.RequiresCode() {
+		a.lastStep = step
+	}
+	token := encodeToken(tokenBytes)
 	delete(a.attempts, address)
 	a.sessions[token] = session{expiresAt: now.Add(a.cfg.SessionTTL)}
 	a.mu.Unlock()
 	setCookie(w, r, token, int(a.cfg.SessionTTL/time.Second))
-	writeJSON(w, http.StatusOK, map[string]any{"mode": a.cfg.Mode, "requiresPassword": true, "authenticated": true})
+	writeJSON(w, http.StatusOK, map[string]any{"mode": a.cfg.Mode, "requiresPassword": true, "requiresCode": a.RequiresCode(), "authenticated": true})
 }
 
 func (a *Auth) Logout(w http.ResponseWriter, r *http.Request) {

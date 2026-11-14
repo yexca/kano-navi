@@ -152,7 +152,10 @@ with hash routing (`#view/tab`, where the tab is everything after the view
 and may hold several parts; a `#content/<tab>` link opens the matching
 view, and `#models` and `#llm/<provider>` links open Detection); `use-admin-data.ts` owns every
 [Admin API](admin-api.md) call, the session and the overview poll that tracks
-the active run while the console is visible; `api.ts` is the transport and error mapping; `types.ts` holds
+the active run while the console is visible. Until a session read succeeds
+the login requirements are unknown, so a failed read shows its reason and a
+retry rather than a password-only form, and a refused login reads the
+session again in case the one-time code was turned on or off; `api.ts` is the transport and error mapping; `types.ts` holds
 the wire shapes; `ui.tsx` the console primitives (buttons, panels, native
 modal dialog, toasts); `views/` one file per section, with
 `views/platform-tabs.tsx` the platform tab row that opens Posts, External

@@ -2,7 +2,7 @@
 
 | Symptom                                 | Checks and recovery                                                                                                                                         |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Server refuses startup                  | Check APP_MODE and production ADMIN_PASSWORD length. Authentication is validated before SQLite opens.                                                       |
+| Server refuses startup                  | Check APP_MODE, production ADMIN_PASSWORD length and the ADMIN_TOTP_SECRET format. Authentication is validated before SQLite opens.                         |
 | Fresh board has no posts or providers   | Expected initialization. Configure providers and the model queues in /admin, then use Run now or enable a timer on the Sources page.                        |
 | Stale data after a failed run           | Inspect guarded sync history; the previous snapshot is retained. Check source coverage and request budgets.                                                 |
 | Date range returns partial coverage     | Check source credential-availability flags and pagination budgets. Public timeline/RSS coverage cannot expand to a full archive.                            |

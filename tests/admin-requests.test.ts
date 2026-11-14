@@ -140,6 +140,7 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
       authenticated: true,
       mode: "production",
       requiresPassword: true,
+      requiresCode: false,
     }
     const signedOut = { ...signedIn, authenticated: false }
     const run = (id: string) => ({
@@ -193,6 +194,109 @@ test("admin hook gates polling on the session, tracks runs and coordinates reque
           assert.equal(fixture.all("/overview").length, 2)
           await fixture.tick(1)
           assert.equal(fixture.all("/overview").length, 3)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a login with the one-time code sends it beside the password",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          await fixture.respond(fixture.open("/session"), {
+            ...signedOut,
+            requiresCode: true,
+          })
+          let login: Promise<void> | undefined
+          await act(async () => {
+            login = fixture.current().login("synthetic-password", "123456")
+          })
+          const post = fixture.open("/session", "POST")
+          assert.deepEqual(post.body, {
+            password: "synthetic-password",
+            code: "123456",
+          })
+          await fixture.respond(post, { ...signedIn, requiresCode: true })
+          await login
+          assert.equal(fixture.current().session.authenticated, true)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a failed session read stays unknown until a retry finds the one-time code",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          await fixture.respond(
+            fixture.open("/session"),
+            failure("unavailable"),
+            503,
+          )
+          // Unknown is not password-only: no session, a reason, no polling.
+          assert.equal(fixture.current().session, null)
+          assert.ok(fixture.current().sessionError)
+          await fixture.tick(60000)
+          assert.equal(fixture.all("/overview").length, 0)
+
+          await act(async () => fixture.current().retrySession())
+          assert.equal(fixture.current().sessionError, null)
+          await fixture.respond(fixture.open("/session"), {
+            ...signedOut,
+            requiresCode: true,
+          })
+          assert.equal(fixture.current().session.requiresCode, true)
+
+          let login: Promise<void> | undefined
+          await act(async () => {
+            login = fixture.current().login("synthetic-password", "123456")
+          })
+          const post = fixture.open("/session", "POST")
+          assert.deepEqual(post.body, {
+            password: "synthetic-password",
+            code: "123456",
+          })
+          await fixture.respond(post, { ...signedIn, requiresCode: true })
+          await login
+          assert.equal(fixture.current().session.authenticated, true)
+        } finally {
+          await fixture.unmount()
+        }
+      },
+    )
+
+    await t.test(
+      "a refused login reads the requirements again",
+      async (context) => {
+        const fixture = await setup(context)
+        try {
+          // The page loaded before the deployment turned the code on.
+          await fixture.respond(fixture.open("/session"), signedOut)
+          let outcome: Promise<unknown> | undefined
+          await act(async () => {
+            outcome = fixture
+              .current()
+              .login("synthetic-password")
+              .then(
+                () => "resolved",
+                (error: { status: number }) => error.status,
+              )
+          })
+          await fixture.respond(
+            fixture.open("/session", "POST"),
+            failure("invalid_credentials"),
+            401,
+          )
+          await fixture.respond(fixture.open("/session"), {
+            ...signedOut,
+            requiresCode: true,
+          })
+          assert.equal(await outcome, 401)
+          assert.equal(fixture.current().session.requiresCode, true)
         } finally {
           await fixture.unmount()
         }
