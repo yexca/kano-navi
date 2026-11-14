@@ -13,7 +13,7 @@ import (
 
 func (s *Store) queryScheduleAssets(ctx context.Context, from, to string) ([]Asset, error) {
 	period := SchedulePeriodSQL("a")
-	q := `SELECT a.id,a.kind,a.alt,` + period.WeekStart + `,` + period.Start + `,` + period.End + `,` + period.Basis + `,a.source_account,a.updated_at,a.url,a.source_url,COALESCE(r.manual_status,'unreviewed'),COALESCE(r.llm_status,'pending'),(SELECT COALESCE(json_extract(p.raw_json,'$.search_text'),p.text) FROM posts p WHERE p.url=a.source_url ORDER BY p.published_at DESC LIMIT 1) FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id=a.id WHERE a.kind='schedule' AND ` + period.Start + `<=? AND ` + period.End + `>=? AND (r.manual_status='schedule' OR (COALESCE(r.manual_status,'unreviewed')='unreviewed' AND r.llm_status='schedule')) ORDER BY a.updated_at DESC,a.id ASC LIMIT 100`
+	q := `SELECT a.id,a.kind,a.alt,` + period.WeekStart + `,` + period.Start + `,` + period.End + `,` + period.Basis + `,a.source_account,a.updated_at,a.url,a.source_url,COALESCE(r.manual_status,'unreviewed'),COALESCE(r.llm_status,'pending'),(SELECT COALESCE(json_extract(p.raw_json,'$.search_text'),p.text) FROM posts p WHERE p.url=a.source_url ORDER BY p.published_at DESC LIMIT 1) FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id=a.id WHERE a.kind='schedule' AND ` + LiveScheduleAssetSQL("a") + ` AND ` + period.Start + `<=? AND ` + period.End + `>=? AND (r.manual_status='schedule' OR (COALESCE(r.manual_status,'unreviewed')='unreviewed' AND r.llm_status='schedule')) ORDER BY a.updated_at DESC,a.id ASC LIMIT 100`
 	rows, err := s.db.QueryContext(ctx, q, to, from)
 	if err != nil {
 		return nil, dbErr(err)

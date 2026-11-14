@@ -55,7 +55,7 @@ func EventAttentionSQL(alias, today string) string {
 // labelled and the model has not settled. A record without an image URL has
 // nothing to check.
 func ScheduleImagePendingSQL(a, r string) string {
-	return a + `.kind='schedule' AND TRIM(` + a + `.url)<>'' AND COALESCE(` + r + `.manual_status,'unreviewed')='unreviewed'
+	return a + `.kind='schedule' AND TRIM(` + a + `.url)<>'' AND ` + LiveScheduleAssetSQL(a) + ` AND COALESCE(` + r + `.manual_status,'unreviewed')='unreviewed'
 	 AND COALESCE(` + r + `.llm_status,'pending') IN ('pending','uncertain','failed')`
 }
 

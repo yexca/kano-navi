@@ -498,7 +498,7 @@ func (s *Store) AdminPostByID(ctx context.Context, id string) (AdminPost, error)
 
 func (s *Store) ListAdminPosts(ctx context.Context, f AdminPostFilter) (AdminPage[AdminPost], error) {
 	page, pageSize := boundPage(f.Page, f.PageSize, 200, 50)
-	clauses := []string{"1=1"}
+	clauses := []string{livePostSQL("p")}
 	args := []any{}
 	if f.ID != "" {
 		clauses = append(clauses, "p.id = ?")
@@ -1171,13 +1171,13 @@ func (s *Store) AdminCounts(ctx context.Context, today string) (AdminCounts, err
 	err := s.db.QueryRowContext(ctx, `SELECT
 	  (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL AND starts_on >= ? AND cancellation_status <> 'manual_confirmed'),
 	  (SELECT COUNT(*) FROM events WHERE deleted_at IS NULL AND merged_into IS NULL),
-	  (SELECT COUNT(*) FROM posts),
+	  (SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL),
 	  (SELECT COUNT(*) FROM videos),
 	  (SELECT COUNT(*) FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id=a.id WHERE `+ScheduleImagePendingSQL("a", "r")+`),
 	  (SELECT COUNT(*) FROM events WHERE `+attention+`='`+AttentionSuspected+`'),
 	  (SELECT COUNT(*) FROM events WHERE `+attention+`='`+AttentionUncertain+`'),
-	  (SELECT COUNT(*) FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE s.status='failed' OR (`+TranslatedPostSQL("p")+` AND `+failedTranslation+`)),
-	  (SELECT COUNT(*) FROM post_llm_states WHERE status='failed'),
+	  (SELECT COUNT(*) FROM posts p LEFT JOIN post_llm_states s ON s.post_id=p.id WHERE p.deleted_at IS NULL AND (s.status='failed' OR (`+TranslatedPostSQL("p")+` AND `+failedTranslation+`))),
+	  (SELECT COUNT(*) FROM post_llm_states WHERE status='failed' AND post_id NOT IN (SELECT id FROM posts WHERE deleted_at IS NOT NULL)),
 	  (SELECT COUNT(*) FROM posts p WHERE `+TranslatedPostSQL("p")+` AND `+failedTranslation+`)`, today).Scan(
 		&c.UpcomingEvents, &c.Events, &c.Posts, &c.Videos, &c.PendingImages, &c.SuspectedCancellations, &c.UncertainEvents, &c.FailedPosts, &c.FailedExtractions, &c.FailedTranslations)
 	if err != nil {

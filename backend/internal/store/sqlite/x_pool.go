@@ -73,11 +73,11 @@ func writeQuotedStatus(ctx context.Context, tx *sql.Tx, q *xsource.Quote, quoted
 // author; one it does not carry only marks a pooled row reposted. The
 // reasons of a related account's status are evaluated again; another
 // author's is stored until an operator promotes it. A post stored under the
-// repost's own status ID (from an import, say) is removed with everything
-// keyed to it (see removeRepostPost). The board shows a reposted status only
-// once it is promoted. Every distinct own ID stays in x_repost_ids, even
+// repost's own status ID (from an import, say) is soft-deleted with
+// everything keyed to it kept (see removeRepostPost). The board shows a
+// reposted status only once it is promoted. Every distinct own ID stays in x_repost_ids, even
 // when the account reposts the same original again. It reports whether a
-// post changed.
+// post changed, a new account reposting a promoted post included.
 func writeXReposts(ctx context.Context, tx *sql.Tx, account string, reposts []xsource.Repost, now string) (bool, error) {
 	if len(reposts) == 0 {
 		return false, nil
@@ -95,6 +95,19 @@ func writeXReposts(ctx context.Context, tx *sql.Tx, account string, reposts []xs
 		retweet := ""
 		if quoteIDPattern.MatchString(r.RetweetID) && r.RetweetID != r.ID {
 			retweet = r.RetweetID
+		}
+		// A new reposting account of a promoted post changes its public
+		// repostedBy.
+		linked, linkErr := rowExists(ctx, tx, `SELECT 1 FROM x_reposts WHERE status_id=? AND account_handle=?`, r.ID, strings.ToLower(account))
+		if linkErr != nil {
+			return false, linkErr
+		}
+		if !linked {
+			shown, shownErr := rowExists(ctx, tx, `SELECT 1 FROM posts WHERE id=? AND promoted_at IS NOT NULL AND deleted_at IS NULL`, r.ID)
+			if shownErr != nil {
+				return false, shownErr
+			}
+			changed = changed || shown
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO x_reposts(status_id,account_handle,author_handle,retweet_id,first_seen_at) VALUES(?,?,?,?,?)
 			ON CONFLICT(status_id,account_handle) DO UPDATE SET author_handle=COALESCE(x_reposts.author_handle,excluded.author_handle),
@@ -147,16 +160,20 @@ func backfillRepostIDs(ctx context.Context, tx *sql.Tx) error {
 	return err
 }
 
-// removeRepostPost removes the account's stored post id, which a detail
-// answer showed to be its repost of another status, with everything keyed
-// to it, in the caller's transaction: its media links, schedule-image
-// candidate and review, extraction state and history, translations and
-// refresh request. Its event evidence is retired as an extraction without
-// events retires it (see retirePostEvidence). A promoted post or another
-// account's post is left alone. It reports whether a post was removed.
+// removeRepostPost soft-deletes the account's stored post id, which a detail
+// answer showed to be its repost of another status, in the caller's
+// transaction: posts.deleted_at is stamped and its refresh request cleared.
+// The row and everything keyed to it (media links, schedule-image candidate
+// and review, extraction state and history, translations) stay in place;
+// every reader skips a deleted post and its schedule-image candidate (see
+// livePostSQL and LiveScheduleAssetSQL). Its event evidence is retired as an
+// extraction without events retires it (see retirePostEvidence), and a
+// suspected cancellation it raised is withdrawn. A promoted
+// post, another account's post or one already deleted is left alone. It
+// reports whether a post was deleted.
 func removeRepostPost(ctx context.Context, tx *sql.Tx, id, account, now string) (bool, error) {
 	var handle sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT account_handle FROM posts WHERE id=? AND source='x' AND promoted_at IS NULL`, id).Scan(&handle)
+	err := tx.QueryRowContext(ctx, `SELECT account_handle FROM posts WHERE id=? AND source='x' AND promoted_at IS NULL AND deleted_at IS NULL`, id).Scan(&handle)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -166,29 +183,34 @@ func removeRepostPost(ctx context.Context, tx *sql.Tx, id, account, now string) 
 	if handle.String != "" && !strings.EqualFold(handle.String, account) {
 		return false, nil
 	}
-	for _, statement := range []string{
-		`DELETE FROM media_links WHERE owner_type='post' AND owner_id=?`,
-		`DELETE FROM post_llm_states WHERE post_id=?`,
-		`DELETE FROM schedule_extractions WHERE source='x' AND source_item_id=?`,
-		`DELETE FROM translations WHERE owner_type='post' AND owner_id=?`,
-		`DELETE FROM translation_states WHERE owner_type='post' AND owner_id=?`,
-		`DELETE FROM posts WHERE id=?`,
-	} {
-		if _, err = tx.ExecContext(ctx, statement, id); err != nil {
-			return false, err
-		}
+	if _, err = tx.ExecContext(ctx, `UPDATE posts SET deleted_at=?,refresh_requested_at=NULL WHERE id=?`, now, id); err != nil {
+		return false, err
 	}
-	asset := scheduleAssetID(id)
-	for _, statement := range []string{
-		`DELETE FROM media_links WHERE owner_type='asset' AND owner_id=?`,
-		`DELETE FROM schedule_asset_reviews WHERE asset_id=?`,
-		`DELETE FROM assets WHERE id=?`,
-	} {
-		if _, err = tx.ExecContext(ctx, statement, asset); err != nil {
-			return false, err
-		}
+	// The model's cancellation warning the repost raised has no post behind
+	// it; an operator's confirmed cancellation stays.
+	if _, err = tx.ExecContext(ctx, `UPDATE events SET cancellation_status='none',cancellation_source=NULL,cancellation_reason=NULL,cancellation_evidence=NULL,
+		cancellation_source_item_id=NULL,cancellation_confidence=NULL,cancellation_at=NULL,updated_at=?
+		WHERE cancellation_status='llm_suspected' AND cancellation_source_item_id=?`, now, id); err != nil {
+		return false, err
 	}
 	return true, retirePostEvidence(ctx, tx, "x", id, now)
+}
+
+// livePostSQL is the condition that the posts row aliased alias is not
+// soft-deleted. Every reader of posts applies it, except the write paths'
+// existence checks, which keep a deleted ID from being stored again.
+func livePostSQL(alias string) string {
+	if alias == "" {
+		return "deleted_at IS NULL"
+	}
+	return alias + ".deleted_at IS NULL"
+}
+
+// LiveScheduleAssetSQL is the condition that the assets row aliased a is not
+// the schedule-image candidate of a soft-deleted post. The candidate's ID is
+// scheduleAssetID of its post.
+func LiveScheduleAssetSQL(a string) string {
+	return a + `.id NOT IN (SELECT 'schedule-x-'||id FROM posts WHERE deleted_at IS NOT NULL)`
 }
 
 // retirePostEvidence retires every active event evidence of a removed post
@@ -254,7 +276,7 @@ func backfillRepostedStatuses(ctx context.Context, tx *sql.Tx) error {
 // side cannot read counts as held, so such a post is not written again on
 // every startup.
 const quotedStatusesSQL = `SELECT p.raw_json,p.published_at FROM posts p
- WHERE p.source='x' AND p.promoted_at IS NULL AND json_valid(p.quote_json) AND json_type(p.quote_json,'$.unavailable') IS NOT 'true'
+ WHERE p.source='x' AND p.promoted_at IS NULL AND p.deleted_at IS NULL AND json_valid(p.quote_json) AND json_type(p.quote_json,'$.unavailable') IS NOT 'true'
   AND json_valid(p.raw_json)
   AND NOT EXISTS (SELECT 1 FROM x_statuses s WHERE s.id=json_extract(p.quote_json,'$.id') AND s.quoted_at IS NOT NULL
    AND (julianday(s.quoted_at)>=julianday(p.published_at) OR julianday(s.quoted_at) IS NULL OR julianday(p.published_at) IS NULL))`

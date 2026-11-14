@@ -493,6 +493,12 @@ func (a *Adapter) FetchRecent(ctx context.Context, account string, opts Options)
 			settled++
 			continue
 		}
+		// The account's repost is never a post, even when its reposted
+		// status cannot be read.
+		if accountRetweet(payload, account) {
+			fail(id, string(ErrInvalidResponse), &Error{Code: ErrInvalidResponse}, false)
+			continue
+		}
 		post := Normalize(payload, id, account)
 		if post == nil || post.ID != id {
 			fail(id, string(ErrInvalidResponse), &Error{Code: ErrInvalidResponse}, false)

@@ -409,7 +409,7 @@ func (s *Store) XRecentState(ctx context.Context, account string) (XRecentState,
 	if len(out.PendingIDs) > 1000 {
 		out.PendingIDs = out.PendingIDs[:1000]
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM posts WHERE source='x' AND lower(account_handle)=lower(?) ORDER BY julianday(published_at) DESC,id LIMIT 200`, account)
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM posts WHERE source='x' AND deleted_at IS NULL AND lower(account_handle)=lower(?) ORDER BY julianday(published_at) DESC,id LIMIT 200`, account)
 	if err != nil {
 		return out, ErrSourceWrite
 	}
@@ -425,7 +425,7 @@ func (s *Store) XRecentState(ctx context.Context, account string) (XRecentState,
 		return out, ErrSourceWrite
 	}
 	rows.Close()
-	refresh, err := s.db.QueryContext(ctx, `SELECT id FROM posts WHERE source='x' AND lower(account_handle)=lower(?) AND refresh_requested_at IS NOT NULL ORDER BY refresh_requested_at,id LIMIT ?`, account, maxRefreshIDs)
+	refresh, err := s.db.QueryContext(ctx, `SELECT id FROM posts WHERE source='x' AND deleted_at IS NULL AND lower(account_handle)=lower(?) AND refresh_requested_at IS NOT NULL ORDER BY refresh_requested_at,id LIMIT ?`, account, maxRefreshIDs)
 	if err != nil {
 		return out, ErrSourceWrite
 	}

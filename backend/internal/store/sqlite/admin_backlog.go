@@ -23,9 +23,9 @@ type AdminBacklog struct {
 // "any" of them. Anything else adds no condition.
 func postQueuedSQL(queue string) string {
 	// A hidden post is not extracted, so its request waits until it is shown.
-	extraction := "(COALESCE(s.reprocess_requested, 0) = 1 AND p.hidden_at IS NULL)"
-	refresh := "p.refresh_requested_at IS NOT NULL"
-	translation := TranslationRequestedSQL(TranslationOwnerPost, "p")
+	extraction := "(COALESCE(s.reprocess_requested, 0) = 1 AND p.hidden_at IS NULL AND p.deleted_at IS NULL)"
+	refresh := "(p.refresh_requested_at IS NOT NULL AND p.deleted_at IS NULL)"
+	translation := "(" + TranslationRequestedSQL(TranslationOwnerPost, "p") + " AND p.deleted_at IS NULL)"
 	switch queue {
 	case "extraction":
 		return extraction

@@ -194,7 +194,7 @@ func (s *Store) evidenceNearbyIDs(ctx context.Context, event AdminEvent, evidenc
 		anchor, from, to = parsed, parsed.Add(-evidenceLeadWindow), parsed
 		clauses = append(clauses, "(p.source IN ('x','bilibili') AND p.promoted_at IS NULL)")
 	}
-	where := "julianday(p.published_at) BETWEEN julianday(?) AND julianday(?) AND (" + strings.Join(clauses, " OR ") + ")"
+	where := "p.deleted_at IS NULL AND julianday(p.published_at) BETWEEN julianday(?) AND julianday(?) AND (" + strings.Join(clauses, " OR ") + ")"
 	args = append([]any{from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339)}, args...)
 	if len(evidence) > 0 {
 		where += " AND p.id NOT IN (" + placeholders(len(evidence)) + ")"

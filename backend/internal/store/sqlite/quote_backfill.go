@@ -15,7 +15,7 @@ import (
 // but that have no quote projection yet. Every vxtwitter answer carries
 // "qrt": null, so only an object or a quoted URL counts.
 const quotedPostsSQL = `SELECT id,raw_json,COALESCE(media_url,'') FROM posts
- WHERE source='x' AND quote_json IS NULL AND json_valid(raw_json) AND (
+ WHERE source='x' AND deleted_at IS NULL AND quote_json IS NULL AND json_valid(raw_json) AND (
   json_type(raw_json,'$.qrt')='object' OR json_type(raw_json,'$.quote')='object'
   OR json_type(raw_json,'$.quotedTweet')='object' OR json_type(raw_json,'$.quoted_tweet')='object'
   OR json_type(raw_json,'$.qrtURL')='text')`

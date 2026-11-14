@@ -555,7 +555,9 @@ rewrite of `quote_json` and the `quote-image` links, like a manual lock.
 the post out, extraction never selects it, and the automatic events it alone
 supports leave the public pages (see
 [Events of hidden posts](#events-of-hidden-posts)). The console still lists
-the post, and no synchronization path writes the column. `posts.refresh_requested_at` is a
+the post, and no synchronization path writes the column. `posts.deleted_at`
+marks a soft-deleted post, which no reader shows, the console included (see
+[Reposts stored as posts](#reposts-stored-as-posts)). `posts.refresh_requested_at` is a
 queued refresh from the source, cleared once the X synchronization made its
 detail request (see
 [Refresh from the source](sources.md#refresh-from-the-source)). All three are
@@ -881,19 +883,26 @@ video's linked event. The console lists it with `hiddenByPosts`.
 
 An own account's repost has a status ID of its own, which a detail answer
 or an X API answer names (see [Reposts](sources.md#reposts)). An own X
-post stored under that ID, such as one an archive import wrote, is removed
-in the transaction that records the repost: the `posts` row with its
+post stored under that ID, such as one an archive import wrote, is
+soft-deleted in the transaction that records the repost: `posts.deleted_at`
+is stamped and its refresh request cleared. Nothing is removed: the row, its
 `media_links`, its `schedule-x-<id>` asset with that asset's links and
-review, `post_llm_states`, `schedule_extractions`, its `post` translations
-and translation state, and its refresh request. Its active `event_sources`
-rows are retired as an extraction that no longer names them retires them:
-an automatic, unlocked event left without active evidence is retired, which
-releases the rule merges into it, while an event with other active evidence
-stays and a manual or locked event keeps its row and decisions (see
-[Event precedence](#event-precedence)). A promoted post or another account's
-post is never removed this way. The ID stays in `x_repost_ids`, so
-no synchronization, fetch or promotion writes a post under it again; a write
-that names it skips it, with its schedule candidate.
+review, `post_llm_states`, `schedule_extractions`, and its `post`
+translations and translation state stay as they were. Every reader skips a
+deleted post and its schedule-image candidate: the dashboard, the post
+archive and its month index, MCP, the console's lists, counts and failures,
+extraction, translation, refresh and the schedule-image check. Its active
+`event_sources` rows are retired as an extraction that no longer names them
+retires them: an automatic, unlocked event left without active evidence is
+retired, which releases the rule merges into it, while an event with other
+active evidence stays and a manual or locked event keeps its row and
+decisions (see [Event precedence](#event-precedence)). A model's suspected
+cancellation that the post raised is withdrawn; an operator's confirmed
+cancellation stays. A promoted post, another account's post or a post
+already deleted is never touched this way. The ID stays in `x_repost_ids`,
+so no synchronization, fetch or promotion writes a post under it again; a
+write that names it skips it, with its schedule candidate, and the deleted
+row keeps its stored content.
 
 ## Event Platforms
 

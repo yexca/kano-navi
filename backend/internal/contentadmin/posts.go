@@ -34,7 +34,7 @@ const maxBatchPosts = 200
 // clears its failure backoff and settled stamp, or answers errPostNotFound.
 func queuePostReprocess(ctx context.Context, tx *sql.Tx, postID string, route *string, now string) error {
 	var found int
-	if err := tx.QueryRowContext(ctx, `SELECT 1 FROM posts WHERE id = ?`, postID).Scan(&found); errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRowContext(ctx, `SELECT 1 FROM posts WHERE id = ? AND deleted_at IS NULL`, postID).Scan(&found); errors.Is(err, sql.ErrNoRows) {
 		return errPostNotFound
 	} else if err != nil {
 		return err
@@ -248,7 +248,7 @@ func (m *Module) dismissPost(w http.ResponseWriter, r *http.Request, postID stri
 			return dismissErr
 		}
 		var found int
-		if lookupErr := tx.QueryRowContext(ctx, `SELECT 1 FROM posts WHERE id = ?`, postID).Scan(&found); errors.Is(lookupErr, sql.ErrNoRows) {
+		if lookupErr := tx.QueryRowContext(ctx, `SELECT 1 FROM posts WHERE id = ? AND deleted_at IS NULL`, postID).Scan(&found); errors.Is(lookupErr, sql.ErrNoRows) {
 			return errPostNotFound
 		} else if lookupErr != nil {
 			return lookupErr

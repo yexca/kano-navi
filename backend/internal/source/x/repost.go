@@ -17,24 +17,30 @@ type Repost struct {
 	RetweetID string
 }
 
+// accountRetweet reports whether a vxtwitter detail answer carries a retweet
+// and names the account as its author: the account's repost, whether or not
+// its reposted status can be read.
+func accountRetweet(payload map[string]any, account string) bool {
+	if len(object(payload["retweet"])) == 0 {
+		return false
+	}
+	by := firstString(object(payload["user"]), "screen_name", "screenName")
+	if by == "" {
+		by = stringValue(payload["user_screen_name"])
+	}
+	return strings.EqualFold(strings.TrimPrefix(by, "@"), account)
+}
+
 // detailRepost reads a vxtwitter detail answer for id as the account's
 // repost. Such an answer names the reposting account as its author, words
 // itself "RT @author: …" and carries the reposted status under retweet. It
 // reports false for an answer without a usable retweet or of another
 // account, which the caller treats as any other answer.
 func detailRepost(payload map[string]any, id, account string) (Repost, bool) {
-	retweet := object(payload["retweet"])
-	if len(retweet) == 0 {
+	if !accountRetweet(payload, account) {
 		return Repost{}, false
 	}
-	by := firstString(object(payload["user"]), "screen_name", "screenName")
-	if by == "" {
-		by = stringValue(payload["user_screen_name"])
-	}
-	if !strings.EqualFold(strings.TrimPrefix(by, "@"), account) {
-		return Repost{}, false
-	}
-	original := quoteFrom(retweet)
+	original := quoteFrom(object(payload["retweet"]))
 	if original == nil || original.ID == id {
 		return Repost{}, false
 	}

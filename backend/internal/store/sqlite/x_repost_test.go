@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -104,10 +105,10 @@ const (
 )
 
 // A stored post that a detail answer shows to be the account's repost is
-// removed with everything keyed to it, its evidence retires the events it
-// alone supports, the reposted status enters the pool, and no later write
-// stores the repost's ID as a post again.
-func TestDetailRepostRemovesTheStoredPost(t *testing.T) {
+// soft-deleted with everything keyed to it kept, no reader shows it, its
+// evidence retires the events it alone supports, the reposted status enters
+// the pool, and no later write stores the repost's ID as a post again.
+func TestDetailRepostSoftDeletesTheStoredPost(t *testing.T) {
 	f := newRelatedFixture(t)
 	ctx := context.Background()
 	db := f.s.DB()
@@ -134,6 +135,10 @@ func TestDetailRepostRemovesTheStoredPost(t *testing.T) {
 		`INSERT INTO event_sources(event_id,source,source_item_id,source_key,created_at,updated_at) VALUES
 			('ev-alone','x','` + storedRetweet + `','a','` + stamp + `','` + stamp + `'),('ev-shared','x','` + storedRetweet + `','b','` + stamp + `','` + stamp + `'),
 			('ev-shared','x','` + retweetSibling + `','b','` + stamp + `','` + stamp + `'),('ev-locked','x','` + storedRetweet + `','c','` + stamp + `','` + stamp + `')`,
+		// The retweet raised a model's cancellation warning on one event; an
+		// operator confirmed another's cancellation from it.
+		`UPDATE events SET cancellation_status='llm_suspected',cancellation_source='llm',cancellation_reason='r',cancellation_source_item_id='` + storedRetweet + `',cancellation_at='` + stamp + `' WHERE id='ev-shared'`,
+		`UPDATE events SET cancellation_status='manual_confirmed',cancellation_source='manual',cancellation_source_item_id='` + storedRetweet + `',cancellation_at='` + stamp + `' WHERE id='ev-locked'`,
 	} {
 		if _, err := db.Exec(statement); err != nil {
 			t.Fatalf("%s: %v", statement, err)
@@ -154,11 +159,33 @@ func TestDetailRepostRemovesTheStoredPost(t *testing.T) {
 		(SELECT COUNT(*) FROM assets WHERE id='schedule-x-'||$1)||','||(SELECT COUNT(*) FROM schedule_asset_reviews WHERE asset_id='schedule-x-'||$1)||','||
 		(SELECT COUNT(*) FROM post_llm_states WHERE post_id=$1)||','||(SELECT COUNT(*) FROM schedule_extractions WHERE source_item_id=$1)||','||
 		(SELECT COUNT(*) FROM translations WHERE owner_id=$1)||','||(SELECT COUNT(*) FROM translation_states WHERE owner_id=$1)`
-	if got := f.text(keyed, storedRetweet); got != "0,0,0,0,0,0,0,0" {
-		t.Fatalf("rows keyed to the removed post: %s", got)
+	// A soft delete: the row and everything keyed to it stay.
+	if got := f.text(keyed, storedRetweet); got != "1,2,1,1,1,1,1,1" {
+		t.Fatalf("rows keyed to the deleted post: %s", got)
 	}
-	if got := f.text(`SELECT COUNT(*) FROM posts WHERE id=?`, retweetSibling); got != "1" {
-		t.Fatal("the account's other post was removed")
+	if got := f.text(`SELECT (deleted_at IS NOT NULL)||','||(refresh_requested_at IS NULL)||','||(hidden_at IS NULL) FROM posts WHERE id=?`, storedRetweet); got != "1,1,1" {
+		t.Fatalf("deleted post state: %s", got)
+	}
+	if got := f.text(`SELECT COUNT(*) FROM posts WHERE id=? AND deleted_at IS NULL`, retweetSibling); got != "1" {
+		t.Fatal("the account's other post was deleted")
+	}
+	// No reader shows the deleted post or its schedule-image candidate.
+	archive, err := f.s.GetPostArchive(ctx, "2026-10-01", "2026-10-31", "", 1, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if archive.Total != 1 || len(archive.Items) != 1 || archive.Items[0].ID != retweetSibling {
+		t.Fatalf("public archive: total=%d items=%+v", archive.Total, archive.Items)
+	}
+	admin, err := f.s.ListAdminPosts(ctx, AdminPostFilter{ID: storedRetweet})
+	if err != nil || admin.Total != 0 {
+		t.Fatalf("admin posts: %+v err=%v", admin, err)
+	}
+	if got := f.text(`SELECT COUNT(*) FROM assets a WHERE ` + LiveScheduleAssetSQL("a")); got != "0" {
+		t.Fatalf("live schedule candidates: %s", got)
+	}
+	if got := f.text(`SELECT COUNT(*) FROM posts p WHERE `+TranslatedPostSQL("p")+` AND p.id=?`, storedRetweet); got != "0" {
+		t.Fatalf("translation scope keeps the deleted post: %s", got)
 	}
 	if got := f.text(`SELECT status_id||'|'||account_handle||'|'||author_handle||'|'||retweet_id FROM x_reposts`); got != retweetedID+"|kano_2525|yura_synthetic|"+storedRetweet {
 		t.Fatalf("repost link: %s", got)
@@ -170,12 +197,17 @@ func TestDetailRepostRemovesTheStoredPost(t *testing.T) {
 	if got := f.text(events); got != "ev-alone:1:-,ev-locked:0:-,ev-merged:0:-,ev-shared:0:-" {
 		t.Fatalf("events: %s", got)
 	}
+	cancellations := `SELECT group_concat(id||':'||cancellation_status||':'||COALESCE(cancellation_source_item_id,'-'),',') FROM (SELECT * FROM events WHERE id IN ('ev-shared','ev-locked') ORDER BY id)`
+	if got := f.text(cancellations); got != "ev-locked:manual_confirmed:"+storedRetweet+",ev-shared:none:-" {
+		t.Fatalf("cancellations: %s", got)
+	}
 	if got := f.text(`SELECT COUNT(*) FROM event_sources WHERE source_item_id=? AND deleted_at IS NULL`, storedRetweet); got != "0" {
 		t.Fatalf("active evidence of the removed post: %s", got)
 	}
 	if f.text(`SELECT value FROM app_settings WHERE key='dashboard_revision'`) == revision {
-		t.Fatal("removing a post must change the public snapshot revision")
+		t.Fatal("deleting a post must change the public snapshot revision")
 	}
+	deletedAt := f.text(`SELECT deleted_at FROM posts WHERE id=?`, storedRetweet)
 
 	// Neither a listing, a fetch page nor an import write stores it again.
 	if err := f.s.WriteXRecent(ctx, "kano_2525", xsource.Result{Account: "kano_2525", Posts: []xsource.Post{imported, sibling},
@@ -186,8 +218,15 @@ func TestDetailRepostRemovesTheStoredPost(t *testing.T) {
 	if err != nil || written.New != 0 {
 		t.Fatalf("history written=%+v err=%v", written, err)
 	}
-	if got := f.text(keyed, storedRetweet); got != "0,0,0,0,0,0,0,0" {
+	if got := f.text(`SELECT COALESCE(deleted_at,'')||'|'||text FROM posts WHERE id=?`, storedRetweet); got != deletedAt+"|"+imported.Text {
 		t.Fatalf("the repost came back: %s", got)
+	}
+	// A second repost answer leaves the deleted post as it is.
+	if err := f.s.WriteXRecent(ctx, "kano_2525", repost, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.text(`SELECT deleted_at FROM posts WHERE id=?`, storedRetweet); got != deletedAt {
+		t.Fatalf("deleted_at moved: %s", got)
 	}
 }
 
@@ -218,5 +257,63 @@ func TestStartupMarksPooledStatusesReposted(t *testing.T) {
 	}
 	if got != retweetedID+":2026-10-02T00:00:00.000Z" {
 		t.Fatalf("pool after backfill: %s", got)
+	}
+}
+
+// A status by an own account, which another own account reposted, is never
+// promoted: the configured handles and the own posts stored both name it.
+func TestOwnAccountsRepostIsNeverPromoted(t *testing.T) {
+	f := newRelatedFixture(t)
+	ctx := context.Background()
+	const ownID = "1900000000000000710"
+	status := &xsource.Quote{ID: ownID, AuthorHandle: "kano_2525", AuthorName: "Kano", Text: "own notice",
+		PublishedAt: "2026-10-10T00:00:00Z", URL: "https://x.com/kano_2525/status/" + ownID}
+	if err := f.s.WriteXRecent(ctx, "_SyntheticB", xsource.Result{Account: "_SyntheticB",
+		Reposts: []xsource.Repost{{ID: ownID, Author: "kano_2525", Status: status}}}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.SetXStatusDecision(ctx, ownID, xDecisionPromote, "own post", "@Kano_2525"); !errors.Is(err, ErrXRelatedInvalid) {
+		t.Fatalf("promote by configured handle: %v", err)
+	}
+	own := quotingPost("1900000000000000711", "2026-10-11T00:00:00Z", nil)
+	own.AccountHandle = "kano_2525"
+	if err := f.s.WriteXRecent(ctx, "kano_2525", xsource.Result{Account: "kano_2525", Posts: []xsource.Post{own}}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.SetXStatusDecision(ctx, ownID, xDecisionPromote, "own post"); !errors.Is(err, ErrXRelatedInvalid) {
+		t.Fatalf("promote by stored own posts: %v", err)
+	}
+	if f.state(ownID) != "missing" {
+		t.Fatalf("own status stored as a post: %s", f.state(ownID))
+	}
+}
+
+// Another own account reposting a promoted post changes its public
+// repostedBy, so the revision moves even when the listing carries no post.
+func TestNewReposterOfPromotedPostChangesTheRevision(t *testing.T) {
+	f := newRelatedFixture(t)
+	ctx := context.Background()
+	const otherID = "1900000000000000720"
+	other := &xsource.Quote{ID: otherID, AuthorHandle: "composer_example", AuthorName: "Composer", Text: "new song",
+		PublishedAt: "2026-10-10T00:00:00Z", URL: "https://x.com/composer_example/status/" + otherID}
+	repost := []xsource.Repost{{ID: otherID, Author: "composer_example", Status: other}}
+	if err := f.s.WriteXRecent(ctx, "kano_2525", xsource.Result{Account: "kano_2525", Reposts: repost}, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.SetXStatusDecision(ctx, otherID, xDecisionPromote, "collaborator"); err != nil {
+		t.Fatal(err)
+	}
+	revision := f.text(`SELECT value FROM app_settings WHERE key='dashboard_revision'`)
+	if err := f.s.WriteXRecent(ctx, "kano_2525", xsource.Result{Account: "kano_2525", Reposts: repost}, true); err != nil {
+		t.Fatal(err)
+	}
+	if f.text(`SELECT value FROM app_settings WHERE key='dashboard_revision'`) != revision {
+		t.Fatal("a repeated sighting changed the revision")
+	}
+	if err := f.s.WriteXRecent(ctx, "_SyntheticB", xsource.Result{Account: "_SyntheticB", Reposts: repost}, true); err != nil {
+		t.Fatal(err)
+	}
+	if f.text(`SELECT value FROM app_settings WHERE key='dashboard_revision'`) == revision {
+		t.Fatal("a new reposter must change the revision")
 	}
 }

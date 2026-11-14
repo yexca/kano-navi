@@ -228,7 +228,8 @@ CREATE TABLE posts (
     quote_hidden_at TEXT,
     refresh_requested_at TEXT,
     hidden_at TEXT,
-    promoted_at TEXT
+    promoted_at TEXT,
+    deleted_at TEXT
   );
 
 CREATE TABLE profile_media (
@@ -535,6 +536,8 @@ CREATE INDEX post_llm_states_status_idx
     ON post_llm_states (status, reprocess_requested, updated_at DESC);
 
 CREATE INDEX posts_account_handle_idx ON posts (account_handle, published_at DESC);
+
+CREATE INDEX posts_deleted_idx ON posts (id) WHERE deleted_at IS NOT NULL;
 
 CREATE INDEX posts_instant_idx ON posts (julianday(published_at) DESC, id);
 

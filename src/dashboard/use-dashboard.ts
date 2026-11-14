@@ -984,7 +984,8 @@ export function useArchive<T>(
   }, [scope, load])
 
   // Reads the page before the first loaded one and puts its newer records
-  // above the loaded ones; a write in between rereads the whole run instead.
+  // above the loaded ones; a write in between rereads the whole run from that
+  // page instead.
   const loadNewer = useCallback(async () => {
     const current = requestRef.current
     const { key: currentKey, snapshot } = stateRef.current
@@ -1004,7 +1005,29 @@ export function useArchive<T>(
       )
       if (keyRef.current !== currentKey) return
       if (newer.revision !== snapshot.revision || newer.page !== first - 1) {
-        await load()
+        // Reread the whole run from the newer page, so the request still
+        // brings its newer records.
+        requestedTargetRef.current = refreshTargetRef.current
+        const read = await scope.run("archive", (signal) =>
+          readLoadedPages(
+            (page) => readPage(current, page, signal),
+            snapshot,
+            (before, page) => ({
+              ...page,
+              firstPage: before.firstPage ?? before.page,
+              items: [...before.items, ...page.items],
+            }),
+            first - 1,
+            snapshot.page,
+          ),
+        )
+        if (keyRef.current !== currentKey) return
+        setState({
+          key: currentKey,
+          snapshot: { ...read, firstPage: read.firstPage ?? read.page },
+          isLoading: false,
+          error: null,
+        })
         return
       }
       setState({
@@ -1026,7 +1049,7 @@ export function useArchive<T>(
       )
         setState((value) => ({ ...value, isLoading: false, error }))
     }
-  }, [scope, load])
+  }, [scope])
 
   useEffect(() => {
     scope.activate()

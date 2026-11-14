@@ -797,7 +797,7 @@ null for a status whose post owns the translations.
 characters and become a durable lock, or `automatic`, which removes the lock
 so the keyword rules decide again. A promote needs a related account's
 status or a reposted one (otherwise `400 invalid_input`), writes or shows
-its post and answers the status; a demote hides the promoted post. An own post answers `400 invalid_input`, a missing status
+its post and answers the status; a demote hides the promoted post. An own post, or a promote of an own account's status, answers `400 invalid_input`, a missing status
 `404 not_found`. A change moves the dashboard revision. Translations of a
 pooled status use the [translation routes](#translations) with owner
 `x_status`.

@@ -1,13 +1,15 @@
 # Unreleased
 
-> [!WARNING]
+> [!IMPORTANT]
 > An X detail answer that shows a stored own post to be the account's
-> repost of another status (one an archive import stored, say) deletes that
-> post with its media links, schedule-image candidate, extraction state and
-> history, translations and refresh request, and retires the automatic,
-> unlocked events only it supported; manual and locked events stay. The
-> repost's ID is then never stored as a post again. Back up `./data` before
-> queuing refreshes of imported posts.
+> repost of another status (one an archive import stored, say) soft-deletes
+> that post: it leaves the board, the post archive, MCP and the console, and
+> extraction, translation and refresh skip it, while its row, media links,
+> schedule-image candidate, extraction history and translations stay in the
+> database. The automatic, unlocked events only it supported are retired and
+> a suspected cancellation it raised is withdrawn; manual and locked events
+> and confirmed cancellations stay. The repost's ID is then never stored as
+> a post again.
 
 <details>
 <summary><strong>Upgrade notes</strong></summary>
@@ -23,7 +25,8 @@
 - `POST /posts/{id}/refresh` answers `400 invalid_input` for a promoted
   related-account status, which the own accounts' synchronization never
   reads.
-- Startup adds `x_reposts.retweet_id` and its index, retains every distinct
+- Startup adds `posts.deleted_at` (a soft-deleted post) with its index, and
+  `x_reposts.retweet_id` and its index, retains every distinct
   repost's own ID in `x_repost_ids`, backfills that table from existing
   repost links, and marks every pooled
   X status an `x_reposts` row names as reposted (`reposted_at` from the
@@ -36,9 +39,9 @@
   related account's reposted status is translated in the pool; another
   author's is stored untranslated, and an operator translation request for
   it queues nothing, until an operator promotes it.
-- `PUT /x-statuses/{id}/decision` accepts `promote` for any reposted status,
-  whatever its author; keyword rules still promote related accounts'
-  statuses alone.
+- `PUT /x-statuses/{id}/decision` accepts `promote` for any reposted status
+  of another author, and answers `400 invalid_input` for an own account's
+  status; keyword rules still promote related accounts' statuses alone.
 - Public dashboard, post archive and MCP posts add `repostedBy`: the own X
   accounts that reposted a promoted post, first sighting first, and `[]` for
   every other post.
@@ -105,6 +108,9 @@
 - Notes in the footer opens one notice, the same on every page, in a
   dialog instead of unfolding the page's own note in the footer; About
   shows the same notice.
+- Past posts' previous and next month links skip months whose posts are all
+  hidden, and its All filter counts every post of the month, picked reposts
+  included.
 
 </details>
 
@@ -131,9 +137,11 @@
 - A vxtwitter detail answer that carries `retweet` and explicitly matches
   the requested outer status ID is recorded as the
   account's repost of the original status and never stored as a post, on
-  the pending queue, known-post refreshes and operator refreshes alike.
+  the pending queue, known-post refreshes and operator refreshes alike. Such
+  an answer whose reposted status has no usable ID fails as an invalid
+  answer and keeps the stored post.
 - X API answers record each repost's own status ID, so a stored post under
-  it is removed in the same way. Repeated reposts of one original retain
+  it is soft-deleted in the same way. Repeated reposts of one original retain
   every own ID, including when one API page carries several, so later
   synchronization and imports cannot restore them as posts.
 - Each X image records whether it is a photo or a video's or GIF's

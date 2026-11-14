@@ -126,7 +126,7 @@ func (a *api) decideXStatus(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, httpx.Invalid("reason must be a string"))
 		return
 	}
-	status, err := a.Store.SetXStatusDecision(r.Context(), r.PathValue("id"), decision, reason)
+	status, err := a.Store.SetXStatusDecision(r.Context(), r.PathValue("id"), decision, reason, a.XHandles...)
 	if err != nil {
 		writeXStatusError(w, err)
 		return

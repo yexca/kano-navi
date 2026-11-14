@@ -32,7 +32,7 @@ var (
 func readQuoteState(ctx context.Context, q queryer, postID string) (*postQuoteState, error) {
 	state := postQuoteState{PostID: postID}
 	var postHidden, hidden, refresh sql.NullString
-	if err := q.QueryRowContext(ctx, `SELECT hidden_at, quote_hidden_at, refresh_requested_at FROM posts WHERE id = ?`, postID).Scan(&postHidden, &hidden, &refresh); err != nil {
+	if err := q.QueryRowContext(ctx, `SELECT hidden_at, quote_hidden_at, refresh_requested_at FROM posts WHERE id = ? AND deleted_at IS NULL`, postID).Scan(&postHidden, &hidden, &refresh); err != nil {
 		return nil, err
 	}
 	state.HiddenAt, state.QuoteHiddenAt, state.RefreshRequestedAt = textPointer(postHidden), textPointer(hidden), textPointer(refresh)
@@ -48,7 +48,7 @@ func (m *Module) setQuoteHidden(ctx context.Context, postID string, hidden bool)
 	err := m.inTx(ctx, func(tx *sql.Tx) error {
 		var quote sql.NullString
 		var was sql.NullString
-		if err := tx.QueryRowContext(ctx, `SELECT quote_json, quote_hidden_at FROM posts WHERE id = ?`, postID).Scan(&quote, &was); errors.Is(err, sql.ErrNoRows) {
+		if err := tx.QueryRowContext(ctx, `SELECT quote_json, quote_hidden_at FROM posts WHERE id = ? AND deleted_at IS NULL`, postID).Scan(&quote, &was); errors.Is(err, sql.ErrNoRows) {
 			return errPostNotFound
 		} else if err != nil {
 			return err
@@ -84,7 +84,7 @@ func (m *Module) setPostHidden(ctx context.Context, postID string, hidden bool) 
 	now := m.timestamp()
 	err := m.inTx(ctx, func(tx *sql.Tx) error {
 		var was sql.NullString
-		if err := tx.QueryRowContext(ctx, `SELECT hidden_at FROM posts WHERE id = ?`, postID).Scan(&was); errors.Is(err, sql.ErrNoRows) {
+		if err := tx.QueryRowContext(ctx, `SELECT hidden_at FROM posts WHERE id = ? AND deleted_at IS NULL`, postID).Scan(&was); errors.Is(err, sql.ErrNoRows) {
 			return errPostNotFound
 		} else if err != nil {
 			return err
@@ -137,7 +137,7 @@ func queuePostRefresh(ctx context.Context, tx *sql.Tx, postID, now string) error
 	var source string
 	var account sql.NullString
 	var promoted bool
-	if err := tx.QueryRowContext(ctx, `SELECT source, account_handle, promoted_at IS NOT NULL FROM posts WHERE id = ?`, postID).Scan(&source, &account, &promoted); errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRowContext(ctx, `SELECT source, account_handle, promoted_at IS NOT NULL FROM posts WHERE id = ? AND deleted_at IS NULL`, postID).Scan(&source, &account, &promoted); errors.Is(err, sql.ErrNoRows) {
 		return errPostNotFound
 	} else if err != nil {
 		return err

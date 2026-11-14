@@ -163,9 +163,16 @@ func TestWrongCodesAreLimitedAcrossAddresses(t *testing.T) {
 			t.Fatalf("attempt %d = %d", i, rec.Code)
 		}
 	}
+	// Past the limit the right password and a wrong one answer alike, so the
+	// lockout confirms no password.
 	right := withCode(totpCode(rfcKey, totpStep(*now)))
-	if rec := codeLogin(auth, "192.0.2.9", right); rec.Code != 429 || rec.Body.String() != `{"error":"too_many_attempts"}` {
-		t.Fatalf("fresh address after the shared limit = %d %s", rec.Code, rec.Body)
+	for address, body := range map[string]string{"192.0.2.9": right, "192.0.2.10": `{"password":"wrong","code":"000000"}`} {
+		if rec := codeLogin(auth, address, body); rec.Code != 401 || rec.Body.String() != `{"error":"invalid_credentials"}` {
+			t.Fatalf("fresh address after the shared limit = %d %s", rec.Code, rec.Body)
+		}
+	}
+	if auth.codeFailures.count != codeFailureLimit {
+		t.Fatalf("a locked login spent the shared allowance: %d", auth.codeFailures.count)
 	}
 	*now = now.Add(5 * time.Minute)
 	if rec := codeLogin(auth, "192.0.2.9", withCode(totpCode(rfcKey, totpStep(*now)))); rec.Code != 200 {
@@ -221,25 +228,25 @@ func TestConcurrentWrongCodesStopAtTheSharedLimit(t *testing.T) {
 		t.Fatalf("wrong passwords = %v, shared failures %d", counts, auth.codeFailures.count)
 	}
 	// Right-password logins at once, wrong codes and the one current code
-	// mixed: exactly the limit's worth of failures is verified, at most one
-	// signs in, and the rest wait.
+	// mixed: exactly the limit's worth of failures is counted, at most one
+	// signs in, and the rest fail.
 	bodies = map[string]string{}
 	for i := 0; i < 40; i++ {
 		bodies[fmt.Sprintf("203.0.113.%d", i)] = withCode(wrong)
 		bodies[fmt.Sprintf("192.0.2.%d", i)] = withCode(right)
 	}
 	counts := burst(auth, bodies)
-	if counts[401] != codeFailureLimit || counts[200] > 1 || counts[200]+counts[401]+counts[429] != 80 || len(auth.sessions) != counts[200] || auth.codeFailures.count != codeFailureLimit {
+	if counts[200] > 1 || counts[200]+counts[401] != 80 || len(auth.sessions) != counts[200] || auth.codeFailures.count != codeFailureLimit {
 		t.Fatalf("mixed burst = %v, sessions %d, shared failures %d", counts, len(auth.sessions), auth.codeFailures.count)
 	}
 	// Once the limit is reached, logins with a valid, unspent code in flight
-	// together all wait and none signs in.
+	// together all fail and none signs in.
 	sessions := len(auth.sessions)
 	bodies = map[string]string{}
 	for i := 0; i < 20; i++ {
 		bodies[fmt.Sprintf("192.0.2.%d", 100+i)] = withCode(totpCode(rfcKey, totpStep(*now)+1))
 	}
-	if counts := burst(auth, bodies); counts[429] != 20 || len(auth.sessions) != sessions {
+	if counts := burst(auth, bodies); counts[401] != 20 || len(auth.sessions) != sessions {
 		t.Fatalf("after the limit = %v, sessions %d", counts, len(auth.sessions))
 	}
 }

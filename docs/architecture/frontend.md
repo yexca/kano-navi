@@ -234,7 +234,8 @@ A post that quotes another status (`post.quote`, see
 below the post's own wording and images and above the engagement counts: an
 indented card on the quieter sunken surface with "display name @handle ·
 time", the quoted wording clamped to four lines and up to three thumbnails
-("+N" counts the rest). The card follows the quoted post's link (its x.com
+("+N" counts the rest, on a tile that opens the image viewer even when it
+shows a video's still). The card follows the quoted post's link (its x.com
 page, or for a Bilibili forward the forwarded dynamic's or upload's Bilibili
 page) from anywhere except its thumbnails, which open the image viewer with
 the quote's images. A forward's card names the forwarded dynamic's author by
@@ -940,8 +941,10 @@ is unbounded.
 Until a month's first page arrives, the schedule dialog shows the month grid
 with its dates and a shimmering bar in each day, and the post archive shows
 skeleton cards in the chosen layout, so a month change keeps the body in
-place. The post account filter takes its counts from the month index when it
-has one, so they stay while the month loads.
+place; after a failed first read the day panel shows no outlines until a
+retry starts. The post account filter takes its counts from the month index
+when it has one, so they stay while the month loads; its All button counts
+the month's total, which includes promoted posts filed under their authors.
 A click anywhere in a month-grid day picks it, listing its entries beside the
 grid (below it on phones). The current month opens on today; in another month
 the side panel asks for a day, and on phones the day list waits below the
@@ -983,7 +986,10 @@ following page with it so the month can reach the top, and scrolls to the
 month once it is read. Its first loaded page is the snapshot's `firstPage`;
 while that is after page 1, a button above the list reads the page before it
 and puts its videos above, and the video that was first keeps its place on
-screen. A refresh rereads the whole loaded run, from `firstPage` on. While
+screen; when the snapshot changed in between, it rereads the whole run from
+that newer page instead. The button stays focusable during background
+rereads and ignores presses while a read runs. A refresh rereads the whole
+loaded run, from `firstPage` on. While
 the months around a jump or the newly read videos render at their real height
 in place of the `content-visibility` estimate, a `ResizeObserver` keeps the
 target in place for up to a second, letting go as soon as the reader scrolls.

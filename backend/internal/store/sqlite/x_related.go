@@ -559,14 +559,33 @@ const (
 	xDecisionAutomatic = "automatic"
 )
 
+// isOwnXAccount reports whether handle is an own X account: one of the
+// configured handles, or one with an own (unpromoted) post or a repost
+// stored.
+func isOwnXAccount(ctx context.Context, tx *sql.Tx, handle string, own []string) (bool, error) {
+	key := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(handle), "@"))
+	if key == "" {
+		return false, nil
+	}
+	for _, item := range own {
+		if strings.ToLower(strings.TrimPrefix(strings.TrimSpace(item), "@")) == key {
+			return true, nil
+		}
+	}
+	return rowExists(ctx, tx, `SELECT 1 WHERE EXISTS (SELECT 1 FROM posts WHERE source='x' AND promoted_at IS NULL AND lower(account_handle)=?)
+		OR EXISTS (SELECT 1 FROM x_reposts WHERE account_handle=?)`, key, key)
+}
+
 // SetXStatusDecision records an operator's promote or demote as a durable
 // lock with its reason, or with "automatic" removes the lock so the rules
 // decide again. A promote needs a related account's status or one an own
 // account reposted, and shows a promoted post hidden before; a demote hides
-// the promoted post. The status's own post is never touched. Returned to the
-// rules, a status they do not promote (any but a related account's matching
-// status) stays unpromoted, or hidden when it was promoted.
-func (s *Store) SetXStatusDecision(ctx context.Context, id, decision, reason string) (AdminXStatus, error) {
+// the promoted post. A status by an own account (one of own, or a handle
+// with own posts or reposts stored) is never promoted, so the status's own
+// post is never touched. Returned to the rules, a status they do not promote
+// (any but a related account's matching status) stays unpromoted, or hidden
+// when it was promoted.
+func (s *Store) SetXStatusDecision(ctx context.Context, id, decision, reason string, own ...string) (AdminXStatus, error) {
 	if !s.Writable() {
 		return AdminXStatus{}, ErrReadOnly
 	}
@@ -605,6 +624,15 @@ func (s *Store) SetXStatusDecision(ctx context.Context, id, decision, reason str
 	}
 	if _, related := relatedKeywords(accounts)[strings.ToLower(author)]; decision == xDecisionPromote && !related && !reposted {
 		return AdminXStatus{}, fmt.Errorf("%w: only a related account's or a reposted status can be promoted", ErrXRelatedInvalid)
+	}
+	if decision == xDecisionPromote {
+		ownAuthor, ownErr := isOwnXAccount(ctx, tx, author, own)
+		if ownErr != nil {
+			return AdminXStatus{}, dbErr(ownErr)
+		}
+		if ownAuthor {
+			return AdminXStatus{}, fmt.Errorf("%w: the status is an own account's post", ErrXRelatedInvalid)
+		}
 	}
 	now := ISOTime(time.Now())
 	changed := false
@@ -844,7 +872,7 @@ func (s *Store) xStatusLinks(ctx context.Context, items []AdminXStatus) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT quoted, id FROM (
 		SELECT json_extract(quote_json,'$.id') AS quoted, id,
 			ROW_NUMBER() OVER (PARTITION BY json_extract(quote_json,'$.id') ORDER BY julianday(published_at) DESC,id) AS n
-		FROM posts WHERE source='x' AND promoted_at IS NULL AND json_valid(quote_json)
+		FROM posts WHERE source='x' AND promoted_at IS NULL AND deleted_at IS NULL AND json_valid(quote_json)
 			AND json_extract(quote_json,'$.id') IN (`+placeholders(len(ids))+`))
 		WHERE n<=5 ORDER BY quoted,n`, idArgs(ids)...)
 	if err != nil {

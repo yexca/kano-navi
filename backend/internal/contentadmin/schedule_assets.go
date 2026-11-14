@@ -155,7 +155,7 @@ func scanScheduleAsset(row rowScanner) (*scheduleAsset, error) {
 
 // getScheduleAsset returns nil without an error for an unknown schedule image.
 func (m *Module) getScheduleAsset(ctx context.Context, id string) (*scheduleAsset, error) {
-	asset, err := scanScheduleAsset(m.db.QueryRowContext(ctx, `SELECT `+scheduleAssetColumns+scheduleAssetFrom+`WHERE a.id = ? AND a.kind = 'schedule'`, id))
+	asset, err := scanScheduleAsset(m.db.QueryRowContext(ctx, `SELECT `+scheduleAssetColumns+scheduleAssetFrom+`WHERE a.id = ? AND a.kind = 'schedule' AND `+sqlite.LiveScheduleAssetSQL("a"), id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -169,7 +169,7 @@ func (m *Module) getScheduleAsset(ctx context.Context, id string) (*scheduleAsse
 // update; from and to, when both are dates, keep those whose period overlaps
 // them, and pending keeps those that wait for a decision.
 func (m *Module) listScheduleAssets(ctx context.Context, limit int, from, to string, pending bool) ([]scheduleAsset, error) {
-	where, args := `WHERE a.kind = 'schedule'`, []any{}
+	where, args := `WHERE a.kind = 'schedule' AND `+sqlite.LiveScheduleAssetSQL("a"), []any{}
 	if pending {
 		where += ` AND ` + sqlite.ScheduleImagePendingSQL("a", "r")
 	}
@@ -302,7 +302,7 @@ var errScheduleAssetNotFound = errors.New("schedule asset not found")
 
 func scheduleAssetExists(ctx context.Context, tx *sql.Tx, id string) error {
 	var found int
-	err := tx.QueryRowContext(ctx, `SELECT 1 FROM assets WHERE id = ? AND kind = 'schedule'`, id).Scan(&found)
+	err := tx.QueryRowContext(ctx, `SELECT 1 FROM assets a WHERE a.id = ? AND a.kind = 'schedule' AND `+sqlite.LiveScheduleAssetSQL("a"), id).Scan(&found)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errScheduleAssetNotFound
 	}

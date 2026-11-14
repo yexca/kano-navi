@@ -199,13 +199,18 @@ export function DashboardApp() {
   // the month's posts arrive, so the account filter keeps its numbers.
   const postMonthKey =
     archiveView?.kind === "posts" ? monthKeyOf(archiveView.monthStart) : null
-  const postAccountCounts = useMemo(() => {
+  const postMonthIndex = useMemo(() => {
     if (indexKind !== "posts" || !archiveMonths || !postMonthKey)
       return undefined
     return (
-      archiveMonths.find(({ month }) => month === postMonthKey)?.counts ?? {}
+      archiveMonths.find(({ month }) => month === postMonthKey) ?? {
+        month: postMonthKey,
+        total: 0,
+        counts: {},
+      }
     )
   }, [indexKind, archiveMonths, postMonthKey])
+  const postAccountCounts = postMonthIndex?.counts
   // Every video's category over the whole index, so the filter keeps its
   // totals wherever the timeline starts.
   const videoCategoryCounts = useMemo(() => {
@@ -627,6 +632,10 @@ export function DashboardApp() {
                   account={archiveView.account || null}
                   setAccount={setArchiveAccount}
                   counts={postAccountCounts ?? archive.archive?.accountCounts}
+                  total={
+                    postMonthIndex?.total ??
+                    (archiveView.account ? null : archive.archive?.total)
+                  }
                   t={t}
                 />
                 <PostArchiveLayoutToggle

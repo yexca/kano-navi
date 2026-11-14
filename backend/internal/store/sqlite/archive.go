@@ -201,7 +201,7 @@ func (s *Store) GetPostArchive(ctx context.Context, from, to, account string, pa
 		return nil, err
 	}
 
-	previous, next, err := s.adjacentDates(ctx, "posts", instant, filter, filterArgs, start, end)
+	previous, next, err := s.adjacentDates(ctx, "posts", instant, " AND "+wallPostSQL+filter, filterArgs, start, end)
 	if err != nil {
 		return nil, err
 	}

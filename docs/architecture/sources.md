@@ -236,8 +236,9 @@ shows a hidden promoted post, and returning a status to the rules lets them
 decide again. A related account's status and any reposted status can be
 promoted by hand. Returned to the rules, a status they do not promote (any
 but a related account's status that matches its keywords) stays unpromoted,
-or hidden when it was promoted. A pooled status that is an own post is never
-promoted or demoted.
+or hidden when it was promoted. A pooled status that is an own post, or
+whose author is an own account (a configured handle, or one with own posts
+or reposts stored), is never promoted.
 
 #### X API in the chain
 
@@ -1845,9 +1846,13 @@ multiple reposts of one original in an X API page. The board shows a reposted
 status only once an operator promotes it (below). The timed X API method asks for the
 account's posts without retweets, so it records none.
 
+A detail answer that carries `retweet` with the reposting account as its
+author is never a post: when the reposted status has no ID, or the requested
+one, the answer fails with `x_invalid_response` and keeps the stored post.
+
 A stored own post under a repost's own ID (an archive import can write one)
-is removed with everything keyed to it, and the events it alone supported
-are retired, in the same transaction (see
+is soft-deleted with everything keyed to it kept, and the events it alone
+supported are retired, in the same transaction (see
 [Reposts stored as posts](data-model.md#reposts-stored-as-posts)). No later
 write stores a post under that ID.
 
@@ -1886,8 +1891,8 @@ a detail request even when a timeline page lists the status (which would
 otherwise store it from the page and leave the stored post unchanged) and
 even while a failure backoff holds it. A usable answer rewrites the post,
 its quote and its `quote-image` links like any detail answer; the hide
-decision stays. An answer that the status is the account's repost removes
-the post and records the repost instead (see [Reposts](#reposts)). The request is cleared once its detail request was made,
+decision stays. An answer that the status is the account's repost
+soft-deletes the post and records the repost instead (see [Reposts](#reposts)). The request is cleared once its detail request was made,
 whatever it answered; a failed request is then pending like any other. A
 refresh shares the X status-request budget, so with a budget of 0 it
 waits. The step result counts made refreshes as `refreshed`, only when

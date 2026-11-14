@@ -334,6 +334,10 @@ function QuoteCard({
       {shown.length ? (
         <div className="post-quote-media">
           {shown.map((item, index) => {
+            // A quoted video or GIF plays on X, from the quote's page. The
+            // tile that counts the hidden images opens the viewer, which
+            // reaches them, whatever it shows.
+            const more = hidden > 0 && index === shown.length - 1
             const content = (
               <>
                 <img
@@ -344,15 +348,14 @@ function QuoteCard({
                   loading="lazy"
                 />
                 <MediaKindMark kind={item.kind} />
-                {hidden > 0 && index === shown.length - 1 ? (
+                {more ? (
                   <span className="post-quote-more" aria-hidden="true">
                     +{hidden}
                   </span>
                 ) : null}
               </>
             )
-            // A quoted video or GIF plays on X, from the quote's page.
-            return isPlayable(item) ? (
+            return isPlayable(item) && !more ? (
               <ExternalLink
                 className="media-opener is-playable"
                 key={item.id || item.url}
@@ -804,7 +807,8 @@ export function PostWall({
 
 /**
  * The post archive's account filter, counting the month's posts per account
- * (keyed by lowercase handle or mid).
+ * (keyed by lowercase handle or mid). All counts the month's total, which
+ * includes promoted posts filed under their authors' handles.
  */
 export function PostArchiveFilter({
   accounts,
@@ -812,6 +816,7 @@ export function PostArchiveFilter({
   account,
   setAccount,
   counts,
+  total,
   t,
 }: {
   accounts: string[]
@@ -819,15 +824,18 @@ export function PostArchiveFilter({
   account: string | null
   setAccount: (account: string | null) => void
   counts: Record<string, number> | undefined
+  total?: number | null
   t: Translator
 }) {
   const filters = postAccounts(accounts, bilibiliAccounts)
   if (filters.length < 2) return null
   const countFor = (handle: string) =>
     counts ? (counts[handle.toLowerCase()] ?? 0) : null
-  const all = counts
-    ? filters.reduce((sum, item) => sum + (countFor(item.handle) || 0), 0)
-    : null
+  const all =
+    total ??
+    (counts
+      ? filters.reduce((sum, item) => sum + (countFor(item.handle) || 0), 0)
+      : null)
   return (
     <div className="segmented" role="group" aria-label={t("feed.filter")}>
       <button

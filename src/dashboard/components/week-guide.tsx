@@ -795,8 +795,10 @@ export function ScheduleMonth({
   }
 
   // Until the month arrives the grid stands with its dates and no entries,
-  // so a month change never collapses the layout.
-  const loading = !archive
+  // so a month change never collapses the layout. A failed read shows its
+  // error instead of outlines until a retry starts.
+  const loading = !archive && (isLoading || !error)
+  const unavailable = !archive && !loading
   const empty = Boolean(archive && !archive.total)
 
   return (
@@ -842,7 +844,7 @@ export function ScheduleMonth({
                 aria-atomic="true"
               >
                 <h3>{formatLongDate(selected, locale)}</h3>
-                {loading ? null : (
+                {loading || unavailable ? null : (
                   <span>
                     {t("schedule.weekCount", { count: selectedCount })}
                   </span>
@@ -850,7 +852,7 @@ export function ScheduleMonth({
               </div>
               {loading ? (
                 <Placeholder lines={2} />
-              ) : selectedItems.length ? (
+              ) : unavailable ? null : selectedItems.length ? (
                 <ol className="guide-day-events">
                   {selectedItems.map((event) => (
                     <GuideEvent

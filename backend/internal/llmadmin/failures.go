@@ -42,11 +42,13 @@ func RecentFailures(ctx context.Context, db Querier) ([]Failure, error) {
 			e.extractor_version AS version, e.model AS model, e.error AS message, e.updated_at AS at
 		FROM schedule_extractions e
 		WHERE e.status = 'failed' AND COALESCE(e.error, '') NOT IN ('', ?)
+			AND e.source_item_id NOT IN (SELECT id FROM posts WHERE deleted_at IS NOT NULL)
 		UNION ALL
 		SELECT 'verify', 'image', r.asset_id, a.source_url, NULL, r.llm_model, r.llm_reason,
 			COALESCE(r.llm_checked_at, r.updated_at)
 		FROM schedule_asset_reviews r LEFT JOIN assets a ON a.id = r.asset_id
 		WHERE r.llm_status = 'failed' AND COALESCE(r.llm_reason, '') NOT IN ('', ?)
+			AND r.asset_id NOT IN (SELECT 'schedule-x-'||id FROM posts WHERE deleted_at IS NOT NULL)
 		UNION ALL
 		SELECT 'translate', ts.owner_type, ts.owner_id,
 			CASE ts.owner_type
@@ -56,6 +58,7 @@ func RecentFailures(ctx context.Context, db Querier) ([]Failure, error) {
 			NULL, NULL, ts.last_error, COALESCE(ts.last_attempt_at, ts.updated_at)
 		FROM translation_states ts
 		WHERE ts.status = 'failed' AND COALESCE(ts.last_error, '') NOT IN ('', ?)
+			AND NOT (ts.owner_type = 'post' AND ts.owner_id IN (SELECT id FROM posts WHERE deleted_at IS NOT NULL))
 	) ORDER BY julianday(at) DESC, route ASC, subject_id ASC LIMIT ?`,
 		cancelledMessage, cancelledMessage, cancelledMessage, recentFailureLimit)
 }

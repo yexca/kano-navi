@@ -473,7 +473,7 @@ func (e *Extractor) listCandidatePosts(ctx context.Context, keywords []string, d
 			AND s.failure_count = 0 AND s.failure_fingerprint IS NULL AND s.next_attempt_at IS NULL,
 		s.settled_stamp
 		FROM posts p LEFT JOIN post_llm_states s ON s.post_id = p.id
-		WHERE p.source IN ('x','bilibili') AND p.hidden_at IS NULL
+		WHERE p.source IN ('x','bilibili') AND p.hidden_at IS NULL AND p.deleted_at IS NULL
 			AND (? = '' OR julianday(p.published_at) >= julianday(?))
 		ORDER BY p.published_at DESC`, detectionType, extractorVersion, routeForDetectionType(detectionType), cutoff, cutoff)
 	if err != nil {
@@ -549,7 +549,7 @@ func (e *Extractor) listRequestedPosts(ctx context.Context, limit int) ([]post, 
 	rows, err := e.db.QueryContext(ctx, `SELECT p.source, p.id, p.text, p.published_at, p.url, p.media_url,
 		p.raw_json, s.route, CASE WHEN p.quote_hidden_at IS NULL THEN p.quote_json END
 		FROM posts p LEFT JOIN post_llm_states s ON s.post_id = p.id
-		WHERE s.reprocess_requested = 1 AND p.hidden_at IS NULL
+		WHERE s.reprocess_requested = 1 AND p.hidden_at IS NULL AND p.deleted_at IS NULL
 		ORDER BY p.published_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -1032,7 +1032,7 @@ func scanAssetReview(row rowScanner) (*assetReview, error) {
 func getAssetReview(ctx context.Context, q queryer, assetID string) (*assetReview, error) {
 	review, err := scanAssetReview(q.QueryRowContext(ctx, `SELECT `+assetReviewColumns+`
 		FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id = a.id
-		WHERE a.id = ? AND a.kind = 'schedule'`, assetID))
+		WHERE a.id = ? AND a.kind = 'schedule' AND `+sqlite.LiveScheduleAssetSQL("a"), assetID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -1042,7 +1042,7 @@ func getAssetReview(ctx context.Context, q queryer, assetID string) (*assetRevie
 func listAssetReviews(ctx context.Context, q queryer) ([]*assetReview, error) {
 	rows, err := q.QueryContext(ctx, `SELECT `+assetReviewColumns+`
 		FROM assets a LEFT JOIN schedule_asset_reviews r ON r.asset_id = a.id
-		WHERE a.kind = 'schedule'
+		WHERE a.kind = 'schedule' AND `+sqlite.LiveScheduleAssetSQL("a")+`
 		ORDER BY COALESCE(a.week_start, a.updated_at) DESC, a.id ASC`)
 	if err != nil {
 		return nil, err

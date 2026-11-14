@@ -67,8 +67,10 @@ operator actions, and share the bounded single-flight synchronization queue.
 - Failed logins are rate-limited per observed client address. With the
   one-time code on, logins with the right password and a wrong code are also
   limited across every address (10 per 5 minutes), after which every login
-  waits for the window to reset; such failures mean the password has leaked,
-  so replace it. A wrong password counts only toward its address. The limit
+  fails with `invalid_credentials`, as a wrong password does, until the
+  window resets, so the lockout never confirms the password; such failures
+  mean the password has leaked, so replace it. A wrong password counts only
+  toward its address. The limit
   check, the verification and the counters are one atomic step, so
   concurrent logins cannot exceed either limit or sign in after it is
   reached. Server restarts clear all sessions.

@@ -187,3 +187,25 @@ func TestAPIRepostsKeepEveryRetweetIdentity(t *testing.T) {
 		t.Fatalf("distinct retweets of one original: %+v", got)
 	}
 }
+
+// The account's repost whose reposted status cannot be read (no ID, or the
+// requested ID itself) fails as an invalid answer and is never a post.
+func TestUnreadableDetailRepostIsNeverAPost(t *testing.T) {
+	const requested = "1900000000000000910"
+	for name, retweet := range map[string]string{
+		"no id":   `{"text":"notice","user_screen_name":"someone"}`,
+		"same id": `{"tweetID":"` + requested + `","text":"notice","user_screen_name":"someone"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := `{"tweetID":"` + requested + `","text":"RT @someone: notice","date_epoch":1792540800,"user_screen_name":"kano","retweet":` + retweet + `}`
+			client := NewClient(&http.Client{Transport: fakeRoundTripper(func(r *http.Request) (*http.Response, error) {
+				return response(200, body), nil
+			})})
+			opts := Options{RefreshOnly: true, RefreshIDs: []string{requested}, MaxDetailRequests: 1}
+			got, err := NewAdapter(client, opts).FetchRecent(context.Background(), "kano", opts)
+			if err == nil || safeCode(err) != string(ErrInvalidResponse) || len(got.Posts) != 0 || len(got.Reposts) != 0 {
+				t.Fatalf("unreadable repost: %+v err=%v", got, err)
+			}
+		})
+	}
+}

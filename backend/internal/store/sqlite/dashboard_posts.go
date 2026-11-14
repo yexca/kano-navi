@@ -45,11 +45,11 @@ func scanPostRow(row scanner) (postRow, error) {
 }
 
 // wallPostSQL holds for a post of the unaliased posts table that the post
-// wall and the archive list: not hidden, and not a promoted post that a shown
+// wall and the archive list: not deleted or hidden, and not a promoted post that a shown
 // own post's shown quote already carries. The second is a display
 // rule computed at read time; the quote card returns the post to the wall
 // when the quoting post or its quote is hidden.
-const wallPostSQL = `hidden_at IS NULL AND NOT (promoted_at IS NOT NULL AND EXISTS (SELECT 1 FROM posts wq WHERE wq.source='x' AND wq.promoted_at IS NULL AND wq.hidden_at IS NULL AND wq.quote_hidden_at IS NULL AND json_valid(wq.quote_json) AND json_extract(wq.quote_json,'$.id')=posts.id))`
+const wallPostSQL = `deleted_at IS NULL AND hidden_at IS NULL AND NOT (promoted_at IS NOT NULL AND EXISTS (SELECT 1 FROM posts wq WHERE wq.source='x' AND wq.promoted_at IS NULL AND wq.deleted_at IS NULL AND wq.hidden_at IS NULL AND wq.quote_hidden_at IS NULL AND json_valid(wq.quote_json) AND json_extract(wq.quote_json,'$.id')=posts.id))`
 
 // dashboardAccountPosts is how many of each account's newest posts the board
 // always lists, however old, so every account's filter fills the wall's whole
@@ -65,7 +65,7 @@ func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error)
 	// post appears in the combined wall, never as an account of its own.
 	rows, err := s.db.QueryContext(ctx, `SELECT `+postColumns+` FROM posts WHERE id IN (
 		SELECT id FROM (SELECT id FROM posts WHERE `+wallPostSQL+` AND `+instant+` >= julianday(?) ORDER BY `+instant+` DESC, id ASC LIMIT 100)
-		UNION SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY lower(COALESCE(account_handle, '')) ORDER BY `+instant+` DESC, id ASC) AS n FROM posts WHERE hidden_at IS NULL AND promoted_at IS NULL) WHERE n <= ?
+		UNION SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY lower(COALESCE(account_handle, '')) ORDER BY `+instant+` DESC, id ASC) AS n FROM posts WHERE deleted_at IS NULL AND hidden_at IS NULL AND promoted_at IS NULL) WHERE n <= ?
 	) ORDER BY `+instant+` DESC, id ASC`, since, dashboardAccountPosts)
 	if err != nil {
 		return nil, dbErr(err)
@@ -87,7 +87,7 @@ func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error)
 
 func (s *Store) queryLatestPost(ctx context.Context) (*postRow, error) {
 	// The latest post is an own account's: a promoted post never takes it.
-	r, err := scanPostRow(s.db.QueryRowContext(ctx, `SELECT `+postColumns+` FROM posts WHERE hidden_at IS NULL AND promoted_at IS NULL ORDER BY julianday(published_at) DESC,id ASC LIMIT 1`))
+	r, err := scanPostRow(s.db.QueryRowContext(ctx, `SELECT `+postColumns+` FROM posts WHERE deleted_at IS NULL AND hidden_at IS NULL AND promoted_at IS NULL ORDER BY julianday(published_at) DESC,id ASC LIMIT 1`))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

@@ -377,18 +377,18 @@ test("month archives page by revision, follow the board and cancel on close", as
           await fixture.respond(5, fixture.page(4, 2, ["d2"]))
           assert.equal(fixture.ids(), "b2,c2,d2")
           assert.equal(first(), 2)
-          // A newer page from another revision rereads instead of joining.
+          // A newer page from another revision rereads the whole run from
+          // that newer page instead of joining, so it still arrives.
           await act(async () => void fixture.current().loadNewer())
           await fixture.respond(6, fixture.page(1, 3, ["a3"], true))
-          assert.match(fixture.requests[7].url, /[?&]page=2&/)
-          await fixture.respond(7, fixture.page(2, 3, ["b3"], true))
-          await fixture.respond(8, fixture.page(3, 3, ["c3"], true))
-          await fixture.respond(9, fixture.page(4, 3, ["d3"]))
-          assert.equal(fixture.ids(), "b3,c3,d3")
-          await act(async () => void fixture.current().loadNewer())
-          await fixture.respond(10, fixture.page(1, 3, ["a3"], true))
+          assert.match(fixture.requests[7].url, /[?&]page=1&/)
+          await fixture.respond(7, fixture.page(1, 3, ["a3"], true))
+          await fixture.respond(8, fixture.page(2, 3, ["b3"], true))
+          await fixture.respond(9, fixture.page(3, 3, ["c3"], true))
+          await fixture.respond(10, fixture.page(4, 3, ["d3"]))
           assert.equal(fixture.ids(), "a3,b3,c3,d3")
           assert.equal(first(), 1)
+          assert.equal(fixture.current().archive.page, 4)
           // Nothing is newer than page one.
           await act(async () => void fixture.current().loadNewer())
           assert.equal(fixture.requests.length, 11)

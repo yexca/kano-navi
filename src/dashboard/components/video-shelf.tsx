@@ -1109,13 +1109,25 @@ export function VideoTimeline({
     if (!list || !body) return
     return holdInView(body, list, () => videoCard(body, keep.id), keep.top)
   }, [firstId])
+  // Whether the reader asked for newer videos and they are still loading; a
+  // background reread neither relabels nor disables the button, so it keeps
+  // keyboard focus.
+  const [newerPending, setNewerPending] = useState(false)
+  useEffect(() => {
+    if (isLoading) return
+    // A read that settled without newer videos leaves nothing to hold.
+    keepRef.current = null
+    setNewerPending(false)
+  }, [isLoading, newerPending])
   const showNewer = () => {
+    if (isLoading) return
     const card =
       firstId && listRef.current ? videoCard(listRef.current, firstId) : null
     keepRef.current =
       card && firstPage > 1
         ? { id: firstId!, top: card.getBoundingClientRect().top }
         : null
+    setNewerPending(true)
     onNewer()
   }
 
@@ -1137,11 +1149,12 @@ export function VideoTimeline({
           <button
             type="button"
             className="pill-button"
-            disabled={isLoading}
+            aria-disabled={isLoading || undefined}
+            aria-busy={newerPending || undefined}
             onClick={showNewer}
           >
             <ChevronUp aria-hidden="true" />
-            {isLoading ? t("common.refreshing") : t("videos.newer")}
+            {newerPending ? t("common.refreshing") : t("videos.newer")}
           </button>
         </div>
       ) : null}

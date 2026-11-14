@@ -57,7 +57,7 @@ var TranslationPostSources = []string{"x", "bilibili"}
 // TranslatedPostSQL is a condition on the posts row aliased alias: its source
 // is one the machine step translates.
 func TranslatedPostSQL(alias string) string {
-	return alias + ".source IN ('" + strings.Join(TranslationPostSources, "','") + "')"
+	return alias + ".source IN ('" + strings.Join(TranslationPostSources, "','") + "') AND " + livePostSQL(alias)
 }
 
 // SourceLanguages are the codes the machine step records: none means there is
@@ -119,7 +119,7 @@ type translationOwner struct {
 
 // An origin without a column ignores the alias through %.0[1]s.
 var translationOwners = map[string]translationOwner{
-	TranslationOwnerPost:           {table: "posts", field: "text", source: "%[1]s.text", instant: "%[1]s.published_at", scope: "%[1]s.source IN ('x','bilibili')", origin: "%[1]s.source"},
+	TranslationOwnerPost:           {table: "posts", field: "text", source: "%[1]s.text", instant: "%[1]s.published_at", scope: "%[1]s.source IN ('x','bilibili') AND %[1]s.deleted_at IS NULL", origin: "%[1]s.source"},
 	TranslationOwnerVideo:          {table: "videos", field: "title", source: videoTitleSource, instant: "COALESCE(%[1]s.scheduled_at, %[1]s.published_at)", scope: videoTranslationScope, origin: "%[1]s.source"},
 	TranslationOwnerXStatus:        {table: "x_statuses", field: "text", source: "%[1]s.text", instant: xStatusInstant, scope: xStatusTranslationScope, origin: "%.0[1]s'x'"},
 	TranslationOwnerBilibiliStatus: {table: "bilibili_statuses", field: "text", source: "%[1]s.text", instant: "%[1]s.forwarded_at", scope: bilibiliStatusTranslationScope, origin: "%.0[1]s'bilibili'"},

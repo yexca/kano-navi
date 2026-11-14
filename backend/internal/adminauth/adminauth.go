@@ -94,7 +94,8 @@ type attempt struct {
 
 // codeFailureLimit bounds logins with the right password and a wrong code
 // across every address, so spreading guesses over many addresses does not
-// widen the six-digit search.
+// widen the six-digit search. Once it is reached every login fails with
+// invalid_credentials until the window resets.
 const codeFailureLimit = 10
 
 type Auth struct {
@@ -228,7 +229,7 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	a.purgeLocked(now)
 	current := a.attempts[address]
-	if current.count >= 5 && current.resetAt.After(now) || a.codeFailures.count >= codeFailureLimit {
+	if current.count >= 5 && current.resetAt.After(now) {
 		a.mu.Unlock()
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too_many_attempts"})
 		return
@@ -237,12 +238,16 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 	expected := []byte(a.cfg.Password)
 	matches := len(actual) == len(expected) && subtle.ConstantTimeCompare(actual, expected) == 1
 	step, codeMatches := int64(0), true
+	locked := false
 	if a.RequiresCode() {
 		step, codeMatches = matchTOTP(a.cfg.TOTPSecret, code, now)
 		// A code is accepted once: a later login needs a later step.
 		codeMatches = codeMatches && step > a.lastStep
+		// The shared limit fails every login as a wrong password does, so
+		// the lockout never tells which password is right.
+		locked = a.codeFailures.count >= codeFailureLimit
 	}
-	if !matches || !codeMatches {
+	if !matches || !codeMatches || locked {
 		if current.resetAt.IsZero() || !current.resetAt.After(now) {
 			current = attempt{resetAt: now.Add(5 * time.Minute)}
 		}
@@ -250,7 +255,7 @@ func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 		a.attempts[address] = current
 		// Only the right password with a wrong code spends the shared
 		// allowance; a wrong password is limited per address alone.
-		if matches {
+		if matches && !locked {
 			if a.codeFailures.resetAt.IsZero() {
 				a.codeFailures.resetAt = now.Add(5 * time.Minute)
 			}
