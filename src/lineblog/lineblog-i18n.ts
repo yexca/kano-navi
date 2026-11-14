@@ -63,9 +63,6 @@ export const lineblogMessages = {
     "lineblog.commentsNote": "网页存档中保留下来的评论。",
     "lineblog.commentRating": ({ value }: { value: number }) =>
       `评分 ${value}/5`,
-    "lineblog.disclaimerLabel": "版权与说明",
-    "lineblog.disclaimer":
-      "LINE BLOG 存档中的文章、图片与视频，其权利归鹿乃及相应权利人所有。本页为粉丝整理的离线存档，与 LINE 及相关组织无关。中文翻译由 AI 根据日文原文生成。",
   },
   ja: {
     "lineblog.metaTitle": "LINE BLOG アーカイブ · 鹿乃ちゃん何してるか",
@@ -131,9 +128,6 @@ export const lineblogMessages = {
     "lineblog.commentsNote": "保存ページに残っていたコメントです。",
     "lineblog.commentRating": ({ value }: { value: number }) =>
       `評価 ${value}/5`,
-    "lineblog.disclaimerLabel": "権利と注意事項",
-    "lineblog.disclaimer":
-      "LINE BLOG アーカイブの記事・画像・動画の権利は、鹿乃さんと各権利者に帰属します。このページはファンによるオフラインアーカイブで、LINE および関係団体とは関係ありません。",
   },
   en: {
     "lineblog.metaTitle": "LINE BLOG archive · What’s Kano Up To?",
@@ -206,8 +200,5 @@ export const lineblogMessages = {
       "The comments an archived copy of the page preserved.",
     "lineblog.commentRating": ({ value }: { value: number }) =>
       `Rated ${value} of 5`,
-    "lineblog.disclaimerLabel": "Rights and notes",
-    "lineblog.disclaimer":
-      "Posts, images and videos in the LINE BLOG archive belong to Kano and their respective rights holders. This page is a fan-made offline archive, unaffiliated with LINE or related organizations. The English translations are AI translations of the Japanese posts.",
   },
 }

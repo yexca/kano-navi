@@ -712,7 +712,7 @@ export function HistoryApp() {
         </Tabs>
       </main>
 
-      <SiteFooter disclaimer={t("history.disclaimer")} />
+      <SiteFooter />
       <MediaDialog
         items={viewer?.items}
         index={viewer?.index || 0}

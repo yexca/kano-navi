@@ -261,10 +261,7 @@ export function LineblogApp() {
         </div>
       )}
 
-      <SiteFooter
-        disclaimer={t("lineblog.disclaimer")}
-        disclaimerLabel={t("lineblog.disclaimerLabel")}
-      />
+      <SiteFooter />
     </div>
   )
 }

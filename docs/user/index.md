@@ -26,8 +26,11 @@ Every page shares one header with the site name (with an "Unofficial" mark on
 wide screens), the page links (Now, Journey, Works, LINE BLOG, About), a live
 Japan-time clock, and language and theme controls. The footer says the site
 is fan-made and unaffiliated and links to About and Back to top. **Notes**
-(**Rights and notes** on the LINE BLOG archive) opens the page's notes below
-it.
+opens the site's notice in a window, the same on every page: the site is
+unofficial and unaffiliated, the board is not a live feed and the original
+pages are authoritative, the archives are curated by hand, some translations
+are AI-generated, third-party content belongs to its rights holders, and the
+code license. The About page shows the same notice.
 
 - **Languages:** English, Japanese, and Simplified Chinese. The language
   menu sets the interface language and, separately, the content language:

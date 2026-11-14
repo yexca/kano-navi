@@ -102,6 +102,9 @@
   for iOS (in development) and the mainland China server site. Credits and
   the technologies, AI models included, each take one section, and the
   project links, version and author share one row.
+- Notes in the footer opens one notice, the same on every page, in a
+  dialog instead of unfolding the page's own note in the footer; About
+  shows the same notice.
 
 </details>
 

@@ -44,15 +44,6 @@ export const aboutMessages = {
     "about.group.backend": "后端",
     "about.group.delivery": "运行与交付",
     "about.notice": "使用与许可说明",
-    "about.unofficial":
-      "本站为粉丝制作，与鹿乃まほろ本人、所属机构及相关组织无隶属关系，也不代表官方立场。",
-    "about.accuracy":
-      "内容来自公开来源及人工整理，自动识别的日程可能存在误差。活动时间、变更与公告请以原始来源为准。",
-    "about.rights":
-      "本站展示的图片、作品、名称及其他第三方内容，其权利归原权利人所有，不属于本站代码许可证的授权范围。",
-    "about.licenseText":
-      "本站代码采用 GNU AGPL v3（AGPL-3.0）许可证，不提供任何保证。",
-    "about.fullLicense": "查看完整许可证",
   },
   ja: {
     "about.kicker": "このサイトについて",
@@ -101,15 +92,6 @@ export const aboutMessages = {
     "about.group.backend": "バックエンド",
     "about.group.delivery": "実行環境・配布",
     "about.notice": "ご利用とライセンスについて",
-    "about.unofficial":
-      "本サイトはファンによる制作であり、鹿乃まほろ本人、所属事務所、関連団体とは関係ありません。公式の見解を示すものではありません。",
-    "about.accuracy":
-      "公開情報と手作業による整理に基づいており、自動抽出された予定には誤りが含まれる場合があります。開催日時、変更、お知らせは元の情報をご確認ください。",
-    "about.rights":
-      "掲載画像、作品、名称などの第三者コンテンツの権利は各権利者に帰属し、本サイトのコードライセンスの対象には含まれません。",
-    "about.licenseText":
-      "本サイトのコードは GNU AGPL v3（AGPL-3.0）で提供され、いかなる保証もありません。",
-    "about.fullLicense": "ライセンス全文を読む",
   },
   en: {
     "about.kicker": "About",
@@ -158,14 +140,5 @@ export const aboutMessages = {
     "about.group.backend": "Backend",
     "about.group.delivery": "Runtime & delivery",
     "about.notice": "Usage & license",
-    "about.unofficial":
-      "This is a fan-made site with no affiliation to Kano Mahoro, her agency, or related organizations. It does not represent an official position.",
-    "about.accuracy":
-      "Content comes from public sources and manual curation. Automatically extracted schedules may contain errors. Refer to the original source for event times, changes, and announcements.",
-    "about.rights":
-      "Images, works, names, and other third-party content belong to their respective rights holders and are outside the scope of this site’s code license.",
-    "about.licenseText":
-      "This site’s code is licensed under GNU AGPL v3 (AGPL-3.0), without any warranty.",
-    "about.fullLicense": "Read the full license",
   },
 }

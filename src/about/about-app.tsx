@@ -13,12 +13,12 @@ import type { LucideIcon } from "lucide-react"
 import { version } from "../../package.json"
 import { useAppSettings } from "@/app-settings"
 import { ExternalLink } from "@/site/links"
-import { REPOSITORY_URL } from "@/site/repository"
+import { LICENSE_URL, REPOSITORY_URL } from "@/site/repository"
+import { SiteNotice } from "@/site/site-notice"
 import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
 import "./about.css"
 
 const AUTHOR = "yexca"
-const LICENSE_URL = `${REPOSITORY_URL}/blob/main/LICENSE`
 const CONTRIBUTORS_URL = `${REPOSITORY_URL}/graphs/contributors`
 /**
  * GitHub logins. Avatars load from GitHub's avatar CDN, which answers
@@ -345,23 +345,12 @@ export function AboutApp() {
           </Chapter>
 
           <Chapter number={4} title={t("about.notice")}>
-            <div className="about-notice">
-              <p>{t("about.unofficial")}</p>
-              <p>{t("about.accuracy")}</p>
-              <p>{t("about.rights")}</p>
-              <p>
-                {t("about.licenseText")}{" "}
-                <ExternalLink className="text-link" href={LICENSE_URL}>
-                  {t("about.fullLicense")}
-                  <ArrowUpRight aria-hidden="true" />
-                </ExternalLink>
-              </p>
-            </div>
+            <SiteNotice />
           </Chapter>
         </div>
       </main>
 
-      <SiteFooter disclaimer={t("footer.disclaimer")} />
+      <SiteFooter />
     </div>
   )
 }

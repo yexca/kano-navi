@@ -339,19 +339,6 @@
   font-weight: 700;
 }
 
-/* --------------------------------------------------------------- notice */
-
-.about-notice {
-  display: grid;
-  gap: 10px;
-}
-
-.chapter-body .about-notice p {
-  color: var(--soft);
-  font-size: 13.5px;
-  line-height: 1.8;
-}
-
 @media (max-width: 760px) {
   .about-hero {
     padding-top: 32px;

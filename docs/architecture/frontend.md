@@ -59,7 +59,9 @@ public pages share `src/site/`: `site-shell.tsx` (header with page navigation an
 Japan clock, footer, skip link, section title, empty and loading states;
 narrow screens show the site name and fold the page links into a menu behind
 the `kano-seal.tsx` deer seal; the footer is the fan-made and unaffiliated
-line, About and Back to top, with the page's disclaimer behind a switch),
+line, Notes, About and Back to top),
+`site-notice.tsx` (the site's one notice, the same on every page, which
+Notes opens in a native modal dialog and About shows in place),
 `media-dialog.tsx` (the native modal image viewer: its close button stays in
 the screen's top-right corner, and a click anywhere outside the image, its
 arrows and its details closes it; a set without details takes the

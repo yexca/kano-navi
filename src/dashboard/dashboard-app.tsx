@@ -554,7 +554,7 @@ export function DashboardApp() {
         />
       </main>
 
-      <SiteFooter disclaimer={t("footer.disclaimer")} />
+      <SiteFooter />
 
       <div
         className={`toast${toast ? " is-visible" : ""}`}

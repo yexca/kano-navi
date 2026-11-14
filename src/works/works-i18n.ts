@@ -28,8 +28,6 @@ export const worksMessages = {
     "works.section.uploads": "投稿作品",
     "works.sections": "作品分类",
     "works.officialDiscography": "官网唱片目录",
-    "works.disclaimer":
-      "非官方粉丝站。封面与作品的权利属于各自的权利人；部分封面文件取自商店或数据库页面，已逐一注明。",
     "works.loading": "正在载入",
     "works.loadFailed": "这部分没能载入。",
     "works.retry": "重试",
@@ -193,8 +191,6 @@ export const worksMessages = {
     "works.section.uploads": "投稿作品",
     "works.sections": "作品の種類",
     "works.officialDiscography": "公式ディスコグラフィー",
-    "works.disclaimer":
-      "非公式のファンサイトです。ジャケットと作品の権利は各権利者に帰属します。ショップやデータベースから取得したジャケットはその旨を記載しています。",
     "works.loading": "読み込み中",
     "works.loadFailed": "この部分を読み込めませんでした。",
     "works.retry": "再試行",
@@ -359,8 +355,6 @@ export const worksMessages = {
     "works.section.uploads": "Uploads",
     "works.sections": "Kinds of works",
     "works.officialDiscography": "Official discography",
-    "works.disclaimer":
-      "An unofficial fan site. Covers and works belong to their rights holders; covers taken from a shop or database page are marked as such.",
     "works.loading": "Loading",
     "works.loadFailed": "This part could not load.",
     "works.retry": "Try again",

@@ -761,7 +761,7 @@ export function WorksApp() {
         </Tabs>
       </main>
 
-      <SiteFooter disclaimer={t("works.disclaimer")} />
+      <SiteFooter />
       {open ? (
         <ReleaseSheet
           key={open.id}

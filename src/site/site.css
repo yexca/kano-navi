@@ -305,9 +305,9 @@
 /* ------------------------------------------------------------------ footer */
 
 /*
- * One row: the fan-made line, then the notes switch, About and Back to top.
- * The page's notes open on a row of their own below. Phones put the lines on
- * top of each other.
+ * One row: the fan-made line, then Notes, About and Back to top. Notes opens
+ * the site's notice in a dialog, so the footer keeps its height. Phones put
+ * the lines on top of each other.
  */
 .site-footer {
   position: relative;
@@ -348,15 +348,6 @@
   font-size: 14px;
 }
 
-.site-footer-more {
-  grid-column: 1 / -1;
-  max-width: 72ch;
-  margin: 0;
-  color: var(--soft);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
 .site-footer-mirror {
   margin: 2px 0 0;
   font-size: 13px;
@@ -390,7 +381,7 @@
 }
 
 .site-footer-links a,
-.site-footer-toggle {
+.site-footer-notes {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -398,21 +389,13 @@
 }
 
 .site-footer-links a:hover,
-.site-footer-toggle:hover {
+.site-footer-notes:hover {
   color: var(--berry);
 }
 
 .site-footer-links svg {
   width: 14px;
   height: 14px;
-}
-
-.site-footer-toggle svg {
-  transition: transform 160ms ease;
-}
-
-.site-footer-toggle[aria-expanded="true"] svg {
-  transform: rotate(180deg);
 }
 
 @media (max-width: 680px) {
@@ -433,18 +416,109 @@
     display: none;
   }
 
-  /* The notes open between the lines and the links. */
-  .site-footer-more {
-    grid-row: 2;
-  }
-
   .site-footer-links {
     justify-content: flex-start;
   }
 
-  .site-footer-toggle {
+  .site-footer-notes {
     margin-right: auto;
   }
+}
+
+/* ------------------------------------------------------------------ notice */
+
+/* The site's notice: one statement per row, divided by hairlines. */
+.site-notice {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-notice li {
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+  color: color-mix(in oklab, var(--ink) 78%, var(--soft));
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.site-notice li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.site-notice li:last-child {
+  padding-bottom: 0;
+}
+
+.site-notice .text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--berry);
+  font-weight: 700;
+}
+
+.site-notice .text-link svg {
+  width: 13px;
+  height: 13px;
+}
+
+.site-notice-dialog {
+  width: min(560px, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+  overscroll-behavior: contain;
+}
+
+.site-notice-dialog::backdrop {
+  background: rgb(20 12 18 / 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.site-notice-sheet {
+  position: relative;
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px 24px;
+}
+
+/* The gingham edge, as on the header and footer. */
+.site-notice-sheet::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 6px;
+  content: "";
+  background: var(--gingham);
+  opacity: 0.5;
+}
+
+.site-notice-sheet header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.site-notice-sheet h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.site-notice-close {
+  flex: none;
 }
 
 /* ---------------------------------------------------------------- sections */

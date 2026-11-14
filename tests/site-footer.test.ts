@@ -5,7 +5,7 @@ import { act, createElement } from "react"
 import { createServer } from "vite"
 import { click, render, type Rendered } from "./dom.ts"
 
-test("the footer's switch opens the page's notes, and it links About and the top", async () => {
+test("the footer's Notes opens the site's notice in a dialog, and it links About and the top", async () => {
   const vite = await createServer({
     configFile: false,
     envDir: false,
@@ -23,32 +23,33 @@ test("the footer's switch opens the page's notes, and it links About and the top
     ])
     await act(async () => {
       root = render(
-        createElement(
-          AppSettingsProvider,
-          null,
-          createElement(SiteFooter, {
-            disclaimer: "Synthetic page notes",
-            disclaimerLabel: "Synthetic label",
-          }),
-        ),
+        createElement(AppSettingsProvider, null, createElement(SiteFooter)),
       )
     })
     const footer = root!.container.querySelector("footer.site-footer")!
+    const page = root!.container.ownerDocument
 
-    // The unaffiliated line stays outside the fold; the notes sit in it.
+    // The unaffiliated line stays in the footer; the notice waits closed.
     assert.match(footer.textContent || "", /Not affiliated/)
-    const toggle = footer.querySelector("button.site-footer-toggle")!
-    assert.equal(toggle.textContent, "Synthetic label")
-    const notes = root!.container.ownerDocument.getElementById(
-      toggle.getAttribute("aria-controls")!,
-    )!
-    assert.match(notes.textContent || "", /Synthetic page notes/)
-    assert.equal(toggle.getAttribute("aria-expanded"), "false")
-    assert.ok(notes.hidden)
+    assert.equal(page.querySelector("dialog.site-notice-dialog"), null)
+    const notes = footer.querySelector("button.site-footer-notes")!
+    assert.equal(notes.textContent, "Notes")
+    assert.equal(notes.getAttribute("aria-haspopup"), "dialog")
 
-    await click(toggle)
-    assert.equal(toggle.getAttribute("aria-expanded"), "true")
-    assert.ok(!notes.hidden)
+    await click(notes)
+    const dialog = page.querySelector("dialog.site-notice-dialog")!
+    assert.ok(dialog)
+    const title = page.getElementById(dialog.getAttribute("aria-labelledby")!)
+    assert.equal(title?.textContent, "Notes")
+    // One notice for every page: affiliation, freshness, rights and license.
+    const text = dialog.textContent || ""
+    assert.match(text, /no affiliation/)
+    assert.match(text, /not a live feed/)
+    assert.match(text, /rights holders/)
+    assert.match(text, /AGPL-3\.0/)
+
+    await click(dialog.querySelector("button.site-notice-close"))
+    assert.equal(page.querySelector("dialog.site-notice-dialog"), null)
 
     // The header holds the pages; the footer links only About and the top.
     assert.deepEqual(

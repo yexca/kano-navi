@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
-import { useEffect, useId, useState } from "react"
-import { ArrowUp, ArrowUpRight, Check, ChevronDown } from "lucide-react"
+import { useEffect, useState } from "react"
+import { ArrowUp, ArrowUpRight, Check } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import { PreferenceControls } from "@/components/preference-controls"
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { KanoSeal } from "./kano-seal"
 import { ExternalLink } from "./links"
+import { NoticeDialog } from "./site-notice"
 import "./site.css"
 
 export type PublicPage = "board" | "history" | "works" | "lineblog" | "about"
@@ -172,21 +173,12 @@ function MainlandSiteLink() {
 
 /**
  * The shared footer: one line saying the site is fan-made and unaffiliated,
- * the page's `disclaimer` behind a `disclaimerLabel` switch, and links to
- * About and the top. The header holds the other pages.
+ * Notes opening the site's notice in a dialog, and links to About and the
+ * top. The header holds the other pages.
  */
-export function SiteFooter({
-  disclaimer,
-  disclaimerLabel,
-  topHref = "#top",
-}: {
-  disclaimer: string
-  disclaimerLabel?: string
-  topHref?: string
-}) {
+export function SiteFooter({ topHref = "#top" }: { topHref?: string }) {
   const { locale, t } = useAppSettings()
   const [open, setOpen] = useState(false)
-  const moreId = useId()
   const about = pages.find((item) => item.id === "about")!
   return (
     <footer className="site-footer">
@@ -204,13 +196,11 @@ export function SiteFooter({
         <nav className="site-footer-links" aria-label={t("header.pages")}>
           <button
             type="button"
-            className="site-footer-toggle"
-            aria-expanded={open}
-            aria-controls={moreId}
-            onClick={() => setOpen((value) => !value)}
+            className="site-footer-notes"
+            aria-haspopup="dialog"
+            onClick={() => setOpen(true)}
           >
-            {disclaimerLabel || t("footer.notes")}
-            <ChevronDown aria-hidden="true" />
+            {t("footer.notes")}
           </button>
           <a href={about.href}>{t(about.labelKey)}</a>
           <a href={topHref}>
@@ -218,10 +208,8 @@ export function SiteFooter({
             {t("footer.backToTop")}
           </a>
         </nav>
-        <p id={moreId} className="site-footer-more" hidden={!open}>
-          {disclaimer}
-        </p>
       </div>
+      {open ? <NoticeDialog onClose={() => setOpen(false)} /> : null}
     </footer>
   )
 }
