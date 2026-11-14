@@ -91,6 +91,9 @@
 - In Safari and on iPhone, the weekly schedule folds past entries to two
   lines of title and cuts other entries' titles at three lines, as in other
   browsers, instead of showing every title whole.
+- In the LINE BLOG menu bar's list of official sites, the site under the
+  pointer or keyboard focus shows its text in the highlight's colour, as the
+  design picker does.
 - A reposted post the operator picks shows on the wall and in Past posts as
   its author's post, marked Reposted by and the account of Kano's that
   reposted it, under All only.
