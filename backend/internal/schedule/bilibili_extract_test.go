@@ -16,7 +16,7 @@ func (f *fixture) addBilibiliPost(id, text, publishedAt string) string {
 	f.t.Helper()
 	url := "https://www.bilibili.com/opus/" + id
 	f.exec(`INSERT INTO posts (id, source, account_handle, type, label, text, published_at, url)
-		VALUES (?, 'bilibili', '316381099', 'daily', 'DAILY / 近况', ?, ?, ?)`, "bilibili-"+id, text, publishedAt, url)
+		VALUES (?, 'bilibili', '316381099', 'daily', 'DAILY', ?, ?, ?)`, "bilibili-"+id, text, publishedAt, url)
 	return url
 }
 

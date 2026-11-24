@@ -114,7 +114,9 @@ signatures and provenance attestations of the installed packages, and make
 go-audit runs govulncheck against the backend and its Go toolchain; make audit
 runs all four. The Dependency audit workflow runs them daily. The advisory
 checks are separate from source privacy and deterministic CI; CI and make ci
-verify the signatures of every fresh installation. Review the lockfile and
+verify the signatures of every fresh installation, and a pull request that
+changes `backend/go.mod`, `backend/go.sum`, `package.json` or
+`package-lock.json` must also pass the matching advisory audit. Review the lockfile and
 outbound boundaries on upgrades. No npm dependency needs an install script: the
 image build installs with `--ignore-scripts`, and SQLite is the pure-Go
 `modernc.org/sqlite` driver pinned in `backend/go.mod`. Review `go.sum`

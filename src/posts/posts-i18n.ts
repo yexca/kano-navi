@@ -1,7 +1,7 @@
-import { dashboardMessages } from "@/dashboard/dashboard-i18n"
+import { postMessages } from "@/dashboard/post-i18n"
 
-// The page reuses the board's post wording (filters, cards, the viewer) and
-// adds its own heading and link-preview copy.
+// The page reuses the board's post wording (filters, cards, the viewer), not
+// the rest of the board's copy, and adds its own heading and link preview.
 const pageMessages = {
   "zh-CN": {
     "posts.metaTitle": "动态 · 鹿乃在做什么",
@@ -39,7 +39,7 @@ const pageMessages = {
 }
 
 export const postsMessages = {
-  "zh-CN": { ...dashboardMessages["zh-CN"], ...pageMessages["zh-CN"] },
-  ja: { ...dashboardMessages.ja, ...pageMessages.ja },
-  en: { ...dashboardMessages.en, ...pageMessages.en },
+  "zh-CN": { ...postMessages["zh-CN"], ...pageMessages["zh-CN"] },
+  ja: { ...postMessages.ja, ...pageMessages.ja },
+  en: { ...postMessages.en, ...pageMessages.en },
 }

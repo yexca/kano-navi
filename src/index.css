@@ -50,7 +50,8 @@
  * Global tokens shared by the public board and /admin.
  * Palette: strawberry red and cream from the banner's gingham, with the sky
  * blue of the outfit as a secondary hue. Dashboard-only styling lives in
- * src/dashboard/dashboard.css; admin-only styling lives in src/admin.css.
+ * src/dashboard/styles/ (imported by src/dashboard/board.css); admin-only
+ * styling lives in src/admin/styles/ (imported by src/admin/admin.css).
  */
 @layer base {
   :root {

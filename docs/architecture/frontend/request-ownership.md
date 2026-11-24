@@ -24,7 +24,13 @@ follow the interface); page message providers
 extend its translator without duplicating preferences. The base dictionary
 holds the copy shared by pages (header, footer, navigation, page status and
 the translation toggle); the board's own copy is in
-`src/dashboard/dashboard-i18n.ts`. While a page's code loads, the current
+`src/dashboard/dashboard-i18n.ts`, which takes its post wording (the wall's
+filters, cards and media, the month bar, the archive state) from
+`src/dashboard/post-i18n.ts`. The `/posts` page loads that post wording and
+its own copy, not the rest of the board's, and likewise only the board's
+base, posts and month-dialog stylesheets from `src/dashboard/styles/`. Each
+page sets its title and link-preview description through `usePageMeta`
+(`src/site/page-meta.ts`). While a page's code loads, the current
 page stays on screen, or on a direct visit a localized loading status
 appears after a short delay; a page error boundary offers a full-page
 reload when a chunk fails (including after a deployment). Direct visits and

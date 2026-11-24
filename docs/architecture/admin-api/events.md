@@ -15,6 +15,10 @@ Curating events and deciding schedule images.
 | `POST /events/{id}/unmerge` |                                                                                                                         | `{event}`         |
 | `DELETE /events/{id}`       |                                                                                                                         | `204` (tombstone) |
 
+Every `{event}` result and the evidence read's event have the fields of a
+`GET /events` item, `extractionId` (the extraction that wrote the entry, or
+`null`) included.
+
 Each event carries `review`, why it needs an operator's look, or `null`:
 `{kind: "suspected", reasons: []}` for a live suspected cancellation,
 `{kind: "unlisted", reasons: []}` for an unconfirmed automatic entry whose

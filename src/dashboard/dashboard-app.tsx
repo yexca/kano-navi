@@ -11,6 +11,7 @@ import { WifiOff } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
 import { MediaDialog, stepIndex } from "@/site/media-dialog"
+import { usePageMeta } from "@/site/page-meta"
 import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
 import { POST_WINDOW_DAYS, VIDEO_WINDOW_DAYS } from "./content"
 import { syncStateFor } from "./freshness"
@@ -183,12 +184,7 @@ export function DashboardApp() {
     index: number
   } | null>(null)
 
-  useEffect(() => {
-    document.title = t("meta.title")
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute("content", t("meta.description"))
-  }, [t])
+  usePageMeta(t("meta.title"), t("meta.description"))
 
   useEffect(() => {
     if (!toast) return undefined

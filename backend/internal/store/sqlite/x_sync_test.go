@@ -16,7 +16,7 @@ func TestWriteXRecentAtomicSnapshotAndCursor(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	r := xsource.Result{Account: "kano", Posts: []xsource.Post{{ID: "1", AccountHandle: "kano", Type: "notice", Label: "SCHEDULE / 日程", Text: "schedule", PublishedAt: "2026-10-11T00:00:00Z", URL: "https://x.com/kano/status/1", MediaURLs: []string{"https://pbs.twimg.com/a.jpg"}, Raw: map[string]any{"x": 1}}}, DiscoveredCount: 1, RequestedCount: 1, NextCursor: "1", NextCursorTime: "2026-10-11T00:00:00Z", ScheduleCandidates: []xsource.ScheduleCandidate{{PostID: "1", SourceURL: "https://x.com/kano/status/1", MediaURL: "https://pbs.twimg.com/a.jpg", AccountHandle: "kano"}}, Discovery: xsource.DiscoveryTimeline}
+	r := xsource.Result{Account: "kano", Posts: []xsource.Post{{ID: "1", AccountHandle: "kano", Type: "notice", Label: xsource.LabelSchedule, Text: "schedule", PublishedAt: "2026-10-11T00:00:00Z", URL: "https://x.com/kano/status/1", MediaURLs: []string{"https://pbs.twimg.com/a.jpg"}, Raw: map[string]any{"x": 1}}}, DiscoveredCount: 1, RequestedCount: 1, NextCursor: "1", NextCursorTime: "2026-10-11T00:00:00Z", ScheduleCandidates: []xsource.ScheduleCandidate{{PostID: "1", SourceURL: "https://x.com/kano/status/1", MediaURL: "https://pbs.twimg.com/a.jpg", AccountHandle: "kano"}}, Discovery: xsource.DiscoveryTimeline}
 	if err = s.WriteXRecent(context.Background(), "kano", r, true); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestWriteXRecentKeepsStoredTimelinePostsAndPendingRetries(t *testing.T) {
 	defer s.Close()
 	ctx := context.Background()
 	post := func(id, text string) xsource.Post {
-		return xsource.Post{ID: id, AccountHandle: "kano", Type: "notice", Label: "SCHEDULE / 日程", Text: text, PublishedAt: "2026-10-1" + id + "T00:00:00Z", URL: "https://x.com/kano/status/" + id, MediaURLs: []string{"https://pbs.twimg.com/media/" + id + ".jpg"}, Raw: map[string]any{}}
+		return xsource.Post{ID: id, AccountHandle: "kano", Type: "notice", Label: xsource.LabelSchedule, Text: text, PublishedAt: "2026-10-1" + id + "T00:00:00Z", URL: "https://x.com/kano/status/" + id, MediaURLs: []string{"https://pbs.twimg.com/media/" + id + ".jpg"}, Raw: map[string]any{}}
 	}
 	candidate := func(id, media string) xsource.ScheduleCandidate {
 		return xsource.ScheduleCandidate{PostID: id, SourceURL: "https://x.com/kano/status/" + id, MediaURL: media, AccountHandle: "kano"}
@@ -134,7 +134,7 @@ func TestWriteXRecentKeepsAPickedScheduleImage(t *testing.T) {
 	}
 	defer s.Close()
 	post := func(media string) xsource.Result {
-		return xsource.Result{Account: "kano", Posts: []xsource.Post{{ID: "1", AccountHandle: "kano", Type: "notice", Label: "SCHEDULE / 日程", Text: "schedule", PublishedAt: "2026-10-11T00:00:00Z", URL: "https://x.com/kano/status/1", MediaURLs: []string{media}, Raw: map[string]any{"x": 1}}},
+		return xsource.Result{Account: "kano", Posts: []xsource.Post{{ID: "1", AccountHandle: "kano", Type: "notice", Label: xsource.LabelSchedule, Text: "schedule", PublishedAt: "2026-10-11T00:00:00Z", URL: "https://x.com/kano/status/1", MediaURLs: []string{media}, Raw: map[string]any{"x": 1}}},
 			DiscoveredCount: 1, RequestedCount: 1, NextCursor: "1", NextCursorTime: "2026-10-11T00:00:00Z", Discovery: xsource.DiscoveryTimeline,
 			ScheduleCandidates: []xsource.ScheduleCandidate{{PostID: "1", SourceURL: "https://x.com/kano/status/1", MediaURL: media, AccountHandle: "kano"}}}
 	}
@@ -170,7 +170,7 @@ func TestWriteXRecentAsksAgainForAReplacedScheduleImage(t *testing.T) {
 	s, _ := openHistoryStore(t)
 	var err error
 	post := func(media string) xsource.Result {
-		return xsource.Result{Account: "kano", Posts: []xsource.Post{{ID: "1", AccountHandle: "kano", Type: "notice", Label: "SCHEDULE / 日程", Text: "schedule", PublishedAt: "2026-10-11T00:00:00Z", URL: "https://x.com/kano/status/1", MediaURLs: []string{media}, Raw: map[string]any{"x": 1}}},
+		return xsource.Result{Account: "kano", Posts: []xsource.Post{{ID: "1", AccountHandle: "kano", Type: "notice", Label: xsource.LabelSchedule, Text: "schedule", PublishedAt: "2026-10-11T00:00:00Z", URL: "https://x.com/kano/status/1", MediaURLs: []string{media}, Raw: map[string]any{"x": 1}}},
 			DiscoveredCount: 1, RequestedCount: 1, NextCursor: "1", NextCursorTime: "2026-10-11T00:00:00Z", Discovery: xsource.DiscoveryTimeline,
 			ScheduleCandidates: []xsource.ScheduleCandidate{{PostID: "1", SourceURL: "https://x.com/kano/status/1", MediaURL: media, AccountHandle: "kano"}}}
 	}

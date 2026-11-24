@@ -231,7 +231,6 @@ function SourceSummary({
         </span>
         <div className="adm-source-summary-title">
           <h2 id={id}>{t(`admin.step.${source}`)}</h2>
-          <p>{t(`admin.sources.${source}.hint`)}</p>
         </div>
         <div className="adm-source-summary-actions">
           <Switch
@@ -246,13 +245,6 @@ function SourceSummary({
             busy={busy === "run"}
             disabled={locked || busy !== "" || (!timed && queued)}
             onClick={runNow}
-            title={t(
-              !timed
-                ? "admin.timer.runNowHint"
-                : queued
-                  ? "admin.queue.runNextHint"
-                  : "admin.queue.startHint",
-            )}
           >
             {t(timed && queued ? "admin.queue.runNext" : "admin.timer.runNow")}
           </Button>
@@ -335,7 +327,6 @@ function YTDLPPanel({
       icon={Download}
       title={t("admin.ytdlp.title")}
       className="adm-panel"
-      help={<p>{t("admin.ytdlp.description")}</p>}
       hint={status?.version || undefined}
       controls={
         status ? (
@@ -437,7 +428,7 @@ const sourceIds: ScheduleSource[] = [
  * the main one.
  */
 export function SourcesView({ tab, navigate }: ViewProps) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const { api, overview } = useAdmin()
   const sources = useResource(() => api.sources(), [])
   const ytdlp = useResource(() => api.ytdlp(), [])

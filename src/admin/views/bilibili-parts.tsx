@@ -84,9 +84,7 @@ export function useForcedRead() {
       icon={ShieldAlert}
       busy={busy}
       onClick={force}
-      title={t("admin.bilibili.forceHint", {
-        time: pending.until ? japanStamp(pending.until) : "—",
-      })}
+      title={t("admin.bilibili.forceHint")}
     >
       {t("admin.bilibili.force")}
     </Button>
@@ -275,11 +273,9 @@ export function BilibiliLoginNote({
   const key =
     login === "expired"
       ? "admin.bilibili.loginExpiredHint"
-      : login !== "not_configured"
-        ? null
-        : dynamics
-          ? "admin.bilibili.dynamics.loginHint"
-          : "admin.bilibili.signInHint"
+      : login === "not_configured" && dynamics
+        ? "admin.bilibili.dynamics.loginHint"
+        : null
   return key ? (
     <p className="adm-source-note">
       <KeyRound aria-hidden />

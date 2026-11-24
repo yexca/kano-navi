@@ -43,7 +43,7 @@ function localUrl(value: string | null | undefined) {
 }
 
 function VideoWhen({ video }: { video: AdminVideo }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   return (
     <small>
       {video.isUpcoming
@@ -207,7 +207,7 @@ function BilibiliForm({ video }: { video: AdminVideo }) {
 
 /** The platform, when, kind, length and format on one line. */
 function VideoMeta({ video }: { video: AdminVideo }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const PlatformIcon = stepIcons[video.source]
   const length = formatLength(video.durationSeconds)
   return (

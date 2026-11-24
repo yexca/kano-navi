@@ -17,8 +17,10 @@ whether or not a queue is configured, and the same queue then asks the
 unsettled uploads for form and tag. Its models come only from the separate
 translation queue (`llm_route_targets.route = 'translate'`), configured in
 `/admin` → Detection; it never falls back to the schedule extraction queue. Targets need
-the `text` tag. Each target gets at most three calls before moving to the
-next configured target, in queue order.
+the `text` tag. Each target gets at most the
+[attempts per model](../../operations/configuration/sync.md#sync-settings)
+in calls (three by default) before the next configured target takes over,
+in queue order.
 Without a usable target the step records `disabled` with the reason and
 keeps operator requests.
 

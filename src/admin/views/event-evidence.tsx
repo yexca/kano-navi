@@ -6,7 +6,7 @@ import { japanStamp } from "@/admin/format"
 import type { AdminPost, EventEvidence, EvidenceRole } from "@/admin/types"
 import { Badge, Empty, Loading } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
-import { PostImages, PostQuote } from "@/admin/views/posts"
+import { PostImages, PostQuote } from "@/admin/views/post-parts"
 
 type EvidencePost = AdminPost & { roles: EvidenceRole[] }
 

@@ -374,23 +374,13 @@ func (s *Store) DeleteManualEvent(ctx context.Context, id string) (AdminEvent, e
 	return s.event(ctx, id)
 }
 
+// event reads one event as ListAdminEvents lists it, deleted and merged ones
+// included; a missing event is sql.ErrNoRows.
 func (s *Store) event(ctx context.Context, id string) (AdminEvent, error) {
-	var e AdminEvent
-	var locked, hiddenByPosts, inferred int
-	var platform, platforms, review sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT id,source,source_item_id,source_key,title,detail,starts_on,starts_at,ends_at,ends_on,timezone,time_precision,status,event_type,tag,tag_source,url,provenance,manual_locked,cancellation_status,cancellation_source,cancellation_reason,cancellation_evidence,cancellation_source_item_id,cancellation_confidence,cancellation_at,deleted_at,created_at,updated_at,merged_into,(SELECT t.title FROM events t WHERE t.id=events.merged_into),merge_source,merge_reason,merged_at,`+eventHiddenByPostsSQL("events")+`,platform,platforms,platforms_inferred,confidence,`+EventAttentionSQL("events", "")+` FROM events WHERE id=?`, id).Scan(&e.ID, &e.Source, &e.SourceItemID, &e.SourceKey, &e.Title, &e.Detail, &e.StartsOn, &e.StartsAt, &e.EndsAt, &e.EndsOn, &e.Timezone, &e.TimePrecision, &e.Status, &e.EventType, &e.Tag, &e.TagSource, &e.URL, &e.Provenance, &locked, &e.CancellationStatus, &e.CancellationSource, &e.CancellationReason, &e.CancellationEvidence, &e.CancellationSourceItemID, &e.CancellationConfidence, &e.CancellationAt, &e.DeletedAt, &e.CreatedAt, &e.UpdatedAt, &e.MergedInto, &e.MergedIntoTitle, &e.MergeSource, &e.MergeReason, &e.MergedAt, &hiddenByPosts, &platform, &platforms, &inferred, &e.Confidence, &review)
-	e.ManualLocked = locked != 0
-	e.HiddenByPosts = hiddenByPosts != 0
+	e, err := scanAdminEvent(s.db.QueryRowContext(ctx, `SELECT `+adminEventColumns("")+` FROM events e WHERE e.id=?`, id))
 	if err != nil {
-		return e, err
+		return AdminEvent{}, err
 	}
-	link := ""
-	if e.URL != nil {
-		link = *e.URL
-	}
-	e.Platforms, _ = readPlatforms(platforms, platform, link)
-	e.PlatformsInferred = inferred != 0
-	e.Review = eventReview(review.String, e)
 	items := []AdminEvent{e}
 	if attachErr := s.attachAdminPlatforms(ctx, items); attachErr != nil {
 		return e, fmt.Errorf("%w: event platforms", ErrUnavailable)

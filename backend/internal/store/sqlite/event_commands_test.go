@@ -2,8 +2,12 @@ package sqlite
 
 import (
 	"context"
-	"github.com/yexca/kano-navi/backend/internal/testutil"
+	"database/sql"
+	"errors"
+	"reflect"
 	"testing"
+
+	"github.com/yexca/kano-navi/backend/internal/testutil"
 )
 
 func TestManualEventCommandsAreAtomicAndLocked(t *testing.T) {
@@ -28,6 +32,39 @@ func TestManualEventCommandsAreAtomicAndLocked(t *testing.T) {
 	}
 	if e, err = store.DeleteManualEvent(context.Background(), "missing"); err == nil || e.ID != "" {
 		t.Fatal("missing delete accepted")
+	}
+}
+
+// An edited automatic entry keeps the extraction that produced it, and a
+// single event reads back exactly as the console list shows it.
+func TestEditedEventReadsBackAsTheListShowsIt(t *testing.T) {
+	path := testutil.NewSnapshot(t)
+	store, err := OpenAdminWrites(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	if _, err = store.DB().ExecContext(ctx, `INSERT INTO events(id,source,source_item_id,title,starts_on,provenance,manual_locked,confidence,extraction_id,created_at,updated_at)
+ VALUES('x-synthetic','x','100','Synthetic stream','2099-01-02','automatic',0,0.5,42,'2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')`); err != nil {
+		t.Fatal(err)
+	}
+	edited, err := store.UpdateManualEvent(ctx, "x-synthetic", EventInput{Title: "Edited stream", StartsOn: "2099-01-02"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edited.ExtractionID == nil || *edited.ExtractionID != 42 || !edited.ManualLocked || edited.Title != "Edited stream" {
+		t.Fatalf("edited=%+v extraction=%v", edited, edited.ExtractionID)
+	}
+	listed, err := store.ListAdminEvents(ctx, AdminEventFilter{Search: "Edited stream"})
+	if err != nil || len(listed.Items) != 1 {
+		t.Fatalf("listed=%+v err=%v", listed, err)
+	}
+	if !reflect.DeepEqual(edited, listed.Items[0]) {
+		t.Fatalf("single read differs from the list:\n%+v\n%+v", edited, listed.Items[0])
+	}
+	if _, err = store.GetAdminEvent(ctx, "missing"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("missing err=%v", err)
 	}
 }
 

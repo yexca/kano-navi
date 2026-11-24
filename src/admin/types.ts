@@ -270,6 +270,7 @@ export interface AlertIncident {
   openedAt: string
   lastSeenAt: string
   resolvedAt: string | null
+  acknowledgedAt: string | null
 }
 
 export interface AlertSettings {

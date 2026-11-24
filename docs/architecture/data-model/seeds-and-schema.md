@@ -41,8 +41,10 @@ each row receives it from the YouTube identity of its URL; a post without `accou
 receives the handle in its URL. Automatic, unlocked YouTube events with a
 start time and `unknown` precision become `exact`. A video whose `kind` or
 `manual_kind` is not one of the [video forms](video-form.md#video-form-and-tags) is
-rewritten once, as that section describes. None of these steps clears a
-snapshot.
+rewritten once, as that section describes. A post label stored in two
+languages (`DAILY / 近况`, `SCHEDULE / 日程`) becomes its English text
+(`DAILY`, `SCHEDULE`), and the dashboard revision advances. None of these
+steps clears a snapshot.
 
 ## Schema Changes
 
@@ -53,6 +55,14 @@ and settings remain in place. The lookup chooses the latest stored source
 wording (including `raw_json.search_text`) and applies the existing text/image
 and manual-review gates. The index is non-unique because multiple stored records
 can share a source URL.
+
+Startup also additively creates two partial post indexes for the board
+snapshot: `posts_account_instant_idx` on
+`posts(lower(COALESCE(account_handle, '')), julianday(published_at) DESC, id)`
+over the public posts that are not promoted, which lists the accounts and each
+account's newest posts, and `posts_bilibili_account_idx` on
+`posts(account_handle)` over the Bilibili posts, which lists the Bilibili
+accounts. Neither changes a stored row.
 
 backend/internal/store/sqlite owns the schema (`bootstrap.sql`), the
 additive upgrade behavior (`schema_upgrade.go`) and the workflow tables

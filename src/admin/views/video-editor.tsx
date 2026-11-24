@@ -181,7 +181,7 @@ export function VideoEditor({
   /** A merge or undo changed this video and another one. */
   onMerged?: () => void
 }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const history = useResource<VideoHistory>(
     () => api.videoHistory(videoId),

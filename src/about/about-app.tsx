@@ -14,6 +14,7 @@ import { useAppSettings } from "@/app-settings"
 import { ExternalLink } from "@/site/links"
 import { LICENSE_URL, REPOSITORY_URL } from "@/site/repository"
 import { SiteNotice } from "@/site/site-notice"
+import { usePageMeta } from "@/site/page-meta"
 import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
 import "./about.css"
 
@@ -275,12 +276,7 @@ function MoreItems({ items, label }: { items: string[]; label: string }) {
 export function AboutApp() {
   const { t } = useAppSettings()
 
-  useEffect(() => {
-    document.title = t("about.metaTitle")
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute("content", t("about.metaDescription"))
-  }, [t])
+  usePageMeta(t("about.metaTitle"), t("about.metaDescription"))
 
   return (
     <div className="site about" id="top">

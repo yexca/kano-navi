@@ -2,8 +2,12 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"sort"
 	"time"
+
+	bilisource "github.com/yexca/kano-navi/backend/internal/source/bilibili"
+	ytsource "github.com/yexca/kano-navi/backend/internal/source/youtube"
 )
 
 // Dashboard and its child records contain only columns needed to construct the
@@ -27,6 +31,12 @@ type Dashboard struct {
 	// nil.
 	LiveNow *LiveNow
 	Meta    DashboardMeta
+	// ValidUntil is the earliest time after the read at which its projection
+	// changes without a revision: the projection's next transition, or the
+	// moment a broadcast state the read trusted stops counting. It is zero
+	// when neither lies ahead. Sliding windows (posts, the week, the video
+	// count) and freshness times are not included.
+	ValidUntil time.Time
 }
 
 type Profile struct {
@@ -436,32 +446,24 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 	if err != nil {
 		return nil, err
 	}
-	latestPost, err := s.queryLatestPost(ctx)
-	if err != nil {
-		return nil, err
-	}
-	prefetch := postRows[:len(postRows):len(postRows)]
-	if latestPost != nil {
-		prefetch = append(prefetch, *latestPost)
-	}
-	if err = s.prefetchPostRows(ctx, prefetch); err != nil {
+	if err = s.prefetchPostRows(ctx, postRows); err != nil {
 		return nil, err
 	}
 	posts := make([]Post, 0, len(postRows))
+	var latest *Post
 	for _, row := range postRows {
 		mapped, mapErr := s.mapPost(ctx, row)
 		if mapErr != nil {
 			return nil, mapErr
 		}
 		posts = append(posts, mapped)
-	}
-	var latest *Post
-	if latestPost != nil {
-		mapped, mapErr := s.mapPost(ctx, *latestPost)
-		if mapErr != nil {
-			return nil, mapErr
+		// The latest post is an own account's: a promoted post never takes
+		// it. queryPosts lists every account's newest posts newest first, so
+		// the first own post is the newest of them all.
+		if latest == nil && !row.promoted {
+			latestCopy := mapped
+			latest = &latestCopy
 		}
-		latest = &mapped
 	}
 	postCount, err := s.queryPostCount(ctx, windowStart)
 	if err != nil {
@@ -716,5 +718,63 @@ func (s *Store) GetDashboard(ctx context.Context, days int, now time.Time) (*Das
 		Meta: DashboardMeta{FetchedAt: fetchedAt, SourceFetchedAt: sourceFetchedAt, LastSync: lastSync, PostWindowDays: days, EventWindow: EventWindow{From: from, To: to, Paginated: true}, GeneratedAt: now.UTC().Format("2006-01-02T15:04:05.000Z"), MediaCache: mediaCache, Revision: revision, FeaturedVideoID: featuredID, XAccounts: xAccounts, BilibiliAccounts: bilibiliAccounts},
 	}
 	applyDashboardProjection(dashboard, now)
+	liveExpiry, err := s.liveStatusExpiry(ctx, now, probe)
+	if err != nil {
+		return nil, err
+	}
+	dashboard.ValidUntil = liveExpiry
+	if next := dashboard.Projection.NextTransitionAt; next != nil {
+		if at, parseErr := time.Parse(time.RFC3339Nano, *next); parseErr == nil && at.After(now) && (dashboard.ValidUntil.IsZero() || at.Before(dashboard.ValidUntil)) {
+			dashboard.ValidUntil = at
+		}
+	}
 	return dashboard, nil
+}
+
+// liveStatusExpiry is the earliest time after now at which a broadcast state
+// that a read at now trusts stops counting: a YouTube video's live or
+// upcoming state (see liveView) or the Bilibili room's on-air state (see
+// projectRoom). It covers every stored video, not only the read's, so it is
+// never later than the read's own; it is zero when no state would expire.
+func (s *Store) liveStatusExpiry(ctx context.Context, now time.Time, probe LiveProbeSettings) (time.Time, error) {
+	var expiry time.Time
+	consider := func(at time.Time) {
+		if at.After(now) && (expiry.IsZero() || at.Before(expiry)) {
+			expiry = at
+		}
+	}
+	cutoff := now.Add(-probe.Freshness())
+	rows, err := s.db.QueryContext(ctx, `SELECT live_status,live_checked_at FROM videos WHERE live_status IN (?,?) AND julianday(live_checked_at) > julianday(?)`,
+		ytsource.LiveStatusLive, ytsource.LiveStatusUpcoming, cutoff.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return time.Time{}, dbErr(err)
+	}
+	for rows.Next() {
+		var status, checked sql.NullString
+		if err = rows.Scan(&status, &checked); err != nil {
+			_ = rows.Close()
+			return time.Time{}, dbErr(err)
+		}
+		// Only a state liveView trusts can stop counting.
+		if liveView(status, checked, cutoff) != nil {
+			at, _ := time.Parse(time.RFC3339Nano, checked.String)
+			consider(at.Add(probe.Freshness()))
+		}
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	if err != nil {
+		return time.Time{}, dbErr(err)
+	}
+	if exists, tableErr := s.hasTable(ctx, "sync_state"); tableErr != nil || !exists {
+		return expiry, tableErr
+	}
+	live, err := readBilibiliLive(ctx, s.db, bilisource.OptionsFromEnv().Account)
+	if err != nil {
+		return time.Time{}, dbErr(err)
+	}
+	if live.State.Room.RoomID != "" && live.State.Room.LiveStatus == bilisource.RoomLive && !live.LastBroadcast.IsZero() {
+		consider(live.State.CheckedAt.Add(probe.BilibiliFreshness()))
+	}
+	return expiry, nil
 }

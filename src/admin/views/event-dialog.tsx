@@ -288,7 +288,6 @@ export function EventDialog({
       onClose={() => onClose()}
       footer={
         <>
-          <span className="adm-muted">{t("admin.schedule.lockHint")}</span>
           <Button onClick={() => onClose()}>{t("admin.action.cancel")}</Button>
           <Button
             type="submit"
@@ -340,12 +339,12 @@ export function EventDialog({
             label={t("admin.schedule.field.tag")}
             hint={
               event
-                ? `${t("admin.schedule.field.tagHint")} · ${t(
+                ? t(
                     event.tagSource === "manual"
                       ? "admin.schedule.tag.decidedManual"
                       : "admin.schedule.tag.decidedAutomatic",
-                  )}`
-                : t("admin.schedule.field.tagHint")
+                  )
+                : undefined
             }
           >
             <select
@@ -565,10 +564,7 @@ export function EventDialog({
           <details className="adm-disclosure adm-entry-more" open={moreOpen}>
             <summary>{t("admin.schedule.more")}</summary>
             <div className="adm-form-row is-top">
-              <Field
-                label={t("admin.schedule.field.status")}
-                hint={t("admin.schedule.field.statusHint")}
-              >
+              <Field label={t("admin.schedule.field.status")}>
                 <input
                   value={draft.status}
                   onChange={(e) => set({ status: e.target.value })}

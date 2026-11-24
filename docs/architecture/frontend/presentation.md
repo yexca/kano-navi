@@ -186,8 +186,11 @@ posts and Videos: one icon tab per platform, styled like the Sources tabs,
 above a tab panel, the platform kept in the URL, and the arrow keys, Home and
 End moving between the tabs; and `admin.css` styles
 them with `adm-` prefixed selectors, importing one file per area from
-`styles/` in cascade order. `src/components/ui/` contains
-basic UI primitives, while the CSS files contain layout and design tokens. The
+`styles/` in cascade order. `src/components/ui/` holds the Radix wrappers
+for dropdown menus, tabs and tooltips and the header's button; the shared
+design tokens are in `src/index.css`, and each area's stylesheet holds its
+layout and look (see
+[Design and interaction](../../development/design.md)). The
 presentation layer must not open SQLite or call X, YouTube, OpenAI,
 or a third-party proxy directly. The optional mainland China site comes from
 the same-origin `/api/visitor-region` response, read at most once per page

@@ -2,7 +2,9 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -136,5 +138,62 @@ func TestDashboardPostsLeaveOutArchiveOnlyAccounts(t *testing.T) {
 	}
 	if len(page.Items) != 2 {
 		t.Fatalf("archive items=%d, want 2", len(page.Items))
+	}
+}
+
+// queryPlan lists the details of a statement's query plan steps.
+func queryPlan(t *testing.T, db *sql.DB, statement string, args ...any) []string {
+	t.Helper()
+	rows, err := db.Query(`EXPLAIN QUERY PLAN `+statement, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	steps := []string{}
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		steps = append(steps, detail)
+	}
+	if err := rows.Err(); err != nil || len(steps) == 0 {
+		t.Fatalf("plan steps=%d err=%v", len(steps), err)
+	}
+	return steps
+}
+
+// The board's post reads run on every snapshot read, so none of them may
+// walk the posts table: each account's newest posts, the Bilibili accounts
+// and the upstream-deleted schedule candidates are read through indexes.
+func TestDashboardPostReadsUseIndexes(t *testing.T) {
+	store, err := OpenReadOnly(testutil.NewSnapshot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	scope := ` AND NOT (source='x' AND promoted_at IS NULL AND lower(COALESCE(account_handle,'')) IN (?))`
+	for _, tc := range []struct {
+		name, statement, index string
+		args                   []any
+	}{
+		{"newest posts per account", dashboardPostsSQL(""), "posts_account_instant_idx", []any{"2026-10-28T00:00:00Z", 8}},
+		{"newest posts per account outside the archive", dashboardPostsSQL(scope), "posts_account_instant_idx", []any{"archived", "2026-10-28T00:00:00Z", "archived", 8}},
+		{"bilibili accounts", bilibiliAccountsSQL, "posts_bilibili_account_idx", nil},
+		{"upstream-deleted schedule candidates", `SELECT a.id FROM assets a WHERE ` + publicScheduleAssetSQL("a"), "(id=?)", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			steps := queryPlan(t, store.DB(), tc.statement, tc.args...)
+			plan := strings.Join(steps, "; ")
+			for _, step := range steps {
+				if step == "SCAN posts" || step == "SCAN up" {
+					t.Errorf("plan walks the posts: %s", plan)
+				}
+			}
+			if !strings.Contains(plan, tc.index) {
+				t.Errorf("plan does not use %s: %s", tc.index, plan)
+			}
+		})
 	}
 }

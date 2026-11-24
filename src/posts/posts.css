@@ -1,6 +1,7 @@
 /*
  * /posts: the post archive on the public shell (src/site/site.css). Post
- * cards and the month controls are the board's (src/dashboard/board.css);
+ * cards and the month controls are the board's, from the base, posts and
+ * month-dialogs files in src/dashboard/styles/ (not the whole board.css);
  * this file lays out the account cards and the activity map in the rail
  * beside the timeline (the cards above it in narrower windows), and the
  * timeline's months and days.

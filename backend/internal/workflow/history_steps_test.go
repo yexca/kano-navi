@@ -204,7 +204,7 @@ func (s *stubTimeline) TimelineStatuses(_ context.Context, account, cursor strin
 	s.accounts = append(s.accounts, account)
 	s.mu.Unlock()
 	id := map[string]string{"synthetic_one": "1900000000000000001", "synthetic_two": "1900000000000000002"}[account]
-	post := &xsource.Post{ID: id, AccountHandle: account, Type: "daily", Label: "DAILY / 近况", Text: "from the timeline", PublishedAt: "2026-03-05T03:00:00Z", URL: "https://x.com/" + account + "/status/" + id, Raw: map[string]any{"id": id}}
+	post := &xsource.Post{ID: id, AccountHandle: account, Type: "daily", Label: xsource.LabelDaily, Text: "from the timeline", PublishedAt: "2026-03-05T03:00:00Z", URL: "https://x.com/" + account + "/status/" + id, Raw: map[string]any{"id": id}}
 	return xsource.TimelineStatuses{Statuses: []xsource.TimelineStatus{
 		{ID: id, PublishedAt: post.PublishedAt, Post: post},
 		{ID: "1800000000000000001", PublishedAt: "2026-02-01T00:00:00Z"},

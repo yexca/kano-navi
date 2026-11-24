@@ -251,7 +251,7 @@ func TestParityWithTypeScriptExtractor(t *testing.T) {
 	f.addProvider("p-anth", protocolAnthropic, "https://anthropic.example.test/v1/", "model-c", `["text","image"]`)
 	f.queue("p-chat", "p-anth")
 	for _, item := range []struct{ id, label, text, publishedAt string }{
-		{"post-a", "SCHEDULE / 日程", "今週のスケジュール 😀 です\n5/3 21:00 歌枠 <b>&\u2028", "2026-04-28T03:00:00.000Z"},
+		{"post-a", "SCHEDULE", "今週のスケジュール 😀 です\n5/3 21:00 歌枠 <b>&\u2028", "2026-04-28T03:00:00.000Z"},
 		{"post-c", "", "予定していた5/3の配信は中止です", "2026-04-27T03:00:00.000Z"},
 		{"post-b", "", "明日 20時から歌います", "2026-04-26T03:00:00.000Z"},
 		{"post-d", "", "おはよう", "2026-04-25T03:00:00.000Z"},
@@ -386,8 +386,8 @@ func TestParityWithTypeScriptImagePaths(t *testing.T) {
 		id, postType, label, text, publishedAt string
 		media                                  []any
 	}{
-		{"img-a", "notice", "SCHEDULE / 日程", "今週のスケジュールです", "2026-04-28T03:00:00.000Z", []any{boardURL, otherURL}},
-		{"img-b", "notice", "SCHEDULE / 日程", "", "2026-04-27T03:00:00.000Z", []any{otherURL}},
+		{"img-a", "notice", "SCHEDULE", "今週のスケジュールです", "2026-04-28T03:00:00.000Z", []any{boardURL, otherURL}},
+		{"img-b", "notice", "SCHEDULE", "", "2026-04-27T03:00:00.000Z", []any{otherURL}},
 		{"img-c", "daily", "", "来週の予定表", "2026-04-26T03:00:00.000Z", []any{pendingURL}},
 		{"img-d", "daily", "", "今日は22時から配信予定です", "2026-04-25T03:00:00.000Z", []any{otherURL}},
 	} {

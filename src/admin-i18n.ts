@@ -88,27 +88,12 @@ export const adminMessages = {
     "admin.step.media": "Media cache",
     "admin.step.schedule": "Schedule extraction",
     "admin.step.live": "Live status",
-    "admin.step.x.hint": "Read new posts from the configured accounts",
     "admin.step.x_related": "X related",
-    "admin.step.x_related.hint":
-      "Read the related accounts' timelines into External posts",
-    "admin.step.youtube.hint": "Read new and upcoming videos",
     "admin.step.bilibili": "Bilibili uploads",
-    "admin.step.bilibili.hint": "Read new uploads, at most once per interval",
     "admin.step.bilibili_dynamics": "Bilibili dynamics",
-    "admin.step.bilibili_dynamics.hint":
-      "Read new dynamics with the login cookie, at most once per interval",
     "admin.step.shop": "Official shop",
-    "admin.step.shop.hint":
-      "Read Kano's sale periods from the shop's product list",
-    "admin.step.media.hint": "Cache images and thumbnails locally",
-    "admin.step.schedule.hint": "Turn candidate posts into schedule entries",
     "admin.step.translate": "Translation",
-    "admin.step.translate.hint":
-      "Translate X posts, Bilibili dynamics and YouTube titles that lack one; dates and times stay as written",
     "admin.step.reconcile": "Duplicate merge",
-    "admin.step.reconcile.hint":
-      "Hide duplicate entries of one stream and attach Bilibili uploads to their YouTube copy; runs after source and extraction steps",
 
     "admin.run.kind.sync": "Full sync",
     "admin.run.kind.scan": "Schedule scan",
@@ -181,11 +166,7 @@ export const adminMessages = {
     "admin.queue.waiting": "Waiting for the current run",
     "admin.queue.starting": "Starting shortly",
     "admin.queue.startNow": "Start now",
-    "admin.queue.startHint":
-      "Run this timer now. Its next run is planned from this one.",
     "admin.queue.runNext": "Run next",
-    "admin.queue.runNextHint":
-      "Start this timer after the current run and any timer already due.",
     "admin.overview.idle": "Idle",
     "admin.overview.startedAt": "Started {time} JST",
     "admin.overview.noSchedule": "Nothing runs on a timer.",
@@ -237,16 +218,12 @@ export const adminMessages = {
     "admin.queuePreview.schedule.thisRun":
       "This run: {count} of {limit} places",
     "admin.queuePreview.schedule.none": "Nothing to process",
-    "admin.queuePreview.schedule.noneHint":
-      "Every candidate has a stored result or is held back.",
     "admin.queuePreview.schedule.rest": "After this run",
     "admin.queuePreview.schedule.later": "Left for later runs",
     "admin.queuePreview.schedule.cached": "Stored result, no call",
     "admin.queuePreview.schedule.backoff": "In backoff",
     "admin.queuePreview.schedule.nextAt": "next {time}",
     "admin.queuePreview.schedule.retryStopped": "Retries stopped",
-    "admin.queuePreview.schedule.note":
-      "Posts synced, edited or requested before the run starts, and model queue changes, can change this order.",
     "admin.queuePreview.youtube.watchPages": "Watch pages per run",
     "admin.queuePreview.youtube.apiVideos": "Data API videos per run",
     "admin.queuePreview.youtube.noApi": "No API key",
@@ -354,8 +331,6 @@ export const adminMessages = {
     "admin.site.worksRecentEmpty":
       "No upload after the collection date is listed or excluded.",
     "admin.site.worksRecentLimit": "Showing the newest {count} of {total}.",
-    "admin.site.worksRecentHint":
-      "To list a video the rules miss, such as a Bilibili-only upload, set Works page to Include in its video editor.",
 
     "admin.review.title": "Review queue",
     "admin.review.tab.schedule": "Schedule",
@@ -407,15 +382,13 @@ export const adminMessages = {
     "admin.review.media.none": "No image",
     "admin.review.media.noneLegacy": "No image (legacy record)",
     "admin.review.noImageHint":
-      "This record has no image URL, so there is nothing to download or check. Label it Not a schedule to close it; a newer synced image replaces it.",
+      "This record has no image URL. Label it Not a schedule to close it.",
     "admin.review.periodTitle": "Correct the covered dates",
     "admin.review.periodHint": "Both days are included, in Asia/Tokyo.",
     "admin.review.periodStart": "First day",
     "admin.review.periodEnd": "Last day",
     "admin.review.noMerges": "No uploads wait for a merge decision",
     "admin.review.noForms": "No Bilibili uploads wait for a form decision",
-    "admin.review.formsHint":
-      "Bilibili does not say whether an upload replays a live broadcast. These uploads stay off the board until you choose; the rules and the model could not tell.",
     "admin.review.form.uncertain": "Model unsure",
     "admin.review.form.failed": "Model failed three times",
     "admin.review.form.broadcast": "Broadcast {start} – {end}",
@@ -478,8 +451,6 @@ export const adminMessages = {
     "admin.posts.schedule.image": "Image",
     "admin.posts.schedule.imageOption": "Image {index}",
     "admin.posts.schedule.reasonPlaceholder": "Why this image is the schedule",
-    "admin.posts.schedule.periodHint":
-      "Without dates the image is labelled but stays off the board.",
     "admin.posts.schedule.open": "Open schedule images",
     "admin.posts.open": "Open post",
     "admin.posts.edit": "Edit post",
@@ -487,8 +458,7 @@ export const adminMessages = {
     "admin.posts.hidden": "Hidden",
     "admin.posts.deletedUpstream": "Deleted on X",
     "admin.posts.promoted": "Promoted",
-    "admin.posts.promotedHint":
-      "A related account's status on the board. Promote or demote it in External posts.",
+    "admin.posts.promotedHint": "Change it in External posts.",
     "admin.posts.translations": "Translations",
 
     "admin.external.title": "External posts",
@@ -538,9 +508,9 @@ export const adminMessages = {
     "admin.external.promote.title": "Promote this status",
     "admin.external.demote.title": "Demote this status",
     "admin.external.promote.hint":
-      "It becomes a post on the board, with its images, and stays there whatever the keyword rules say.",
+      "Stays on the board regardless of the keyword rules.",
     "admin.external.demote.hint":
-      "Its post is hidden from the board, and stays hidden whatever the keyword rules say. Its row, images and events are kept.",
+      "Hidden from the board regardless of the keyword rules; its images and events are kept.",
     "admin.external.reason": "Reason",
     "admin.external.notice.promote": "Status promoted",
     "admin.external.notice.demote": "Status demoted",
@@ -605,7 +575,7 @@ export const adminMessages = {
     "admin.event.keptSeparate": "Kept separate",
     "admin.event.hiddenByPosts": "Hidden by its posts",
     "admin.event.hiddenByPostsHint":
-      "Every source post is hidden, so the public pages leave this entry out. Show a post or confirm the entry to show it.",
+      "Show a post or confirm the entry to list it.",
     "admin.event.type.event": "Event",
     "admin.event.type.stream": "Stream",
     "admin.event.type.member": "Members",
@@ -637,7 +607,7 @@ export const adminMessages = {
     "admin.schedule.merge.open": "Merge into another entry",
     "admin.schedule.merge.title": "Merge into another entry",
     "admin.schedule.merge.hint":
-      "“{title}” ({day}) will be hidden behind the entry you choose. Automatic merging never changes this decision; undo it from the list.",
+      "“{title}” ({day}) will be hidden behind the entry you choose.",
     "admin.schedule.merge.action": "Merge here",
     "admin.schedule.merge.none":
       "No other entry is shown on the board from the day before to the day after.",
@@ -711,8 +681,6 @@ export const adminMessages = {
     "admin.schedule.filter.to": "To",
     "admin.schedule.empty": "No entries match",
     "admin.schedule.emptyHint": "Try another date range, view or search.",
-    "admin.schedule.lockHint":
-      "Saving locks this entry: later syncs keep your values. A model may still flag a suspected cancellation.",
     "admin.schedule.field.title": "Title",
     "admin.schedule.field.date": "Date",
     "admin.schedule.field.dateHint": "Japan date",
@@ -741,19 +709,17 @@ export const adminMessages = {
     "admin.schedule.field.approximate": "The start time is approximate",
     "admin.schedule.field.type": "Type",
     "admin.schedule.field.tag": "Calendar label",
-    "admin.schedule.field.tagHint": "Shown beside the entry in the calendar",
     "admin.schedule.tag.none": "No label",
     "admin.schedule.tag.auto": "Automatic",
     "admin.schedule.tag.decidedManual": "set by an operator",
     "admin.schedule.tag.decidedAutomatic": "set automatically",
     "admin.schedule.field.status": "Status note",
-    "admin.schedule.field.statusHint": "Shown as a short label",
     "admin.schedule.field.url": "Link",
     "admin.schedule.field.platforms": "Platforms",
     "admin.schedule.field.platformsHint":
       "Where the entry happens; choose YouTube and bilibili for a simulcast, none when not known",
     "admin.schedule.roomLinkHint":
-      "A bilibili live-room link is the same for every broadcast, so it is not the entry's link: bilibili is chosen instead and the board links the room. Choose Other to keep it for someone else's room.",
+      "A live-room link sets the bilibili platform. Choose Other for someone else's room.",
     "admin.event.platform.youtube": "YouTube",
     "admin.event.platform.bilibili": "bilibili",
     "admin.event.platform.other": "Other",
@@ -839,8 +805,6 @@ export const adminMessages = {
     "admin.videos.merge.sameBroadcast": "replay of this broadcast",
     "admin.videos.merge.byOperator": "Merged by an operator",
     "admin.videos.merge.separate": "Kept separate",
-    "admin.videos.merge.separateHint":
-      "An operator undid this upload's merge, so the matching rule leaves it alone. It can still be merged by hand.",
     "admin.videos.merge.undo": "Undo merge",
     "admin.videos.merge.keepSeparate": "Keep separate",
     "admin.videos.merge.open": "Merge…",
@@ -853,11 +817,7 @@ export const adminMessages = {
     "admin.videos.merge.candidates": "Possible YouTube copies",
     "admin.videos.merge.noCandidates":
       "No YouTube video was published within six hours with a matching title or length.",
-    "admin.review.mergeHint":
-      "Uploads the matching rule merges at its next run, and those it leaves to you because several videos match, a length is unknown or the titles differ.",
     "admin.review.worksConflicts": "The Works list pairs these differently",
-    "admin.review.worksConflictsHint":
-      "The packaged Works list names other YouTube videos for these Bilibili uploads than their merge. The list never merges or releases an upload; decide here or correct the collection.",
     "admin.review.worksMergedInto": "Merged into {id}",
     "admin.review.worksNotMerged": "Not merged",
     "admin.review.worksPairs": "Works list: {ids}",
@@ -887,16 +847,14 @@ export const adminMessages = {
     "admin.bilibili.loginExpired": "Login expired",
     "admin.bilibili.loginUnchecked": "Login not checked yet",
     "admin.bilibili.loginExpiredHint":
-      "The login cookie expired. Set a fresh BILIBILI_COOKIE or BILIBILI_SESSDATA in the server environment; the daily login check confirms it.",
+      "The login cookie expired. Set a fresh BILIBILI_COOKIE or BILIBILI_SESSDATA in the server environment.",
     "admin.bilibili.force": "Try once anyway",
     "admin.bilibili.forceHint":
-      "Reads wait for the captcha backoff until {time}. This sends this one read now, which may extend the backoff.",
+      "Sends one read now; it may extend the backoff.",
     "admin.bilibili.blocked": "Captcha backoff",
     "admin.bilibili.account": "Account",
     "admin.bilibili.blockedUntil": "Waiting until {time}",
     "admin.bilibili.lastError": "Last error",
-    "admin.bilibili.signInHint":
-      "Anonymous reads often meet Bilibili's captcha. Set BILIBILI_COOKIE or BILIBILI_SESSDATA in the server environment to read as a signed-in account; see the configuration guide.",
     "admin.bilibili.add": "Add an upload",
     "admin.bilibili.addButton": "Add",
     "admin.bilibili.addField": "BV ID or video link",
@@ -1009,8 +967,6 @@ export const adminMessages = {
     "admin.runs.section.history": "History",
     "admin.runs.section.next": "Up next",
     "admin.runs.stepRun": "Run steps once",
-    "admin.runs.stepRunHint":
-      "Pick any steps and run them once; nothing is saved. Sources also run on their own timers on the Sources page.",
     "admin.runs.runOnce": "Run once",
     "admin.runs.skippedStep": "Disabled in this process",
     "admin.runs.history": "Run history",
@@ -1023,12 +979,6 @@ export const adminMessages = {
       "This browser refused the clipboard. Select the text and copy it.",
 
     "admin.sources.title": "Sources",
-    "admin.sources.x.hint":
-      "The public FxTwitter timeline, or the full archive with X_API_BEARER_TOKEN.",
-    "admin.sources.x_related.hint":
-      "Related accounts' FxTwitter timelines; keyword matches reach the board.",
-    "admin.sources.youtube.hint":
-      "The RSS feed, or older videos with YOUTUBE_API_KEY.",
     "admin.sources.lastSuccess": "Last successful read",
     "admin.sources.oldest": "Oldest stored · {label}",
     "admin.sources.channel": "channel",
@@ -1069,12 +1019,6 @@ export const adminMessages = {
     "admin.fetch.method.youtube.ytdlp": "yt-dlp",
     "admin.fetch.method.bilibili.space": "Space uploads",
     "admin.fetch.method.bilibili_dynamics.space": "Space dynamics",
-    "admin.fetch.methodHint.youtube.api":
-      "The uploads playlist through YOUTUBE_API_KEY, 50 videos and one quota unit a page.",
-    "admin.fetch.methodHint.youtube.rss":
-      "The public feed, which lists the newest 15 uploads.",
-    "admin.fetch.methodHint.youtube.ytdlp":
-      "The configured yt-dlp executable, which reads upload metadata without downloading media.",
     "admin.fetch.bilibiliBlocked":
       "Bilibili asked this server for a captcha; fetches wait until {time}.",
     "admin.fetch.needs": "Needs {variable} on the server.",
@@ -1083,8 +1027,6 @@ export const adminMessages = {
     "admin.fetch.mode.all": "Everything",
     "admin.fetch.modeHint.range.x":
       "An inclusive Japan date range of up to 365 days.",
-    "admin.fetch.modeHint.before.x":
-      "Continue backwards from each account's oldest stored post. An interrupted interval finishes first.",
     "admin.fetch.countRange": "1 to {max}",
     "admin.fetch.options": "Then",
     "admin.fetch.option.extract": "Extract schedules",
@@ -1101,11 +1043,7 @@ export const adminMessages = {
     "admin.fetch.openRuns": "Open runs",
     "admin.fetch.openSources": "Fetch",
     "admin.push.title": "YouTube push",
-    "admin.push.description":
-      "Let YouTube's hub notify this site about new videos, which queues a YouTube read.",
     "admin.push.enable": "Receive push notifications",
-    "admin.push.enableHint":
-      "Needs a public HTTPS callback that reaches this server.",
     "admin.push.unavailable": "YouTube is disabled by SKIP_YOUTUBE.",
     "admin.push.callback": "Deployment address",
     "admin.push.callbackPlaceholder":
@@ -1120,15 +1058,9 @@ export const adminMessages = {
     "admin.push.triggered": "Last queued read",
     "admin.push.lastError": "Last error",
     "admin.liveProbe.title": "Live-status probe",
-    "admin.liveProbe.description":
-      "Rechecks only the watch pages of streams that are about to start or still running, at most {max} per run, so the board shows On air from YouTube's own state.",
     "admin.liveProbe.notRunning": "Not running",
     "admin.liveProbe.enable": "Probe active streams",
-    "admin.liveProbe.enableHint":
-      "Runs in the server's job queue, every few minutes around a stream's start, and only while a video is active.",
     "admin.liveProbe.interval": "Interval (minutes)",
-    "admin.liveProbe.intervalHint":
-      "{min} to {max} minutes between checks of a stream on air, or of a waiting room still closed 45 minutes after its start. From the start until it goes live, it checks every 3 minutes. A result counts for two intervals; after that the board falls back to the start time.",
     "admin.liveProbe.intervalRange": "{min} to {max}",
     "admin.liveProbe.lastRun": "Last probe",
     "admin.liveProbe.nextRun": "Next probe",
@@ -1140,8 +1072,6 @@ export const adminMessages = {
     "admin.liveProbe.phase.overdue": "Past its start",
     "admin.liveProbe.phase.baseline": "Routine check",
     "admin.liveProbe.bilibili.title": "Bilibili live room",
-    "admin.liveProbe.bilibili.description":
-      "Checks the account's Bilibili live room around Bilibili stream events, and at the interval otherwise, so the board shows On air for an announced or unannounced Bilibili stream.",
     "admin.liveProbe.bilibili.enable": "Check the Bilibili live room",
     "admin.liveProbe.bilibili.nextCheck": "Next check",
     "admin.liveProbe.due": "next check {time}",
@@ -1150,16 +1080,8 @@ export const adminMessages = {
     "admin.liveProbe.resume": "Check again",
     "admin.liveProbe.stopped.unavailable": "Stopped: private or removed",
     "admin.liveProbe.stopped.operator": "Stopped by an operator",
-    "admin.sources.bilibili.hint":
-      "The account's public uploads, read at most once per BILIBILI_MIN_INTERVAL_MINUTES. Its live room is checked on its own interval.",
-    "admin.sources.bilibili_dynamics.hint":
-      "The account's dynamics, read with BILIBILI_COOKIE or BILIBILI_SESSDATA at most once per BILIBILI_MIN_INTERVAL_MINUTES. They share the uploads' captcha backoff: a block met by either read holds both.",
-    "admin.sources.shop.hint":
-      "The official shop's newest products. Products tagged 鹿乃まほろ with a dated order or sale period become On sale entries, one per collection and period.",
     "admin.timer.on": "Every {interval}",
     "admin.timer.enable": "Run on a timer",
-    "admin.timer.enableHint":
-      "The first run comes one interval after the timer is turned on. Runs share the job queue with everything else.",
     "admin.timer.skipped": "Not running: {flag}=1 disables this source.",
     "admin.timer.schedulerOff":
       "Not running: timers are off (WORKFLOW_SCHEDULER_ENABLED=0).",
@@ -1170,21 +1092,14 @@ export const adminMessages = {
     "admin.timer.syncLimit.count.x": "Newest posts per account",
     "admin.timer.syncLimit.incremental.youtube": "Most new videos per run",
     "admin.timer.syncLimit.count.youtube": "Newest videos per run",
-    "admin.timer.syncLimitHint.x": "1 to 200",
     "admin.timer.syncLimit.incremental.x_related":
       "Most new statuses per account",
-    "admin.timer.syncLimitHint.x_related": "1 to 200",
-    "admin.timer.syncLimitHint.youtube":
-      "1 to 200. Without YOUTUBE_API_KEY the RSS feed lists 15.",
+    "admin.timer.syncLimitHint": "1 to 200",
     "admin.timer.nextRun": "Next run",
     "admin.timer.lastRun": "Last run",
     "admin.timer.runNow": "Run now",
-    "admin.timer.runNowHint":
-      "Run this source's steps once. The next timed run stays as planned.",
     "admin.timer.never": "Never",
     "admin.chain.title": "Method chain",
-    "admin.chain.description":
-      "Timed reads, Run now, pushes and step runs try the enabled methods from the top and fall to the next when the first page fails, lists none of the account's own records, or hits quota or rate limits. Manual fetches pick their own method.",
     "admin.chain.up": "Move {method} up",
     "admin.chain.down": "Move {method} down",
     "admin.chain.needs": "Needs {variable}",
@@ -1204,30 +1119,17 @@ export const adminMessages = {
     "admin.chain.method.shop.signed": "Newest 50 products, signed",
     "admin.chain.method.shop.new_arrivals": "Newest 50 products, unsigned",
     "admin.chain.method.shop.atom": "Catalog Atom feed (newest 25)",
-    "admin.chain.youtubeAPIOff":
-      "With the Data API off, YouTube makes no Data API call at all: listing, details, the live-status probe and Shorts verdicts use public pages.",
     "admin.chain.apiGate": "Timeline failures before the X API",
-    "admin.chain.apiGateHint":
-      "The X API runs only after the timeline failed this many consecutive runs of an account. 0 opens it at once.",
     "admin.chain.apiDailyCap": "X API posts per Japan day",
-    "admin.chain.apiDailyCapHint":
-      "At the cap the chain skips the X API until midnight in Japan. Manual fetches count too.",
     "admin.chain.usage": "X API today",
     "admin.chain.usageUnit": "posts",
     "admin.chain.streakUnit": "timeline failures",
-    "admin.help.about": "About {topic}",
     "admin.sources.locked": "Locked",
-    "admin.xapi.description":
-      "Timed X reads reach the X API only after an account's timeline keeps failing, and only up to a daily cap.",
     "admin.xapi.inChain": "Method {rank} in the chain",
     "admin.xapi.offInChain": "Off in the chain",
     "admin.xapi.usageHint": "{posts} of {cap} posts today",
     "admin.confirm.title": "Progressive confirmation",
-    "admin.confirm.description":
-      "YouTube confirms a video in steps: push queues a read when it appears, the live-status probe follows streams around their start, and follow-up checks reread it after it ends. The timer catches what these miss.",
     "admin.ytdlp.title": "yt-dlp",
-    "admin.ytdlp.description":
-      "Use the configured yt-dlp executable as an additional YouTube listing method and update it from the server.",
     "admin.ytdlp.status": "Status",
     "admin.ytdlp.available": "Available",
     "admin.ytdlp.unavailable": "Not configured",
@@ -1239,45 +1141,22 @@ export const adminMessages = {
     "admin.syncSettings.section.timed": "Timed reads",
     "admin.syncSettings.section.manual": "Manual fetches",
     "admin.syncSettings.field.xMaxStatusRequests": "Status requests per run",
-    "admin.syncSettings.hint.xMaxStatusRequests":
-      "Detail requests shared by all accounts, and the page budget of a manual X fetch.",
     "admin.syncSettings.field.xRefreshKnown": "Known posts refreshed",
-    "admin.syncSettings.hint.xRefreshKnown":
-      "Stored posts read again each run for updated counts and media.",
     "admin.syncSettings.field.xBootstrapDays": "First-run age limit (days)",
-    "admin.syncSettings.hint.xBootstrapDays":
-      "How far back an account's first run reads, before it has a cursor.",
     "admin.syncSettings.field.xDiscoveryLimit": "Full-sync post cap",
-    "admin.syncSettings.hint.xDiscoveryLimit":
-      "Unstored posts per account in a full sync; a timer uses its own cap.",
     "admin.syncSettings.field.youtubeMaxDetailRequests":
       "Video pages inspected per run",
-    "admin.syncSettings.hint.youtubeMaxDetailRequests":
-      "Watch pages read for reservations and details.",
     "admin.syncSettings.field.fetchMaxPages": "Manual fetch pages",
     "admin.syncSettings.field.fetchTimeoutMs": "Request timeout (ms)",
-    "admin.syncSettings.hint.fetchTimeoutMs":
-      "Per request of manual fetches and the X API method.",
     "admin.syncSettings.field.fetchRequestDelayMs": "Request spacing (ms)",
-    "admin.syncSettings.hint.fetchRequestDelayMs":
-      "Wait between the pages of a manual fetch.",
     "admin.syncSettings.field.extractionLookbackDays":
       "Extraction lookback (days)",
-    "admin.syncSettings.hint.extractionLookbackDays":
-      "Age of posts extracted without a request; 0 sets no limit.",
+    "admin.syncSettings.hint.extractionLookbackDays": "0 sets no limit.",
     "admin.syncSettings.field.translationScanLimit": "Translations per run",
-    "admin.syncSettings.hint.translationScanLimit":
-      "Posts and titles the translate step sends to a model.",
     "admin.syncSettings.field.translationLookbackDays":
       "Translation lookback (days)",
-    "admin.syncSettings.hint.translationLookbackDays":
-      "Age of posts and videos translated without a request.",
     "admin.syncSettings.field.llmModelAttempts": "Attempts per model",
-    "admin.syncSettings.hint.llmModelAttempts":
-      "Calls a model gets for one input before the next model in its queue takes over.",
     "admin.followUp.title": "Follow-up checks",
-    "admin.followUp.description":
-      "Every YouTube read rereads the watch page of up to 10 finished videos at these times after their end, start or publication, to pick up a new thumbnail or title. Videos older than 8 days are left alone.",
     "admin.followUp.automatic": "Automatic",
     "admin.followUp.offsets": "Rechecked after",
     "admin.fetch.headingFor": "Manual fetch · {source}",
@@ -1292,14 +1171,11 @@ export const adminMessages = {
     "admin.models.keywordsPlaceholder": "Type a keyword and press Enter",
     "admin.models.unsaved": "Unsaved changes",
     "admin.models.providers": "Providers",
-    "admin.models.providersHint":
-      "Keys are stored encrypted and never shown again.",
     "admin.models.noProviders": "No providers yet",
     "admin.models.noProvidersHint":
       "Add a provider, then discover or add its models.",
 
     "admin.route.empty": "No models queued",
-    "admin.route.emptyHint": "Without a model, extraction reports a safe skip.",
     "admin.route.up": "Move up",
     "admin.route.down": "Move down",
     "admin.route.remove": "Remove from queue",
@@ -1327,11 +1203,9 @@ export const adminMessages = {
     "admin.provider.baseUrl": "API base URL",
     "admin.provider.endpoint": "Requests go to {endpoint}",
     "admin.provider.apiKey": "API key",
-    "admin.provider.apiKeyHint": "Stored encrypted with LLM_SECRETS_KEY.",
     "admin.provider.apiKeyKeep": "A key is stored. Leave empty to keep it.",
     "admin.provider.clearKey": "Remove the stored key",
     "admin.provider.timeout": "Timeout (s)",
-    "admin.provider.retries": "Retries",
     "admin.provider.enabled": "Enabled",
     "admin.provider.keySet": "Key stored",
     "admin.provider.keyMissing": "No key",
@@ -1431,8 +1305,6 @@ export const adminMessages = {
     "admin.nav.proxy": "Proxies",
     "admin.proxy.title": "Outbound proxies",
     "admin.proxy.queue": "Proxy queue",
-    "admin.proxy.queueHint":
-      "A routed request tries these proxies top to bottom and stops at the first that answers. A proxy that fails moves behind the others for a minute.",
     "admin.proxy.add": "Add proxy",
     "admin.proxy.addTitle": "Add proxy",
     "admin.proxy.editTitle": "Edit proxy",
@@ -1442,7 +1314,6 @@ export const adminMessages = {
     "admin.proxy.emptyHint":
       "Every outbound request connects directly. Add a proxy, then choose the areas that use it.",
     "admin.proxy.name": "Name",
-    "admin.proxy.nameHint": "Optional label shown in the queue.",
     "admin.proxy.scheme": "Protocol",
     "admin.proxy.host": "Address",
     "admin.proxy.port": "Port",
@@ -1453,8 +1324,6 @@ export const adminMessages = {
       "The stored password cannot be read with the current secrets key; enter it again.",
     "admin.proxy.clearPassword": "Remove the stored password",
     "admin.proxy.enabled": "In use",
-    "admin.proxy.enabledHint":
-      "A proxy that is not in use stays in the queue but is skipped.",
     "admin.proxy.disabled": "Not in use",
     "admin.proxy.hasPassword": "Password",
     "admin.proxy.passwordUnreadable": "Re-enter password",
@@ -1463,32 +1332,17 @@ export const adminMessages = {
     "admin.proxy.lastFailure": "Failed {time}",
     "admin.proxy.test": "Test",
     "admin.proxy.testTarget": "Test through",
-    "admin.proxy.testHint":
-      "A test asks one public page of that area through one proxy, with no fallback.",
     "admin.proxy.testOk": "HTTP {status} in {ms} ms",
     "admin.proxy.testError.timeout": "No answer within 10 seconds",
     "admin.proxy.testError.failed": "The proxy did not carry the request",
     "admin.proxy.areas": "Areas",
-    "admin.proxy.areasHint":
-      "Choose which requests use the queue. An area that is off connects directly.",
     "admin.proxy.area.x": "X",
     "admin.proxy.area.youtube": "YouTube",
     "admin.proxy.area.bilibili": "Bilibili",
     "admin.proxy.area.shop": "Official shop",
     "admin.proxy.area.media": "Media downloads",
     "admin.proxy.area.llm": "Model providers",
-    "admin.proxy.areaHint.x":
-      "Profile, FxTwitter and vxtwitter reads, and the X API.",
-    "admin.proxy.areaHint.youtube":
-      "Pages, feeds, the Data API, push subscriptions and yt-dlp reads (at most three proxies per read).",
-    "admin.proxy.areaHint.bilibili": "Upload lists and video details.",
-    "admin.proxy.areaHint.shop": "The shop's product and collection lists.",
-    "admin.proxy.areaHint.media": "Post, video and profile images.",
     "admin.proxy.area.notify": "Alerts",
-    "admin.proxy.areaHint.notify":
-      "ntfy, Telegram, webhooks and the heartbeat.",
-    "admin.proxy.areaHint.llm":
-      "Extraction, translation, provider tests and model discovery. Providers on this machine or the local network always connect directly.",
     "admin.proxy.useProxies": "Proxies for this area",
     "admin.proxy.allHint": "None selected: every proxy in queue order.",
     "admin.proxy.selectionHint": "Only the selected proxies, in queue order.",
@@ -1497,8 +1351,6 @@ export const adminMessages = {
     "admin.proxy.noUsableDirect":
       "No proxy for this area is in use, so its requests connect directly.",
     "admin.proxy.directFallback": "Connect directly when every proxy fails",
-    "admin.proxy.directFallbackHint":
-      "Off keeps a routed area from ever connecting directly; its requests fail instead.",
     "admin.notice.proxySaved": "Proxy saved",
     "admin.notice.proxyRemoved": "Proxy removed",
     "admin.notice.proxyRoutesSaved": "Proxy areas saved",
@@ -1512,19 +1364,13 @@ export const adminMessages = {
     "admin.notice.extractionSaved": "Detection settings saved",
     "admin.notice.queueSaved": "Queue saved",
     "admin.models.translation": "Translation queue",
-    "admin.route.translationEmptyHint":
-      "Without a model, the translate step skips safely and keeps operator requests.",
     "admin.route.translationNeedsText":
       "No usable text model is queued, so nothing is translated.",
-    "admin.route.verifyEmptyHint":
-      "Without a model, image posts and schedule images stay unprocessed; a manual label still publishes schedule images.",
     "admin.route.verifyNeedsImage":
       "No usable image model is queued, so image posts and schedule images are not processed.",
     "admin.translation.title": "Translations",
     "admin.translation.edit": "Edit translations",
     "admin.translation.original": "Original",
-    "admin.translation.precedence":
-      "Readers see a manual translation first, then the platform’s, then the AI’s. A manual translation stays until you clear it.",
     "admin.translation.locale.en": "English",
     "admin.translation.locale.ja": "Japanese",
     "admin.translation.locale.zh-CN": "Simplified Chinese",
@@ -1820,8 +1666,6 @@ export const adminMessages = {
     "admin.notice.wbaGenerated": "Web Bot Auth key generated",
     "admin.notice.wbaRemoved": "Web Bot Auth key removed",
     "admin.shop.readAll": "Read the whole catalog",
-    "admin.shop.readAllHint":
-      "Reads every product page, at most six, three seconds apart, for sale periods the newest-50 window never listed. It waits out a 429 like the timer.",
     "admin.code.youtube_watch_login_required":
       "YouTube asked this server to sign in (its bot check), so the run read no more watch pages.",
     "admin.code.youtube_feed_http_error":
@@ -1878,6 +1722,9 @@ export const adminMessages = {
     "admin.alerts.state.off": "Off",
     "admin.alerts.open": "Open alerts",
     "admin.alerts.openedAt": "Opened {time}",
+    "admin.alerts.acknowledgedAt": "acknowledged {time}",
+    "admin.alerts.acknowledge": "Acknowledge",
+    "admin.alerts.unacknowledge": "Undo acknowledge",
     "admin.alerts.channels": "Channels",
     "admin.alerts.addChannel": "Add channel",
     "admin.alerts.editChannel": "Edit channel",
@@ -1974,26 +1821,18 @@ export const adminMessages = {
     "admin.detection.mode": "Posts sent to the model",
     "admin.detection.mode.keyword": "Keyword match",
     "admin.detection.mode.llm": "Everything to the LLM",
-    "admin.detection.modeHint.keyword":
-      "Posts with a keyword are read as schedule images; other posts that mention a date or stream are read as text.",
-    "admin.detection.modeHint.llm":
-      "Every post with text or images goes to the model, without a keyword or date check. Each new post costs one model call.",
     "admin.detection.modeHint.custom":
       "The saved stages match neither mode. Pick one to replace them.",
     "admin.llm.queues": "Model queues",
     "admin.llm.queue.schedule": "Schedule extraction",
     "admin.llm.queue.verify": "Image extraction",
     "admin.llm.failures.title": "Recent failures",
-    "admin.llm.failures.hint":
-      "The newest failed model results of schedule extraction, image extraction and translation/light tasks, with the stored message.",
     "admin.llm.failures.reload": "Reload recent failures",
     "admin.llm.failures.translate": "Translation",
     "admin.llm.failures.post": "Post",
     "admin.llm.failures.image": "Image of post",
     "admin.llm.failures.video": "Video",
     "admin.llm.failures.none": "No recent failures",
-    "admin.llm.failures.noneHint":
-      "Failed model calls appear here with their stage, model and message.",
     "admin.route.addModel": "Add model",
     "admin.route.usedFor.text": "First for text",
     "admin.route.usedFor.image": "First for images",
@@ -2022,8 +1861,6 @@ export const adminMessages = {
     "admin.provider.state.unchecked": "Not checked yet",
     "admin.provider.checked": "Checked {time}",
     "admin.provider.lastError": "Last error",
-    "admin.provider.createNext":
-      "After saving, the provider's model list is fetched so you can pick the models to add.",
     "admin.translation.placeholder": "Type the translation readers should see",
     "admin.translation.machineReference": "AI translation",
     "admin.translation.useMachine": "Copy into the editor",
@@ -2105,24 +1942,12 @@ export const adminMessages = {
     "admin.step.media": "媒体缓存",
     "admin.step.schedule": "日程提取",
     "admin.step.live": "直播状态",
-    "admin.step.x.hint": "读取所配置账号的新贴文",
-    "admin.step.youtube.hint": "读取新视频和预定直播",
     "admin.step.bilibili": "哔哩哔哩投稿",
-    "admin.step.bilibili.hint": "读取新投稿，受最小间隔限制",
     "admin.step.x_related": "X 关联账号",
     "admin.step.bilibili_dynamics": "哔哩哔哩动态",
-    "admin.step.bilibili_dynamics.hint":
-      "使用登录 Cookie 读取新动态，受最小间隔限制",
     "admin.step.shop": "官方商店",
-    "admin.step.shop.hint": "从商店商品列表读取鹿乃的发售期间",
-    "admin.step.media.hint": "把图片和缩略图缓存到本地",
-    "admin.step.schedule.hint": "把候选贴文转换为日程",
     "admin.step.translate": "翻译",
-    "admin.step.translate.hint":
-      "翻译缺少译文的 X 贴文、哔哩哔哩动态和 YouTube 标题；日期和时间保持原文",
     "admin.step.reconcile": "重复合并",
-    "admin.step.reconcile.hint":
-      "隐藏同一场直播的重复条目，并把哔哩哔哩投稿合并到对应的 YouTube 视频；在来源和提取步骤之后运行",
 
     "admin.run.kind.sync": "完整同步",
     "admin.run.kind.scan": "日程扫描",
@@ -2244,7 +2069,7 @@ export const adminMessages = {
     "admin.review.media.none": "无图片",
     "admin.review.media.noneLegacy": "无图片（旧记录）",
     "admin.review.noImageHint":
-      "这条记录没有图片地址，无需下载或检查。标记为「不是日程」即可关闭；之后同步到的新图片会替换它。",
+      "这条记录没有图片地址。标记为「不是日程」即可关闭。",
     "admin.review.periodTitle": "修正覆盖日期",
     "admin.review.periodHint": "两端日期都包含在内（日本时间）。",
     "admin.review.periodStart": "第一天",
@@ -2354,8 +2179,7 @@ export const adminMessages = {
     "admin.event.mergedInto": "已合并到 {title}",
     "admin.event.keptSeparate": "保持独立",
     "admin.event.hiddenByPosts": "因来源帖子隐藏",
-    "admin.event.hiddenByPostsHint":
-      "所有来源帖子都已隐藏，公开页面不显示此条目。显示任一帖子或确认此条目即可重新显示。",
+    "admin.event.hiddenByPostsHint": "显示任一帖子或确认此条目即可重新显示。",
     "admin.event.type.event": "活动",
     "admin.event.type.stream": "直播",
     "admin.event.type.member": "会员",
@@ -2386,8 +2210,7 @@ export const adminMessages = {
     "admin.schedule.unmerge": "撤销合并并保持独立",
     "admin.schedule.merge.open": "合并到其他条目",
     "admin.schedule.merge.title": "合并到其他条目",
-    "admin.schedule.merge.hint":
-      "“{title}”（{day}）将隐藏在你选择的条目之后。自动合并不会更改此决定；可在列表中撤销。",
+    "admin.schedule.merge.hint": "“{title}”（{day}）将隐藏在你选择的条目之后。",
     "admin.schedule.merge.action": "合并到此",
     "admin.schedule.merge.none":
       "前一天到后一天之间没有其他在看板上显示的条目。",
@@ -2399,8 +2222,6 @@ export const adminMessages = {
     "admin.schedule.filter.to": "截止",
     "admin.schedule.empty": "没有符合条件的条目",
     "admin.schedule.emptyHint": "换一个日期范围、筛选或搜索词。",
-    "admin.schedule.lockHint":
-      "保存后条目会被锁定，之后的同步会保留你的内容。模型仍可能标记疑似取消。",
     "admin.schedule.field.title": "标题",
     "admin.schedule.field.date": "日期",
     "admin.schedule.field.dateHint": "日本日期",
@@ -2427,13 +2248,11 @@ export const adminMessages = {
     "admin.schedule.field.approximate": "开始时间是大致时间",
     "admin.schedule.field.type": "类型",
     "admin.schedule.field.tag": "日程标签",
-    "admin.schedule.field.tagHint": "显示在日程表中该条目的旁边",
     "admin.schedule.tag.none": "不设置",
     "admin.schedule.tag.auto": "自动识别",
     "admin.schedule.tag.decidedManual": "由运营员设定",
     "admin.schedule.tag.decidedAutomatic": "自动识别",
     "admin.schedule.field.status": "状态备注",
-    "admin.schedule.field.statusHint": "作为短标签显示",
     "admin.schedule.field.url": "链接",
     "admin.schedule.field.detail": "详情",
     "admin.schedule.field.detailPlaceholder": "显示在标题下方和日历备注中",
@@ -2503,8 +2322,6 @@ export const adminMessages = {
     "admin.videos.merge.byRule": "由匹配规则合并",
     "admin.videos.merge.byOperator": "由管理员合并",
     "admin.videos.merge.separate": "保持独立",
-    "admin.videos.merge.separateHint":
-      "管理员撤销过这个投稿的合并，匹配规则不会再自动合并它；仍可手动合并。",
     "admin.videos.merge.undo": "撤销合并",
     "admin.videos.merge.open": "合并…",
     "admin.videos.merge.action": "合并",
@@ -2516,11 +2333,7 @@ export const adminMessages = {
     "admin.videos.merge.candidates": "可能的 YouTube 版本",
     "admin.videos.merge.noCandidates":
       "六小时内没有标题或时长相符的 YouTube 视频。",
-    "admin.review.mergeHint":
-      "匹配规则将在下次运行时合并的投稿，以及因多个视频相符、时长未知或标题不同而留给你决定的投稿。",
     "admin.review.worksConflicts": "作品列表的配对与此不同",
-    "admin.review.worksConflictsHint":
-      "随程序发布的作品列表为这些 B 站投稿配对的 YouTube 视频与当前合并不同。作品列表不会合并或解除任何投稿；请在这里决定，或修正资料库。",
     "admin.review.worksMergedInto": "已合并到 {id}",
     "admin.review.worksNotMerged": "未合并",
     "admin.review.worksPairs": "作品列表：{ids}",
@@ -2538,16 +2351,13 @@ export const adminMessages = {
     "admin.bilibili.loginExpired": "登录已过期",
     "admin.bilibili.loginUnchecked": "尚未检查登录",
     "admin.bilibili.loginExpiredHint":
-      "登录 Cookie 已过期。请在服务器环境中设置新的 BILIBILI_COOKIE 或 BILIBILI_SESSDATA，每日登录检查会确认它。",
+      "登录 Cookie 已过期。请在服务器环境中设置新的 BILIBILI_COOKIE 或 BILIBILI_SESSDATA。",
     "admin.bilibili.force": "仍然尝试一次",
-    "admin.bilibili.forceHint":
-      "验证码退避持续到 {time}。这会立即发送这一次读取，可能延长退避。",
+    "admin.bilibili.forceHint": "立即发送一次读取，可能延长退避。",
     "admin.bilibili.blocked": "验证码退避中",
     "admin.bilibili.account": "账号",
     "admin.bilibili.blockedUntil": "等待至 {time}",
     "admin.bilibili.lastError": "最近错误",
-    "admin.bilibili.signInHint":
-      "未登录读取经常会遇到哔哩哔哩的验证码。在服务器环境中设置 BILIBILI_COOKIE 或 BILIBILI_SESSDATA 即可以登录账号读取，详见配置说明。",
     "admin.bilibili.add": "添加投稿",
     "admin.bilibili.addButton": "添加",
     "admin.bilibili.addField": "BV 号或视频链接",
@@ -2645,8 +2455,6 @@ export const adminMessages = {
     "admin.runs.section.history": "历史",
     "admin.runs.section.next": "接下来",
     "admin.runs.stepRun": "单次运行步骤",
-    "admin.runs.stepRunHint":
-      "任选步骤运行一次，不会保存。来源也会在“来源”页按各自的定时器运行。",
     "admin.runs.runOnce": "运行一次",
     "admin.runs.skippedStep": "本进程已停用",
     "admin.runs.history": "运行记录",
@@ -2656,10 +2464,6 @@ export const adminMessages = {
     "admin.runs.retry": "重试",
 
     "admin.sources.title": "来源",
-    "admin.sources.x.hint":
-      "公开的 FxTwitter 时间线；配置 X_API_BEARER_TOKEN 后可检索完整历史。",
-    "admin.sources.youtube.hint":
-      "RSS 订阅；配置 YOUTUBE_API_KEY 后可读取更早的视频。",
     "admin.sources.lastSuccess": "最近一次成功读取",
     "admin.sources.oldest": "最早记录 · {label}",
     "admin.sources.channel": "频道",
@@ -2689,10 +2493,7 @@ export const adminMessages = {
     "admin.fetch.account.all": "全部账号",
     "admin.fetch.openSources": "抓取",
     "admin.push.title": "YouTube 推送",
-    "admin.push.description":
-      "让 YouTube 的 Hub 在有新视频时通知本站，从而排队一次 YouTube 读取。",
     "admin.push.enable": "接收推送通知",
-    "admin.push.enableHint": "需要一个能访问到本服务器的公开 HTTPS 回调地址。",
     "admin.push.unavailable": "YouTube 已被 SKIP_YOUTUBE 停用。",
     "admin.push.callback": "部署地址",
     "admin.push.callbackPlaceholder": "部署域名，例如 https://example.com",
@@ -2706,14 +2507,8 @@ export const adminMessages = {
     "admin.push.triggered": "最近排队读取",
     "admin.push.lastError": "最近错误",
     "admin.liveProbe.title": "直播状态探测",
-    "admin.liveProbe.description":
-      "只重新读取即将开始或仍在进行的直播的观看页，每次最多 {max} 个，让看板按 YouTube 自己的状态显示直播中。",
     "admin.liveProbe.enable": "探测进行中的直播",
-    "admin.liveProbe.enableHint":
-      "在服务器任务队列中运行：直播开始前后每隔几分钟检查一次，且只在有活跃视频时运行。",
     "admin.liveProbe.interval": "间隔（分钟）",
-    "admin.liveProbe.intervalHint":
-      "{min} 到 {max} 分钟，用于直播中的视频，以及开始 45 分钟后仍未开播的待机室。从预定开始到确认开播，每 3 分钟检查一次。结果在两个间隔内有效，之后看板改按开始时间推断。",
     "admin.liveProbe.lastRun": "最近探测",
     "admin.liveProbe.nextRun": "下次探测",
     "admin.liveProbe.active": "当前活跃视频",
@@ -2724,8 +2519,6 @@ export const adminMessages = {
     "admin.liveProbe.phase.overdue": "已过开播时间",
     "admin.liveProbe.phase.baseline": "例行检查",
     "admin.liveProbe.bilibili.title": "哔哩哔哩直播间",
-    "admin.liveProbe.bilibili.description":
-      "在哔哩哔哩直播日程前后检查账号的直播间，其余时间按间隔检查，让公开页面显示已预告或未预告的哔哩哔哩直播。",
     "admin.liveProbe.bilibili.enable": "检查哔哩哔哩直播间",
     "admin.liveProbe.bilibili.nextCheck": "下次检查",
     "admin.liveProbe.due": "下次检查 {time}",
@@ -2734,18 +2527,10 @@ export const adminMessages = {
     "admin.liveProbe.resume": "重新检查",
     "admin.liveProbe.stopped.unavailable": "已停止：私密或已删除",
     "admin.liveProbe.stopped.operator": "已由管理员停止",
-    "admin.sources.bilibili.hint":
-      "账号的公开投稿，每 BILIBILI_MIN_INTERVAL_MINUTES 最多读取一次。直播间按自己的间隔检查。",
-    "admin.sources.bilibili_dynamics.hint":
-      "账号的动态，使用 BILIBILI_COOKIE 或 BILIBILI_SESSDATA 读取，默认先用桌面端列表。每 BILIBILI_MIN_INTERVAL_MINUTES 最多读取一次；遇到验证码或限流时立即停止备用请求。",
     "admin.chain.method.bilibili_dynamics.desktop": "桌面端动态列表",
     "admin.chain.method.bilibili_dynamics.dynamics": "WBI 动态列表",
-    "admin.sources.shop.hint":
-      "官方商店最新的 50 件商品。带有「鹿乃まほろ」标签并写明受注或发售期间的商品，会按系列和期间成为「发售中」条目。",
     "admin.timer.on": "每 {interval}",
     "admin.timer.enable": "定时运行",
-    "admin.timer.enableHint":
-      "开启后过一个间隔才第一次运行。运行与其他任务共用一个队列。",
     "admin.timer.skipped": "未运行：{flag}=1 停用了此来源。",
     "admin.timer.schedulerOff":
       "未运行：定时器已关闭（WORKFLOW_SCHEDULER_ENABLED=0）。",
@@ -2755,14 +2540,10 @@ export const adminMessages = {
     "admin.timer.syncLimit.count.x": "每个账号最新贴文数",
     "admin.timer.syncLimit.incremental.youtube": "每次最多新视频数",
     "admin.timer.syncLimit.count.youtube": "每次最新视频数",
-    "admin.timer.syncLimitHint.x": "1 到 200",
-    "admin.timer.syncLimitHint.youtube":
-      "1 到 200。没有 YOUTUBE_API_KEY 时 RSS 只列出 15 个。",
+    "admin.timer.syncLimitHint": "1 到 200",
     "admin.timer.nextRun": "下次运行",
     "admin.timer.lastRun": "上次运行",
     "admin.timer.runNow": "立即运行",
-    "admin.timer.runNowHint":
-      "立即运行此来源的步骤一次，下次定时运行的时间不变。",
     "admin.timer.never": "从未",
 
     "admin.models.extraction": "识别方式",
@@ -2774,12 +2555,10 @@ export const adminMessages = {
     "admin.models.keywordsPlaceholder": "输入关键词后按回车",
     "admin.models.unsaved": "有未保存的修改",
     "admin.models.providers": "服务商",
-    "admin.models.providersHint": "Key 加密保存，保存后不会再显示。",
     "admin.models.noProviders": "还没有服务商",
     "admin.models.noProvidersHint": "添加服务商，然后发现或添加模型。",
 
     "admin.route.empty": "队列中还没有模型",
-    "admin.route.emptyHint": "没有模型时，提取会安全跳过。",
     "admin.route.up": "上移",
     "admin.route.down": "下移",
     "admin.route.remove": "从队列移除",
@@ -2806,11 +2585,9 @@ export const adminMessages = {
     "admin.provider.baseUrl": "API 基础地址",
     "admin.provider.endpoint": "请求将发送到 {endpoint}",
     "admin.provider.apiKey": "API Key",
-    "admin.provider.apiKeyHint": "使用 LLM_SECRETS_KEY 加密保存。",
     "admin.provider.apiKeyKeep": "已保存 Key，留空即保持不变。",
     "admin.provider.clearKey": "删除已保存的 Key",
     "admin.provider.timeout": "超时（秒）",
-    "admin.provider.retries": "重试次数",
     "admin.provider.enabled": "启用",
     "admin.provider.keySet": "已保存 Key",
     "admin.provider.keyMissing": "没有 Key",
@@ -2892,19 +2669,13 @@ export const adminMessages = {
     "admin.notice.extractionSaved": "识别设置已保存",
     "admin.notice.queueSaved": "队列已保存",
     "admin.models.translation": "翻译/轻任务队列",
-    "admin.route.translationEmptyHint":
-      "没有模型时，翻译步骤会安全跳过，并保留人工发起的请求。",
     "admin.route.translationNeedsText":
       "队列中没有可用的“文本”模型，不会进行任何翻译。",
-    "admin.route.verifyEmptyHint":
-      "没有模型时，带图片的贴文和日程图不会处理；人工标记仍可发布日程图。",
     "admin.route.verifyNeedsImage":
       "队列中没有可用的“图片”模型，不会处理带图片的贴文和日程图。",
     "admin.translation.title": "翻译",
     "admin.translation.edit": "编辑翻译",
     "admin.translation.original": "原文",
-    "admin.translation.precedence":
-      "读者优先看到人工翻译，其次是平台提供的翻译，最后是 AI 翻译。人工翻译会一直保留，直到你清除它。",
     "admin.translation.locale.en": "英文",
     "admin.translation.locale.ja": "日文",
     "admin.translation.locale.zh-CN": "简体中文",
@@ -3132,26 +2903,18 @@ export const adminMessages = {
     "admin.detection.mode": "交给模型的贴文",
     "admin.detection.mode.keyword": "关键词匹配",
     "admin.detection.mode.llm": "全部交给 LLM",
-    "admin.detection.modeHint.keyword":
-      "含关键词的贴文按日程图片读取；其他提到日期或直播的贴文按文字读取。",
-    "admin.detection.modeHint.llm":
-      "每条带文字或图片的贴文都交给模型，不做关键词或日期检查。每条新贴文消耗一次模型调用。",
     "admin.detection.modeHint.custom":
       "已保存的阶段设置不属于任一方式，选择一种即可替换。",
     "admin.llm.queues": "模型队列",
     "admin.llm.queue.schedule": "日程提取",
     "admin.llm.queue.verify": "图片提取",
     "admin.llm.failures.title": "最近失败",
-    "admin.llm.failures.hint":
-      "日程提取、图片提取和翻译/轻任务最近失败的模型结果，以及记录的错误信息。",
     "admin.llm.failures.reload": "重新载入最近失败",
     "admin.llm.failures.translate": "翻译",
     "admin.llm.failures.post": "推文",
     "admin.llm.failures.image": "推文图片",
     "admin.llm.failures.video": "视频",
     "admin.llm.failures.none": "最近没有失败",
-    "admin.llm.failures.noneHint":
-      "失败的模型调用会显示在这里，包括环节、模型和错误信息。",
     "admin.route.addModel": "添加模型",
     "admin.route.usedFor.text": "文字首选",
     "admin.route.usedFor.image": "图片首选",
@@ -3179,8 +2942,6 @@ export const adminMessages = {
     "admin.provider.state.unchecked": "尚未检查",
     "admin.provider.checked": "{time}检查",
     "admin.provider.lastError": "最近一次错误",
-    "admin.provider.createNext":
-      "保存后会获取该服务商的模型列表，供你选择要添加的模型。",
     "admin.translation.placeholder": "输入读者应看到的译文",
     "admin.translation.machineReference": "AI 译文",
     "admin.translation.useMachine": "复制到编辑框",

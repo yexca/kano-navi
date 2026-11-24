@@ -28,9 +28,9 @@ not routed.
 The configuration is one ordered proxy queue, one route per area and a
 direct-fallback switch:
 
-- A proxy has a protocol (`http`, `https`, `socks5` or `socks5h`), a hostname
-  or IP address, a port, an optional username and password, and an in-use
-  switch. The queue holds at most 16 proxies.
+- A proxy has an optional name, which labels it in the console's queue, a
+  protocol (`http`, `https`, `socks5` or `socks5h`), a hostname or IP
+  address, a port, an optional username and password, and an in-use switch. The queue holds at most 16 proxies.
 - A route is off (the area connects directly) or on with a proxy selection.
   An empty selection means every proxy; either way proxies are tried in
   queue order. A selection keeps the ids it names when a proxy is removed, so

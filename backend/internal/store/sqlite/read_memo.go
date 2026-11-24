@@ -301,6 +301,13 @@ func (s *Store) queryLinkedEvents(ctx context.Context, videos []Video, now time.
 	return out, nil
 }
 
+// cancelledVideosSQL is cancelledVideos' statement for n videos, each bound
+// as its ID and URL.
+func cancelledVideosSQL(n int) string {
+	return `WITH v(vid,vurl) AS (VALUES ` + strings.TrimSuffix(strings.Repeat("(?,?),", n), ",") + `)
+ SELECT v.vid FROM v WHERE ` + videoEventExistsSQL("v.vid", "v.vurl", "e.cancellation_status='manual_confirmed'", true)
+}
+
 // cancelledVideos lists the videos that an operator-confirmed cancellation
 // names by ID, source evidence or stream URL.
 func (s *Store) cancelledVideos(ctx context.Context, videos []Video) (map[string]bool, error) {
@@ -311,8 +318,7 @@ func (s *Store) cancelledVideos(ctx context.Context, videos []Video) (map[string
 		for _, v := range chunk {
 			args = append(args, v.ID, v.URL)
 		}
-		rows, err := s.db.QueryContext(ctx, `WITH v(vid,vurl) AS (VALUES `+strings.TrimSuffix(strings.Repeat("(?,?),", len(chunk)), ",")+`)
- SELECT v.vid FROM v WHERE EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND (e.id='youtube-'||v.vid OR (e.source='youtube' AND e.source_item_id=v.vid) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.vid) OR (e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.vurl))))`, args...)
+		rows, err := s.db.QueryContext(ctx, cancelledVideosSQL(len(chunk)), args...)
 		if err != nil {
 			return nil, dbErr(err)
 		}

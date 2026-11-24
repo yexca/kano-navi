@@ -3,8 +3,8 @@ import { appendFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
 // Validation runs in one of two tiers. `pr` selects jobs from the changed
-// paths and is what a pull request must pass to merge. `full` runs every job
-// and is what main and a release must pass.
+// paths and is what a pull request must pass to merge. `full` runs every
+// validation job and is what main and a release must pass.
 export const tiers = ["pr", "full"] as const
 export type Tier = (typeof tiers)[number]
 
@@ -17,9 +17,18 @@ export const jobs = [
   "frontend",
   "smoke",
   "docker",
+  "go-audit",
+  "npm-audit",
 ] as const
 export type Job = (typeof jobs)[number]
 export type Plan = Record<Job, boolean>
+
+// The advisory audits query live databases, so only a pull request that
+// changes the matching dependency manifest plans one: a new advisory for an
+// unchanged dependency never fails an unrelated pull request. The daily
+// Dependency audit workflow covers main, so the full tier plans neither and a
+// new advisory cannot hold back a release.
+export const auditJobs: readonly Job[] = ["go-audit", "npm-audit"]
 
 // The jobs every tier runs unconditionally, beside the planned ones.
 export const alwaysRun = ["plan", "style"] as const
@@ -83,7 +92,8 @@ const documentation =
 const styleOnly = /^(\.env\.example|\.gitignore|docker-compose(\.dev)?\.yml)$/
 const frontendConfig = /^(index\.html|tsconfig\.json|vite\.config\.ts)$/
 
-// The jobs a changed path selects, or null when it selects every job.
+// The jobs a changed path selects, or null when it selects every validation
+// job.
 function jobsFor(path: string): Job[] | null {
   if (documentation.test(path) || styleOnly.test(path)) return []
   if (path.startsWith("scripts/")) {
@@ -93,6 +103,7 @@ function jobsFor(path: string): Job[] | null {
   // The frontend tests read the static seed to keep its copy in step.
   if (path === "backend/internal/store/sqlite/static-seed.json")
     return [...backendJobs, "frontend"]
+  if (/^backend\/go\.(mod|sum)$/.test(path)) return [...backendJobs, "go-audit"]
   // Go container builds this image; the release image has its own Dockerfile.
   if (path === "backend/Dockerfile") return ["go-container"]
   if (path.startsWith("backend/")) return backendJobs
@@ -100,10 +111,11 @@ function jobsFor(path: string): Job[] | null {
   if (frontendConfig.test(path)) return frontendJobs
   if (path.startsWith("tests/")) return ["frontend"]
   // The release image installs from the manifest and reads its version.
-  if (/^package(-lock)?\.json$/.test(path)) return frontendJobs
+  if (/^package(-lock)?\.json$/.test(path))
+    return [...frontendJobs, "npm-audit"]
   if (path.startsWith("docker/") || path === "LICENSE") return ["docker"]
   // Makefile, .nvmrc, workflows, composite actions, Dependabot and anything
-  // unclassified.
+  // unclassified: every validation job, but no advisory audit.
   return null
 }
 
@@ -115,14 +127,20 @@ export function createPlan({
   paths?: string[] | null
 }): Plan {
   if (!tiers.includes(tier as Tier)) throw new Error(`Unknown CI tier: ${tier}`)
-  const all = Object.fromEntries(jobs.map((job) => [job, true])) as Plan
-  // A missing or empty diff is not evidence that it is safe to skip validation.
-  if (tier === "full" || !paths?.length) return all
+  const validation = jobs.filter((job) => !auditJobs.includes(job))
   const plan = Object.fromEntries(jobs.map((job) => [job, false])) as Plan
+  if (tier === "full") {
+    for (const job of validation) plan[job] = true
+    return plan
+  }
+  // A missing or empty diff is not evidence that it is safe to skip validation
+  // or an audit.
+  if (!paths?.length) {
+    for (const job of jobs) plan[job] = true
+    return plan
+  }
   for (const path of paths) {
-    const selected = jobsFor(path)
-    if (!selected) return all
-    for (const job of selected) plan[job] = true
+    for (const job of jobsFor(path) ?? validation) plan[job] = true
   }
   return plan
 }

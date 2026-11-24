@@ -59,8 +59,11 @@ test("review posts filter by step and state, link to the posts queued for a run 
   let root: Rendered | undefined
   let compactRoot: Rendered | undefined
   try {
-    const { PostActions, ReviewView } = await vite.ssrLoadModule(
+    const { ReviewView } = await vite.ssrLoadModule(
       "/src/admin/views/review.tsx",
+    )
+    const { PostActions } = await vite.ssrLoadModule(
+      "/src/admin/views/post-parts.tsx",
     )
     const { AdminContext } = await vite.ssrLoadModule(
       "/src/admin/use-admin-data.ts",

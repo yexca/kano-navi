@@ -18,7 +18,6 @@ interface ProviderDraft {
   apiKey: string
   clearKey: boolean
   timeoutSeconds: number
-  maxRetries: number
   enabled: boolean
 }
 
@@ -52,7 +51,6 @@ export function ProviderDialog({
     apiKey: "",
     clearKey: false,
     timeoutSeconds: Math.round((provider?.timeoutMs || 30000) / 1000),
-    maxRetries: provider?.maxRetries ?? 2,
     enabled: provider?.enabled ?? true,
   }))
   const [busy, setBusy] = useState(false)
@@ -75,7 +73,6 @@ export function ProviderDialog({
       baseUrl: draft.baseUrl,
       protocol: draft.protocol,
       timeoutMs: draft.timeoutSeconds * 1000,
-      maxRetries: draft.maxRetries,
       enabled: draft.enabled,
     }
     // A key is sent only when typed or explicitly cleared; it is never read back.
@@ -192,7 +189,7 @@ export function ProviderDialog({
           hint={
             provider?.apiKeyConfigured
               ? t("admin.provider.apiKeyKeep")
-              : t("admin.provider.apiKeyHint")
+              : undefined
           }
         >
           <span className="adm-input-icon">
@@ -231,15 +228,6 @@ export function ProviderDialog({
                 }
               />
             </Field>
-            <Field label={t("admin.provider.retries")}>
-              <input
-                type="number"
-                min={0}
-                max={2}
-                value={draft.maxRetries}
-                onChange={(e) => set({ maxRetries: Number(e.target.value) })}
-              />
-            </Field>
           </div>
         </details>
         <Switch
@@ -247,9 +235,6 @@ export function ProviderDialog({
           onChange={(enabled) => set({ enabled })}
           label={t("admin.provider.enabled")}
         />
-        {!provider ? (
-          <p className="adm-field-hint">{t("admin.provider.createNext")}</p>
-        ) : null}
         <div className="adm-form-actions">
           <Button onClick={onClose}>{t("admin.action.cancel")}</Button>
           <Button type="submit" variant="primary" icon={Save} busy={busy}>

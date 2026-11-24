@@ -296,11 +296,6 @@
   font-weight: 650;
 }
 
-.adm-switch-text small {
-  color: var(--adm-muted);
-  font-size: 12px;
-}
-
 .adm-segmented {
   display: inline-flex;
   flex-wrap: wrap;
@@ -571,10 +566,6 @@
   .adm-select-list {
     animation: none;
   }
-}
-
-.adm-filter-pill.is-toggle {
-  font-weight: 600;
 }
 
 .adm-date-range {

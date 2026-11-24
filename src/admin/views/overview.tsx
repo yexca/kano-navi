@@ -144,9 +144,6 @@ function QueueRow({ entry, busy }: { entry: QueueEntry; busy: boolean }) {
             busy={pending}
             disabled={pending}
             onClick={() => startNow(entry.source)}
-            title={t(
-              busy ? "admin.queue.runNextHint" : "admin.queue.startHint",
-            )}
           >
             {t(busy ? "admin.queue.runNext" : "admin.queue.startNow")}
           </Button>

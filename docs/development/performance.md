@@ -48,6 +48,26 @@ stage change), and `Preview` the queue preview judging every post.
   `posts_url_published_at_idx` index on `posts(url, published_at DESC)`,
   without a temporary sort. Startup adds the index to older snapshots, and
   the schema upgrade tests check that it exists.
+- The board snapshot's post reads never walk the posts table:
+  `TestDashboardPostReadsUseIndexes` checks that each account's newest posts
+  are read through `posts_account_instant_idx`, the Bilibili accounts through
+  `posts_bilibili_account_idx` and a schedule candidate's upstream-deleted
+  post by its ID. The latest post is the newest own post of that read, not a
+  query of its own. Startup adds both indexes to older snapshots, and the
+  schema upgrade tests check that they exist.
+- The board snapshot's video reads look each video's events up by identity:
+  `TestDashboardVideoReadsLookEventsUpByIdentity` checks that the active
+  videos and the confirmed cancellations match an event by its entry ID,
+  source item, event sources or stream URL through their indexes, each as a
+  lookup of its own, and never walk the events for every video.
+- A dashboard read at an unchanged revision is answered from the
+  [prepared response](../architecture/backend.md#text-transfer-and-static-caching):
+  `TestDashboardCacheFollowsTheRevision` checks that hits keep the body and
+  ETag and that a new revision computes again,
+  `TestDashboardCacheExpires` the expiry at the next transition and at the
+  next minute, `TestDashboardCacheSharesOneComputation` that concurrent misses
+  compute once, and `TestDashboardValidUntilEndsWithATrustedLiveState` the
+  expiry of a trusted broadcast state.
 - Public dashboard, revision and health JSON, the calendar and Atom feeds
   are gzip-compressed on the fly, and the build's text files are sent from
   Brotli or gzip siblings written at build time; admin, authentication,

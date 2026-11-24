@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/url"
 	"regexp"
 	"strings"
@@ -51,9 +50,10 @@ const publicPostSQL = `deleted_at IS NULL AND hidden_at IS NULL AND upstream_del
 
 // publicScheduleAssetSQL is the condition that the assets row aliased a is
 // not the schedule-image candidate of a post deleted upstream, which public
-// reads leave out with its post.
+// reads leave out with its post. The post is looked up by the ID that follows
+// the candidate's "schedule-x-" prefix, so the check never walks the posts.
 func publicScheduleAssetSQL(a string) string {
-	return a + `.id NOT IN (SELECT 'schedule-x-'||id FROM posts WHERE upstream_deleted_at IS NOT NULL)`
+	return `NOT (substr(` + a + `.id,1,11)='schedule-x-' AND EXISTS (SELECT 1 FROM posts up WHERE up.id=substr(` + a + `.id,12) AND up.upstream_deleted_at IS NOT NULL))`
 }
 
 // wallPostSQL holds for a post of the unaliased posts table that the post
@@ -69,6 +69,25 @@ const wallPostSQL = publicPostSQL + ` AND NOT (promoted_at IS NOT NULL AND EXIST
 // src/dashboard/post-rows.ts), like the per-kind limits of the video shelf.
 const dashboardAccountPosts = 8
 
+// dashboardPostsSQL is queryPosts' statement for the boardPostScope
+// condition scope. Its arguments are the scope's, the window start, the
+// scope's again and the per-account count.
+//
+// The per-account newest posts are the own accounts' only: a promoted post
+// appears in the combined wall, never as an account of its own.
+// posts_account_instant_idx holds those posts by account and instant, so the
+// accounts and each account's newest posts are read from the index instead
+// of ranking every post on each read.
+func dashboardPostsSQL(scope string) string {
+	instant := "julianday(published_at)"
+	account := "lower(COALESCE(account_handle,''))"
+	return `WITH accounts(k) AS (SELECT DISTINCT ` + account + ` FROM posts WHERE ` + publicPostSQL + ` AND promoted_at IS NULL)
+	SELECT ` + postColumns + ` FROM posts WHERE id IN (
+		SELECT id FROM (SELECT id FROM posts WHERE ` + wallPostSQL + scope + ` AND ` + instant + ` >= julianday(?) ORDER BY ` + instant + ` DESC, id ASC LIMIT 100)
+		UNION SELECT p.id FROM accounts JOIN posts p ON p.id IN (SELECT id FROM posts WHERE ` + publicPostSQL + scope + ` AND promoted_at IS NULL AND ` + account + `=accounts.k ORDER BY ` + instant + ` DESC, id ASC LIMIT ?)
+	) ORDER BY ` + instant + ` DESC, id ASC`
+}
+
 // queryPosts lists the newest 100 posts published since the window start
 // and, for every account, the newest dashboardAccountPosts of its posts.
 func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error) {
@@ -76,14 +95,8 @@ func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error)
 	if err != nil {
 		return nil, err
 	}
-	instant := "julianday(published_at)"
 	args := append(append(append([]any{}, scopeArgs...), since), scopeArgs...)
-	// The per-account newest posts are the own accounts' only: a promoted
-	// post appears in the combined wall, never as an account of its own.
-	rows, err := s.db.QueryContext(ctx, `SELECT `+postColumns+` FROM posts WHERE id IN (
-		SELECT id FROM (SELECT id FROM posts WHERE `+wallPostSQL+scope+` AND `+instant+` >= julianday(?) ORDER BY `+instant+` DESC, id ASC LIMIT 100)
-		UNION SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY lower(COALESCE(account_handle, '')) ORDER BY `+instant+` DESC, id ASC) AS n FROM posts WHERE `+publicPostSQL+scope+` AND promoted_at IS NULL) WHERE n <= ?
-	) ORDER BY `+instant+` DESC, id ASC`, append(args, dashboardAccountPosts)...)
+	rows, err := s.db.QueryContext(ctx, dashboardPostsSQL(scope), append(args, dashboardAccountPosts)...)
 	if err != nil {
 		return nil, dbErr(err)
 	}
@@ -100,22 +113,6 @@ func (s *Store) queryPosts(ctx context.Context, since string) ([]postRow, error)
 		return nil, dbErr(err)
 	}
 	return out, nil
-}
-
-func (s *Store) queryLatestPost(ctx context.Context) (*postRow, error) {
-	scope, scopeArgs, err := s.boardPostScope(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// The latest post is an own account's: a promoted post never takes it.
-	r, err := scanPostRow(s.db.QueryRowContext(ctx, `SELECT `+postColumns+` FROM posts WHERE `+publicPostSQL+scope+` AND promoted_at IS NULL ORDER BY julianday(published_at) DESC,id ASC LIMIT 1`, scopeArgs...))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, dbErr(err)
-	}
-	return &r, nil
 }
 
 func (s *Store) queryPostCount(ctx context.Context, since string) (int64, error) {

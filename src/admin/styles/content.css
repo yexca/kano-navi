@@ -526,6 +526,10 @@
   gap: 10px;
 }
 
+.adm-video-merge-section > .adm-badge {
+  justify-self: start;
+}
+
 /* The schedule's merge dialog: the explanation, then the visible entries. */
 .adm-event-merge .adm-modal-content {
   display: grid;

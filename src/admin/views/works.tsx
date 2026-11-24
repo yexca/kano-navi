@@ -353,7 +353,6 @@ function WorksRecentPanel({
           })}
         </p>
       ) : null}
-      <p className="adm-field-hint">{t("admin.site.worksRecentHint")}</p>
     </Panel>
   )
 }

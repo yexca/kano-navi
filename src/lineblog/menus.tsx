@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils"
 import { mediaVariantUrl } from "@/lib/media"
 import { ExternalLink } from "@/site/links"
-import { archiveMonths, media, mediaUrl, posts } from "./content"
+import { archiveMonths, mediaUrl, posts } from "./content"
 import { designOptions, officialSites, type LineblogDesign } from "./designs"
 import { type Translation, MenuLabel } from "./translation"
 

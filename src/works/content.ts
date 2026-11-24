@@ -2,12 +2,7 @@ import { cdnUrl } from "../lib/cdn.ts"
 import type { Locale } from "../types.ts"
 import personal from "./personal.json" with { type: "json" }
 import summary from "./summary.json" with { type: "json" }
-import type {
-  PersonalRelease,
-  Upload,
-  UploadVideos,
-  WorksCover,
-} from "./types.ts"
+import type { PersonalRelease, UploadVideos, WorksCover } from "./types.ts"
 
 /** Kano's own releases, oldest first as the collection lists them. */
 export const personalReleases = personal as PersonalRelease[]

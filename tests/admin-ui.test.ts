@@ -833,7 +833,7 @@ test("profile view distinguishes distinct uploaded account avatars by content ha
       copy,
     ] = await Promise.all([
       vite.ssrLoadModule("/src/admin/index.tsx"),
-      vite.ssrLoadModule("/src/admin/views/profile.tsx"),
+      vite.ssrLoadModule("/src/admin/views/profile-own-accounts.tsx"),
       vite.ssrLoadModule("/src/app-settings.tsx"),
       vite.ssrLoadModule("/src/admin-i18n.ts"),
     ])

@@ -56,7 +56,7 @@ username, hasPassword, passwordUnreadable, enabled, health}`, where `health`
 is `{lastSuccessAt, lastFailureAt, coolingUntil}` from this process. A save
 replaces each field it carries: `proxies` replaces the whole queue (a proxy
 without `id` is new), `routes` maps every area (`x`, `youtube`,
-`bilibili`, `shop`, `media`, `llm`) to `{enabled, proxyIds}`. In a proxy write,
+`bilibili`, `shop`, `media`, `llm`, `notify`) to `{enabled, proxyIds}`. In a proxy write,
 an omitted `password` keeps the stored password of the proxy with the same
 `id` while its scheme, host and port stay the same (a changed one is
 `400 invalid_input` until a password is sent), `""` clears it, and a

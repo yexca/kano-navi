@@ -123,17 +123,9 @@ function FetchForm({
   }
   return (
     <form className="adm-form" onSubmit={submit}>
-      {/* A source with one method, such as Bilibili's, has nothing to pick;
-      only YouTube's methods differ enough to explain. */}
+      {/* A source with one method, such as Bilibili's, has nothing to pick. */}
       {methods.length > 1 ? (
-        <FieldGroup
-          label={t("admin.fetch.method")}
-          hint={
-            source === "youtube"
-              ? t(`admin.fetch.methodHint.${source}.${method.id}`)
-              : undefined
-          }
-        >
+        <FieldGroup label={t("admin.fetch.method")}>
           <Segmented
             label={t("admin.fetch.method")}
             value={method.id}
@@ -174,14 +166,14 @@ function FetchForm({
           />
         </FieldGroup>
       ) : null}
-      {/* A method with one mode has nothing to pick; Latest and Everything
-      explain themselves, and only date windows need their bounds. */}
+      {/* A method with one mode has nothing to pick; only a date range needs
+      its bounds. */}
       {method.modes.length > 1 ? (
         <FieldGroup
           label={t("admin.fetch.selection")}
           hint={
-            current === "range" || current === "before"
-              ? t(`admin.fetch.modeHint.${current}.${source}`)
+            current === "range"
+              ? t(`admin.fetch.modeHint.range.${source}`)
               : undefined
           }
         >
@@ -522,7 +514,7 @@ export function FetchPanel({
   sources: Sources
   onOpenRuns: () => void
 }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const { api, overview } = useAdmin()
   const state = fetchState(source, sources, t)
   const [started, setStarted] = useState<string | null>(null)
@@ -663,7 +655,6 @@ export function ShopFetchPanel({
       icon={Download}
       title={t("admin.fetch.headingFor", { source: t("admin.step.shop") })}
     >
-      <p className="adm-field-hint">{t("admin.shop.readAllHint")}</p>
       <div className="adm-form-actions">
         <Button
           variant="primary"

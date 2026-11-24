@@ -188,12 +188,6 @@
   line-height: 1.2;
 }
 
-.adm-source-summary-title p {
-  margin: 2px 0 0;
-  color: var(--adm-muted);
-  font-size: 13px;
-}
-
 .adm-source-summary-actions {
   display: flex;
   flex-wrap: wrap;
@@ -317,57 +311,6 @@
 .adm-timed-actions.is-dirty {
   border-top-color: var(--adm-line);
   box-shadow: 0 -6px 16px -12px rgb(0 0 0 / 0.35);
-}
-
-/* A question mark beside a section title opens its explanation. */
-.adm-shell .adm-help-button {
-  width: 24px;
-  height: 24px;
-}
-
-.adm-shell .adm-help-button svg {
-  width: 15px;
-  height: 15px;
-}
-
-/* A field label with its question mark. */
-.adm-label-help {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.adm-shell .adm-label-help .adm-help-button {
-  margin-block: -4px;
-}
-
-.adm-help {
-  display: grid;
-  gap: 12px;
-  max-width: 60ch;
-  color: var(--adm-muted);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.adm-help p {
-  margin: 0;
-}
-
-.adm-help-terms {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-}
-
-.adm-help-terms dt {
-  margin-top: 8px;
-  color: var(--adm-text);
-  font-weight: 650;
-}
-
-.adm-help-terms dd {
-  margin: 0;
 }
 
 /* Counts against their limits: today's X API posts and each account's
@@ -669,13 +612,6 @@
 
 .adm-confirm-step .adm-fold-name h4 {
   font-size: 14px;
-}
-
-.adm-panel-header p {
-  max-width: 64ch;
-  margin: 4px 0 0;
-  color: var(--adm-muted);
-  font-size: 13px;
 }
 
 .adm-empty {

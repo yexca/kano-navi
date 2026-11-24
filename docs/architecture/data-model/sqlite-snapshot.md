@@ -60,7 +60,7 @@ own transaction, and the selected profile media is reconciled with its files
 | `x_reposts`                 | The own X accounts' reposts: reposted status, account, author, first sighting and first known own ID   |
 | `x_repost_ids`              | Every known own status ID of a repost, with its original status, account and first sighting            |
 | `bilibili_statuses`         | The Bilibili status pool: dynamics own forwards forward; never public                                  |
-| `alert_incidents`           | [Operator alert](../alerts.md#incidents) incidents: rule, subject, severity, detail, open/resolved     |
+| `alert_incidents`           | [Operator alert](../alerts.md#incidents) incidents: rule, subject, severity, detail, status, ack time  |
 | `alert_deliveries`          | The [alert outbox](../alerts.md#delivery-outbox): channel, kind, status, attempts and error code       |
 
 The API maps snake_case columns to camelCase and removes `raw_json`. The

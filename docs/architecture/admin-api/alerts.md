@@ -3,13 +3,15 @@
 Operator alert channels, rules, the heartbeat, open incidents and the
 delivery history. Behavior is in [Operator alerts](../alerts.md).
 
-| Method and path                   | Body                                         | Result                         |
-| --------------------------------- | -------------------------------------------- | ------------------------------ |
-| `GET /alerts`                     |                                              | alert settings (below)         |
-| `PUT /alerts`                     | any subset of `{channels, rules, heartbeat}` | alert settings                 |
-| `GET /alerts/deliveries`          |                                              | `{deliveries}`, the latest 100 |
-| `POST /alerts/channels/{id}/test` |                                              | `{ok, error?, latencyMs}`      |
-| `POST /alerts/heartbeat/test`     |                                              | `{ok, error?, latencyMs}`      |
+| Method and path                             | Body                                         | Result                         |
+| ------------------------------------------- | -------------------------------------------- | ------------------------------ |
+| `GET /alerts`                               |                                              | alert settings (below)         |
+| `PUT /alerts`                               | any subset of `{channels, rules, heartbeat}` | alert settings                 |
+| `GET /alerts/deliveries`                    |                                              | `{deliveries}`, the latest 100 |
+| `POST /alerts/channels/{id}/test`           |                                              | `{ok, error?, latencyMs}`      |
+| `POST /alerts/heartbeat/test`               |                                              | `{ok, error?, latencyMs}`      |
+| `POST /alerts/incidents/{id}/acknowledge`   |                                              | alert settings                 |
+| `DELETE /alerts/incidents/{id}/acknowledge` |                                              | alert settings                 |
 
 ```json
 {
@@ -27,7 +29,7 @@ delivery history. Behavior is in [Operator alerts](../alerts.md).
   ],
   "heartbeat": {"enabled", "intervalMinutes", "hasUrl", "urlUnreadable", "lastOkAt", "lastFailureAt", "lastError"},
   "incidents": [
-    {"id", "rule", "subject", "severity", "status", "detail", "openedAt", "lastSeenAt", "resolvedAt"}
+    {"id", "rule", "subject", "severity", "status", "detail", "openedAt", "lastSeenAt", "resolvedAt", "acknowledgedAt"}
   ]
 }
 ```
@@ -52,5 +54,9 @@ delivery history. Behavior is in [Operator alerts](../alerts.md).
   in any state and whether or not it is in use, and a channel test is
   recorded as a `test` delivery. A channel or heartbeat whose secret is
   unreadable answers `400`; an unknown channel `404 alert_channel_not_found`.
+- `POST` acknowledges an open incident and keeps the first acknowledgement
+  time; `DELETE` clears it. An id that names no open incident answers
+  `404 alert_incident_not_found`.
 
-`GET /overview` reports the number of open incidents as `alerts.open`.
+`GET /overview` reports the number of open, unacknowledged incidents as
+`alerts.open`.

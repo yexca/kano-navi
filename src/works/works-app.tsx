@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ExternalLink } from "@/site/links"
 import { REPOSITORY_URL } from "@/site/repository"
 import { MediaDialog, stepIndex } from "@/site/media-dialog"
+import { usePageMeta } from "@/site/page-meta"
 import {
   Placeholder,
   SiteFooter,
@@ -568,12 +569,7 @@ export function WorksApp() {
     title: string
   } | null>(null)
 
-  useEffect(() => {
-    document.title = t("works.metaTitle")
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute("content", t("works.metaDescription"))
-  }, [t])
+  usePageMeta(t("works.metaTitle"), t("works.metaDescription"))
 
   // The linked release opens once; the address keeps only the section.
   useEffect(() => {

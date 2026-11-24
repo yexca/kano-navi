@@ -206,7 +206,7 @@ func TestXSyncAndRelatedRegisterAccountAvatars(t *testing.T) {
 			ID:               "1900000000000000910",
 			AccountHandle:    "kano_2525",
 			Type:             "daily",
-			Label:            "DAILY / 近况",
+			Label:            xsource.LabelDaily,
 			Text:             "hello",
 			PublishedAt:      "2026-10-20T00:00:00Z",
 			URL:              "https://x.com/kano_2525/status/1900000000000000910",

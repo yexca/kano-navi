@@ -177,7 +177,6 @@ export function MergeLine({
 }
 
 function MiniVideo({ video, detail }: { video: AdminVideo; detail?: string }) {
-  const { locale } = useAppSettings()
   const thumbnail = localUrl(video.thumbnailUrl)
   return (
     <span className="adm-merge-video">
@@ -345,7 +344,6 @@ export function MergeQueue() {
   return (
     <div className="adm-merge-queue">
       {disagreements}
-      <p className="adm-note">{t("admin.review.mergeHint")}</p>
       <ol>
         {items.map((item) => (
           <li key={item.bilibili.id} className="adm-merge-row">
@@ -398,7 +396,6 @@ export function FormQueue() {
   }
   return (
     <div className="adm-merge-queue">
-      <p className="adm-note">{t("admin.review.formsHint")}</p>
       <ol>
         {items.map(({ video, review, broadcast }) => (
           <li key={video.id} className="adm-merge-row">
@@ -450,7 +447,6 @@ function WorksConflicts({ items }: { items: WorksMergeConflict[] }) {
   return (
     <section className="adm-merge-queue">
       <h3>{t("admin.review.worksConflicts")}</h3>
-      <p className="adm-note">{t("admin.review.worksConflictsHint")}</p>
       <ul>
         {items.map((item) => (
           <li key={item.bilibili} className="adm-chip-row">
@@ -530,7 +526,7 @@ export function MergeSection({
   video: AdminVideo
   onChanged: () => void
 }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const bilibili = video.source === "bilibili"
   const candidates = useResource(
@@ -612,7 +608,7 @@ export function MergeSection({
       ) : (
         <>
           {video.mergeSource === "manual" ? (
-            <p className="adm-note">{t("admin.videos.merge.separateHint")}</p>
+            <Badge icon={Unlink}>{t("admin.videos.merge.separate")}</Badge>
           ) : null}
           <strong className="adm-field-label">
             {t("admin.videos.merge.candidates")}

@@ -25,6 +25,14 @@
   columns `previous_manual_status`, `previous_manual_reason`,
   `previous_manual_checked_at`, `check_status`, `check_reason` and
   `check_at`, all empty, to existing snapshots.
+- Startup adds the post indexes `posts_account_instant_idx` and
+  `posts_bilibili_account_idx` to existing snapshots. A read-only instance
+  serves an older snapshot without them, only more slowly.
+- A post's public `label` (dashboard, post archive, MCP) is English text:
+  `DAILY`, `SCHEDULE` or `ANNOUNCEMENT`. Startup rewrites the stored
+  `DAILY / 近况` and `SCHEDULE / 日程` labels once. A configured extraction
+  keyword that matched a post only through `近况` or `日程` in its old label
+  no longer matches it.
 
 </details>
 
@@ -79,12 +87,17 @@
   unread, the Bilibili login expires or stored secrets cannot be decrypted,
   and another when it recovers. A heartbeat pings an external monitor such
   as Uptime Kuma, so a stopped server is noticed too. Destinations must be
-  public addresses, and development mode never sends.
+  public addresses, and development mode never sends. Acknowledging an
+  open alert takes it off the nav badge until the problem returns.
 - The nav groups pages by task: Today, Content, Pipeline and System.
   Queue becomes the Runs page's **Up next** tab, and the Works covers and
   recent uploads move from Site to a **Works** page in System. Older
   `#queue` links open Up next.
+- Panels, fields and switches drop their explanatory text and question-mark
+  help; the docs describe how each feature works.
 - Posts marks a post deleted on X with a **Deleted on X** badge.
+- The model provider dialog drops its retries field, which never took
+  effect; calls follow the attempts per model sync setting.
 - The Review queue lists entries their posts no longer list, with Keep entry
   and Delete entry, and the overview counts them.
 - A schedule image card shows its last check and, after an image change, the
@@ -92,6 +105,9 @@
 - Admin API: events carry review kind `unlisted`; the overview's review
   counts add `unlistedEvents`; schedule images add `needsReview`,
   `previousDecision` and `lastCheck`.
+- Admin API: the event an edit, confirmation, merge, unmerge or creation
+  returns, and the evidence read's event, carry their `extractionId` as the
+  events list does instead of `null`.
 
 </details>
 
@@ -171,6 +187,18 @@
 <details>
 <summary><strong>Runtime and development</strong></summary>
 
+- `/posts` loads only the board's post wording and its post and month
+  stylesheets instead of the whole board copy and `board.css`.
+- The board snapshot reads each account's newest posts, the Bilibili
+  accounts and the schedule images of posts deleted on X through indexes
+  instead of walking every stored post on each read, and looks up the events
+  of its active and cancelled videos by identity instead of walking the
+  events for every video.
+- `/api/dashboard` answers a request at an unchanged revision, a 304
+  included, from a prepared response that lasts until the next projection
+  transition, a trusted broadcast state going stale or the next minute;
+  requests that miss together compute it once. `meta.generatedAt` is the
+  time that response was computed.
 - The agent guide is a short root `AGENTS.md` with area guides for
   `backend/`, `src/`, `scripts/` and `docs/`, plus `merge-to-main` and
   `release` skills in `.claude/skills/`.
@@ -178,5 +206,8 @@
   API, workflows, media cache, testing, configuration and LINE BLOG archive
   maintenance) are short indexes of topic pages, and `make docs-check` also
   validates heading anchors.
+- A pull request that changes `backend/go.mod`, `backend/go.sum`,
+  `package.json` or `package-lock.json` also runs the matching Go or npm
+  advisory audit, and `PR / Gate` requires it to pass.
 
 </details>

@@ -424,7 +424,7 @@ func (s *Store) projectRoom(ctx context.Context, events []DashboardEvent, states
 		return nil, "", err
 	}
 	link := bilisource.RoomURL(room.RoomID)
-	fresh := live.State.CheckedAt.After(now.Add(-2 * time.Duration(settings.BilibiliIntervalMinutes) * time.Minute))
+	fresh := live.State.CheckedAt.After(now.Add(-settings.BilibiliFreshness()))
 	onAir := fresh && room.LiveStatus == bilisource.RoomLive && !live.LastBroadcast.IsZero()
 	match, matched, err := roomBroadcastMatch(ctx, s.db, live)
 	if err != nil {

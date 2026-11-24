@@ -45,7 +45,6 @@ import catalogFile from "../src/lineblog/media-catalog.json" with { type: "json"
 import type {
   LineblogComment,
   LineblogMedia,
-  LineblogPost,
   LineblogPostFile,
   LineblogSummary,
 } from "../src/lineblog/types.ts"

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/yexca/kano-navi/backend/internal/httpx"
@@ -16,7 +17,8 @@ import (
 const deliveryPage = 100
 
 // Admin owns /api/admin/alerts: channels, rules, the heartbeat, open
-// incidents, the delivery history and channel tests.
+// incidents and their acknowledgement, the delivery history and channel
+// tests.
 type Admin struct {
 	service *Service
 }
@@ -35,6 +37,8 @@ func (a *Admin) AdminRoutes() []httpx.Route {
 		{Method: http.MethodGet, Path: "/alerts/deliveries", Handler: a.deliveries},
 		{Method: http.MethodPost, Path: "/alerts/channels/{id}/test", Handler: a.testChannel},
 		{Method: http.MethodPost, Path: "/alerts/heartbeat/test", Handler: a.testHeartbeat},
+		{Method: http.MethodPost, Path: "/alerts/incidents/{id}/acknowledge", Handler: a.acknowledge(true)},
+		{Method: http.MethodDelete, Path: "/alerts/incidents/{id}/acknowledge", Handler: a.acknowledge(false)},
 	}
 }
 
@@ -358,4 +362,41 @@ func (a *Admin) testHeartbeat(w http.ResponseWriter, r *http.Request) {
 	started := a.service.now()
 	code := a.service.heartbeat(r.Context(), heartbeat, true)
 	httpx.WriteJSON(w, http.StatusOK, testResult{OK: code == "", Error: code, LatencyMs: a.service.now().Sub(started).Milliseconds()})
+}
+
+// acknowledge sets (on) or clears an open incident's acknowledgement and
+// returns the settings with the open incidents. Acknowledging changes no
+// delivery: an incident's opened and resolved notices are sent as usual.
+func (a *Admin) acknowledge(on bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !a.service.store.Writable() {
+			httpx.ReadOnly(w)
+			return
+		}
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || id <= 0 {
+			httpx.WriteCode(w, http.StatusNotFound, "alert_incident_not_found")
+			return
+		}
+		settings, err := a.service.Settings(r.Context())
+		if err != nil {
+			httpx.WriteCode(w, http.StatusServiceUnavailable, "alert_settings_unavailable")
+			return
+		}
+		found, err := acknowledge(r.Context(), a.service.store.DB(), id, on, a.service.now())
+		if err != nil {
+			httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+			return
+		}
+		if !found {
+			httpx.WriteCode(w, http.StatusNotFound, "alert_incident_not_found")
+			return
+		}
+		out, err := a.response(r.Context(), settings)
+		if err != nil {
+			httpx.WriteCode(w, http.StatusServiceUnavailable, "database_unavailable")
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, out)
+	}
 }

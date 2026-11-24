@@ -114,7 +114,8 @@ the refresh as a quiet button, the platform link, cancel and save.
 
 The Review queue (`src/admin/views/review.tsx`) lists only what waits for a
 decision, in tabs for the schedule, video merges and posts; a decision
-removes the item and the sidebar badge counts again. `#review/images` and
+removes the item and the sidebar badge counts again; its post rows use the
+pieces shared with Posts in `post-parts.tsx`. `#review/images` and
 `#review/cancellations` open the schedule tab. The schedule tab
 (`review-schedule.tsx`) reads the schedule work by week (see
 [Admin API](../admin-api/events.md#schedule-images)) and shows one group per week,

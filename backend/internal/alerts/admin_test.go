@@ -1,6 +1,7 @@
 package alerts
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yexca/kano-navi/backend/internal/httpx"
 	"github.com/yexca/kano-navi/backend/internal/store/sqlite"
@@ -185,5 +187,80 @@ func TestWebhookAddressIsSealedAndKept(t *testing.T) {
 	settings, err := reloaded.Settings(t.Context())
 	if err != nil || settings.Channels[0].URL != address || settings.Channels[0].Name != "Hook 2" {
 		t.Fatalf("channels=%+v err=%v", settings.Channels, err)
+	}
+}
+
+func TestAcknowledgingAnIncidentTakesItOffTheBadgeUntilItReturns(t *testing.T) {
+	store := openStore(t)
+	service, now := newTestService(t, store, false, Signals{})
+	configure(t, service)
+	admin := NewAdmin(service)
+	ctx := context.Background()
+	workflow := sqlite.SourceScheduleWorkflow("x")
+	enableSchedule(t, store, "x", now.at.Add(-time.Hour))
+	for index := range 3 {
+		addRun(t, store, fmt.Sprintf("run-%d", index), workflow, "failed", "", now.at.Add(-time.Duration(30*(3-index))*time.Minute))
+	}
+	service.Tick(ctx)
+	badge := func() int {
+		t.Helper()
+		count, err := store.OpenAlertIncidents(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	first := incidents(t, store)[0]
+	if badge() != 1 || first.AcknowledgedAt != nil {
+		t.Fatalf("badge=%d incident=%+v", badge(), first)
+	}
+
+	path := fmt.Sprintf("/alerts/incidents/%d/acknowledge", first.ID)
+	w, payload := call(t, admin, http.MethodPost, path, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body)
+	}
+	listed := payload["incidents"].([]any)[0].(map[string]any)
+	if listed["acknowledgedAt"] != formatTime(now.at) || badge() != 0 {
+		t.Fatalf("incident=%v badge=%d", listed, badge())
+	}
+
+	// A later pass while the problem holds keeps the acknowledgement, and
+	// acknowledging again keeps its first time.
+	now.at = now.at.Add(time.Minute)
+	service.Tick(ctx)
+	if w, _ = call(t, admin, http.MethodPost, path, ""); w.Code != http.StatusOK {
+		t.Fatalf("status=%d", w.Code)
+	}
+	if got := incidents(t, store)[0].AcknowledgedAt; got == nil || *got != formatTime(now.at.Add(-time.Minute)) || badge() != 0 {
+		t.Fatalf("acknowledgedAt=%v badge=%d", got, badge())
+	}
+
+	if w, _ = call(t, admin, http.MethodDelete, path, ""); w.Code != http.StatusOK || badge() != 1 {
+		t.Fatalf("status=%d badge=%d", w.Code, badge())
+	}
+	if w, _ = call(t, admin, http.MethodPost, path, ""); w.Code != http.StatusOK || badge() != 0 {
+		t.Fatalf("status=%d badge=%d", w.Code, badge())
+	}
+
+	// Once resolved it cannot be acknowledged; the same problem returning
+	// opens a new incident that counts again.
+	addRun(t, store, "run-ok", workflow, "succeeded", "", now.at)
+	now.at = now.at.Add(time.Minute)
+	service.Tick(ctx)
+	if w, _ = call(t, admin, http.MethodDelete, path, ""); w.Code != http.StatusNotFound {
+		t.Fatalf("resolved incident status=%d", w.Code)
+	}
+	for index := range 3 {
+		addRun(t, store, fmt.Sprintf("run-again-%d", index), workflow, "failed", "", now.at.Add(time.Duration(index+1)*time.Second))
+	}
+	now.at = now.at.Add(time.Minute)
+	service.Tick(ctx)
+	found := incidents(t, store)
+	if len(found) != 2 || found[1].Status != "open" || found[1].AcknowledgedAt != nil || badge() != 1 {
+		t.Fatalf("incidents=%+v badge=%d", found, badge())
+	}
+	if w, _ = call(t, admin, http.MethodPost, "/alerts/incidents/not-a-number/acknowledge", ""); w.Code != http.StatusNotFound {
+		t.Fatalf("status=%d", w.Code)
 	}
 }

@@ -169,7 +169,7 @@ function ProxyEditor({
           void submit()
         }}
       >
-        <Field label={t("admin.proxy.name")} hint={t("admin.proxy.nameHint")}>
+        <Field label={t("admin.proxy.name")}>
           <input
             value={draft.name}
             maxLength={64}
@@ -260,7 +260,6 @@ function ProxyEditor({
           checked={draft.enabled}
           onChange={(enabled) => set({ enabled })}
           label={t("admin.proxy.enabled")}
-          description={t("admin.proxy.enabledHint")}
         />
       </form>
     </Modal>
@@ -325,7 +324,6 @@ function QueuePanel({
     <Panel
       icon={ListOrdered}
       title={t("admin.proxy.queue")}
-      description={t("admin.proxy.queueHint")}
       actions={
         <Button
           size="sm"
@@ -459,7 +457,6 @@ function QueuePanel({
                   ))}
                 </select>
               </label>
-              <span className="adm-muted">{t("admin.proxy.testHint")}</span>
             </div>
           ) : null}
         </>
@@ -512,11 +509,7 @@ function AreasPanel({
     void saveRoutes({ [area]: { ...route, proxyIds: selected } })
   }
   return (
-    <Panel
-      icon={Route}
-      title={t("admin.proxy.areas")}
-      description={t("admin.proxy.areasHint")}
-    >
+    <Panel icon={Route} title={t("admin.proxy.areas")}>
       <div className="adm-proxy-areas">
         {settings.areas.map((area) => {
           const route = settings.routes[area]
@@ -537,7 +530,6 @@ function AreasPanel({
                   void saveRoutes({ [area]: { ...route, enabled } })
                 }
                 label={t(`admin.proxy.area.${area}`)}
-                description={t(`admin.proxy.areaHint.${area}`)}
               />
               {route.enabled &&
               (settings.proxies.length > 1 || route.proxyIds.length > 0) ? (
@@ -588,7 +580,6 @@ function AreasPanel({
         checked={settings.directFallback}
         onChange={(directFallback) => void saveRoutes({}, directFallback)}
         label={t("admin.proxy.directFallback")}
-        description={t("admin.proxy.directFallbackHint")}
       />
     </Panel>
   )

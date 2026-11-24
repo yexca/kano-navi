@@ -167,7 +167,7 @@ function VariantsPanel({
   loading: boolean
   onChange: (status: VariantStatus) => void
 }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const { api, act, start, overview } = useAdmin()
   const [busy, setBusy] = useState(false)
   const [checking, setChecking] = useState(false)

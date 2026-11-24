@@ -124,7 +124,7 @@ function ExtractionPanel() {
     >
       <FieldGroup
         label={t("admin.detection.mode")}
-        hint={t(`admin.detection.modeHint.${mode ?? "custom"}`)}
+        hint={mode ? undefined : t("admin.detection.modeHint.custom")}
       >
         <Segmented<DetectionMode | "">
           label={t("admin.detection.mode")}

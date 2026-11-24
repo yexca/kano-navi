@@ -4,10 +4,10 @@ The Actions workflows, the CI plan and the gate.
 
 Validation runs in two tiers that share one set of job definitions:
 
-| Tier   | Workflow | Runs on                                                | Selects                    | Decides                            |
-| ------ | -------- | ------------------------------------------------------ | -------------------------- | ---------------------------------- |
-| `pr`   | `PR`     | Every pull request                                     | Jobs for the changed paths | Whether the pull request may merge |
-| `full` | `Full`   | Every push to `main`, and any branch or tag on request | Every job                  | Whether `main` is healthy          |
+| Tier   | Workflow | Runs on                                                | Selects                                 | Decides                            |
+| ------ | -------- | ------------------------------------------------------ | --------------------------------------- | ---------------------------------- |
+| `pr`   | `PR`     | Every pull request                                     | Jobs for the changed paths              | Whether the pull request may merge |
+| `full` | `Full`   | Every push to `main`, and any branch or tag on request | Every validation job, no advisory audit | Whether `main` is healthy          |
 
 `.github/workflows/validate.yml` holds the jobs and has no trigger of its own.
 `pr.yml` and `full.yml` call it with an explicit `tier`, so a tier never
@@ -17,7 +17,8 @@ tagged commit; it does not call `validate.yml` again.
 
 ```text
 Style
-Plan -> Backend, Go builds, Go container, Frontend, API smoke, Docker image
+Plan -> Backend, Go builds, Go container, Frontend, API smoke, Docker image,
+        Go audit, npm audit
 Plan, Style, and all planned jobs -> Gate
 ```
 
@@ -36,6 +37,8 @@ make ci-frontend: the type check, the build and the frontend tests. API smoke
 runs make smoke against the Go backend. Docker image runs make docker-build,
 which compiles the Go backend and the frontend into the release image, with
 Buildx cache arguments and then make production-smoke against that image.
+Go audit runs make go-audit, and npm audit runs make npm-audit-production and
+then make npm-audit.
 
 `scripts/ci-plan.ts` owns the plan (make ci-plan) and the Gate's verdict (make
 ci-results); its tests guard against accidental validation skips. In the `pr`
@@ -45,21 +48,27 @@ sides of renames and deleted paths:
 | PR changes                                                                    | Planned jobs beside Plan, Style, and the Gate                       |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | Only documentation, issue forms, `.env.example` or Compose files              | None                                                                |
-| Go backend source, tests, SQL or module files                                 | Backend, Go builds, Go container, API smoke, Docker image           |
+| Go backend source, tests or SQL                                               | Backend, Go builds, Go container, API smoke, Docker image           |
+| `backend/go.mod` or `backend/go.sum`                                          | Backend, Go builds, Go container, API smoke, Docker image, Go audit |
 | The static seed                                                               | Backend, Go builds, Go container, Frontend, API smoke, Docker image |
 | `backend/Dockerfile`                                                          | Go container                                                        |
-| Frontend source, `public/`, frontend configuration, npm manifest or lockfile  | Frontend, Docker image                                              |
+| Frontend source, `public/` or frontend configuration                          | Frontend, Docker image                                              |
+| `package.json` or `package-lock.json`                                         | Frontend, Docker image, npm audit                                   |
 | Frontend tests                                                                | Frontend                                                            |
 | `docker/` or `LICENSE`                                                        | Docker image                                                        |
 | A validation script                                                           | The jobs that run or type-check it, listed in `scriptJobs`          |
-| Makefile, `.nvmrc`, workflows, composite actions, the planner, or other paths | All jobs                                                            |
+| Makefile, `.nvmrc`, workflows, composite actions, the planner, or other paths | All validation jobs, no advisory audit                              |
 
 Mixed changes use the union of planned jobs, and a missing or empty PR diff
-selects all jobs. The frontend build type-checks every TypeScript script, so
-each one selects Frontend; `scriptJobs` names the other jobs behind each
-script. A script missing from that table selects all jobs, and the planner's
-tests fail until it is listed. The `full` tier ignores changed paths and always
-plans every job, so whatever a pull request leaves out is validated on `main`.
+selects all jobs, the audits included. The frontend build type-checks every
+TypeScript script, so each one selects Frontend; `scriptJobs` names the other
+jobs behind each script. A script missing from that table selects all
+validation jobs, and the planner's tests fail until it is listed. The advisory
+audits follow the dependency manifests alone, so a new advisory for an
+unchanged dependency never fails an unrelated pull request. The `full` tier
+ignores changed paths and always plans every validation job, so whatever a
+pull request leaves out is validated on `main`. It plans no audit: the daily
+Dependency audit covers `main`, so a new advisory never holds back a release.
 A release reuses that result for its tagged commit.
 
 Gate always evaluates the plan against the job results, even after failures.
@@ -96,7 +105,8 @@ govulncheck, pinned by GOVULNCHECK_VERSION, reports vulnerabilities that the
 backend actually reaches in its modules and in the standard library of the
 go.mod toolchain that the release image also uses. A new advisory fails the
 run without changing the repository. These targets query live advisory
-databases, so they stay outside check and ci and never gate a pull request.
+databases, so they stay outside check and ci; in CI they gate only a pull
+request that changes a dependency manifest, through Go audit and npm audit.
 Both jobs run only in the upstream repository, so forks do not inherit the
 schedule.
 

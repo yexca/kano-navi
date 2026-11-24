@@ -23,6 +23,7 @@ import { useAppSettings } from "@/app-settings"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ExternalLink } from "@/site/links"
 import { MediaDialog, stepIndex } from "@/site/media-dialog"
+import { usePageMeta } from "@/site/page-meta"
 import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
 import { branches, milestones } from "./milestones"
 import {
@@ -362,12 +363,7 @@ export function HistoryApp() {
     index: number
   } | null>(null)
 
-  useEffect(() => {
-    document.title = t("history.metaTitle")
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute("content", t("history.metaDescription"))
-  }, [t])
+  usePageMeta(t("history.metaTitle"), t("history.metaDescription"))
 
   const lastYear = currentJapanYear()
   const groups = useMemo(

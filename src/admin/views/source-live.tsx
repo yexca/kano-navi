@@ -25,24 +25,21 @@ import {
 } from "@/admin/ui"
 import { useAdmin } from "@/admin/use-admin-data"
 import { LiveRoomFacts, LiveRoomState } from "@/admin/views/bilibili-parts"
-import { HelpButton, Fold } from "@/admin/views/source-parts"
+import { Fold } from "@/admin/views/source-parts"
 
 /** When a finished YouTube video is reread, in minutes after its anchor
  * (ytsource.FollowUpOffsets). */
 const followUpOffsets = [60, 1440, 4320, 10080]
 
-/** A step of YouTube's progressive confirmation without settings, its
- * explanation behind a question mark beside its title. */
+/** A step of YouTube's progressive confirmation without settings. */
 function Stage({
   icon: StageIcon,
   title,
-  help,
   badge,
   children,
 }: {
   icon: LucideIcon
   title: string
-  help: ReactNode
   badge: ReactNode
   children: ReactNode
 }) {
@@ -56,7 +53,6 @@ function Stage({
           </span>
           <div className="adm-confirm-title">
             <h4 id={id}>{title}</h4>
-            <HelpButton title={title}>{help}</HelpButton>
           </div>
           {badge}
         </header>
@@ -92,7 +88,7 @@ function PushStage({
   push: PushStatus
   onChange: (push: PushStatus) => void
 }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const { api, act } = useAdmin()
   const path = push.callbackPath
   const saved = callbackOrigin(push.callbackUrl, path)
@@ -117,12 +113,6 @@ function PushStage({
         icon={Radio}
         level={4}
         title={t("admin.push.title")}
-        help={
-          <>
-            <p>{t("admin.push.description")}</p>
-            <p>{t("admin.push.enableHint")}</p>
-          </>
-        }
         controls={
           <>
             {push.enabled ? (
@@ -252,7 +242,6 @@ export function BilibiliLivePanel({
       icon={RadioTower}
       title={t("admin.liveProbe.bilibili.title")}
       className="adm-panel"
-      help={<p>{t("admin.liveProbe.bilibili.description")}</p>}
       controls={
         <>
           {live ? <LiveRoomState live={live} /> : null}
@@ -389,21 +378,6 @@ function LiveProbeStage({
         icon={RadioTower}
         level={4}
         title={t("admin.liveProbe.title")}
-        help={
-          <>
-            <p>{t("admin.liveProbe.description", { max: probe.maxVideos })}</p>
-            <p>{t("admin.liveProbe.enableHint")}</p>
-            <dl className="adm-help-terms">
-              <dt>{t("admin.liveProbe.interval")}</dt>
-              <dd>
-                {t("admin.liveProbe.intervalHint", {
-                  min: probe.minIntervalMinutes,
-                  max: probe.maxIntervalMinutes,
-                })}
-              </dd>
-            </dl>
-          </>
-        }
         controls={
           <>
             {probe.enabled && !running ? (
@@ -555,18 +529,7 @@ export function ConfirmationPanel({
 }) {
   const { t } = useAppSettings()
   return (
-    <Panel
-      level={3}
-      icon={ListChecks}
-      title={
-        <>
-          {t("admin.confirm.title")}
-          <HelpButton title={t("admin.confirm.title")}>
-            <p>{t("admin.confirm.description")}</p>
-          </HelpButton>
-        </>
-      }
-    >
+    <Panel level={3} icon={ListChecks} title={t("admin.confirm.title")}>
       <ol className="adm-confirm-steps">
         <PushStage
           push={youtube.push}
@@ -579,7 +542,6 @@ export function ConfirmationPanel({
         <Stage
           icon={CalendarCheck}
           title={t("admin.followUp.title")}
-          help={<p>{t("admin.followUp.description")}</p>}
           badge={<Badge>{t("admin.followUp.automatic")}</Badge>}
         >
           <ul

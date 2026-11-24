@@ -8,6 +8,7 @@ import (
 	"time"
 
 	bilisource "github.com/yexca/kano-navi/backend/internal/source/bilibili"
+	xsource "github.com/yexca/kano-navi/backend/internal/source/x"
 )
 
 // Bilibili dynamics are posts with source = 'bilibili', their ID prefixed
@@ -18,8 +19,9 @@ import (
 // is kept in the metadata of the account's 'bilibili' sync_state row, beside
 // the upload read's, because both share the captcha backoff stored there.
 
-// bilibiliPostLabel is the label every dynamic gets, as an X post does.
-const bilibiliPostLabel = "DAILY / 近况"
+// bilibiliPostLabel is the label every dynamic gets: the English label of a
+// daily X post, never localized text.
+const bilibiliPostLabel = xsource.LabelDaily
 
 // rolePostEmoji links a dynamic's sticker pictures to its post, one link per
 // distinct picture, and roleQuoteEmoji those of the dynamic a forward

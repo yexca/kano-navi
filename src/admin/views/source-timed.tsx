@@ -27,7 +27,7 @@ import {
 } from "@/admin/ui"
 import { useAdmin } from "@/admin/use-admin-data"
 import { cn } from "@/lib/utils"
-import { HelpField, HelpButton, Fold } from "@/admin/views/source-parts"
+import { Fold } from "@/admin/views/source-parts"
 
 const intervals = [15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080]
 
@@ -206,39 +206,27 @@ export function TimedReadsPanel({
                   />
                 </FieldGroup>
               )}
-              <HelpField
+              <Field
                 label={t(`admin.timer.syncLimit.${sync.mode}.${source}`)}
-                help={
-                  source === "youtube" ? (
-                    <p>{t("admin.timer.syncLimitHint.youtube")}</p>
-                  ) : null
-                }
-                hint={
-                  source === "youtube"
-                    ? undefined
-                    : t(`admin.timer.syncLimitHint.${source}`)
-                }
+                hint={t("admin.timer.syncLimitHint")}
               >
-                {(id) => (
-                  <input
-                    id={id}
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={limit}
-                    onChange={(e) => {
-                      const value = Number(e.target.value)
-                      set({
-                        sync:
-                          sync.mode === "count"
-                            ? { mode: "count", count: value }
-                            : { mode: "incremental", max: value },
-                      })
-                    }}
-                    required
-                  />
-                )}
-              </HelpField>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={limit}
+                  onChange={(e) => {
+                    const value = Number(e.target.value)
+                    set({
+                      sync:
+                        sync.mode === "count"
+                          ? { mode: "count", count: value }
+                          : { mode: "incremental", max: value },
+                    })
+                  }}
+                  required
+                />
+              </Field>
             </>
           ) : null}
         </div>
@@ -246,12 +234,7 @@ export function TimedReadsPanel({
           className="adm-timed-section adm-chain"
           disabled={schedule.skipped}
         >
-          <legend>
-            {t("admin.chain.title")}
-            <HelpButton title={t("admin.chain.title")}>
-              <p>{t("admin.chain.description")}</p>
-            </HelpButton>
-          </legend>
+          <legend>{t("admin.chain.title")}</legend>
           <ol className="adm-chain-list">
             {methods.map((method, index) => (
               <li
@@ -320,10 +303,6 @@ export function TimedReadsPanel({
               </li>
             ))}
           </ol>
-          {source === "youtube" &&
-          !methods.some((method) => method.id === "api" && method.enabled) ? (
-            <p className="adm-field-hint">{t("admin.chain.youtubeAPIOff")}</p>
-          ) : null}
         </fieldset>
         <div
           className={cn(
@@ -410,17 +389,6 @@ export function XAPIPanel({
       icon={KeyRound}
       title={t("admin.sources.xapi")}
       className="adm-panel"
-      help={
-        <>
-          <p>{t("admin.xapi.description")}</p>
-          <dl className="adm-help-terms">
-            <dt>{t("admin.chain.apiGate")}</dt>
-            <dd>{t("admin.chain.apiGateHint")}</dd>
-            <dt>{t("admin.chain.apiDailyCap")}</dt>
-            <dd>{t("admin.chain.apiDailyCapHint")}</dd>
-          </dl>
-        </>
-      }
       hint={t("admin.xapi.usageHint", {
         posts: chain.apiUsage?.posts ?? 0,
         cap: savedCap,

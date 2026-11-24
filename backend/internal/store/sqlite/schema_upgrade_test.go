@@ -33,7 +33,7 @@ func olderSnapshot(t *testing.T) (string, string) {
 	for _, statement := range []string{
 		`ALTER TABLE media_assets DROP COLUMN retry_attempts`, `ALTER TABLE media_assets DROP COLUMN next_retry_at`,
 		`DROP INDEX events_instant_idx`, `DROP INDEX events_source_item_idx`, `DROP INDEX events_stream_identity_idx`,
-		`DROP INDEX posts_instant_idx`, `DROP INDEX posts_url_published_at_idx`, `DROP INDEX videos_instant_idx`, `DROP INDEX videos_schedule_instant_idx`,
+		`DROP INDEX posts_instant_idx`, `DROP INDEX posts_url_published_at_idx`, `DROP INDEX posts_account_instant_idx`, `DROP INDEX posts_bilibili_account_idx`, `DROP INDEX videos_instant_idx`, `DROP INDEX videos_schedule_instant_idx`,
 		`ALTER TABLE assets DROP COLUMN asset_version`, `ALTER TABLE assets DROP COLUMN period_start`, `ALTER TABLE assets DROP COLUMN period_end`,
 		`ALTER TABLE assets DROP COLUMN period_basis`, `ALTER TABLE assets DROP COLUMN manual_period_start`, `ALTER TABLE assets DROP COLUMN manual_period_end`,
 		`ALTER TABLE assets DROP COLUMN manual_period_reason`, `ALTER TABLE assets DROP COLUMN manual_image_at`, `ALTER TABLE videos DROP COLUMN live_status`, `ALTER TABLE videos DROP COLUMN live_checked_at`,
@@ -130,7 +130,7 @@ func TestStandaloneUpgradesOlderSnapshotAdditively(t *testing.T) {
 		`SELECT title FROM resources WHERE id=9`:                                                     "official site",
 		`SELECT active_sha256||'/'||active_mime_type FROM profile_media WHERE id='synthetic-avatar'`: hex.EncodeToString(sum[:]) + "/image/png",
 
-		`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN('events_instant_idx','events_stream_identity_idx','posts_instant_idx','posts_url_published_at_idx','videos_instant_idx','videos_schedule_instant_idx','events_source_item_idx','schedule_asset_reviews_status_idx')`: "8",
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name IN('events_instant_idx','events_stream_identity_idx','posts_instant_idx','posts_url_published_at_idx','videos_instant_idx','videos_schedule_instant_idx','events_source_item_idx','schedule_asset_reviews_status_idx','posts_account_instant_idx','posts_bilibili_account_idx')`: "10",
 		`SELECT COUNT(*) FROM pragma_table_info('videos') WHERE name IN('live_status','live_checked_at')`:                                                                          "2",
 		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN('workflow_runs','workflow_run_steps','workflow_step_attempts','workflow_leases','workflow_migrations')`: "5",
 		// The forwarded-dynamic pool starts empty: no forward was stored before.
@@ -215,6 +215,60 @@ func TestStandaloneReplacesGeneratedEventText(t *testing.T) {
 	}
 	if again, quiet := open(); again != events || quiet != revision {
 		t.Fatalf("a second start changed events or the revision: %d -> %d", revision, quiet)
+	}
+}
+
+// Post labels synchronization stored in two languages become English base
+// text once; other labels and posts without one stay as they are.
+func TestStandaloneReplacesBilingualPostLabels(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "snapshot.sqlite")
+	s, err := OpenStandalone(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	insert := `INSERT INTO posts(id,source,type,label,text,published_at,url) VALUES(?,?,?,?,'synthetic','2026-03-01T00:00:00.000Z','https://example.test/post')`
+	for _, row := range [][]any{
+		{"1", "x", "daily", "DAILY / 近况"},
+		{"2", "x", "notice", "SCHEDULE / 日程"},
+		{"3", "x", "notice", "ANNOUNCEMENT"},
+		{"4", "x", "daily", nil},
+		{"bilibili-5", "bilibili", "daily", "DAILY / 近况"},
+	} {
+		if _, err = s.db.Exec(insert, row...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, err := s.GetDashboardRevision(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	open := func() (string, int64) {
+		t.Helper()
+		s, err := OpenStandalone(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		var labels string
+		if err = s.db.QueryRow(`SELECT group_concat(id||':'||COALESCE(label,'-'),',') FROM (SELECT * FROM posts ORDER BY id)`).Scan(&labels); err != nil {
+			t.Fatal(err)
+		}
+		revision, err := s.GetDashboardRevision(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return labels, revision
+	}
+	labels, revision := open()
+	if want := "1:DAILY,2:SCHEDULE,3:ANNOUNCEMENT,4:-,bilibili-5:DAILY"; labels != want {
+		t.Fatalf("labels = %q, want %q", labels, want)
+	}
+	if revision <= before {
+		t.Fatalf("the replaced labels must tell browsers to reload: %d -> %d", before, revision)
+	}
+	if again, quiet := open(); again != labels || quiet != revision {
+		t.Fatalf("a second start changed labels or the revision: %d -> %d", revision, quiet)
 	}
 }
 

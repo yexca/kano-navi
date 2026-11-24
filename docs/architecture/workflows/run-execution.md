@@ -21,7 +21,7 @@ text.
 
 Each step records the adapter that serves it in `adapter_capability`
 (`x_recent`, `x_related`, `youtube_recent`, `bilibili_recent`, `bilibili_dynamics`,
-`youtube_live`,
+`shop_sales`, `youtube_live`,
 `media_download`, `schedule_extract`, `text_translate`, `media_variants` or
 `event_reconcile`), which projections read before the constrained
 `capability` column (`synthetic`, `x_recent` or `capability_not_migrated`).
@@ -108,15 +108,99 @@ its failure status, and always release the single-flight queue after settlement.
 
 ## Implementation Ownership
 
-backend/internal/jobs owns the ordered step catalog and presents durable
-workflow runs as operator jobs. internal/workflow maps steps to their adapters
-(`SourceSteps`), executes runs with leases, retries and recovery, and owns the
-single-flight queue, and the timer that starts due source schedules
-(`SourceChains`) through it. `jobs.QueueManager` submits Run now and step
-runs and freezes each source step's schedule sync and method chain on them.
-A new module needs one catalog entry and one step adapter; the console reads
-the catalog rather than maintaining another step list. See
-[Backend](../backend.md#jobs-and-workflows).
+`backend/internal/jobs` owns the step execution order (`StepOrder`) and
+presents durable workflow runs as operator jobs. `internal/workflow` maps steps
+to their adapters (`SourceSteps`), executes runs with leases, retries and
+recovery, and owns the single-flight queue, and the timer that starts due
+source schedules (`SourceChains`) through it. `jobs.QueueManager` submits Run
+now and step runs and freezes each source step's schedule sync and method
+chain on them. See [Backend](../backend.md#jobs-and-workflows).
+
+### Registering a Step or Source
+
+Step and source IDs are listed by hand wherever they are needed; no list is
+derived from another. In the console, only the step-run dialog reads its
+steps from `GET /api/admin/runs/steps`. A new step or source goes into every
+list below that applies to it. A list marked _partial_ holds a subset on
+purpose and takes the new ID only when it shares that list's property.
+Searching for an existing ID constant, such as `sqlite.ShopSource` or
+`sqlite.BilibiliDynamicsSource`, finds these lists and the per-source code
+beside them.
+
+Every step:
+
+- `backend/internal/jobs/manager.go`: `StepOrder`, the order that full syncs
+  and step runs follow. `live` and `variants` are outside it.
+- `backend/internal/adminapi/runs.go`: `workflowSteps`, the `{id, group}`
+  list `GET /runs/steps` answers, a second copy of `StepOrder`.
+- `backend/cmd/kano-go/standalone.go`: `stepSkipFlags`, each step's `SKIP_*`
+  variable (`reconcile`, `live` and `variants` have none); the executor's
+  `SyntheticSteps`, which names every step with a real adapter, `live` and
+  `variants` included; and `TolerateFailure` (partial: the source steps and
+  `translate`, whose final failure lets the run continue).
+- `backend/internal/store/sqlite/workflow_commands.go`: the switch in
+  `CreateWorkflowRun` that names each step's `adapter_capability`, and
+  `scanStep` in `workflow_store.go`, which reads an adapter name it does not
+  list as `capability_not_migrated`.
+- `backend/internal/workflow/source_steps.go`: the `SourceSteps.Execute`
+  switch that runs the step.
+- `backend/internal/workflow/executor.go`: `withReconcile` (partial: the
+  steps that write events or videos, which append `reconcile`).
+- `src/admin/views/run-parts.tsx`: `stepIcons`; `src/admin-i18n.ts`: the
+  `admin.step.<id>` label.
+
+A step missing from `SyntheticSteps`, from the adapter switch or from
+`Execute` finishes `blocked` with `capability_not_migrated`.
+
+A source step also needs:
+
+- `backend/internal/store/sqlite/workflow_commands.go`: `retrySourceSteps`,
+  the source steps and `live`, after which a retry reruns completed
+  processing steps.
+- `backend/internal/adminapi/runs.go`: `sources` (`GET /sources`) and
+  `overview` (`GET /overview`), which build their per-source objects key by
+  key.
+- `backend/internal/alerts/send.go`: `subjectNames`, and
+  `src/admin-i18n.ts`: `admin.alerts.subject.<id>`, the alert subject's name.
+
+A source with a timer:
+
+- `backend/internal/store/sqlite/source_schedules.go`: `ScheduleSources`, in
+  catalog order, and `defaultScheduleInterval` or `SourceScheduleBounds` when
+  their defaults do not fit.
+- `backend/internal/workflow/scheduler.go`: `SourceChains`, the steps that
+  its timer and Run now submit.
+- `backend/internal/store/sqlite/source_chain.go`: `chainMethods`, its
+  default method chain, and `ChainSources` (partial: the sources whose chain
+  the operator orders; `x_related` has one fixed method).
+- `backend/internal/store/sqlite/workflow_sync.go`: `SyncSources` (partial:
+  the sources whose schedule has a sync setting).
+- `backend/internal/store/sqlite/admin.go`: `SourceLastSuccess` (partial: the
+  sources whose console last success comes from `sync_state`;
+  `bilibili_dynamics` takes its own from the Bilibili account status).
+- `src/admin/types.ts`: `ScheduleSource`; `src/admin/views/sources.tsx`:
+  `sourceIds` (the tab order) and `skipFlags`;
+  `src/admin/views/overview.tsx`: a `SourceRow`.
+
+A source with a [manual fetch](manual-fetches.md):
+
+- `backend/internal/source/history`: its `Source` constant in `fetch.go` and
+  its methods in the `methods` table of `methods.go`;
+  `backend/internal/workflow/history_steps.go`: `MethodAvailable`.
+- `fetchSources` in `backend/internal/jobs/manager.go` and again in
+  `backend/internal/adminapi/runs.go`.
+- `src/admin/types.ts`: `FetchSource` (partial: the sources whose fetch form
+  reads through a method of its own); `src/admin/views/run-parts.tsx`:
+  `fetchSteps` (partial: a stored run frozen without a method reads as a
+  fetch only when all its steps are in it); `src/admin-i18n.ts`: the
+  `admin.fetch.method.<source>.<method>` labels.
+
+A source with a public freshness time (`meta.sourceFetchedAt`):
+
+- `backend/internal/store/sqlite/freshness.go`: `sourceFetchedAt`, and
+  `backend/internal/alerts/rules.go`: `freshSources`, which the
+  `source_stale` alert checks. Both are partial: `x`, `youtube`, `bilibili`
+  and `shop`.
 
 Adapters, candidate selection, model routes, modality, retries, and per-post
 reprocess behavior are defined in [Sources and extraction](../sources.md).

@@ -39,15 +39,14 @@ The console's Sources page (`src/admin/views/sources.tsx`) has a row of
 tabs for X, YouTube, Bilibili uploads, Bilibili dynamics and the official
 shop, each with the platform's logo (a shopping bag for the shop), a dot (or
 a lock) for whether its timer runs here and the state as its tooltip.
-The selected source opens with a summary: what it reads, its timer state,
-next run, last run and last successful read, the timer switch (which saves
+The selected source opens with a summary: its timer state, next run, last run and last successful read, the timer switch (which saves
 at once) and Run now. While the timer runs, Run now starts it as the
 overview queue's Start now does, and reads Run next while a run holds the
 queue; while it is off, Run now runs the source's steps once and waits for a
 free queue. A source that `SKIP_*` turns off is locked. The Bilibili
 tabs' summaries add the login cookie's state and the shared captcha backoff
-as chips, with a note on setting `BILIBILI_COOKIE` or `BILIBILI_SESSDATA` while no cookie is
-configured or the configured one expired. Below the
+as chips, with a note on setting `BILIBILI_COOKIE` or `BILIBILI_SESSDATA` when the
+configured cookie expired or, for dynamics, none is configured. Below the
 summary the main column holds the timed reads
 (`src/admin/views/source-timed.tsx`), one form with one Save and
 Discard: the interval and, for X and YouTube, the sync setting; and the
@@ -59,7 +58,7 @@ unsigned and Atom reads for ordering and toggling. Save sends only the
 changed fields, and the timer switch keeps unsaved edits.
 
 Settings below the timed reads are folded (`src/admin/views/source-parts.tsx`
-holds the fold and the question-mark help): a header row with the title,
+holds the fold): a header row with the title,
 its state and any quick switch opens onto the settings and figures, and
 each fold saves on its own. X adds its X API limits (gate and daily cap,
 with the API's place in the chain and today's usage in the header, and
@@ -89,17 +88,16 @@ its sale entries, last read and error, whether it runs here and the wait a
 X and YouTube fold their timed-read
 limits in the main column and the manual-fetch limits, which they share,
 under the manual fetch, one field per row with its label beside the input.
-Both limit folds edit the page's one read of the settings. Longer
-explanations sit in a dialog behind a question mark beside a title or
-label: the chain, the X API limits, YouTube's per-run limit, its
-progressive confirmation and each of its steps, and yt-dlp.
+Both limit folds edit the page's one read of the settings. Titles, fields
+and folds carry labels, states and value ranges only; how a method, step or
+limit works is described in the architecture pages they belong to.
 
 The manual fetch (`src/admin/views/source-fetch.tsx`) sits beside the main
 column: method, for X every own
 account or one of them, mode, count or dates, options, then the newest
 fetch's summary. The method and mode pickers show only when there is more
-than one to pick, and only YouTube's methods and the date windows carry a
-hint. The X related tab's fetch picks one related account,
+than one to pick, and only the date range carries a hint. The X related
+tab's fetch picks one related account,
 shows its last read, and offers schedule extraction and translation; its
 summary counts the statuses listed, promoted and demoted. The Bilibili tabs'
 fetch form is disabled while the captcha backoff lasts, with its end. The
@@ -142,7 +140,9 @@ Bilibili. It has no promote or demote, since the forward's quote shows the
 dynamic. Filters cover the text or ID, the author's mid or name, and the
 kind.
 
-The console's post list (`src/admin/views/posts.tsx`) has platform tabs
+The console's post list (`src/admin/views/posts.tsx`, its rows and editor in
+`post-item.tsx`, and the images, quote, status and actions it shares with
+the Review queue in `post-parts.tsx`) has platform tabs
 (All, X, Bilibili; `#posts/x`, `#posts/bilibili`) above a feed of posts
 separated by rules, one row of columns per post: the account over the Japan
 time, the wording (three lines) and its quote, the post's own cached images
@@ -190,7 +190,9 @@ edit dialog shows the quote's whole wording. Nothing edits the quote itself.
 
 The Content group also includes `Account avatars`
 (`src/admin/views/account-avatars.tsx`) and `Profile images`
-(`src/admin/views/profile.tsx`). `Account avatars` lists tracked own and
+(`src/admin/views/profile.tsx`, with its previews in `profile-parts.tsx`, the
+own-account cards in `profile-own-accounts.tsx` and the upload and fetch
+dialogs in `profile-dialogs.tsx`). `Account avatars` lists tracked own and
 related X accounts with role filters, `auto` / `manual` / `hidden` mode
 switches, manual latest-avatar checks, image URL or file uploads, candidate
 history controls (`Use & lock`, retry download, delete), and an action to copy

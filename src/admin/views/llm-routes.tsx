@@ -271,15 +271,7 @@ export function QueueEditor({
           })}
         </ol>
       ) : (
-        <Empty title={t("admin.route.empty")}>
-          {t(
-            {
-              schedule: "admin.route.emptyHint",
-              verify: "admin.route.verifyEmptyHint",
-              translate: "admin.route.translationEmptyHint",
-            }[route],
-          )}
-        </Empty>
+        <Empty title={t("admin.route.empty")} />
       )}
       {targets.length
         ? stages
@@ -343,7 +335,6 @@ export function RecentFailures({
     <Panel
       icon={TriangleAlert}
       title={t("admin.llm.failures.title")}
-      description={t("admin.llm.failures.hint")}
       actions={
         <IconButton
           icon={RefreshCw}
@@ -395,9 +386,7 @@ export function RecentFailures({
           })}
         </ul>
       ) : (
-        <Empty icon={Check} title={t("admin.llm.failures.none")}>
-          {t("admin.llm.failures.noneHint")}
-        </Empty>
+        <Empty icon={Check} title={t("admin.llm.failures.none")} />
       )}
     </Panel>
   )

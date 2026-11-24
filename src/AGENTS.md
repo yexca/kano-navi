@@ -10,8 +10,11 @@ only the page a change needs.
   `/about` and `/admin`. Keep board requests in
   `src/dashboard/use-dashboard.ts` and admin requests in
   `src/admin/use-admin-data.ts`.
-- Reuse React, the semantic Tailwind tokens and the existing primitives in
-  `src/components/ui/`.
+- Style markup in its area's stylesheet, with that area's class names over
+  the CSS variables in `src/index.css`, not with Tailwind utilities. Reuse
+  `.round-button` and `.pill-button` (`src/site/site.css`) on public pages,
+  the `src/admin/ui.tsx` components in the console, and the dropdown menu,
+  tabs and tooltip wrappers in `src/components/ui/`.
 - Follow [Design and interaction](../docs/development/design.md) and check
   affected UI in a browser at desktop and mobile widths.
 - Avoid redundant helper labels and explanatory captions; let the layout,

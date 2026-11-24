@@ -38,6 +38,14 @@ has gone 24 hours without a successful read, when the Bilibili login cookie
 expires, and when stored secrets cannot be decrypted (for example after
 `LLM_SECRETS_KEY` changed).
 
+## Open Alerts
+
+The nav badge on Alerts counts open alerts nobody has acknowledged. The
+check button on an open alert acknowledges it and the undo button reverses
+that; an acknowledged alert stays listed, dimmed, until it resolves, and
+sends its recovery as usual. If the problem returns later it opens a new
+alert that counts again.
+
 ## Heartbeat
 
 In-process alerts cannot report a stopped server. Create a push monitor in

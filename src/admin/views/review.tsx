@@ -7,9 +7,7 @@ import {
   CircleHelp,
   ExternalLink,
   Languages,
-  RefreshCw,
   Sparkles,
-  X,
 } from "lucide-react"
 
 import { useAppSettings } from "@/app-settings"
@@ -20,17 +18,21 @@ import {
   Badge,
   Button,
   Empty,
-  IconButton,
   Loading,
   PageHeader,
   Pager,
   Panel,
   Segmented,
-  StatusBadge,
 } from "@/admin/ui"
 import { useAdmin, useResource } from "@/admin/use-admin-data"
 import { FormQueue, MergeQueue } from "@/admin/views/merge-parts"
-import { PostImages, PostQuote } from "@/admin/views/posts"
+import {
+  PostImages,
+  PostQuote,
+  PostAccount,
+  type BulkAction,
+  PostSelectionBar,
+} from "@/admin/views/post-parts"
 import { ScheduleAttentionQueue } from "@/admin/views/review-schedule"
 import { cn } from "@/lib/utils"
 
@@ -42,178 +44,6 @@ type Tab = (typeof tabs)[number]
 function tabOf(tab: string): Tab {
   if (tab === "images" || tab === "cancellations") return "schedule"
   return (tabs as readonly string[]).includes(tab) ? (tab as Tab) : "schedule"
-}
-
-/**
- * Who posted: an X post's @handle, or the source's name for another source
- * (a Bilibili dynamic's handle is the account's numeric mid).
- */
-export function PostAccount({ post }: { post: AdminPost }) {
-  const { t } = useAppSettings()
-  return post.source === "x" && post.accountHandle
-    ? `@${post.accountHandle.replace(/^@/, "")}`
-    : t(`admin.step.${post.source}`)
-}
-
-/**
- * The extraction state, last error, failure backoff and queue flag of one
- * post. A failure names the schedule extraction, apart from a failed
- * translation. A queued state already says the post waits, so the flag is
- * not repeated.
- */
-export function PostStatus({ post }: { post: AdminPost }) {
-  const { t } = useAppSettings()
-  return (
-    <>
-      {post.llmStatus === "failed" ? (
-        <Badge tone="danger">{t("admin.review.failure.extraction")}</Badge>
-      ) : (
-        <StatusBadge status={post.llmStatus} />
-      )}
-      {post.llmLastError ? (
-        <Badge tone="danger">
-          {t(`admin.posts.error.${post.llmLastError}`)}
-        </Badge>
-      ) : null}
-      {post.llmRetryStopped ? (
-        <Badge tone="warning" className="adm-retry-badge">
-          {t("admin.posts.retryStopped")}
-        </Badge>
-      ) : post.llmRetryAt ? (
-        <Badge tone="neutral" className="adm-retry-badge">
-          {t("admin.posts.retryAt", {
-            time: japanStamp(post.llmRetryAt),
-          })}
-        </Badge>
-      ) : null}
-      {post.llmReprocessRequested && post.llmStatus !== "queued" ? (
-        <Badge tone="sky">{t("admin.posts.queued")}</Badge>
-      ) : null}
-    </>
-  )
-}
-
-/**
- * Whether the X synchronization can read the post again from the source:
- * an own X post, not a related account's promoted status.
- */
-export function refreshable(post: AdminPost) {
-  return post.source === "x" && !post.promotedAt
-}
-
-/** A refresh from the source that waits for the next X synchronization. */
-export function RefreshQueued({ post }: { post: AdminPost }) {
-  const { t } = useAppSettings()
-  return post.refreshRequestedAt ? (
-    <Badge tone="running" icon={RefreshCw} className="adm-retry-badge">
-      {t("admin.posts.refreshQueued", {
-        time: japanStamp(post.refreshRequestedAt),
-      })}
-    </Badge>
-  ) : null
-}
-
-/**
- * Have the LLM process a post again in the next schedule scan, queue an own
- * X post's refresh from the source for the next X synchronization, and open
- * it. Compact actions are icons that fit a row; the caller lays them out.
- */
-export function PostActions({
-  post,
-  onDone,
-  compact = false,
-  reprocess: withReprocess = true,
-}: {
-  post: AdminPost
-  onDone: () => void
-  compact?: boolean
-  /** False leaves only the link, for a post that failed only translation. */
-  reprocess?: boolean
-}) {
-  const { t } = useAppSettings()
-  const { api, act } = useAdmin()
-  const [busy, setBusy] = useState<"" | "reprocess" | "refresh">("")
-  const run = async (
-    kind: "reprocess" | "refresh",
-    call: () => Promise<unknown>,
-    notice: string,
-  ) => {
-    setBusy(kind)
-    const result = await act(call, notice)
-    setBusy("")
-    if (result) onDone()
-  }
-  const reprocess = () =>
-    run(
-      "reprocess",
-      () => api.reprocessPost(post.id),
-      "admin.notice.postQueued",
-    )
-  const refresh = () =>
-    run("refresh", () => api.refreshPost(post.id), "admin.notice.refreshQueued")
-  const queued = Boolean(post.refreshRequestedAt)
-  if (compact)
-    return (
-      <>
-        {withReprocess ? (
-          <IconButton
-            icon={Sparkles}
-            label={t("admin.posts.reprocess")}
-            busy={busy === "reprocess"}
-            onClick={reprocess}
-          />
-        ) : null}
-        {refreshable(post) ? (
-          <IconButton
-            icon={RefreshCw}
-            label={t("admin.posts.refresh")}
-            busy={busy === "refresh"}
-            disabled={queued}
-            onClick={refresh}
-          />
-        ) : null}
-        <a
-          className="adm-icon-button"
-          href={post.url}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={t("admin.posts.open")}
-          title={t("admin.posts.open")}
-        >
-          <ExternalLink aria-hidden />
-        </a>
-      </>
-    )
-  return (
-    <>
-      {withReprocess ? (
-        <Button
-          size="sm"
-          icon={Sparkles}
-          busy={busy === "reprocess"}
-          onClick={reprocess}
-        >
-          {t("admin.posts.reprocess")}
-        </Button>
-      ) : null}
-      {refreshable(post) ? (
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={RefreshCw}
-          busy={busy === "refresh"}
-          disabled={queued}
-          onClick={refresh}
-        >
-          {t("admin.posts.refresh")}
-        </Button>
-      ) : null}
-      <a className="adm-link" href={post.url} target="_blank" rel="noreferrer">
-        {t("admin.posts.open")}
-        <ExternalLink aria-hidden />
-      </a>
-    </>
-  )
 }
 
 /** The processing step a post list covers. */
@@ -242,8 +72,6 @@ const postFilters: Record<
     failed: { translation: "failed" },
   },
 }
-
-export type BulkAction = "dismiss" | "reprocess" | "refresh" | "translate"
 
 /** What a step's selected posts in one state can have done to them at once. */
 const bulkActions: Record<
@@ -475,97 +303,6 @@ function PostRow({
         </footer>
       </div>
     </article>
-  )
-}
-
-/**
- * The selection bar over a selectable post list: a page-wide box that reads
- * checked, mixed or empty, the count, and the filter's bulk actions. It
- * stays under the top bar while the list scrolls.
- */
-export function PostSelectionBar({
-  actions,
-  selected,
-  pageCount,
-  busy,
-  onSelectPage,
-  onClear,
-  onAction,
-}: {
-  actions: BulkAction[]
-  selected: number
-  pageCount: number
-  busy: BulkAction | ""
-  onSelectPage: (all: boolean) => void
-  onClear: () => void
-  onAction: (action: BulkAction) => void
-}) {
-  const { t } = useAppSettings()
-  const all = selected > 0 && selected === pageCount
-  const mixed = selected > 0 && !all
-  const icons = {
-    dismiss: Ban,
-    reprocess: Sparkles,
-    refresh: RefreshCw,
-    translate: Languages,
-  }
-  const labels = {
-    dismiss: t("admin.posts.dismiss"),
-    reprocess: t("admin.review.bulkReprocess"),
-    refresh: t("admin.posts.refresh"),
-    translate: t("admin.review.retryTranslation"),
-  }
-  const titles: Partial<Record<BulkAction, string>> = {
-    dismiss: t("admin.posts.dismissTitle"),
-    reprocess: t("admin.posts.reprocess"),
-  }
-  return (
-    <div className={cn("adm-select-bar", selected > 0 && "is-active")}>
-      <label className="adm-check">
-        <input
-          type="checkbox"
-          checked={all}
-          ref={(input) => {
-            if (input) input.indeterminate = mixed
-          }}
-          onChange={() => onSelectPage(!all)}
-        />
-        {selected ? (
-          <strong aria-live="polite">
-            {t("admin.review.selected", { count: selected })}
-          </strong>
-        ) : (
-          t("admin.review.selectPage")
-        )}
-      </label>
-      {selected ? (
-        <IconButton
-          icon={X}
-          label={t("admin.review.clearSelection")}
-          onClick={onClear}
-        />
-      ) : (
-        <span className="adm-select-hint">{t("admin.review.selectHint")}</span>
-      )}
-      <div className="adm-actions">
-        {actions.map((action) => (
-          <Button
-            key={action}
-            size="sm"
-            variant={
-              action === "dismiss" || action === "refresh" ? "ghost" : undefined
-            }
-            icon={icons[action]}
-            title={titles[action]}
-            disabled={!selected || (Boolean(busy) && busy !== action)}
-            busy={busy === action}
-            onClick={() => onAction(action)}
-          >
-            {labels[action]}
-          </Button>
-        ))}
-      </div>
-    </div>
   )
 }
 

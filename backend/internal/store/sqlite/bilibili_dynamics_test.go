@@ -46,10 +46,11 @@ func TestBilibiliDynamicsArePrefixedPostsThatKeepHides(t *testing.T) {
 	if err != nil || !changed || revision() != start+1 {
 		t.Fatalf("changed=%v err=%v", changed, err)
 	}
-	var source, account, url, text string
-	if err = s.DB().QueryRow(`SELECT source, account_handle, url, text FROM posts WHERE id = 'bilibili-900000000000000010'`).Scan(&source, &account, &url, &text); err != nil ||
-		source != "bilibili" || account != biliAccount || url != "https://www.bilibili.com/opus/900000000000000010" || text != "今天20点开播" {
-		t.Fatalf("post=%s %s %s %s err=%v", source, account, url, text, err)
+	// A dynamic is a daily post whose label is English text, never localized.
+	var source, account, url, text, typ, label string
+	if err = s.DB().QueryRow(`SELECT source, account_handle, url, text, type, label FROM posts WHERE id = 'bilibili-900000000000000010'`).Scan(&source, &account, &url, &text, &typ, &label); err != nil ||
+		source != "bilibili" || account != biliAccount || url != "https://www.bilibili.com/opus/900000000000000010" || text != "今天20点开播" || typ != "daily" || label != "DAILY" {
+		t.Fatalf("post=%s %s %s %s %s %s err=%v", source, account, url, text, typ, label, err)
 	}
 	var images int
 	if err = s.DB().QueryRow(`SELECT COUNT(*) FROM media_links l JOIN media_assets a ON a.id = l.media_id WHERE l.owner_id = 'bilibili-900000000000000010' AND l.role = 'post-image' AND a.source = 'bilibili'`).Scan(&images); err != nil || images != 1 {

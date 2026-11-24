@@ -9,6 +9,15 @@ import (
 	"github.com/yexca/kano-navi/backend/internal/urlguard"
 )
 
+// Post labels, stored in posts.label and projected as the public `label`.
+// Like every value synchronization stores, they are English base text, never
+// a localized display string. Bilibili dynamics carry LabelDaily as well.
+const (
+	LabelDaily        = "DAILY"
+	LabelSchedule     = "SCHEDULE"
+	LabelAnnouncement = "ANNOUNCEMENT"
+)
+
 func Normalize(payload map[string]any, fallbackID, account string) *Post {
 	id := stringValue(payload["tweetID"])
 	if id == "" {
@@ -58,13 +67,13 @@ func Normalize(payload map[string]any, fallbackID, account string) *Post {
 	}
 	u = normalizePostURL(u, account, id)
 	avatarURL := extractAuthorAvatarURL(author, payload)
-	p := &Post{ID: id, AccountHandle: account, Type: "daily", Label: "DAILY / 近况", Text: text, PublishedAt: published, URL: u, Likes: number(first(payload, "likes", "likeCount")), Reposts: number(first(payload, "retweets", "reposts", "retweetCount")), Replies: number(first(payload, "replies", "replyCount")), MediaURLs: media, MediaKinds: itemKinds(items), AuthorScreenName: screen, AuthorAvatarURL: avatarURL, Quote: quote, Raw: payload}
+	p := &Post{ID: id, AccountHandle: account, Type: "daily", Label: LabelDaily, Text: text, PublishedAt: published, URL: u, Likes: number(first(payload, "likes", "likeCount")), Reposts: number(first(payload, "retweets", "reposts", "retweetCount")), Replies: number(first(payload, "replies", "replyCount")), MediaURLs: media, MediaKinds: itemKinds(items), AuthorScreenName: screen, AuthorAvatarURL: avatarURL, Quote: quote, Raw: payload}
 	if strings.Contains(strings.ToLower(text), "schedule") || strings.Contains(text, "スケジュール") || strings.Contains(text, "配信予定") || strings.Contains(text, "週間予定") || strings.Contains(text, "今週の予定") {
 		p.Type = "notice"
-		p.Label = "SCHEDULE / 日程"
+		p.Label = LabelSchedule
 	} else if strings.Contains(text, "お知らせ") || strings.Contains(strings.ToLower(text), "official") || strings.Contains(text, "発売") || strings.Contains(text, "告知") {
 		p.Type = "notice"
-		p.Label = "ANNOUNCEMENT"
+		p.Label = LabelAnnouncement
 	}
 	return p
 }

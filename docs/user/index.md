@@ -24,7 +24,7 @@ These pages describe what you can see and do on the site.
 ## Pages and Settings
 
 Every page shares one header with the site name (with an "Unofficial" mark on
-wide screens), the page links (Now, Journey, Works, LINE BLOG, About), a live
+wide screens), the page links (Now, Posts, Journey, Works, LINE BLOG, About), a live
 Japan-time clock, and language and theme controls. The footer says the site
 is fan-made and unaffiliated, with two icons beside it: **Notes** and
 **Back to top**. Notes opens the site's notice in a window, the same on

@@ -187,6 +187,21 @@ func TestNormalizeFallsBackFromCredentialBearingPostURLs(t *testing.T) {
 	}
 }
 
+// A post's type and label are codes and English text, whatever language its
+// text is in.
+func TestNormalizeLabelsPostsInEnglish(t *testing.T) {
+	for text, want := range map[string]string{
+		"おはよう":        "daily/DAILY",
+		"今週のスケジュールです": "notice/SCHEDULE",
+		"新しいグッズのお知らせ": "notice/ANNOUNCEMENT",
+	} {
+		post := Normalize(map[string]any{"id": "1900000000000000001", "text": text, "date_epoch": float64(1790000000)}, "1900000000000000001", "kano")
+		if post == nil || post.Type+"/"+post.Label != want {
+			t.Fatalf("Normalize(%q) = %+v, want %s", text, post, want)
+		}
+	}
+}
+
 // quoteSummary is a quote with its images, which its JSON form leaves out.
 func quoteSummary(t *testing.T, q *Quote) string {
 	t.Helper()

@@ -97,20 +97,6 @@
   gap: 4px;
 }
 
-.adm-qp-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.adm-qp-note svg {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  margin-top: 2px;
-}
-
 @media (max-width: 560px) {
   .adm-qp-row {
     grid-template-columns: 2em minmax(0, 1fr);

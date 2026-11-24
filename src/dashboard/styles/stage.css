@@ -8,23 +8,6 @@
   scroll-margin-top: 72px;
 }
 
-/*
- * A card whose title is its link: followCardLink opens it from anywhere on
- * the card, and the card shows the title link's keyboard focus.
- */
-.link-card {
-  cursor: pointer;
-}
-
-.link-card:has(.card-link:focus-visible) {
-  outline: 2px solid var(--berry);
-  outline-offset: 2px;
-}
-
-.card-link:focus-visible {
-  outline: none;
-}
-
 .ticket {
   display: grid;
   overflow: hidden;

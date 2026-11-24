@@ -23,19 +23,22 @@ type incident struct {
 	OpenedAt   string         `json:"openedAt"`
 	LastSeenAt string         `json:"lastSeenAt"`
 	ResolvedAt *string        `json:"resolvedAt"`
+	// AcknowledgedAt is when the operator acknowledged the open incident;
+	// an acknowledged incident leaves the console's badge count.
+	AcknowledgedAt *string `json:"acknowledgedAt"`
 }
 
 func (i incident) key() string { return i.Rule + "\x00" + i.Subject }
 
 type rowScanner interface{ Scan(dest ...any) error }
 
-const incidentColumns = `id,rule,subject,severity,status,detail_json,opened_at,last_seen_at,resolved_at`
+const incidentColumns = `id,rule,subject,severity,status,detail_json,opened_at,last_seen_at,resolved_at,acknowledged_at`
 
 func scanIncident(row rowScanner) (incident, error) {
 	var out incident
 	var detail string
-	var resolved sql.NullString
-	if err := row.Scan(&out.ID, &out.Rule, &out.Subject, &out.Severity, &out.Status, &detail, &out.OpenedAt, &out.LastSeenAt, &resolved); err != nil {
+	var resolved, acknowledged sql.NullString
+	if err := row.Scan(&out.ID, &out.Rule, &out.Subject, &out.Severity, &out.Status, &detail, &out.OpenedAt, &out.LastSeenAt, &resolved, &acknowledged); err != nil {
 		return incident{}, err
 	}
 	out.Detail = map[string]any{}
@@ -43,7 +46,30 @@ func scanIncident(row rowScanner) (incident, error) {
 	if resolved.Valid {
 		out.ResolvedAt = &resolved.String
 	}
+	if acknowledged.Valid {
+		out.AcknowledgedAt = &acknowledged.String
+	}
 	return out, nil
+}
+
+// acknowledge sets or clears an open incident's acknowledgement. It reports
+// false when no open incident has that id. A resolved incident keeps its
+// acknowledgement as it was; the same problem returning opens a new,
+// unacknowledged incident.
+func acknowledge(ctx context.Context, db *sql.DB, id int64, on bool, now time.Time) (bool, error) {
+	var at any
+	if on {
+		at = formatTime(now)
+	}
+	result, err := db.ExecContext(ctx, `UPDATE alert_incidents SET acknowledged_at=CASE WHEN ? IS NULL THEN NULL ELSE COALESCE(acknowledged_at,?) END WHERE id=? AND status='open'`, at, at, id)
+	if err != nil {
+		return false, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return changed == 1, nil
 }
 
 type rowsQueryer interface {

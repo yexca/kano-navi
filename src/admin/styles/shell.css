@@ -299,12 +299,6 @@
   line-height: 1.2;
 }
 
-.adm-page-header p {
-  max-width: 68ch;
-  margin: 6px 0 0;
-  color: var(--adm-muted);
-}
-
 .adm-grid {
   display: grid;
   gap: 20px;

@@ -110,7 +110,6 @@ export function ModelSetup({ tab, navigate }: ViewProps) {
       <Panel
         icon={Bot}
         title={t("admin.models.providers")}
-        description={t("admin.models.providersHint")}
         actions={
           <Button
             size="sm"

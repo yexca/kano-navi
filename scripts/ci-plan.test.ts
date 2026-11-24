@@ -4,6 +4,7 @@ import test from "node:test"
 
 import {
   alwaysRun,
+  auditJobs,
   createPlan,
   jobs,
   scriptJobs,
@@ -12,6 +13,9 @@ import {
 } from "./ci-plan.ts"
 
 const pr = (paths: string[] | null) => createPlan({ tier: "pr", paths })
+const validation = jobs.filter((job) => !auditJobs.includes(job))
+// Whether a plan runs every validation job, whatever it decides on audits.
+const validates = (plan: Plan) => validation.every((job) => plan[job])
 // The jobs a PR selects, in plan order.
 const selected = (...paths: string[]) => jobs.filter((job) => pr(paths)[job])
 const resultsFor = (plan: Plan) => ({
@@ -54,15 +58,13 @@ test("documentation-only PRs skip planned jobs while unknown paths require full 
     ["scripts/nested/smoke.ts"],
     ["docs/overview.md", "new-runtime/settings.json"],
   ]) {
-    assert.ok(Object.values(pr(paths)).every(Boolean), String(paths))
+    assert.ok(validates(pr(paths)), String(paths))
   }
 })
 
 test("application paths select the jobs that consume them", () => {
   for (const path of [
     "backend/internal/httpapi/server.go",
-    "backend/go.mod",
-    "backend/go.sum",
     "backend/internal/store/sqlite/bootstrap.sql",
   ])
     assert.deepEqual(
@@ -86,8 +88,6 @@ test("application paths select the jobs that consume them", () => {
     "index.html",
     "vite.config.ts",
     "tsconfig.json",
-    "package.json",
-    "package-lock.json",
   ])
     assert.deepEqual(selected(path), ["frontend", "docker"], path)
   assert.deepEqual(selected("tests/polling.test.ts"), ["frontend"])
@@ -135,7 +135,7 @@ test("a validation script selects the jobs that run it, and every script has a d
   // every job; a new script must be classified rather than left unlisted.
   const scripts = readdirSync(new URL(".", import.meta.url))
   for (const name of scripts) {
-    const everything = Object.values(pr([`scripts/${name}`])).every(Boolean)
+    const everything = validates(pr([`scripts/${name}`]))
     assert.equal(everything, name === "ci-plan.ts", name)
   }
   for (const name of Object.keys(scriptJobs))
@@ -156,10 +156,46 @@ test("mixed and renamed paths plan the union of their jobs", () => {
   ])
 })
 
-test("the full tier runs every job whatever changed, and an unknown tier is rejected", () => {
-  for (const paths of [null, [], ["README.md"], ["docs/how-it-works.md"]]) {
+test("dependency manifests also plan their advisory audit, and nothing else does", () => {
+  for (const path of ["backend/go.mod", "backend/go.sum"])
+    assert.deepEqual(
+      selected(path),
+      ["backend", "go-builds", "go-container", "smoke", "docker", "go-audit"],
+      path,
+    )
+  for (const path of ["package.json", "package-lock.json"])
+    assert.deepEqual(selected(path), ["frontend", "docker", "npm-audit"], path)
+  // Paths that select every validation job query no advisory database.
+  for (const paths of [
+    ["Makefile"],
+    [".github/workflows/validate.yml"],
+    ["scripts/ci-plan.ts"],
+    ["new-runtime/settings.json"],
+    ["backend/internal/httpapi/server.go", "src/main.tsx"],
+  ]) {
+    const plan = pr(paths)
     assert.ok(
-      Object.values(createPlan({ tier: "full", paths })).every(Boolean),
+      auditJobs.every((job) => !plan[job]),
+      String(paths),
+    )
+  }
+  // Without a diff the planner cannot rule a manifest change out.
+  for (const paths of [null, []])
+    assert.ok(Object.values(pr(paths)).every(Boolean), String(paths))
+})
+
+test("the full tier runs every validation job but no audit whatever changed, and an unknown tier is rejected", () => {
+  for (const paths of [
+    null,
+    [],
+    ["README.md"],
+    ["docs/how-it-works.md"],
+    ["package-lock.json"],
+  ]) {
+    const plan = createPlan({ tier: "full", paths })
+    assert.ok(validates(plan), String(paths))
+    assert.ok(
+      auditJobs.every((job) => !plan[job]),
       String(paths),
     )
   }
@@ -173,6 +209,7 @@ test("the gate accepts only planned skips and rejects failures, cancellations an
     pr(["README.md"]),
     pr(["Makefile"]),
     pr(["src/main.tsx"]),
+    pr(["backend/go.sum", "package-lock.json"]),
     createPlan({ tier: "full" }),
   ]) {
     assert.doesNotThrow(() => validateResults(plan, resultsFor(plan)))

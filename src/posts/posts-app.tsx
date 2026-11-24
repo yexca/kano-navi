@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useAppSettings } from "@/app-settings"
 import { cdnUrl } from "@/lib/cdn"
 import { MediaDialog, stepIndex } from "@/site/media-dialog"
+import { usePageMeta } from "@/site/page-meta"
 import { SiteFooter, SiteHeader, SkipLink } from "@/site/site-shell"
 import {
   ArchiveMonthBar,
@@ -28,7 +29,9 @@ import { ActivityMap } from "./activity-map"
 import { postsHref, usePostsLocation } from "./navigation"
 import { PostTimeline } from "./post-timeline"
 import { monthCount, nearestMonth } from "./timeline"
-import "@/dashboard/board.css"
+import "@/dashboard/styles/base.css"
+import "@/dashboard/styles/posts.css"
+import "@/dashboard/styles/month-dialogs.css"
 import "./posts.css"
 
 interface ViewerImage {
@@ -58,12 +61,7 @@ export function PostsApp() {
   const [view, show] = usePostsLocation()
   const { index, error: indexError, retry: retryIndex } = usePostArchiveIndex()
 
-  useEffect(() => {
-    document.title = t("posts.metaTitle")
-    document
-      .querySelector('meta[name="description"]')
-      ?.setAttribute("content", t("posts.metaDescription"))
-  }, [t])
+  usePageMeta(t("posts.metaTitle"), t("posts.metaDescription"))
 
   const account = view.account
   const filter = account?.toLowerCase() || null

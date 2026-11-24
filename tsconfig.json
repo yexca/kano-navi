@@ -10,6 +10,8 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "skipLibCheck": true,
     "paths": { "@/*": ["./src/*"] },
     "types": ["vite/client", "node"]

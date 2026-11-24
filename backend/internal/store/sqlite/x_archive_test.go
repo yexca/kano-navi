@@ -58,7 +58,7 @@ func archivePost(id, account, text string, media ...string) xsource.Post {
 	for i := range kinds {
 		kinds[i] = xsource.MediaPhoto
 	}
-	return xsource.Post{ID: id, AccountHandle: account, Type: "daily", Label: "DAILY / 近况", Text: text,
+	return xsource.Post{ID: id, AccountHandle: account, Type: "daily", Label: xsource.LabelDaily, Text: text,
 		PublishedAt: "2020-01-02T00:00:00Z", URL: "https://x.com/" + account + "/status/" + id, Likes: 3,
 		MediaURLs: media, MediaKinds: kinds, Raw: map[string]any{"archive": map[string]any{"origin": xsource.ArchiveOrigin}}}
 }

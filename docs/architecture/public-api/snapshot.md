@@ -52,6 +52,11 @@ or `gif`: a video's or GIF's entry is its thumbnail, and the board links it
 to the post or the quoted status on X. Every image that is not an X video or
 GIF, a Bilibili one included, is a `photo`.
 
+A post's `type` is `daily` or `notice`, and its `label` is English base text,
+not localized copy: `SCHEDULE` or `ANNOUNCEMENT` for an X notice by its
+wording, `DAILY` for any other X post and every Bilibili dynamic, or `null`
+for a post stored without one.
+
 A post's `source` is `x` or `bilibili`. A Bilibili dynamic has the ID
 `bilibili-<dynamic ID>`, its opus page as `url`, the account's mid as
 `accountHandle` and its space as `accountUrl` and zero engagement counts; its
@@ -131,7 +136,9 @@ boundaries use Asia/Tokyo.
 [LINE BLOG archive](lineblog.md) reads send
 `Cache-Control: no-cache` and a weak ETag, a SHA-256 prefix of the
 uncompressed JSON body. The dashboard's tag leaves out `meta.generatedAt`,
-which changes on every read; the other time-derived fields, such as
+the time the response was computed, which a
+[prepared response](../backend.md#text-transfer-and-static-caching) keeps
+until it expires; the other time-derived fields, such as
 `isUpcoming` and `liveStatus` in every one of these reads, are included, so
 the tag changes with them as well as with stored data. A matching
 `If-None-Match`, weak or strong, answers 304 without a body, and the client

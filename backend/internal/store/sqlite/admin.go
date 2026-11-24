@@ -1074,53 +1074,17 @@ func (s *Store) ListAdminEvents(ctx context.Context, f AdminEventFilter) (AdminP
 	if f.Ascending {
 		direction = "ASC"
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.source,e.source_item_id,e.source_key,e.title,e.detail,e.starts_on,e.starts_at,e.ends_at,e.ends_on,e.timezone,e.time_precision,e.status,e.event_type,e.tag,e.tag_source,e.url,e.provenance,e.manual_locked,e.confidence,e.extraction_id,e.cancellation_status,e.cancellation_source,e.cancellation_reason,e.cancellation_evidence,e.cancellation_source_item_id,e.cancellation_confidence,e.cancellation_at,e.deleted_at,e.created_at,e.updated_at,e.merged_into,(SELECT t.title FROM events t WHERE t.id=e.merged_into),e.merge_source,e.merge_reason,e.merged_at,`+eventHiddenByPostsSQL("e")+`,e.platform,e.platforms,e.platforms_inferred,`+attention+` FROM events e WHERE `+where+` ORDER BY COALESCE(julianday(e.starts_at),julianday(e.starts_on || 'T23:59:59.999+09:00')) `+direction+`,e.id ASC LIMIT ? OFFSET ?`, append(args, pageSize, (page-1)*pageSize)...)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+adminEventColumns(f.Today)+` FROM events e WHERE `+where+` ORDER BY COALESCE(julianday(e.starts_at),julianday(e.starts_on || 'T23:59:59.999+09:00')) `+direction+`,e.id ASC LIMIT ? OFFSET ?`, append(args, pageSize, (page-1)*pageSize)...)
 	if err != nil {
 		return AdminPage[AdminEvent]{}, fmt.Errorf("%w: admin events unavailable", ErrUnavailable)
 	}
 	defer rows.Close()
 	items := []AdminEvent{}
 	for rows.Next() {
-		var e AdminEvent
-		var sourceItem, sourceKey, detail, startsAt, endsAt, endsOn, status, eventType, tag, tagSource, url, cancelSource, cancelReason, cancelEvidence, cancelSourceItem, cancelAt, deletedAt sql.NullString
-		var mergedInto, mergedIntoTitle, mergeSource, mergeReason, mergedAt sql.NullString
-		var manual, hiddenByPosts, inferred int
-		var confidence, cancelConfidence sql.NullFloat64
-		var extraction sql.NullInt64
-		var platform, platforms, review sql.NullString
-		if err := rows.Scan(&e.ID, &e.Source, &sourceItem, &sourceKey, &e.Title, &detail, &e.StartsOn, &startsAt, &endsAt, &endsOn, &e.Timezone, &e.TimePrecision, &status, &eventType, &tag, &tagSource, &url, &e.Provenance, &manual, &confidence, &extraction, &e.CancellationStatus, &cancelSource, &cancelReason, &cancelEvidence, &cancelSourceItem, &cancelConfidence, &cancelAt, &deletedAt, &e.CreatedAt, &e.UpdatedAt, &mergedInto, &mergedIntoTitle, &mergeSource, &mergeReason, &mergedAt, &hiddenByPosts, &platform, &platforms, &inferred, &review); err != nil {
+		e, err := scanAdminEvent(rows)
+		if err != nil {
 			return AdminPage[AdminEvent]{}, fmt.Errorf("%w: admin events unavailable", ErrUnavailable)
 		}
-		e.Platforms, _ = readPlatforms(platforms, platform, url.String)
-		e.PlatformsInferred = inferred != 0
-		e.SourceItemID = nullString(sourceItem)
-		e.SourceKey = nullString(sourceKey)
-		e.Detail = nullString(detail)
-		e.StartsAt = nullString(startsAt)
-		e.EndsAt = nullString(endsAt)
-		e.EndsOn = nullString(endsOn)
-		e.Status = nullString(status)
-		e.EventType = nullString(eventType)
-		e.Tag = nullString(tag)
-		e.TagSource = nullString(tagSource)
-		e.URL = nullString(url)
-		e.ManualLocked = manual != 0
-		e.Confidence = nullFloat(confidence)
-		e.ExtractionID = nullInt(extraction)
-		e.CancellationSource = nullString(cancelSource)
-		e.CancellationReason = nullString(cancelReason)
-		e.CancellationEvidence = nullString(cancelEvidence)
-		e.CancellationSourceItemID = nullString(cancelSourceItem)
-		e.CancellationConfidence = nullFloat(cancelConfidence)
-		e.CancellationAt = nullString(cancelAt)
-		e.DeletedAt = nullString(deletedAt)
-		e.MergedInto = nullString(mergedInto)
-		e.MergedIntoTitle = nullString(mergedIntoTitle)
-		e.MergeSource = nullString(mergeSource)
-		e.MergeReason = nullString(mergeReason)
-		e.MergedAt = nullString(mergedAt)
-		e.HiddenByPosts = hiddenByPosts != 0
-		e.Review = eventReview(review.String, e)
 		items = append(items, e)
 	}
 	if err := rows.Err(); err != nil {
@@ -1131,6 +1095,69 @@ func (s *Store) ListAdminEvents(ctx context.Context, f AdminEventFilter) (AdminP
 		return AdminPage[AdminEvent]{}, fmt.Errorf("%w: admin events unavailable", ErrUnavailable)
 	}
 	return AdminPage[AdminEvent]{Items: items, Page: page, PageSize: pageSize, Total: total, TotalPages: totalPages}, nil
+}
+
+// adminEventColumns reads an AdminEvent from the events row aliased e, in the
+// order scanAdminEvent scans; today dates the attention kind (see
+// EventAttentionSQL). Every console read of an event uses this pair, so a
+// single event reads back exactly as the list shows it.
+func adminEventColumns(today string) string {
+	return `e.id,e.source,e.source_item_id,e.source_key,e.title,e.detail,e.starts_on,e.starts_at,e.ends_at,e.ends_on,e.timezone,e.time_precision,
+ e.status,e.event_type,e.tag,e.tag_source,e.url,e.provenance,e.manual_locked,e.confidence,e.extraction_id,
+ e.cancellation_status,e.cancellation_source,e.cancellation_reason,e.cancellation_evidence,e.cancellation_source_item_id,e.cancellation_confidence,e.cancellation_at,
+ e.deleted_at,e.created_at,e.updated_at,e.merged_into,(SELECT t.title FROM events t WHERE t.id=e.merged_into),e.merge_source,e.merge_reason,e.merged_at,
+ ` + eventHiddenByPostsSQL("e") + `,e.platform,e.platforms,e.platforms_inferred,` + EventAttentionSQL("e", today)
+}
+
+// scanAdminEvent scans one row of adminEventColumns. ShownPlatforms stay for
+// attachAdminPlatforms. The scan error is returned as is, so a missing row
+// stays sql.ErrNoRows.
+func scanAdminEvent(row scanner) (AdminEvent, error) {
+	var e AdminEvent
+	var sourceItem, sourceKey, detail, startsAt, endsAt, endsOn, status, eventType, tag, tagSource, url, cancelSource, cancelReason, cancelEvidence, cancelSourceItem, cancelAt, deletedAt sql.NullString
+	var mergedInto, mergedIntoTitle, mergeSource, mergeReason, mergedAt sql.NullString
+	var manual, hiddenByPosts, inferred int
+	var confidence, cancelConfidence sql.NullFloat64
+	var extraction sql.NullInt64
+	var platform, platforms, review sql.NullString
+	if err := row.Scan(&e.ID, &e.Source, &sourceItem, &sourceKey, &e.Title, &detail, &e.StartsOn, &startsAt, &endsAt, &endsOn, &e.Timezone, &e.TimePrecision,
+		&status, &eventType, &tag, &tagSource, &url, &e.Provenance, &manual, &confidence, &extraction,
+		&e.CancellationStatus, &cancelSource, &cancelReason, &cancelEvidence, &cancelSourceItem, &cancelConfidence, &cancelAt,
+		&deletedAt, &e.CreatedAt, &e.UpdatedAt, &mergedInto, &mergedIntoTitle, &mergeSource, &mergeReason, &mergedAt,
+		&hiddenByPosts, &platform, &platforms, &inferred, &review); err != nil {
+		return AdminEvent{}, err
+	}
+	e.Platforms, _ = readPlatforms(platforms, platform, url.String)
+	e.PlatformsInferred = inferred != 0
+	e.SourceItemID = nullString(sourceItem)
+	e.SourceKey = nullString(sourceKey)
+	e.Detail = nullString(detail)
+	e.StartsAt = nullString(startsAt)
+	e.EndsAt = nullString(endsAt)
+	e.EndsOn = nullString(endsOn)
+	e.Status = nullString(status)
+	e.EventType = nullString(eventType)
+	e.Tag = nullString(tag)
+	e.TagSource = nullString(tagSource)
+	e.URL = nullString(url)
+	e.ManualLocked = manual != 0
+	e.Confidence = nullFloat(confidence)
+	e.ExtractionID = nullInt(extraction)
+	e.CancellationSource = nullString(cancelSource)
+	e.CancellationReason = nullString(cancelReason)
+	e.CancellationEvidence = nullString(cancelEvidence)
+	e.CancellationSourceItemID = nullString(cancelSourceItem)
+	e.CancellationConfidence = nullFloat(cancelConfidence)
+	e.CancellationAt = nullString(cancelAt)
+	e.DeletedAt = nullString(deletedAt)
+	e.MergedInto = nullString(mergedInto)
+	e.MergedIntoTitle = nullString(mergedIntoTitle)
+	e.MergeSource = nullString(mergeSource)
+	e.MergeReason = nullString(mergeReason)
+	e.MergedAt = nullString(mergedAt)
+	e.HiddenByPosts = hiddenByPosts != 0
+	e.Review = eventReview(review.String, e)
+	return e, nil
 }
 
 // attachAdminPlatforms fills ShownPlatforms as the public reads compute

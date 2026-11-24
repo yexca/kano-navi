@@ -60,7 +60,6 @@ export function StepRunDialog({ onClose }: { onClose: () => void }) {
         <Loading />
       ) : (
         <form className="adm-form" onSubmit={submit}>
-          <p className="adm-muted">{t("admin.runs.stepRunHint")}</p>
           {(["source", "process"] as const).map((group) => (
             <fieldset key={group} className="adm-fieldset">
               <legend>{t(`admin.runs.group.${group}`)}</legend>
@@ -96,11 +95,9 @@ export function StepRunDialog({ onClose }: { onClose: () => void }) {
                         </span>
                         <span>
                           <strong>{t(`admin.step.${step.id}`)}</strong>
-                          <small>
-                            {off
-                              ? t("admin.runs.skippedStep")
-                              : t(`admin.step.${step.id}.hint`)}
-                          </small>
+                          {off ? (
+                            <small>{t("admin.runs.skippedStep")}</small>
+                          ) : null}
                         </span>
                         {checked ? (
                           <Check className="adm-step-pick-check" aria-hidden />
@@ -683,7 +680,7 @@ function CopyDiagnostics({ run }: { run: Run }) {
 
 /** When the run was queued, how long it took and how long it waited. */
 function RunTimes({ run }: { run: Run }) {
-  const { t, locale } = useAppSettings()
+  const { t } = useAppSettings()
   const parts = [t("admin.runs.queuedAt", { time: japanStamp(run.createdAt) })]
   if (run.startedAt)
     parts.push(

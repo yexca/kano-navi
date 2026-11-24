@@ -284,6 +284,11 @@ function createClient(run: Runner, slow: Runner) {
       send<AlertTestResult>("POST", `/alerts/channels/${enc(id)}/test`),
     testAlertHeartbeat: () =>
       send<AlertTestResult>("POST", "/alerts/heartbeat/test"),
+    acknowledgeAlertIncident: (id: number, on: boolean) =>
+      send<AlertSettings>(
+        on ? "POST" : "DELETE",
+        `/alerts/incidents/${id}/acknowledge`,
+      ),
     syncSettings: () => get<SyncSettings>("/sync-settings"),
     updateSyncSettings: (body: Partial<Record<SyncSettingField, number>>) =>
       send<SyncSettings>("PUT", "/sync-settings", body),

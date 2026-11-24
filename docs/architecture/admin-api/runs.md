@@ -101,7 +101,9 @@ value, and another field or value answers `400 invalid_input`.
 
 Every step works out its queue when a run starts; nothing stores it. These
 read-only routes work a queue out the same way when the console asks, from
-the snapshot alone: they write nothing and contact no source or model. Each
+the snapshot alone: they write nothing and contact no source or model. A
+preview holds as of its read: posts synced, edited or requested, and model
+queue changes, before a run starts change what that run takes. Each
 answers `{queue}`, and a route whose step the process does not run answers
 `503 unavailable`.
 

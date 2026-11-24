@@ -207,18 +207,15 @@ export function StatusBadge({ status }: { status: string | null | undefined }) {
 
 export function PageHeader({
   title,
-  description,
   actions,
 }: {
   title: string
-  description?: ReactNode
   actions?: ReactNode
 }) {
   return (
     <header className="adm-page-header">
       <div>
         <h1>{title}</h1>
-        {description ? <p>{description}</p> : null}
       </div>
       {actions ? <div className="adm-page-actions">{actions}</div> : null}
     </header>
@@ -227,7 +224,6 @@ export function PageHeader({
 
 export function Panel({
   title,
-  description,
   actions,
   children,
   className,
@@ -235,7 +231,6 @@ export function Panel({
   level = 2,
 }: {
   title?: ReactNode
-  description?: ReactNode
   actions?: ReactNode
   children?: ReactNode
   className?: string
@@ -259,7 +254,6 @@ export function Panel({
                 {title}
               </Heading>
             ) : null}
-            {description ? <p>{description}</p> : null}
           </div>
           {actions ? <div className="adm-panel-actions">{actions}</div> : null}
         </header>
@@ -316,14 +310,12 @@ export function Switch({
   checked,
   onChange,
   label,
-  description,
   disabled,
   compact,
 }: {
   checked: boolean
   onChange: (value: boolean) => void
   label: ReactNode
-  description?: ReactNode
   disabled?: boolean
   /** Only the track; the label stays for tooltips and readers. */
   compact?: boolean
@@ -347,7 +339,6 @@ export function Switch({
       <span className="adm-switch-track" aria-hidden />
       <span className={compact ? "adm-visually-hidden" : "adm-switch-text"}>
         <strong>{label}</strong>
-        {description ? <small>{description}</small> : null}
       </span>
     </label>
   )
@@ -784,28 +775,6 @@ export function FilterSelect({
         </ul>
       ) : null}
     </div>
-  )
-}
-
-/** A checkbox drawn as a pill. */
-export function FilterToggle({
-  checked,
-  onChange,
-  children,
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  children: ReactNode
-}) {
-  return (
-    <label className={cn("adm-filter-pill is-toggle", checked && "is-active")}>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-      {children}
-    </label>
   )
 }
 

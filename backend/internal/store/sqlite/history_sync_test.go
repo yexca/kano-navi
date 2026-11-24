@@ -35,7 +35,7 @@ func TestHistoryPageCommitsRecordsWithCheckpointAndKeepsIncrementalCursor(t *tes
 		t.Fatal(err)
 	}
 	window := history.Window{Method: history.MethodAPI, Mode: history.ModeBefore, Days: 2, StartTime: "2026-03-03T00:00:00.000Z", EndTime: "2026-03-05T00:00:00.000Z"}
-	post := xsource.Post{ID: "1900000000000000001", AccountHandle: "synthetic_handle", Type: "notice", Label: "SCHEDULE / 日程", Text: "weekly schedule", PublishedAt: "2026-03-04T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000001", MediaURLs: []string{"https://media.example.test/board.png"}, Raw: map[string]any{"id": "1900000000000000001"}}
+	post := xsource.Post{ID: "1900000000000000001", AccountHandle: "synthetic_handle", Type: "notice", Label: xsource.LabelSchedule, Text: "weekly schedule", PublishedAt: "2026-03-04T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000001", MediaURLs: []string{"https://media.example.test/board.png"}, Raw: map[string]any{"id": "1900000000000000001"}}
 	page := history.Page{
 		Source: history.SourceX, Account: "synthetic_handle", CheckpointKey: "synthetic_handle:checkpoint", Window: window, Next: "page-2", Discovered: 1,
 		Posts:              []xsource.Post{post},
@@ -93,7 +93,7 @@ func TestTimelinePageKeepsStoredPostsAndItsOwnCheckpoint(t *testing.T) {
 	if _, err := s.db.Exec(`INSERT INTO sync_state(source,account_id,cursor_id,cursor_time,last_success_at,metadata_json) VALUES('x','synthetic_handle','1900000000000000009','2026-03-09T00:00:00.000Z','2026-03-09T00:00:00.000Z','{"pendingStatusIds":["1900000000000000010"]}')`); err != nil {
 		t.Fatal(err)
 	}
-	stored := xsource.Post{ID: "1900000000000000001", AccountHandle: "synthetic_handle", Type: "daily", Label: "DAILY / 近况", Text: "from the detail path", PublishedAt: "2026-03-04T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000001", MediaURLs: []string{"https://media.example.test/detail.png"}, Raw: map[string]any{"tweetID": "1900000000000000001"}}
+	stored := xsource.Post{ID: "1900000000000000001", AccountHandle: "synthetic_handle", Type: "daily", Label: xsource.LabelDaily, Text: "from the detail path", PublishedAt: "2026-03-04T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000001", MediaURLs: []string{"https://media.example.test/detail.png"}, Raw: map[string]any{"tweetID": "1900000000000000001"}}
 	page := history.Page{Source: history.SourceX, Account: "synthetic_handle", CheckpointKey: "synthetic_handle:checkpoint", Posts: []xsource.Post{stored}}
 	if _, err := s.WriteHistoryPage(ctx, page); err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestTimelinePageKeepsStoredPostsAndItsOwnCheckpoint(t *testing.T) {
 	window := history.Window{Method: history.MethodTimeline, Mode: history.ModeAll}
 	again := stored
 	again.Text, again.MediaURLs = "from the timeline", []string{"https://media.example.test/timeline.png"}
-	fresh := xsource.Post{ID: "1900000000000000002", AccountHandle: "synthetic_handle", Type: "notice", Label: "SCHEDULE / 日程", Text: "weekly schedule", PublishedAt: "2026-03-05T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000002", MediaURLs: []string{"https://media.example.test/board.png"}, Raw: map[string]any{"id": "1900000000000000002"}}
+	fresh := xsource.Post{ID: "1900000000000000002", AccountHandle: "synthetic_handle", Type: "notice", Label: xsource.LabelSchedule, Text: "weekly schedule", PublishedAt: "2026-03-05T03:00:00Z", URL: "https://x.com/synthetic_handle/status/1900000000000000002", MediaURLs: []string{"https://media.example.test/board.png"}, Raw: map[string]any{"id": "1900000000000000002"}}
 	timeline := history.Page{
 		Source: history.SourceX, Account: "synthetic_handle", CheckpointKey: "synthetic_handle:checkpoint", Checkpoint: history.TimelineCheckpoint,
 		Window: window, Next: "timeline-cursor", Discovered: 2, KeepStored: true, Posts: []xsource.Post{again, fresh},

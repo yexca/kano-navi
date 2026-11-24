@@ -39,7 +39,7 @@ A schedule image (`assets.kind = schedule`) is public only after two gates:
    `backend/internal/schedule/store.go`) checks that the source post's
    own wording (its stored `raw_json.search_text` when present, otherwise
    its text) reads as a weekly or multi-day board notice. The stored post `label` is not part of that input, because the
-   looser post classifier labels any `配信予定` post as `SCHEDULE / 日程`.
+   looser post classifier labels any `配信予定` post as `SCHEDULE`.
 2. The automatic scan sends each unreviewed candidate's ready cached image,
    without the post text, to the image extraction queue
    (`llm_route_targets.route = 'verify'`), whose targets need the `image` tag

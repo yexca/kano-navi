@@ -40,6 +40,8 @@ type Handler struct {
 	webBotAuth *webbotauth.Holder
 	// streams pushes revision changes to /api/dashboard/events.
 	streams *revisionHub
+	// dashboards holds the prepared /api/dashboard responses.
+	dashboards *dashboardCache
 }
 
 // Standalone carries everything the single-process owner serves beyond the
@@ -78,6 +80,7 @@ func NewStandaloneHandler(store *sqlite.Store, now func() time.Time, options Sta
 		cdnBase:      cdn.Base(options.CDNBase),
 		webBotAuth:   options.WebBotAuth,
 		streams:      newRevisionHub(store.GetDashboardRevision),
+		dashboards:   newDashboardCache(),
 	}
 }
 
@@ -96,7 +99,7 @@ func NewHandlerWithAdmin(store *sqlite.Store, now func() time.Time, admin http.H
 	if now == nil {
 		now = time.Now
 	}
-	return &Handler{store: store, now: now, admin: admin, streams: newRevisionHub(store.GetDashboardRevision)}
+	return &Handler{store: store, now: now, admin: admin, streams: newRevisionHub(store.GetDashboardRevision), dashboards: newDashboardCache()}
 }
 
 // WithCDNBase returns the handler with its public reads naming cached media and
@@ -346,14 +349,43 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	if days > 30 {
 		days = 30
 	}
-	dashboard, err := h.store.GetDashboard(r.Context(), days, h.now())
-	if err != nil {
+	var entry *dashboardEntry
+	var err error
+	revision, revisionErr := h.store.GetDashboardRevision(r.Context())
+	if revisionErr != nil {
+		// Without a revision nothing can be reused; compute as usual.
+		entry, err = h.computeDashboard(r.Context(), dashboardKey{days: days})
+	} else {
+		key := dashboardKey{revision: revision, days: days}
+		entry, err = h.dashboards.get(r.Context(), key, h.now, func() (*dashboardEntry, error) {
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), dashboardComputeTimeout)
+			defer cancel()
+			return h.computeDashboard(ctx, key)
+		})
+	}
+	switch {
+	case errors.Is(err, errDashboardEncoding):
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"}, "")
+	case err != nil:
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "database_unavailable"}, "")
-		return
+	default:
+		writePreparedJSON(w, r, entry.body, entry.etag)
+	}
+}
+
+var errDashboardEncoding = errors.New("dashboard could not be encoded")
+
+// computeDashboard reads and encodes the dashboard for key's post window,
+// with its validator and the time it stops being current.
+func (h *Handler) computeDashboard(ctx context.Context, key dashboardKey) (*dashboardEntry, error) {
+	now := h.now()
+	dashboard, err := h.store.GetDashboard(ctx, key.days, now)
+	if err != nil {
+		return nil, err
 	}
 	payload := h.public(publicview.Dashboard(dashboard))
-	// meta.generatedAt changes on every read; leaving it out of the validator
-	// lets an otherwise unchanged snapshot revalidate.
+	// meta.generatedAt changes on every computation; leaving it out of the
+	// validator lets an otherwise unchanged snapshot revalidate.
 	validated := make(map[string]any, len(payload))
 	for key, value := range payload {
 		validated[key] = value
@@ -367,7 +399,15 @@ func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		validated["meta"] = stable
 	}
-	writeRevalidatedJSON(w, r, payload, validated)
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, errDashboardEncoding
+	}
+	validator, err := json.Marshal(validated)
+	if err != nil {
+		validator = body
+	}
+	return &dashboardEntry{key: key, body: body, etag: revalidatedETag(validator), expiresAt: dashboardExpiry(now, dashboard.ValidUntil)}, nil
 }
 
 func queryCalendarNumber(r *http.Request, key string, fallback float64) float64 {

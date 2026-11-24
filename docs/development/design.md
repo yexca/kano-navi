@@ -1,9 +1,20 @@
 # Design and Interaction
 
 The public board should be easy to scan and keep source provenance visible.
-Use the shared semantic tokens in src/index.css, the public shell and controls
-in src/site/, and the existing shadcn/ui-style primitives in
-src/components/ui/. Public pages use cream paper with hairline rules rather
+Each area styles its own markup in its own stylesheet (`src/site/site.css`
+for the public shell, `src/dashboard/board.css`, `src/admin/admin.css`, and
+one per page or shared component), with class names scoped to the area or
+component, over the CSS variables in `src/index.css`. New markup takes such
+classes rather than Tailwind utilities; the utility theme in `src/index.css`
+serves the `src/components/ui/` wrappers and the error pages in
+`src/main.tsx`. Public pages reuse the shell's controls in `src/site/site.css`,
+such as `.round-button` and `.pill-button`; the console reuses the
+`src/admin/ui.tsx` components (buttons, badges, panels, fields, switches,
+filters, pager, modal, toasts). Menus, tabs and tooltips use the Radix
+wrappers in `src/components/ui/`, restyled with an area class.
+`src/components/ui/button.tsx` serves only the header's preference controls:
+its colours are the fixed `ink` and `coral`, which have no dark-mode values.
+Public pages use cream paper with hairline rules rather
 than boxing everything, a rounded display face for names and titles, tabular
 numerals for times, and strawberry gingham as the signature edge. Admin keeps
 its own adm- styles on the same tokens. Preserve light/dark themes and the
@@ -101,7 +112,10 @@ introduce a separate token system for a single page.
   tokens, so both themes apply.
 - /about is a static project, attribution, and code-license page.
 - /admin is the hidden operator console. Its styles use adm- prefixed selectors.
-  Do not add it to public navigation. Lazy page loads show a localized status
+  Do not add it to public navigation. Its copy is labels, states, counts and
+  short hints for a format or an otherwise hidden action; how a feature works
+  belongs in the docs, so panels, page headers and switches take no
+  description. Lazy page loads show a localized status
   and offer a full reload on failure, using the shared theme tokens.
 
 Keep loading, empty, stale, error, and unavailable-media states explicit. Never

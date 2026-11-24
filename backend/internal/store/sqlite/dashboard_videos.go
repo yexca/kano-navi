@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -18,14 +19,33 @@ const (
 	dashboardActiveLimit   = 30
 )
 
-func (s *Store) queryVideos(ctx context.Context, now, liveCutoff time.Time) ([]Video, error) {
-	n := now.UTC().Format(time.RFC3339Nano)
+// videoEventExistsSQL is the condition that an events row e meeting cond
+// names the YouTube video whose ID and URL are the SQL expressions id and url:
+// by the entry the sync created for it, by its source item, by its event
+// sources, or, when byURL, by stream URL. Each identity is its own EXISTS on
+// its own index; one OR across them inside a single EXISTS makes SQLite scan
+// the events for every video (see queryLinkedEvents).
+func videoEventExistsSQL(id, url, cond string, byURL bool) string {
+	parts := []string{
+		`EXISTS (SELECT 1 FROM events e WHERE e.id='youtube-'||` + id + ` AND ` + cond + `)`,
+		`EXISTS (SELECT 1 FROM events e WHERE e.source='youtube' AND e.source_item_id=` + id + ` AND ` + cond + `)`,
+		`EXISTS (SELECT 1 FROM event_sources es JOIN events e ON e.id=es.event_id WHERE es.source='youtube' AND es.source_item_id=` + id + ` AND ` + cond + `)`,
+	}
+	if byURL {
+		parts = append(parts, `EXISTS (SELECT 1 FROM events e WHERE e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(`+url+`) AND `+cond+`)`)
+	}
+	return "(" + strings.Join(parts, " OR ") + ")"
+}
+
+// dashboardVideosSQL is queryVideos' statement. ?1 is the read's time and ?2
+// the live-check cutoff.
+func dashboardVideosSQL() string {
 	// A confirmed live broadcast stays listed past the start-time grace.
 	streamKinds := "'stream'"
 	videoTime := "julianday(COALESCE(scheduled_at,published_at))"
 	base := "COALESCE(manual_kind,kind,'')"
 	short := "COALESCE(manual_is_short,is_short,0)"
-	q := `SELECT id,source,COALESCE(manual_title,title),published_at,scheduled_at,url,thumbnail_url,COALESCE(manual_kind,kind),is_upcoming,live_status,live_checked_at,duration_seconds,COALESCE(manual_is_short,is_short),` + videoTagSQL("videos") + `,COALESCE(manual_availability,availability) FROM videos WHERE id IN (
+	return `SELECT id,source,COALESCE(manual_title,title),published_at,scheduled_at,url,thumbnail_url,COALESCE(manual_kind,kind),is_upcoming,live_status,live_checked_at,duration_seconds,COALESCE(manual_is_short,is_short),` + videoTagSQL("videos") + `,COALESCE(manual_availability,availability) FROM videos WHERE id IN (
 		SELECT id FROM (SELECT id FROM videos WHERE ` + publicVideoScope + ` AND ` + short + `<>1 AND ` + base + ` NOT IN (` + streamKinds + `)
 			ORDER BY ` + videoTime + ` DESC,id ASC LIMIT ` + fmt.Sprint(dashboardWorksLimit) + `)
 		UNION SELECT id FROM (SELECT id FROM videos WHERE ` + publicVideoScope + ` AND ` + short + `<>1 AND ` + base + ` IN (` + streamKinds + `)
@@ -33,18 +53,17 @@ func (s *Store) queryVideos(ctx context.Context, now, liveCutoff time.Time) ([]V
 		UNION SELECT id FROM (SELECT id FROM videos WHERE ` + publicVideoScope + ` AND ` + short + `=1
 			ORDER BY ` + videoTime + ` DESC,id ASC LIMIT ` + fmt.Sprint(dashboardShortsLimit) + `)
 		UNION SELECT id FROM (SELECT v.id FROM videos v WHERE v.source='youtube' AND (
-			julianday(v.scheduled_at)>julianday(?,'-3 hours') OR v.scheduled_at IS NULL AND v.is_upcoming=1 OR
-			v.live_status='live' AND julianday(v.live_checked_at)>julianday(?) OR EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)>julianday(?) AND
-				(e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR
-				(e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url)))))
-			AND NOT EXISTS (SELECT 1 FROM events e WHERE e.cancellation_status='manual_confirmed' AND
-				(e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id)))
-			AND NOT EXISTS (SELECT 1 FROM events e WHERE e.deleted_at IS NULL AND julianday(e.ends_at)<=julianday(?) AND
-				(e.id='youtube-'||v.id OR (e.source='youtube' AND e.source_item_id=v.id) OR EXISTS (SELECT 1 FROM event_sources es WHERE es.event_id=e.id AND es.source='youtube' AND es.source_item_id=v.id) OR
-				(e.url IS NOT NULL AND stream_identity(e.url)=stream_identity(v.url))))
+			julianday(v.scheduled_at)>julianday(?1,'-3 hours') OR v.scheduled_at IS NULL AND v.is_upcoming=1 OR
+			v.live_status='live' AND julianday(v.live_checked_at)>julianday(?2) OR
+			` + videoEventExistsSQL("v.id", "v.url", "e.deleted_at IS NULL AND julianday(e.ends_at)>julianday(?1)", true) + `)
+			AND NOT ` + videoEventExistsSQL("v.id", "v.url", "e.cancellation_status='manual_confirmed'", false) + `
+			AND NOT ` + videoEventExistsSQL("v.id", "v.url", "e.deleted_at IS NULL AND julianday(e.ends_at)<=julianday(?1)", true) + `
 			ORDER BY julianday(v.scheduled_at) ASC,v.id ASC LIMIT ` + fmt.Sprint(dashboardActiveLimit) + `)
 	) ORDER BY ` + videoTime + ` DESC,id ASC`
-	rows, err := s.db.QueryContext(ctx, q, n, liveCutoff.UTC().Format(time.RFC3339Nano), n, n, n)
+}
+
+func (s *Store) queryVideos(ctx context.Context, now, liveCutoff time.Time) ([]Video, error) {
+	rows, err := s.db.QueryContext(ctx, dashboardVideosSQL(), now.UTC().Format(time.RFC3339Nano), liveCutoff.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return nil, dbErr(err)
 	}

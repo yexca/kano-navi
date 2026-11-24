@@ -30,6 +30,8 @@ jobs:
       frontend: ${{ steps.plan.outputs.frontend }}
       smoke: ${{ steps.plan.outputs.smoke }}
       docker: ${{ steps.plan.outputs.docker }}
+      go-audit: ${{ steps.plan.outputs.go-audit }}
+      npm-audit: ${{ steps.plan.outputs.npm-audit }}
     steps:
       # Full history without file contents: the diff against the PR base reads
       # only commits and trees.
@@ -310,13 +312,68 @@ jobs:
       - name: Check production runtime
         run: make DOCKER_IMAGE=kano-navi:ci production-smoke
 
+  # The advisory audits run only for a pull request that changes the matching
+  # manifest; the daily Dependency audit workflow covers main.
+  go-audit:
+    name: Go audit
+    needs: plan
+    if: needs.plan.outputs.go-audit == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Check reachable vulnerabilities in modules and the standard library
+        run: make go-audit
+
+  npm-audit:
+    name: npm audit
+    needs: plan
+    if: needs.plan.outputs.npm-audit == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # The advisory audits read only package-lock.json; Frontend verifies the
+      # registry signatures of its installation.
+      - name: Set up Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          cache: "false"
+      - name: Audit the production dependencies
+        run: make npm-audit-production
+      - name: Audit the full locked dependency tree
+        if: ${{ !cancelled() }}
+        run: make npm-audit
+
   # The only result a caller or a ruleset needs: it fails unless every planned
   # job succeeded, and only the plan may authorize a skipped job.
   gate:
     name: Gate
     if: always()
     needs:
-      [plan, style, backend, go-builds, go-container, frontend, smoke, docker]
+      [
+        plan,
+        style,
+        backend,
+        go-builds,
+        go-container,
+        frontend,
+        smoke,
+        docker,
+        go-audit,
+        npm-audit,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

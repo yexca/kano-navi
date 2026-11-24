@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	xsource "github.com/yexca/kano-navi/backend/internal/source/x"
 )
 
 // OpenStandalone opens the runtime database for the process that owns the
@@ -297,6 +299,9 @@ func backfillUpgrade(ctx context.Context, tx *sql.Tx, added map[string]bool) err
 	if err := backfillEventCodes(ctx, tx); err != nil {
 		return err
 	}
+	if err := backfillPostLabels(ctx, tx); err != nil {
+		return err
+	}
 	if err := backfillYoutubeEventTimePrecision(ctx, tx); err != nil {
 		return err
 	}
@@ -427,6 +432,26 @@ func backfillEventCodes(ctx context.Context, tx *sql.Tx) error {
 		if err := bumpRevision(ctx, tx, workflowTime(time.Now())); err != nil {
 			return fmt.Errorf("%w: upgrade backfill failed", ErrSchema)
 		}
+	}
+	return nil
+}
+
+// backfillPostLabels replaces the bilingual post labels synchronization used
+// to store with their English base text (see xsource.LabelDaily). No operator
+// edits a post label, and the label is not part of the extraction input
+// stamp, so the rewrite never sends a post to a model again.
+func backfillPostLabels(ctx context.Context, tx *sql.Tx) error {
+	result, err := tx.ExecContext(ctx, `UPDATE posts SET label=CASE label WHEN 'DAILY / 近况' THEN ? ELSE ? END
+WHERE label IN ('DAILY / 近况','SCHEDULE / 日程')`, xsource.LabelDaily, xsource.LabelSchedule)
+	if err != nil {
+		return fmt.Errorf("%w: upgrade backfill failed", ErrSchema)
+	}
+	changed, _ := result.RowsAffected()
+	if changed == 0 {
+		return nil
+	}
+	if err = bumpRevision(ctx, tx, workflowTime(time.Now())); err != nil {
+		return fmt.Errorf("%w: upgrade backfill failed", ErrSchema)
 	}
 	return nil
 }

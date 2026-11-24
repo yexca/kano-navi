@@ -98,6 +98,12 @@ func (p LiveProbeSettings) Freshness() time.Duration {
 	return 2 * time.Duration(p.IntervalMinutes) * time.Minute
 }
 
+// BilibiliFreshness is how long the Bilibili room's last check counts on the
+// board: two check intervals.
+func (p LiveProbeSettings) BilibiliFreshness() time.Duration {
+	return 2 * time.Duration(p.BilibiliIntervalMinutes) * time.Minute
+}
+
 // liveProbeDue places an active video in its phase and says when it is next
 // due, from its reserved (or, once on air, actual) start, the broadcast state
 // the last page reported and the last time its page was read or asked for

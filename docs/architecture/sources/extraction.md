@@ -4,7 +4,8 @@ How source text becomes schedule entries and how extraction failures back off.
 
 Schedule extraction has two independent candidate paths:
 
-1. The schedule-board path uses the admin-configurable keyword list to select
+1. The schedule-board path uses the admin-configurable keyword list, matched
+   case-insensitively against a post's `label` and text, to select
    posts that look like a schedule image or board; its posts are recorded with
    the `schedule_board` detection route.
 2. The single-message path applies a cheap local date/time and scheduling-verb

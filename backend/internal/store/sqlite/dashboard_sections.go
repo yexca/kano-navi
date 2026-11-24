@@ -223,9 +223,13 @@ func (s *Store) getMediaCache(ctx context.Context) (map[string]int64, error) {
 	return out, rows.Err()
 }
 
+// bilibiliAccountsSQL walks posts_bilibili_account_idx, which holds the
+// Bilibili posts alone, so the X posts are never read.
+const bilibiliAccountsSQL = `SELECT DISTINCT account_handle FROM posts WHERE source='bilibili' AND hidden_at IS NULL AND account_handle IS NOT NULL ORDER BY account_handle LIMIT 5`
+
 // getBilibiliAccounts lists the accounts of the stored, shown Bilibili posts.
 func (s *Store) getBilibiliAccounts(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT account_handle FROM posts WHERE source='bilibili' AND hidden_at IS NULL AND account_handle IS NOT NULL ORDER BY account_handle LIMIT 5`)
+	rows, err := s.db.QueryContext(ctx, bilibiliAccountsSQL)
 	if err != nil {
 		return nil, dbErr(err)
 	}

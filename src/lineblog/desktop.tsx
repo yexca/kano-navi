@@ -2,7 +2,6 @@ import { useAppSettings } from "@/app-settings"
 import { mediaSrcSet } from "@/lib/media"
 import {
   archiveMonths,
-  media,
   mediaUrl,
   neighbours,
   pagerPages,

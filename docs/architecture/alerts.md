@@ -60,6 +60,10 @@ An incident is one rule holding for one subject, keyed by rule and subject
 - Turning a rule off resolves its incidents without a delivery and drops
   their pending deliveries (`rule_off`). A rule whose
   check failed keeps its incidents until a later pass evaluates it.
+- The operator can acknowledge an open incident (`acknowledged_at`), which
+  takes it off the console's Alerts badge and changes no delivery. It stays
+  acknowledged while it is open; the same problem returning after it
+  resolved opens a new, unacknowledged incident.
 
 An incident's detail holds counts, hours, times and fixed error codes only.
 

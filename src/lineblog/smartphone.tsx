@@ -11,7 +11,6 @@ import {
   neighbours,
   postDate,
   postExcerpt,
-  posts,
   shortText,
 } from "./content"
 import { type LineblogDesign } from "./designs"

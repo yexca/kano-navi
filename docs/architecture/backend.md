@@ -260,11 +260,21 @@ the same headers and paths for a CDN to pull; the variable changes the
 addresses `index.html` carries and the media routes the public reads name, not
 this origin's own serving (see [CDN](../operations/cdn.md)). Dynamic media
 retains its independent version/hash
-validation and caching. The server keeps no dashboard response cache, because
-the projection compares event and video times with the exact clock; the
-dashboard, calendar and archive reads are revalidated by the browser through
-their [ETags](public-api/snapshot.md), and the revision read
-and the revision stream are `no-store`.
+validation and caching. The server keeps one prepared dashboard response,
+with its body and ETag, per post window, keyed by the durable revision. Each
+request reads the revision from SQLite first, so a write by `kano-go sync`
+from another process ends the response as well as one by this process. A
+request at the same revision before the response expires is answered from it,
+a 304 included. The response expires at the projection's `nextTransitionAt`,
+when a trusted live or upcoming broadcast state stops counting (a YouTube
+state two probe intervals after its check, the Bilibili room's two check
+intervals after its check), or at the next whole minute, whichever comes
+first; the minute bounds the sliding post, week and video-count windows and
+the source freshness times, which move without a revision. Requests that miss
+together share one computation. The calendar and archive reads are computed
+on every request. All of them are revalidated by the browser through their
+[ETags](public-api/snapshot.md), and the revision read and the revision
+stream are `no-store`.
 
 ## Listener Timeouts
 

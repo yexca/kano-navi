@@ -20,7 +20,8 @@ CREATE TABLE alert_incidents (
     detail_json TEXT NOT NULL DEFAULT '{}',
     opened_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
-    resolved_at TEXT
+    resolved_at TEXT,
+    acknowledged_at TEXT
   );
 
 CREATE TABLE app_settings (
@@ -595,6 +596,12 @@ CREATE INDEX post_llm_states_status_idx
     ON post_llm_states (status, reprocess_requested, updated_at DESC);
 
 CREATE INDEX posts_account_handle_idx ON posts (account_handle, published_at DESC);
+
+CREATE INDEX posts_account_instant_idx
+    ON posts (lower(COALESCE(account_handle, '')), julianday(published_at) DESC, id)
+    WHERE deleted_at IS NULL AND hidden_at IS NULL AND upstream_deleted_at IS NULL AND promoted_at IS NULL;
+
+CREATE INDEX posts_bilibili_account_idx ON posts (account_handle) WHERE source = 'bilibili';
 
 CREATE INDEX posts_deleted_idx ON posts (id) WHERE deleted_at IS NOT NULL;
 

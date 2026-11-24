@@ -70,6 +70,8 @@ assets. Packaged Journey, LINE BLOG and Works media follow
   [Sources](../docs/architecture/sources.md)
 - Manual fetches, schedules, steps, runs:
   [Workflows](../docs/architecture/workflows.md)
+- Adding a step or source:
+  [Registering a step or source](../docs/architecture/workflows/run-execution.md#registering-a-step-or-source)
 - Downloads, `/media`, resized copies:
   [Media cache](../docs/architecture/media-cache.md)
 - Proxies and request signing:

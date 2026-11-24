@@ -291,11 +291,11 @@ export function TranslationEditor({
       onClose={onClose}
       footer={
         <>
-          <span className="adm-muted">
-            {current.requested
-              ? t("admin.translation.requestedHint")
-              : t("admin.translation.precedence")}
-          </span>
+          {current.requested ? (
+            <span className="adm-muted">
+              {t("admin.translation.requestedHint")}
+            </span>
+          ) : null}
           <Button
             icon={RotateCcw}
             busy={busy}

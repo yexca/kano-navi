@@ -8,7 +8,7 @@ import {
 } from "react"
 import { flushSync } from "react-dom"
 
-import { loadedPost, posts } from "./content"
+import { loadedPost } from "./content"
 import { loadView, viewLoaded } from "./post-files"
 import type { LineblogSummary } from "./types"
 

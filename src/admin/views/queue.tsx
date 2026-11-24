@@ -210,9 +210,10 @@ function ScheduleTab({ navigate }: { navigate: ViewProps["navigate"] }) {
           ))}
         </ol>
       ) : (
-        <Empty icon={ListOrdered} title={t("admin.queuePreview.schedule.none")}>
-          {t("admin.queuePreview.schedule.noneHint")}
-        </Empty>
+        <Empty
+          icon={ListOrdered}
+          title={t("admin.queuePreview.schedule.none")}
+        />
       )}
       <h3 className="adm-qp-title">{t("admin.queuePreview.schedule.rest")}</h3>
       <Facts
@@ -238,10 +239,6 @@ function ScheduleTab({ navigate }: { navigate: ViewProps["navigate"] }) {
           ],
         ]}
       />
-      <p className="adm-muted adm-qp-note">
-        <Info aria-hidden />
-        {t("admin.queuePreview.schedule.note")}
-      </p>
     </div>
   )
 }
